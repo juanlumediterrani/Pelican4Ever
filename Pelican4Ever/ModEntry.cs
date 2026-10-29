@@ -34,7 +34,10 @@ namespace Pelican4Ever
             RegisterModules(
                 new PersistenceModule(),
                 new ClientVersionGuardModule(),
-                new StatusCommandModule()
+                new StatusCommandModule(),
+                new RealTimeClockModule(),
+                new BedLogoutModule(),
+                new DailyRolloverModule()
             );
 
             Monitor.Log($"Cargado (Rollover {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
