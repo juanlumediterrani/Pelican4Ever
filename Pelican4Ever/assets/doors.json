@@ -3,6 +3,8 @@
     "DoorId": "Town_Door_01",
     "TownTileX": 53,
     "TownTileY": 70,
+    "MailboxTileX": 54,
+    "MailboxTileY": 70,
     "DefaultSlotId": "Pelican4Ever_Farm_01",
     "Description": "Casa sur de Pelican Town (Cerca del río)"
   },
@@ -10,6 +12,8 @@
     "DoorId": "Town_Door_02",
     "TownTileX": 60,
     "TownTileY": 53,
+    "MailboxTileX": 61,
+    "MailboxTileY": 53,
     "DefaultSlotId": "Pelican4Ever_Farm_02",
     "Description": "Casa este de Pelican Town (Junto a la herrería)"
   },
@@ -17,6 +21,8 @@
     "DoorId": "Town_Door_03",
     "TownTileX": 42,
     "TownTileY": 40,
+    "MailboxTileX": 43,
+    "MailboxTileY": 40,
     "DefaultSlotId": "Pelican4Ever_Farm_03",
     "Description": "Casa oeste de Pelican Town (Cerca de la plaza central)"
   },
@@ -24,6 +30,8 @@
     "DoorId": "Town_Door_04",
     "TownTileX": 30,
     "TownTileY": 25,
+    "MailboxTileX": 31,
+    "MailboxTileY": 25,
     "DefaultSlotId": "Pelican4Ever_Farm_04",
     "Description": "Casa norte de Pelican Town (Camino al centro comunitario)"
   }

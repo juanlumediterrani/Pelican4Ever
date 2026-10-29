@@ -39,6 +39,9 @@ namespace Pelican4Ever
                 new BedLogoutModule(),
                 new DailyRolloverModule(),
                 new FarmSlotModule(),
+                new TownMailboxModule(),
+                new ChatChannelModule(),
+                new CommunityMarketModule(),
                 new EconomyModule(),
                 new WorldLifeModule()
             );

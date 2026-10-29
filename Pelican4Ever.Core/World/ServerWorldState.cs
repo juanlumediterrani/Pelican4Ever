@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Players;
 
 namespace Pelican4Ever.Core.World
@@ -49,6 +50,9 @@ namespace Pelican4Ever.Core.World
         /// <summary>Puertas reclamadas (clave: DoorId del catálogo <c>assets/doors.json</c>).</summary>
         public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
 
+        /// <summary>Ofertas activas e históricas del mercado vecinal asíncrono (TASK-503).</summary>
+        public List<MarketListing> MarketListings { get; set; } = new();
+
         /// <summary>Festivales reprogramados: clave fecha original ("spring13"), valor nueva fecha ("spring16").</summary>
         public Dictionary<string, string> RescheduledFestivals { get; set; } = new();
 
@@ -85,7 +89,14 @@ namespace Pelican4Ever.Core.World
                 Players ??= new Dictionary<long, PlayerRecord>();
                 Doors ??= new Dictionary<string, DoorAssignment>();
                 RescheduledFestivals ??= new Dictionary<string, string>();
+                MarketListings ??= new List<MarketListing>();
                 SchemaVersion = 2;
+                changed = true;
+            }
+
+            if (MarketListings == null)
+            {
+                MarketListings = new List<MarketListing>();
                 changed = true;
             }
 

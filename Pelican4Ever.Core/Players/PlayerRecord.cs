@@ -65,6 +65,9 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Día de juego al que corresponden los contadores diarios (si no coincide, se consideran a 0).</summary>
         public int SatietyGameDay { get; set; } = -1;
 
+        /// <summary>Oro acumulado por ventas en el mercado vecinal mientras el jugador estaba desconectado.</summary>
+        public int PendingMarketGold { get; set; }
+
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;
 

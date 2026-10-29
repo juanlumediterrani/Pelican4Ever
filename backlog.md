@@ -149,7 +149,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 ### Épica 5: Comunicación e Inmersión Comunitaria
 > **Objetivo:** Facilitar la vida compartida en Pelican Town mediante interacción asíncrona y multicanal.
 
-- [ ] **TASK-501: Buzones Urbanos Interactivos en Fachadas (`TownMailboxInterceptor`)**
+- [x] **TASK-501: Buzones Urbanos Interactivos en Fachadas (`TownMailboxInterceptor`)**
   * **Análisis Técnico:** En `GameLocation.performAction`, el caso `"Mailbox"` (línea 9953) solo se ejecuta si la ubicación es `Farm` o comprueba si pertenece al jugador. Al pulsar sobre el tile del buzón en `Town`, podemos registrar una acción de tile personalizada `"Pelican4Ever.TownMailbox <doorId>"` o interceptarla en `ButtonPressed`. Si la puerta pertenece a `Game1.player.UniqueMultiplayerID`, se llama a `GameLocation.mailbox()`, abriendo las cartas sin obligar a entrar a la granja. Si hay cartas pendientes (`Game1.mailbox.Count > 0`), se inyecta un `TemporaryAnimatedSprite` de banderita alzada sobre el buzón.
   * **Prioridad:** Alta
   * **Criterios de Aceptación:**
@@ -158,7 +158,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     3. Si el buzón pertenece a otro jugador, muestra el mensaje estándar: `"Buzón de [NombreVecino]"`.
     4. El sprite exterior refleja si hay correo por leer.
 
-- [ ] **TASK-502: Chat Multicanal y de Proximidad (`ChatChannelModule.cs`)**
+- [x] **TASK-502: Chat Multicanal y de Proximidad (`ChatChannelModule.cs`)**
   * **Análisis Técnico:** `Multiplayer.sendChatMessage` (línea 1127) envía el mensaje 10 con `recipientID`. Si `recipientID == AllPlayers (-1)`, es global. Al interceptar `ChatBox.textBoxEnter` (línea 130), podemos capturar prefijos:
     - `/l` o `/local`: Se envía un mensaje SMAPI o mensaje filtrado a los jugadores cuya `Farmer.currentLocation.NameOrUniqueName == Game1.player.currentLocation.NameOrUniqueName`.
     - `/g` o `/global`: Transmisión global estándar.
@@ -169,7 +169,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Escribir `/w <nombre> <texto>` envía un mensaje privado directo que solo ven el emisor y el receptor.
     3. Escribir texto estándar o `/g <texto>` lo transmite al canal global.
 
-- [ ] **TASK-503: Tablón de Mercado Vecinal Asíncrono (`CommunityMarketModule.cs`)**
+- [x] **TASK-503: Tablón de Mercado Vecinal Asíncrono (`CommunityMarketModule.cs`)**
   * **Análisis Técnico:** En un servidor 24/7, los jugadores tienen horarios distintos. Usando un cofre especial registrado en el Host o un menú `ItemGrabMenu` personalizado colocado frente a la tienda de Pierre, se serializa en `ServerWorldState.MarketListings` una lista de ofertas `(ListingId, SellerUid, ItemData, PriceGold)`. Cuando un comprador abona el oro, el Host retira el ítem, lo transfiere al inventario del comprador y deposita el oro directamente en la cartera personal (`Farmer.Money`) del vendedor mediante `GetPlayer(sellerUid)`.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**

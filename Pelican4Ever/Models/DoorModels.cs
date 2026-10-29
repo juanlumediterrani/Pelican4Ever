@@ -5,6 +5,8 @@ namespace Pelican4Ever.Models
         public string DoorId { get; set; } = string.Empty;
         public int TownTileX { get; set; }
         public int TownTileY { get; set; }
+        public int? MailboxTileX { get; set; }
+        public int? MailboxTileY { get; set; }
         public string DefaultSlotId { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
     }

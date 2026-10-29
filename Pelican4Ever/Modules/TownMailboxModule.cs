@@ -1,0 +1,152 @@
+using System;
+using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.World;
+using Pelican4Ever.Framework;
+using Pelican4Ever.Models;
+using StardewModdingAPI;
+using StardewModdingAPI.Events;
+using StardewValley;
+
+namespace Pelican4Ever.Modules
+{
+    /// <summary>
+    /// Gestiona los buzones interactivos de las residencias en Pelican Town (TASK-501).
+    /// Permite leer cartas sin viajar hasta la granja y muestra la banderita / animación de correo pendiente.
+    /// </summary>
+    public sealed class TownMailboxModule : IModule
+    {
+        private ModContext? context;
+
+        public string Name => "TownMailbox";
+
+        public ModuleSide Side => ModuleSide.Both;
+
+        public void Register(ModContext ctx)
+        {
+            context = ctx;
+
+            ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
+            ctx.Helper.Events.Display.RenderedWorld += OnRenderedWorld;
+        }
+
+        private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
+        {
+            if (!Context.IsWorldReady || context == null)
+                return;
+
+            if (!e.Button.IsActionButton())
+                return;
+
+            if (Game1.currentLocation == null || Game1.currentLocation.Name != "Town")
+                return;
+
+            Vector2 targetTile = e.Cursor.GrabTile;
+            int targetX = (int)targetTile.X;
+            int targetY = (int)targetTile.Y;
+
+            foreach (DoorModel door in FarmSlotModule.RegisteredDoors)
+            {
+                var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
+                if (TownMailboxLogic.IsMailboxTarget(targetX, targetY, mbX, mbY))
+                {
+                    HandleMailboxInteraction(door, mbX, mbY);
+                    context.Helper.Input.Suppress(e.Button);
+                    break;
+                }
+            }
+        }
+
+        private void HandleMailboxInteraction(DoorModel door, int mbX, int mbY)
+        {
+            if (context == null) return;
+
+            context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
+            long? ownerId = assignment?.OwnerId;
+            string? ownerName = null;
+
+            if (ownerId.HasValue)
+            {
+                if (context.WorldState.Players.TryGetValue(ownerId.Value, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
+                {
+                    ownerName = rec.PlayerName;
+                }
+                else
+                {
+                    Farmer? f = Game1.GetPlayer(ownerId.Value);
+                    if (f != null && !string.IsNullOrWhiteSpace(f.Name))
+                        ownerName = f.Name;
+                }
+            }
+
+            var eval = TownMailboxLogic.EvaluateAccess(
+                Game1.player.UniqueMultiplayerID,
+                ownerId,
+                ownerName,
+                Game1.mailbox.Count
+            );
+
+            if (eval.Status == MailboxAccessStatus.Owner)
+            {
+                Game1.currentLocation.mailbox();
+            }
+            else
+            {
+                Game1.drawObjectDialogue(eval.Message);
+            }
+        }
+
+        private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
+        {
+            if (!Context.IsWorldReady || context == null)
+                return;
+
+            if (Game1.currentLocation == null || Game1.currentLocation.Name != "Town")
+                return;
+
+            long myId = Game1.player.UniqueMultiplayerID;
+            if (Game1.mailbox.Count == 0)
+                return;
+
+            foreach (DoorModel door in FarmSlotModule.RegisteredDoors)
+            {
+                if (context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment) && assignment.OwnerId == myId)
+                {
+                    var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
+                    DrawMailboxNotice(e.SpriteBatch, mbX, mbY);
+                }
+            }
+        }
+
+        private void DrawMailboxNotice(SpriteBatch b, int mbX, int mbY)
+        {
+            float bounce = 4f * (float)Math.Round(Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 250.0), 2);
+            float depth = (float)((mbX + 1) * 64) / 10000f + (float)(mbY * 64) / 10000f;
+
+            // Indicador de carta de GameLocation.draw / Farm.draw nativo
+            b.Draw(
+                Game1.mouseCursors,
+                Game1.GlobalToLocal(Game1.viewport, new Vector2(mbX * 64, (float)(mbY * 64 - 96 - 48) + bounce)),
+                new Rectangle(141, 465, 20, 24),
+                Color.White * 0.75f,
+                0f,
+                Vector2.Zero,
+                4f,
+                SpriteEffects.None,
+                depth + 1E-06f
+            );
+
+            b.Draw(
+                Game1.mouseCursors,
+                Game1.GlobalToLocal(Game1.viewport, new Vector2(mbX * 64 + 32 + 4, (float)(mbY * 64 - 64 - 24 - 8) + bounce)),
+                new Rectangle(189, 423, 15, 13),
+                Color.White,
+                0f,
+                new Vector2(7f, 6f),
+                4f,
+                SpriteEffects.None,
+                depth + 1E-05f
+            );
+        }
+    }
+}
