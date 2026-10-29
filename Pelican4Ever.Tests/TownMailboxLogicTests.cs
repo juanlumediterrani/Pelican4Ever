@@ -33,6 +33,18 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void IsMailboxTarget_DoorTileTarget_ReturnsFalse()
+        {
+            // Puerta en (50, 60), buzón en (51, 60)
+            bool onDoor = TownMailboxLogic.IsMailboxTarget(50, 60, 51, 60, 50, 60);
+            Assert.False(onDoor);
+
+            // Clic en el propio buzón (51, 60)
+            bool onMailbox = TownMailboxLogic.IsMailboxTarget(51, 60, 51, 60, 50, 60);
+            Assert.True(onMailbox);
+        }
+
+        [Fact]
         public void EvaluateAccess_UnassignedMailbox_ReturnsUnassignedStatus()
         {
             var result = TownMailboxLogic.EvaluateAccess(100L, null, null, 0);

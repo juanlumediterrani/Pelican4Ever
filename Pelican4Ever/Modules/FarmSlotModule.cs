@@ -5,6 +5,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
@@ -54,10 +55,9 @@ namespace Pelican4Ever.Modules
             ctx.Helper.ConsoleCommands.Add("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
             ctx.Helper.Events.GameLoop.GameLaunched += (s, e) => RegisterChatCommands();
 
-            if (Context.IsMainPlayer)
-            {
-                ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
-            }
+            // Mensajes y sincronización multijugador (en host y peones)
+            ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
+            ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
 
             ApplyHarmonyPatches(ctx.Harmony);
         }
@@ -128,25 +128,47 @@ namespace Pelican4Ever.Modules
         {
             RegisterChatCommands();
 
-            if (!Context.IsMainPlayer || context == null)
-                return;
-
-            // Asegurarse de que useSeparateWallets esté activo para carteras individuales
-            Game1.player.team.useSeparateWallets.Value = true;
-
-            // Aprovisionar cabañas y huecos de farmhands suficientes en la granja del host
-            EnsureHostCabins(Game1.getFarm(), context.Config.FarmSlotCount);
-
-            // Publicar modData de propiedad en las ubicaciones cargadas
-            foreach (var kvp in context.WorldState.Doors)
+            if (Context.IsMainPlayer)
             {
-                DoorAssignment assignment = kvp.Value;
-                GameLocation? loc = Game1.getLocationFromName(assignment.FarmSlotId);
-                if (loc != null)
+                if (context == null) return;
+
+                // Asegurarse de que useSeparateWallets esté activo para carteras individuales
+                Game1.player.team.useSeparateWallets.Value = true;
+
+                // Aprovisionar cabañas y huecos de farmhands suficientes en la granja del host
+                EnsureHostCabins(Game1.getFarm(), context.Config.FarmSlotCount);
+
+                // Publicar modData de propiedad en las ubicaciones cargadas
+                foreach (var kvp in context.WorldState.Doors)
                 {
-                    loc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    DoorAssignment assignment = kvp.Value;
+                    GameLocation? loc = Game1.getLocationFromName(assignment.FarmSlotId);
+                    if (loc != null)
+                    {
+                        loc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    }
                 }
+
+                // Sincronizar catálogo inicial de residencias con todos los peones
+                BroadcastDoorsSync();
             }
+            else
+            {
+                // Cliente: pedir al host el estado más actualizado de residencias
+                context?.Helper.Multiplayer.SendMessage(
+                    string.Empty,
+                    ModMessages.RequestDoorsSync,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                );
+            }
+        }
+
+        private void OnPeerContextReceived(object? sender, PeerContextReceivedEventArgs e)
+        {
+            if (!Context.IsMainPlayer || context == null) return;
+
+            SendDoorsSyncToPlayer(e.Peer.PlayerID);
         }
 
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
@@ -284,13 +306,10 @@ namespace Pelican4Ever.Modules
 
         private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
         {
-            if (!Context.IsMainPlayer || context == null)
+            if (context == null || e.FromModID != context.Manifest.UniqueID)
                 return;
 
-            if (e.FromModID != context.Manifest.UniqueID)
-                return;
-
-            if (e.Type == ModMessages.ClaimDoorRequest)
+            if (e.Type == ModMessages.ClaimDoorRequest && Context.IsMainPlayer)
             {
                 var payload = e.ReadAs<ClaimDoorPayload>();
                 if (payload != null)
@@ -298,7 +317,7 @@ namespace Pelican4Ever.Modules
                     HandleClaimDoor(e.FromPlayerID, payload.DoorId, payload.FarmType);
                 }
             }
-            else if (e.Type == ModMessages.ChangePolicyRequest)
+            else if (e.Type == ModMessages.ChangePolicyRequest && Context.IsMainPlayer)
             {
                 var payload = e.ReadAs<ChangePolicyPayload>();
                 if (payload != null)
@@ -306,6 +325,64 @@ namespace Pelican4Ever.Modules
                     HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy);
                 }
             }
+            else if (e.Type == ModMessages.RequestDoorsSync && Context.IsMainPlayer)
+            {
+                SendDoorsSyncToPlayer(e.FromPlayerID);
+            }
+            else if (e.Type == ModMessages.SyncDoorsState)
+            {
+                var payload = e.ReadAs<SyncDoorsPayload>();
+                if (payload != null)
+                {
+                    context.WorldState.Doors.Clear();
+                    foreach (var kvp in payload.Doors)
+                    {
+                        context.WorldState.Doors[kvp.Key] = kvp.Value;
+                    }
+
+                    foreach (var kvp in payload.Players)
+                    {
+                        context.WorldState.Players[kvp.Key] = kvp.Value;
+                    }
+
+                    context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas).", LogLevel.Info);
+                }
+            }
+        }
+
+        public static void BroadcastDoorsSync()
+        {
+            if (context == null || !Context.IsMainPlayer) return;
+
+            var payload = new SyncDoorsPayload
+            {
+                Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
+                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players)
+            };
+
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                ModMessages.SyncDoorsState,
+                new[] { context.Manifest.UniqueID }
+            );
+        }
+
+        public static void SendDoorsSyncToPlayer(long playerId)
+        {
+            if (context == null || !Context.IsMainPlayer) return;
+
+            var payload = new SyncDoorsPayload
+            {
+                Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
+                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players)
+            };
+
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                ModMessages.SyncDoorsState,
+                new[] { context.Manifest.UniqueID },
+                new[] { playerId }
+            );
         }
 
         private void HandleClaimDoor(long playerId, string doorId, string farmType)
@@ -347,6 +424,9 @@ namespace Pelican4Ever.Modules
             }
 
             context.Monitor.Log($"[FarmSlotModule] Puerta {doorId} asignada con éxito a {playerId} (Granja: {slotId}, Tipo: {resolvedType}).", LogLevel.Info);
+
+            // Sincronizar inmediatamente a todos los peones
+            BroadcastDoorsSync();
         }
 
         private void HandleChangePolicy(long playerId, string farmSlotId, string policyStr)
@@ -366,6 +446,9 @@ namespace Pelican4Ever.Modules
                     loc.PublishOwnership(playerId, newPolicy);
                 }
                 context.Monitor.Log($"[FarmSlotModule] Política de {farmSlotId} cambiada a {newPolicy} por propietario {playerId}.", LogLevel.Info);
+
+                // Sincronizar inmediatamente a todos los peones
+                BroadcastDoorsSync();
             }
         }
 
@@ -429,12 +512,43 @@ namespace Pelican4Ever.Modules
                                 new[] { Game1.MasterPlayer.UniqueMultiplayerID }
                             );
 
+                            string resolvedType = string.IsNullOrWhiteSpace(whichAnswer) ? "Standard" : whichAnswer;
+                            var localAssignment = new DoorAssignment
+                            {
+                                DoorId = door.DoorId,
+                                FarmSlotId = door.DefaultSlotId,
+                                FarmType = resolvedType,
+                                OwnerId = myId,
+                                Policy = AccessPolicy.Locked
+                            };
+                            worldState.Doors[door.DoorId] = localAssignment;
+                            var playerRecord = worldState.GetOrCreatePlayer(myId, Game1.player.Name);
+                            playerRecord.FarmSlotId = door.DefaultSlotId;
+
                             if (Context.IsMainPlayer)
                             {
                                 HandleClaimDoor(myId, door.DoorId, whichAnswer);
                             }
 
-                            Game1.addHUDMessage(new HUDMessage($"Residencia reclamada con plantilla {whichAnswer}.", HUDMessage.newQuest_type));
+                            Game1.addHUDMessage(new HUDMessage($"¡Residencia reclamada! Plantilla: {resolvedType}.", HUDMessage.newQuest_type));
+
+                            Response[] travelChoices = new[]
+                            {
+                                new Response("Yes", "Sí, entrar ahora a mi granja"),
+                                new Response("No", "No, quedarme en el pueblo")
+                            };
+
+                            Game1.currentLocation.createQuestionDialogue(
+                                $"¡Enhorabuena! Has fundado tu residencia ({resolvedType}).\n¿Deseas entrar a tu granja ahora?",
+                                travelChoices,
+                                (w, a) =>
+                                {
+                                    if (a == "Yes")
+                                    {
+                                        WarpToFarm(door.DefaultSlotId);
+                                    }
+                                }
+                            );
                         }
                     }
                 );
@@ -742,6 +856,40 @@ namespace Pelican4Ever.Modules
 
                 float bounce = (dist <= 2.5f) ? (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f : 0f;
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(door.TownTileX * 64f + 32f, (door.TownTileY - 1) * 64f + bounce));
+
+                // Dibujar marcador visual en el suelo (poste con cartel de entrada)
+                Vector2 worldTilePos = new Vector2(door.TownTileX * 64f, door.TownTileY * 64f);
+                Vector2 localTilePos = Game1.GlobalToLocal(Game1.viewport, worldTilePos);
+
+                if (Game1.objectSpriteSheet != null)
+                {
+                    // Poste de madera (Wood Sign)
+                    e.SpriteBatch.Draw(
+                        Game1.objectSpriteSheet,
+                        new Vector2(localTilePos.X + 16f, localTilePos.Y + 8f),
+                        GameLocation.getSourceRectForObject(37),
+                        Color.White,
+                        0f,
+                        Vector2.Zero,
+                        2.5f,
+                        SpriteEffects.None,
+                        (float)(door.TownTileY * 64 + 32) / 10000f
+                    );
+
+                    // Icono de casita coloreado
+                    Color iconTint = isClaimed ? (isMine ? Color.Cyan : Color.LightGoldenrodYellow) : Color.LightGreen;
+                    e.SpriteBatch.Draw(
+                        Game1.mouseCursors,
+                        new Vector2(localTilePos.X + 22f, localTilePos.Y + 12f),
+                        new Rectangle(64, 448, 16, 16),
+                        iconTint,
+                        0f,
+                        Vector2.Zero,
+                        1.2f,
+                        SpriteEffects.None,
+                        (float)(door.TownTileY * 64 + 33) / 10000f
+                    );
+                }
 
                 DrawDoorBadge(e.SpriteBatch, badgeText, screenPos, badgeColor);
             }

@@ -32,10 +32,14 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
-        /// Comprueba si el cursor o tile objetivo corresponde al buzón (coincidencia directa o adyacente a distancia 1).
+        /// Comprueba si el cursor o tile objetivo corresponde al buzón.
+        /// Si se especifican doorX y doorY, descarta el clic si coincide exactamente con la puerta residencial contigua.
         /// </summary>
-        public static bool IsMailboxTarget(int targetX, int targetY, int mbX, int mbY)
+        public static bool IsMailboxTarget(int targetX, int targetY, int mbX, int mbY, int doorX = -1, int doorY = -1)
         {
+            if (doorX >= 0 && doorY >= 0 && targetX == doorX && targetY == doorY)
+                return false;
+
             return Math.Abs(targetX - mbX) <= 1 && Math.Abs(targetY - mbY) <= 1;
         }
 

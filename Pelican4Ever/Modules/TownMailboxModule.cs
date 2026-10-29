@@ -53,7 +53,7 @@ namespace Pelican4Ever.Modules
                     continue;
 
                 var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
-                if (TownMailboxLogic.IsMailboxTarget(targetX, targetY, mbX, mbY))
+                if (TownMailboxLogic.IsMailboxTarget(targetX, targetY, mbX, mbY, door.TownTileX, door.TownTileY))
                 {
                     HandleMailboxInteraction(door, mbX, mbY);
                     context.Helper.Input.Suppress(e.Button);

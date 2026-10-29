@@ -1,3 +1,7 @@
+using System.Collections.Generic;
+using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.World;
+
 namespace Pelican4Ever.Models
 {
     public class DoorModel
@@ -16,6 +20,8 @@ namespace Pelican4Ever.Models
     {
         public const string ClaimDoorRequest = "ClaimDoorRequest";
         public const string ChangePolicyRequest = "ChangePolicyRequest";
+        public const string SyncDoorsState = "SyncDoorsState";
+        public const string RequestDoorsSync = "RequestDoorsSync";
     }
 
     public class ClaimDoorPayload
@@ -28,5 +34,11 @@ namespace Pelican4Ever.Models
     {
         public string FarmSlotId { get; set; } = string.Empty;
         public string Policy { get; set; } = string.Empty;
+    }
+
+    public class SyncDoorsPayload
+    {
+        public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
+        public Dictionary<long, PlayerRecord> Players { get; set; } = new();
     }
 }
