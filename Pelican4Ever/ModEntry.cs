@@ -38,7 +38,8 @@ namespace Pelican4Ever
                 new RealTimeClockModule(),
                 new BedLogoutModule(),
                 new DailyRolloverModule(),
-                new FarmSlotModule()
+                new FarmSlotModule(),
+                new EconomyModule()
             );
 
             Monitor.Log($"Cargado (Rollover {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
