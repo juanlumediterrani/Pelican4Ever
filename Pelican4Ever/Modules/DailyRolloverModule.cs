@@ -78,7 +78,8 @@ namespace Pelican4Ever.Modules
                         int fee = SleepPolicy.MedicalFee(farmer.Money, cfg.PenaltyGoldPercent, cfg.PenaltyGoldCap);
                         if (fee > 0)
                         {
-                            farmer.Money = Math.Max(0, farmer.Money - fee);
+                            int newMoney = Math.Max(0, farmer.Money - fee);
+                            SetFarmerMoney(farmer, newMoney);
                             context.Monitor.Log($"[DailyRolloverModule] Cargo médico de {fee}g aplicado a {record.PlayerName} ({record.UniqueMultiplayerID}).", LogLevel.Info);
                         }
                     }
@@ -275,6 +276,21 @@ namespace Pelican4Ever.Modules
             catch (Exception ex)
             {
                 context.Monitor.Log($"[DailyRolloverModule] Error al crear backup de seguridad: {ex}", LogLevel.Warn);
+            }
+        }
+
+        /// <summary>
+        /// Ajusta de forma segura los fondos de un granjero respetando carteras individuales en Stardew Valley 1.6.
+        /// </summary>
+        public static void SetFarmerMoney(Farmer farmer, int newMoney)
+        {
+            if (Game1.player?.team != null && Game1.player.team.useSeparateWallets.Value && farmer != Game1.player)
+            {
+                Game1.player.team.SetIndividualMoney(farmer, newMoney);
+            }
+            else
+            {
+                farmer.Money = newMoney;
             }
         }
     }

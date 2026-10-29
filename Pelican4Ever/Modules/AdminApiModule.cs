@@ -33,15 +33,15 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
-            if (!Context.IsMainPlayer)
-                return;
-
-            ctx.Helper.Events.GameLoop.GameLaunched += OnGameLaunched;
+            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
         }
 
-        private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)
+        private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
+            if (!Context.IsMainPlayer)
+                return;
+
             StartServer();
         }
 

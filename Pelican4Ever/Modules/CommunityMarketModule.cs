@@ -458,7 +458,7 @@ namespace Pelican4Ever.Modules
             }
 
             // Aplicar descuento y entrega al comprador
-            buyer.Money = result.RemainingBuyerGold;
+            DailyRolloverModule.SetFarmerMoney(buyer, result.RemainingBuyerGold);
             Item itemReceived = ItemRegistry.Create(listing.ItemId, listing.Stack, listing.Quality);
             buyer.addItemByMenuIfNecessary(itemReceived);
 
@@ -466,7 +466,7 @@ namespace Pelican4Ever.Modules
             Farmer? seller = Game1.GetPlayer(listing.SellerId);
             if (seller != null && seller.isActive())
             {
-                seller.Money += result.SellerProfit;
+                DailyRolloverModule.SetFarmerMoney(seller, seller.Money + result.SellerProfit);
                 if (seller.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
                 {
                     Game1.addHUDMessage(new HUDMessage($"¡Tu oferta de {listing.ItemDisplayName} se vendió por {result.SellerProfit}g!", HUDMessage.newQuest_type));
@@ -517,7 +517,7 @@ namespace Pelican4Ever.Modules
             if (context.WorldState.Players.TryGetValue(player.UniqueMultiplayerID, out var record) && record.PendingMarketGold > 0)
             {
                 int pending = record.PendingMarketGold;
-                player.Money += pending;
+                DailyRolloverModule.SetFarmerMoney(player, player.Money + pending);
                 if (player.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
                 {
                     Game1.addHUDMessage(new HUDMessage($"Has recibido {pending}g por ventas en el Mercado Vecinal mientras estabas fuera.", HUDMessage.newQuest_type));

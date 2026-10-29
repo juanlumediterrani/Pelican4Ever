@@ -4,13 +4,18 @@ using System.IO;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Buildings;
 using StardewValley.GameData.Locations;
+using StardewValley.Locations;
+using StardewValley.Menus;
+using StardewValley.Objects;
 using StardewValley.Tools;
 
 namespace Pelican4Ever.Modules
@@ -22,6 +27,8 @@ namespace Pelican4Ever.Modules
     public sealed class FarmSlotModule : IModule
     {
         private static ModContext? context;
+        private static bool welcomeNotified;
+        private static bool chatCommandsRegistered;
         public static List<DoorModel> RegisteredDoors { get; private set; } = new();
 
         public string Name => "FarmSlot";
@@ -35,13 +42,20 @@ namespace Pelican4Ever.Modules
             // Cargar catálogo de puertas desde assets/doors.json
             LoadDoors();
 
-            // Eventos SMAPI
+            // Eventos SMAPI generales
             ctx.Helper.Events.Content.AssetRequested += OnAssetRequested;
             ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
+            ctx.Helper.Events.Display.RenderedWorld += OnRenderedWorld;
+            ctx.Helper.Events.Player.Warped += OnPlayerWarped;
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
+            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+
+            // Comandos de consola y chat
+            ctx.Helper.ConsoleCommands.Add("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
+            ctx.Helper.Events.GameLoop.GameLaunched += (s, e) => RegisterChatCommands();
 
             if (Context.IsMainPlayer)
             {
-                ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
                 ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             }
 
@@ -112,11 +126,16 @@ namespace Pelican4Ever.Modules
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
+            RegisterChatCommands();
+
             if (!Context.IsMainPlayer || context == null)
                 return;
 
             // Asegurarse de que useSeparateWallets esté activo para carteras individuales
             Game1.player.team.useSeparateWallets.Value = true;
+
+            // Aprovisionar cabañas y huecos de farmhands suficientes en la granja del host
+            EnsureHostCabins(Game1.getFarm(), context.Config.FarmSlotCount);
 
             // Publicar modData de propiedad en las ubicaciones cargadas
             foreach (var kvp in context.WorldState.Doors)
@@ -127,6 +146,139 @@ namespace Pelican4Ever.Modules
                 {
                     loc.PublishOwnership(assignment.OwnerId, assignment.Policy);
                 }
+            }
+        }
+
+        private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
+        {
+            welcomeNotified = false;
+        }
+
+        private void OnPlayerWarped(object? sender, WarpedEventArgs e)
+        {
+            if (!e.IsLocalPlayer || context == null)
+                return;
+
+            if (e.NewLocation.Name is "Town" && !welcomeNotified)
+            {
+                bool hasResidence = context.WorldState.Doors.Values.Any(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+                if (!hasResidence)
+                {
+                    welcomeNotified = true;
+                    Game1.addHUDMessage(new HUDMessage("¡Bienvenido a Pelican Town! Busca una puerta con cartel verde o escribe /residencias para reclamar tu casa.", HUDMessage.newQuest_type));
+                }
+            }
+        }
+
+        public static void EnsureHostCabins(Farm farm, int targetCount)
+        {
+            if (!Context.IsMainPlayer || farm == null) return;
+
+            if (Game1.netWorldState?.Value != null)
+            {
+                Game1.netWorldState.Value.highestPlayerLimit.Value = Math.Max(Game1.netWorldState.Value.highestPlayerLimit.Value, targetCount);
+                Game1.netWorldState.Value.currentPlayerLimit.Value = Math.Max(Game1.netWorldState.Value.currentPlayerLimit.Value, targetCount);
+            }
+
+            int existingCount = farm.buildings.Count(b => b.GetIndoors() is Cabin);
+            if (existingCount >= targetCount)
+            {
+                return;
+            }
+
+            int needed = targetCount - existingCount;
+            context?.Monitor.Log($"[FarmSlotModule] Aprovisionando {needed} cabañas adicionales en la granja del anfitrión para soportar hasta {targetCount} jugadores...", LogLevel.Info);
+
+            string[] cabinTypes = { "Log Cabin", "Stone Cabin", "Plank Cabin" };
+
+            for (int i = existingCount; i < targetCount; i++)
+            {
+                string skin = cabinTypes[i % cabinTypes.Length];
+                Vector2 tile = new Vector2(70 + (i % 3) * 6, 25 + (i / 3) * 4);
+
+                try
+                {
+                    Building building = new Building("Cabin", tile);
+                    building.magical.Value = true;
+                    building.skinId.Value = skin;
+                    building.daysOfConstructionLeft.Value = 0;
+                    building.load();
+                    farm.buildStructure(building, tile, Game1.player, skipSafetyChecks: true);
+
+                    if (building.GetIndoors() is Cabin cabin)
+                    {
+                        cabin.CreateFarmhand();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    context?.Monitor.Log($"[FarmSlotModule] Error aprovisionando cabaña {i + 1}: {ex.Message}", LogLevel.Warn);
+                }
+            }
+
+            context?.Monitor.Log($"[FarmSlotModule] Total de cabañas en la granja: {farm.buildings.Count(b => b.GetIndoors() is Cabin)}.", LogLevel.Info);
+        }
+
+        private static void RegisterChatCommands()
+        {
+            if (chatCommandsRegistered) return;
+            try
+            {
+                if (!ChatCommands.Exists("doors"))
+                {
+                    ChatCommands.Register(
+                        "doors",
+                        HandleDoorsChatCommand,
+                        name => "Muestra el catálogo de residencias de Pelican Town y su estado (/doors o /residencias)",
+                        new[] { "residencias" },
+                        mainOnly: false,
+                        multiplayerOnly: false,
+                        cheatsOnly: false
+                    );
+                }
+                chatCommandsRegistered = true;
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Error registrando comando de chat /doors: {ex}", LogLevel.Warn);
+            }
+        }
+
+        private static void HandleDoorsChatCommand(string[] command, ChatBox chat)
+        {
+            chat.addInfoMessage("=== RESIDENCIAS DISPONIBLES EN PELICAN TOWN ===");
+            int freeCount = 0;
+            foreach (var door in RegisteredDoors)
+            {
+                DoorAssignment? assignment = null;
+                bool isClaimed = context != null && context.WorldState.Doors.TryGetValue(door.DoorId, out assignment);
+                string loc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                if (!isClaimed || assignment == null)
+                {
+                    freeCount++;
+                    chat.addInfoMessage($"[Libre] {door.DoorId}: {loc} ({door.TownTileX},{door.TownTileY}) - {door.Description}");
+                }
+                else
+                {
+                    string owner = "Vecino";
+                    if (context != null && context.WorldState.Players.TryGetValue(assignment.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
+                        owner = rec.PlayerName;
+                    chat.addInfoMessage($"[Ocupada] {door.DoorId} ({owner}): {loc} ({door.TownTileX},{door.TownTileY})");
+                }
+            }
+            chat.addInfoMessage($"Total: {freeCount} residencias libres. Camina hasta la puerta y pulsa [E] para reclamarla.");
+        }
+
+        private void OnConsoleDoors(string command, string[] args)
+        {
+            if (context == null) return;
+            context.Monitor.Log($"=== RESIDENCIAS EN PELICAN TOWN ({RegisteredDoors.Count} en catálogo) ===", LogLevel.Info);
+            foreach (var door in RegisteredDoors)
+            {
+                DoorAssignment? assignment = null;
+                bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out assignment);
+                string status = (isClaimed && assignment != null) ? $"Ocupada por {assignment.OwnerId} ({assignment.FarmType})" : "LIBRE";
+                context.Monitor.Log($"  {door.DoorId} [{status}] en {door.LocationName ?? "Town"} ({door.TownTileX},{door.TownTileY}) - {door.Description}", LogLevel.Info);
             }
         }
 
@@ -420,7 +572,13 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation))
                 );
 
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing y culling de red aplicados.", LogLevel.Trace);
+                // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(BedFurniture), nameof(BedFurniture.ApplyWakeUpPosition)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition))
+                );
+
+                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red y protección de despertar aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
@@ -430,6 +588,28 @@ namespace Pelican4Ever.Modules
 
         public static bool Prefix_WarpFarmer(ref string locationName, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
+            // Si el jugador está saliendo de una cabaña hacia la granja principal
+            if (Game1.currentLocation is Cabin && locationName == "Farm")
+            {
+                var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+                if (assignment != null && RegisteredDoors.FirstOrDefault(d => d.DoorId == assignment.DoorId) is { } door)
+                {
+                    locationName = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                    tileX = door.TownTileX;
+                    tileY = door.TownTileY + 1;
+                    facingDirectionAfterWarp = 2;
+                }
+                else
+                {
+                    // Si aún no tiene residencia reclamada, ubicarlo en la plaza central de Pelican Town
+                    locationName = "Town";
+                    tileX = 42;
+                    tileY = 56;
+                    facingDirectionAfterWarp = 2;
+                }
+                return true;
+            }
+
             // Si el jugador está saliendo de una granja instanciada hacia el exterior, redirigir a su puerta residencial
             if (Game1.currentLocation != null && Game1.currentLocation.Name.StartsWith(LocationCullingLogic.FarmPrefix))
             {
@@ -447,6 +627,147 @@ namespace Pelican4Ever.Modules
                 }
             }
             return true;
+        }
+
+        public static bool Prefix_ApplyWakeUpPosition(Farmer who)
+        {
+            try
+            {
+                string? lastSleep = who.lastSleepLocation.Value;
+                GameLocation? lastSleepLoc = (!string.IsNullOrEmpty(lastSleep) && Game1.isLocationAccessible(lastSleep))
+                    ? Game1.getLocationFromName(lastSleep)
+                    : null;
+
+                GameLocation? disconnectLoc = Game1.getLocationFromName(who.disconnectLocation.Value);
+
+                if (disconnectLoc != null && who.disconnectDay.Value == Game1.MasterPlayer.stats.DaysPlayed && !Game1.newDaySync.hasInstance())
+                {
+                    who.currentLocation = disconnectLoc;
+                    who.Position = who.disconnectPosition.Value;
+                }
+                else if (lastSleepLoc != null && lastSleepLoc.CanWakeUpHere(who))
+                {
+                    who.Position = Utility.PointToVector2(who.lastSleepPoint.Value) * 64f;
+                    who.currentLocation = lastSleepLoc;
+                    BedFurniture.ShiftPositionForBed(who);
+                }
+                else
+                {
+                    FarmHouse? farmHouse = null;
+                    if (!string.IsNullOrEmpty(who.homeLocation.Value))
+                    {
+                        farmHouse = Game1.getLocationFromName(who.homeLocation.Value) as FarmHouse;
+                    }
+
+                    if (farmHouse != null)
+                    {
+                        who.currentLocation = farmHouse;
+                        who.Position = Utility.PointToVector2(farmHouse.GetPlayerBedSpot()) * 64f;
+                        BedFurniture.ShiftPositionForBed(who);
+                    }
+                    else
+                    {
+                        // Fallback de seguridad: ubicación accesible por defecto para evitar congelamiento de clientes
+                        GameLocation fallback = Game1.getLocationFromName("Farm")
+                                             ?? Game1.getLocationFromName("Town")
+                                             ?? Game1.locations.FirstOrDefault()
+                                             ?? new GameLocation("Maps\\Town", "Town");
+
+                        who.currentLocation = fallback;
+                        who.Position = new Vector2(64f * 64f, 15f * 64f);
+                    }
+                }
+
+                if (who == Game1.player)
+                {
+                    Game1.currentLocation = who.currentLocation;
+                }
+
+                return false;
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Advertencia en Prefix_ApplyWakeUpPosition: {ex.Message}. Aplicando recuperación segura.", LogLevel.Warn);
+                who.currentLocation = Game1.getLocationFromName("Town") ?? Game1.currentLocation;
+                who.Position = new Vector2(42f * 64f, 56f * 64f);
+                if (who == Game1.player)
+                    Game1.currentLocation = who.currentLocation;
+                return false;
+            }
+        }
+
+        private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
+        {
+            if (!Context.IsWorldReady || context == null || Game1.currentLocation == null)
+                return;
+
+            string curLoc = Game1.currentLocation.Name;
+            long myId = Game1.player.UniqueMultiplayerID;
+            Vector2 playerTile = Game1.player.Tile;
+
+            foreach (DoorModel door in RegisteredDoors)
+            {
+                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                if (!string.Equals(curLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                float dist = Vector2.Distance(playerTile, new Vector2(door.TownTileX, door.TownTileY));
+                if (dist > 14f)
+                    continue;
+
+                bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
+                bool isMine = isClaimed && assignment?.OwnerId == myId;
+
+                string badgeText;
+                Color badgeColor;
+
+                if (!isClaimed)
+                {
+                    badgeText = dist <= 2.5f ? "[E / Clic] Reclamar Residencia" : "🏠 Residencia Libre";
+                    badgeColor = Color.LightGreen;
+                }
+                else if (isMine)
+                {
+                    badgeText = dist <= 2.5f ? "[E / Clic] Entrar a Mi Granja" : "🏠 Mi Residencia";
+                    badgeColor = Color.Cyan;
+                }
+                else
+                {
+                    string owner = "Vecino";
+                    if (context.WorldState.Players.TryGetValue(assignment!.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
+                        owner = rec.PlayerName;
+                    badgeText = dist <= 2.5f ? $"[E / Clic] Casa de {owner}" : $"🏠 Casa de {owner}";
+                    badgeColor = Color.LightGoldenrodYellow;
+                }
+
+                float bounce = (dist <= 2.5f) ? (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f : 0f;
+                Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(door.TownTileX * 64f + 32f, (door.TownTileY - 1) * 64f + bounce));
+
+                DrawDoorBadge(e.SpriteBatch, badgeText, screenPos, badgeColor);
+            }
+        }
+
+        private static void DrawDoorBadge(SpriteBatch b, string text, Vector2 screenPos, Color textColor)
+        {
+            if (Game1.smallFont == null || Game1.fadeToBlackRect == null)
+                return;
+
+            Vector2 textSize = Game1.smallFont.MeasureString(text);
+            Rectangle bgRect = new Rectangle(
+                (int)(screenPos.X - (textSize.X / 2f) - 8),
+                (int)(screenPos.Y - textSize.Y - 6),
+                (int)textSize.X + 16,
+                (int)textSize.Y + 8
+            );
+
+            b.Draw(Game1.fadeToBlackRect, bgRect, new Color(0, 0, 0, 180));
+            Utility.drawTextWithShadow(
+                b,
+                text,
+                Game1.smallFont,
+                new Vector2(screenPos.X - (textSize.X / 2f), screenPos.Y - textSize.Y - 2),
+                textColor
+            );
         }
 
         public static bool Prefix_ToolBeginUsing(Tool __instance, GameLocation location, Farmer who)
