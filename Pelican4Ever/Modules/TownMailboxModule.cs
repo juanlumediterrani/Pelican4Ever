@@ -95,6 +95,10 @@ namespace Pelican4Ever.Modules
             {
                 Game1.currentLocation.mailbox();
             }
+            else if (eval.Status == MailboxAccessStatus.Unassigned)
+            {
+                FarmSlotModule.InteractWithResidentialDoor(door);
+            }
             else
             {
                 Game1.drawObjectDialogue(eval.Message);

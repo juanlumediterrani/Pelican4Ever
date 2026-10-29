@@ -124,6 +124,30 @@ namespace Pelican4Ever.Modules
                     }
                 });
             }
+            else if (e.NameWithoutLocale.IsEquivalentTo("Maps/Farm"))
+            {
+                // Abrir huecos físicos en la valla/perímetro de la granja del Host
+                e.Edit(asset =>
+                {
+                    var map = asset.AsMap().Data;
+                    var bldLayer = map.GetLayer("Buildings");
+                    var frontLayer = map.GetLayer("Front");
+                    foreach (var door in RegisteredDoors)
+                    {
+                        if (string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (bldLayer != null && door.TownTileX < bldLayer.LayerWidth && door.TownTileY < bldLayer.LayerHeight)
+                            {
+                                bldLayer.Tiles[door.TownTileX, door.TownTileY] = null;
+                            }
+                            if (frontLayer != null && door.TownTileX < frontLayer.LayerWidth && door.TownTileY < frontLayer.LayerHeight)
+                            {
+                                frontLayer.Tiles[door.TownTileX, door.TownTileY] = null;
+                            }
+                        }
+                    }
+                });
+            }
         }
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
@@ -294,56 +318,80 @@ namespace Pelican4Ever.Modules
             if (door != null && !context.WorldState.Doors.ContainsKey(door.DoorId))
             {
                 unclaimedCheckCooldown = 40; // Evitar disparos repetidos
-                Game1.player.Position = new Vector2(door.TownTileX * 64f, (door.TownTileY + 1) * 64f);
+                StepPlayerBackFromPortal(door);
                 Game1.player.completelyStopAnimatingOrDoingAction();
                 InteractWithResidentialDoor(door);
             }
         }
 
+        private static void StepPlayerBackFromPortal(DoorModel door)
+        {
+            if (door.TownTileX <= 2)
+                Game1.player.Position = new Vector2((door.TownTileX + 1) * 64f, door.TownTileY * 64f);
+            else if (door.TownTileX >= 75)
+                Game1.player.Position = new Vector2((door.TownTileX - 1) * 64f, door.TownTileY * 64f);
+            else if (door.TownTileY <= 2)
+                Game1.player.Position = new Vector2(door.TownTileX * 64f, (door.TownTileY + 1) * 64f);
+            else
+                Game1.player.Position = new Vector2(door.TownTileX * 64f, (door.TownTileY - 1) * 64f);
+        }
+
         /// <summary>
-        /// Aprovisiona los portales físicos y los senderos adoquinados en la granja del anfitrión (Plaza Central).
-        /// Cada parcela cuenta con un portal transitable con warp continuo hacia su granja privada,
-        /// su buzón a la izquierda y su poste señalizador con badge interactivo a la derecha.
+        /// Aprovisiona los portales físicos y los senderos en el perímetro de la granja del anfitrión (Plaza Central).
+        /// Cada parcela cuenta con un portal transitable en el borde del mapa con warp continuo hacia su granja privada,
+        /// acera adoquinada de conexión y poste señalizador de madera físico (Sign).
         /// </summary>
         public static void EnsureHostFarmPortals(Farm farm)
         {
             if (farm == null || context == null) return;
 
-            // 1. Pavimentar aceras de las avenidas norte y sur si están vacías
-            // Avenida Norte: Y = 23 (de X = 15 a 65)
-            // Avenida Sur: Y = 37 (de X = 15 a 65)
-            // Calle Central: X = 39..40 (de Y = 20 a 38)
-            for (int x = 15; x <= 65; x++)
-            {
-                PavePathTile(farm, x, 23);
-                PavePathTile(farm, x, 37);
-            }
-            for (int y = 20; y <= 38; y++)
-            {
-                PavePathTile(farm, 39, y);
-                PavePathTile(farm, 40, y);
-            }
-
-            // 2. Limpiar obstáculos y sincronizar Warps continuos en los portales
             foreach (DoorModel door in RegisteredDoors)
             {
                 if (!string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                // Limpiar vegetación/escombros en el umbral del portal y sus laterales (buzón y cartel)
-                for (int dx = -1; dx <= 1; dx++)
+                // 1. Limpiar colisión y obstáculos en el umbral del portal en el borde del mapa
+                farm.removeTile(door.TownTileX, door.TownTileY, "Buildings");
+                farm.removeTile(door.TownTileX, door.TownTileY, "Front");
+                farm.setTileProperty(door.TownTileX, door.TownTileY, "Back", "Passable", "T");
+                farm.removeEverythingFromThisTile(door.TownTileX, door.TownTileY);
+
+                // 2. Pavimentar sendero de 2 losetas conectando el portal hacia el interior de la granja
+                if (door.TownTileX <= 2)
                 {
-                    for (int dy = 0; dy <= 1; dy++)
-                    {
-                        Vector2 t = new Vector2(door.TownTileX + dx, door.TownTileY + dy);
-                        if (farm.objects.ContainsKey(t))
-                            farm.objects.Remove(t);
-                    }
+                    PavePathTile(farm, door.TownTileX + 1, door.TownTileY);
+                    PavePathTile(farm, door.TownTileX + 2, door.TownTileY);
+                }
+                else if (door.TownTileX >= 75)
+                {
+                    PavePathTile(farm, door.TownTileX - 1, door.TownTileY);
+                    PavePathTile(farm, door.TownTileX - 2, door.TownTileY);
+                }
+                else if (door.TownTileY <= 2)
+                {
+                    PavePathTile(farm, door.TownTileX, door.TownTileY + 1);
+                    PavePathTile(farm, door.TownTileX, door.TownTileY + 2);
+                }
+                else
+                {
+                    PavePathTile(farm, door.TownTileX, door.TownTileY - 1);
+                    PavePathTile(farm, door.TownTileX, door.TownTileY - 2);
                 }
 
-                bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
+                // 3. Colocar poste con cartel de madera físico (Sign ID 37) en la casilla designada
+                int signX = door.MailboxTileX ?? (door.TownTileX + 1);
+                int signY = door.MailboxTileY ?? door.TownTileY;
+                Vector2 signTile = new Vector2(signX, signY);
+                farm.removeTile(signX, signY, "Buildings");
+                farm.removeTile(signX, signY, "Front");
+                farm.removeEverythingFromThisTile(signX, signY);
+                if (!farm.objects.ContainsKey(signTile))
+                {
+                    farm.objects[signTile] = new Sign(signTile, "37");
+                }
 
-                // Buscar si ya existe warp en esa casilla
+                // 4. Sincronizar Warps continuos (solo si la parcela está reclamada)
+                bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
                 Warp? existingWarp = farm.warps.FirstOrDefault(w => w.X == door.TownTileX && w.Y == door.TownTileY);
 
                 if (isClaimed && assignment != null)
@@ -365,7 +413,6 @@ namespace Pelican4Ever.Modules
                 }
                 else if (existingWarp != null)
                 {
-                    // Si no está reclamada, no debe teletransportar automáticamente a una granja vacía
                     farm.warps.Remove(existingWarp);
                 }
             }
@@ -374,16 +421,17 @@ namespace Pelican4Ever.Modules
         private static void PavePathTile(Farm farm, int x, int y)
         {
             Vector2 tile = new Vector2(x, y);
-            if (!farm.terrainFeatures.ContainsKey(tile) && !farm.objects.ContainsKey(tile))
+            try
             {
-                try
-                {
-                    farm.terrainFeatures[tile] = new Flooring("5"); // Cobblestone Path
-                }
-                catch
-                {
-                    // Ignorar si el tipo de loseta no permite pavimento
-                }
+                farm.removeTile(x, y, "Buildings");
+                farm.removeTile(x, y, "Front");
+                farm.setTileProperty(x, y, "Back", "Passable", "T");
+                farm.removeEverythingFromThisTile(x, y);
+                farm.terrainFeatures[tile] = new Flooring("5"); // Cobblestone Path
+            }
+            catch
+            {
+                // Ignorar si el tipo de loseta no permite pavimento
             }
         }
 
@@ -395,19 +443,9 @@ namespace Pelican4Ever.Modules
         {
             if (farm == null) return;
 
-            // 1. Quitar cabañas generadas automáticamente por Stardew Valley en granjas secundarias
-            for (int i = farm.buildings.Count - 1; i >= 0; i--)
-            {
-                Building b = farm.buildings[i];
-                if (string.Equals(b.buildingType.Value, "Cabin", StringComparison.OrdinalIgnoreCase))
-                {
-                    farm.buildings.RemoveAt(i);
-                }
-            }
-
-            // 2. Localizar o asegurar el edificio Farmhouse principal
+            // 1. Localizar o asegurar el edificio Farmhouse principal
             Building? farmhouse = farm.getBuildingByType("Farmhouse")
-                               ?? farm.buildings.FirstOrDefault(b => string.Equals(b.buildingType.Value, "Farmhouse", StringComparison.OrdinalIgnoreCase));
+                               ?? farm.buildings.FirstOrDefault(b => b.buildingType.Value.Contains("Farmhouse", StringComparison.OrdinalIgnoreCase));
 
             Point entryDoor = farm.GetMainFarmHouseEntry();
             Vector2 starterTile = farm.GetStarterFarmhouseLocation();
@@ -419,13 +457,23 @@ namespace Pelican4Ever.Modules
                 farm.buildings.Add(farmhouse);
             }
 
+            // 2. Quitar cualquier cabaña secundaria generada automáticamente por Stardew Valley
+            for (int i = farm.buildings.Count - 1; i >= 0; i--)
+            {
+                Building b = farm.buildings[i];
+                if (b != farmhouse && (b.GetIndoors() is Cabin || b.buildingType.Value.EndsWith("Cabin", StringComparison.OrdinalIgnoreCase)))
+                {
+                    farm.buildings.RemoveAt(i);
+                }
+            }
+
             // 3. Asegurar interior tipo Cabin para la Farmhouse de este slot
             string cabinName = $"{farm.NameOrUniqueName}_Home";
             Cabin? cabin = farmhouse.GetIndoors() as Cabin;
 
             if (cabin == null)
             {
-                cabin = new Cabin("Maps\\Cabin");
+                cabin = new Cabin("Maps\\FarmHouse");
                 cabin.uniqueName.Value = cabinName;
                 cabin.IsFarm = true;
                 farmhouse.indoors.Value = cabin;
@@ -442,8 +490,16 @@ namespace Pelican4Ever.Modules
             int doorX = entryDoor.X != 0 ? entryDoor.X : (farmhouse.tileX.Value + farmhouse.humanDoor.X);
             int doorY = entryDoor.Y != 0 ? entryDoor.Y : (farmhouse.tileY.Value + farmhouse.humanDoor.Y);
 
-            cabin.warps.Clear();
-            cabin.warps.Add(new Warp(3, 11, farm.NameOrUniqueName, doorX, doorY + 1, false));
+            if (cabin.warps.Count == 0)
+            {
+                cabin.warps.Add(new Warp(3, 11, farm.NameOrUniqueName, doorX, doorY + 1, false));
+            }
+            else
+            {
+                cabin.warps[0].TargetName = farm.NameOrUniqueName;
+                cabin.warps[0].TargetX = doorX;
+                cabin.warps[0].TargetY = doorY + 1;
+            }
             farmhouse.updateInteriorWarps();
 
             // 5. Asignar dueño si existe
@@ -601,15 +657,15 @@ namespace Pelican4Ever.Modules
             );
         }
 
-        private void HandleClaimDoor(long playerId, string doorId, string farmType)
+        private static void HandleClaimDoor(long playerId, string doorId, string farmType)
         {
             if (context == null) return;
             var worldState = context.WorldState;
 
-            // Si la puerta ya está asignada
-            if (worldState.Doors.ContainsKey(doorId))
+            // Si la puerta ya está asignada a otro jugador
+            if (worldState.Doors.TryGetValue(doorId, out var existing) && existing.OwnerId != playerId)
             {
-                context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} intentó reclamar puerta ocupada {doorId}.", LogLevel.Warn);
+                context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} intentó reclamar puerta ocupada {doorId} (propietario: {existing.OwnerId}).", LogLevel.Warn);
                 return;
             }
 
@@ -653,7 +709,7 @@ namespace Pelican4Ever.Modules
             BroadcastDoorsSync();
         }
 
-        private void HandleChangePolicy(long playerId, string farmSlotId, string policyStr)
+        private static void HandleChangePolicy(long playerId, string farmSlotId, string policyStr)
         {
             if (context == null) return;
             var worldState = context.WorldState;
@@ -723,8 +779,8 @@ namespace Pelican4Ever.Modules
 
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
                 string.Equals(string.IsNullOrWhiteSpace(d.LocationName) ? "Farm" : d.LocationName, curLoc, StringComparison.OrdinalIgnoreCase)
-                && (Math.Abs(d.TownTileX - (int)targetTile.X) <= 1 || Math.Abs((d.TownTileX + 1) - (int)targetTile.X) <= 1)
-                && Math.Abs(d.TownTileY - (int)targetTile.Y) <= 1);
+                && ((Math.Abs(d.TownTileX - (int)targetTile.X) <= 1 && Math.Abs(d.TownTileY - (int)targetTile.Y) <= 1)
+                    || (Math.Abs((d.MailboxTileX ?? (d.TownTileX + 1)) - (int)targetTile.X) <= 1 && Math.Abs((d.MailboxTileY ?? d.TownTileY) - (int)targetTile.Y) <= 1)));
 
             if (door != null)
             {
@@ -732,7 +788,7 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private void InteractWithResidentialDoor(DoorModel door)
+        public static void InteractWithResidentialDoor(DoorModel door)
         {
             if (context == null || Game1.currentLocation == null) return;
             var worldState = context.WorldState;
@@ -869,7 +925,7 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private void ShowPolicySelectionDialog(string farmSlotId)
+        private static void ShowPolicySelectionDialog(string farmSlotId)
         {
             if (context == null || Game1.currentLocation == null) return;
 
@@ -906,7 +962,7 @@ namespace Pelican4Ever.Modules
             );
         }
 
-        private void WarpToFarm(string farmSlotId)
+        public static void WarpToFarm(string farmSlotId)
         {
             // Ubicar coordenadas de llegada de la cabaña según la plantilla elegida
             DoorAssignment? assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId);
@@ -975,13 +1031,13 @@ namespace Pelican4Ever.Modules
                     if (assignment.OwnerId != myId && assignment.Policy == AccessPolicy.Locked)
                     {
                         Game1.showRedMessage("Esta parcela es privada y está cerrada con llave.");
-                        // Si estaba en la Granja Host, dar un paso atrás hacia la acera
+                        // Si estaba en la Granja Host, dar un paso atrás hacia el interior de la plaza
                         if (Game1.currentLocation is Farm)
                         {
                             var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == targetLoc);
                             if (door != null)
                             {
-                                Game1.player.Position = new Vector2(door.TownTileX * 64f, (door.TownTileY + 1) * 64f);
+                                StepPlayerBackFromPortal(door);
                             }
                         }
                         return false;
@@ -996,16 +1052,14 @@ namespace Pelican4Ever.Modules
                 if (assignment != null && RegisteredDoors.FirstOrDefault(d => d.DoorId == assignment.DoorId) is { } door)
                 {
                     locationName = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
-                    tileX = door.TownTileX;
-                    tileY = door.TownTileY + 1;
-                    facingDirectionAfterWarp = 2;
+                    RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
                 }
                 else
                 {
                     // Si aún no tiene parcela reclamada, ubicarlo en la plaza central de la Granja Host
                     locationName = "Farm";
-                    tileX = 40;
-                    tileY = 24;
+                    tileX = 64;
+                    tileY = 16;
                     facingDirectionAfterWarp = 2;
                 }
                 return true;
@@ -1021,13 +1075,39 @@ namespace Pelican4Ever.Modules
                     if (door != null)
                     {
                         locationName = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
-                        tileX = door.TownTileX;
-                        tileY = door.TownTileY + 1; // Salir justo enfrente del portal en la acera
-                        facingDirectionAfterWarp = 2; // Mirando hacia el sur (hacia la calle)
+                        RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
                     }
                 }
             }
             return true;
+        }
+
+        private static void RepositionToPortalExit(DoorModel door, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
+        {
+            if (door.TownTileX <= 2)
+            {
+                tileX = door.TownTileX + 1;
+                tileY = door.TownTileY;
+                facingDirectionAfterWarp = 1; // Mirando hacia el Este (hacia el interior)
+            }
+            else if (door.TownTileX >= 75)
+            {
+                tileX = door.TownTileX - 1;
+                tileY = door.TownTileY;
+                facingDirectionAfterWarp = 3; // Mirando hacia el Oeste
+            }
+            else if (door.TownTileY <= 2)
+            {
+                tileX = door.TownTileX;
+                tileY = door.TownTileY + 1;
+                facingDirectionAfterWarp = 2; // Mirando hacia el Sur
+            }
+            else
+            {
+                tileX = door.TownTileX;
+                tileY = door.TownTileY - 1;
+                facingDirectionAfterWarp = 0; // Mirando hacia el Norte
+            }
         }
 
         public static bool Prefix_ApplyWakeUpPosition(Farmer who)
@@ -1108,12 +1188,12 @@ namespace Pelican4Ever.Modules
 
             foreach (DoorModel door in RegisteredDoors)
             {
-                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
                 if (!string.Equals(curLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 float dist = Vector2.Distance(playerTile, new Vector2(door.TownTileX, door.TownTileY));
-                if (dist > 14f)
+                if (dist > 2.8f)
                     continue;
 
                 bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
@@ -1124,12 +1204,12 @@ namespace Pelican4Ever.Modules
 
                 if (!isClaimed)
                 {
-                    badgeText = dist <= 2.5f ? "[E / Clic o Caminar] Reclamar Parcela" : "🏠 Parcela Libre";
+                    badgeText = "[E / Clic o Caminar] Fundar Parcela";
                     badgeColor = Color.LightGreen;
                 }
                 else if (isMine)
                 {
-                    badgeText = dist <= 2.5f ? "Caminar al portal / Entrar" : "🏠 Mi Parcela";
+                    badgeText = "🏠 Mi Parcela (Caminar para entrar)";
                     badgeColor = Color.Cyan;
                 }
                 else
@@ -1137,33 +1217,12 @@ namespace Pelican4Ever.Modules
                     string owner = "Vecino";
                     if (context.WorldState.Players.TryGetValue(assignment!.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
                         owner = rec.PlayerName;
-                    badgeText = dist <= 2.5f ? $"Parcela de {owner}" : $"🏠 Parcela de {owner}";
+                    badgeText = $"🏠 Parcela de {owner}";
                     badgeColor = Color.LightGoldenrodYellow;
                 }
 
-                float bounce = (dist <= 2.5f) ? (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f : 0f;
-
-                // Dibujar marcador visual en el suelo (poste con cartel de entrada BigCraftable a la derecha del portal)
-                if (Game1.bigCraftableSpriteSheet != null)
-                {
-                    Vector2 signWorldPos = new Vector2((door.TownTileX + 1) * 64f, door.TownTileY * 64f - 64f);
-                    Vector2 signLocalPos = Game1.GlobalToLocal(Game1.viewport, signWorldPos);
-                    Rectangle signSrcRect = StardewValley.Object.getSourceRectForBigCraftable(37);
-
-                    e.SpriteBatch.Draw(
-                        Game1.bigCraftableSpriteSheet,
-                        signLocalPos,
-                        signSrcRect,
-                        Color.White,
-                        0f,
-                        Vector2.Zero,
-                        4f,
-                        SpriteEffects.None,
-                        Math.Max(0f, (float)((door.TownTileY + 1) * 64 - 24) / 10000f)
-                    );
-                }
-
-                Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2((door.TownTileX + 1) * 64f + 32f, (door.TownTileY - 1) * 64f + bounce));
+                float bounce = (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f;
+                Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(door.TownTileX * 64f + 32f, door.TownTileY * 64f - 24f + bounce));
                 DrawDoorBadge(e.SpriteBatch, badgeText, screenPos, badgeColor);
             }
         }
