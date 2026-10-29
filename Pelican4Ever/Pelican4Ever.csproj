@@ -24,4 +24,10 @@
     <ProjectReference Include="..\Pelican4Ever.Core\Pelican4Ever.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="assets\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>
