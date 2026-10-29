@@ -138,6 +138,18 @@ namespace Pelican4Ever.Modules
                 // Aprovisionar cabañas y huecos de farmhands suficientes en la granja del host
                 EnsureHostCabins(Game1.getFarm(), context.Config.FarmSlotCount);
 
+                // Asegurar edificios limpios y Farmhouse operativa en cada granja instanciada
+                int slotCount = context.Config.FarmSlotCount;
+                for (int i = 1; i <= slotCount; i++)
+                {
+                    string slotId = $"Pelican4Ever_Farm_{i:D2}";
+                    if (Game1.getLocationFromName(slotId) is Farm farm)
+                    {
+                        var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId);
+                        EnsureFarmSlotBuildings(farm, assignment);
+                    }
+                }
+
                 // Publicar modData de propiedad en las ubicaciones cargadas
                 foreach (var kvp in context.WorldState.Doors)
                 {
@@ -190,6 +202,12 @@ namespace Pelican4Ever.Modules
                     Game1.addHUDMessage(new HUDMessage("¡Bienvenido a Pelican Town! Busca una puerta con cartel verde o escribe /residencias para reclamar tu casa.", HUDMessage.newQuest_type));
                 }
             }
+
+            if (e.NewLocation is Farm farm && farm.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farm.NameOrUniqueName);
+                EnsureFarmSlotBuildings(farm, assignment);
+            }
         }
 
         public static void EnsureHostCabins(Farm farm, int targetCount)
@@ -239,6 +257,76 @@ namespace Pelican4Ever.Modules
             }
 
             context?.Monitor.Log($"[FarmSlotModule] Total de cabañas en la granja: {farm.buildings.Count(b => b.GetIndoors() is Cabin)}.", LogLevel.Info);
+        }
+
+        /// <summary>
+        /// Asegura que la granja instanciada tenga eliminadas las cabañas automáticas no deseadas,
+        /// su edificio Farmhouse principal con interior tipo Cabin dedicado, y warps de entrada/salida conectados.
+        /// </summary>
+        public static void EnsureFarmSlotBuildings(Farm farm, DoorAssignment? assignment)
+        {
+            if (farm == null) return;
+
+            // 1. Quitar cabañas generadas automáticamente por Stardew Valley en granjas secundarias
+            for (int i = farm.buildings.Count - 1; i >= 0; i--)
+            {
+                Building b = farm.buildings[i];
+                if (string.Equals(b.buildingType.Value, "Cabin", StringComparison.OrdinalIgnoreCase))
+                {
+                    farm.buildings.RemoveAt(i);
+                }
+            }
+
+            // 2. Localizar o asegurar el edificio Farmhouse principal
+            Building? farmhouse = farm.getBuildingByType("Farmhouse")
+                               ?? farm.buildings.FirstOrDefault(b => string.Equals(b.buildingType.Value, "Farmhouse", StringComparison.OrdinalIgnoreCase));
+
+            Point entryDoor = farm.GetMainFarmHouseEntry();
+            Vector2 starterTile = farm.GetStarterFarmhouseLocation();
+
+            if (farmhouse == null)
+            {
+                farmhouse = new Building("Farmhouse", starterTile);
+                farmhouse.load();
+                farm.buildings.Add(farmhouse);
+            }
+
+            // 3. Asegurar interior tipo Cabin para la Farmhouse de este slot
+            string cabinName = $"{farm.NameOrUniqueName}_Home";
+            Cabin? cabin = farmhouse.GetIndoors() as Cabin;
+
+            if (cabin == null)
+            {
+                cabin = new Cabin("Maps\\Cabin");
+                cabin.uniqueName.Value = cabinName;
+                cabin.IsFarm = true;
+                farmhouse.indoors.Value = cabin;
+                farmhouse.nonInstancedIndoorsName.Value = null;
+            }
+
+            // Asegurar que el interior esté en la lista global de ubicaciones para resolución por nombre
+            if (!Game1.locations.Contains(cabin))
+            {
+                Game1.locations.Add(cabin);
+            }
+
+            // 4. Configurar warps de entrada y salida
+            int doorX = entryDoor.X != 0 ? entryDoor.X : (farmhouse.tileX.Value + farmhouse.humanDoor.X);
+            int doorY = entryDoor.Y != 0 ? entryDoor.Y : (farmhouse.tileY.Value + farmhouse.humanDoor.Y);
+
+            cabin.warps.Clear();
+            cabin.warps.Add(new Warp(3, 11, farm.NameOrUniqueName, doorX, doorY + 1, false));
+            farmhouse.updateInteriorWarps();
+
+            // 5. Asignar dueño si existe
+            if (assignment != null && assignment.OwnerId != 0)
+            {
+                Farmer? ownerFarmer = Game1.GetPlayer(assignment.OwnerId);
+                if (ownerFarmer != null)
+                {
+                    cabin.AssignFarmhand(ownerFarmer);
+                }
+            }
         }
 
         private static void RegisterChatCommands()
@@ -416,9 +504,14 @@ namespace Pelican4Ever.Modules
             };
             worldState.Doors[doorId] = assignment;
 
-            // Replicar en GameLocation.modData
+            // Replicar en GameLocation.modData y asegurar configuración de edificios
             GameLocation? loc = Game1.getLocationFromName(slotId);
-            if (loc != null)
+            if (loc is Farm farmLoc)
+            {
+                farmLoc.PublishOwnership(playerId, AccessPolicy.Locked);
+                EnsureFarmSlotBuildings(farmLoc, assignment);
+            }
+            else if (loc != null)
             {
                 loc.PublishOwnership(playerId, AccessPolicy.Locked);
             }
@@ -465,6 +558,38 @@ namespace Pelican4Ever.Modules
 
             string curLoc = Game1.currentLocation.Name;
             Vector2 targetTile = e.Cursor.GrabTile;
+
+            // Interacción con puerta de la Farmhouse en una granja privada (entrar al interior Cabin)
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase) && Game1.currentLocation is Farm farm)
+            {
+                Point entryDoor = farm.GetMainFarmHouseEntry();
+                if (Math.Abs(entryDoor.X - (int)targetTile.X) <= 1 && Math.Abs(entryDoor.Y - (int)targetTile.Y) <= 1)
+                {
+                    Building? farmhouse = farm.getBuildingByType("Farmhouse")
+                                       ?? farm.buildings.FirstOrDefault(b => string.Equals(b.buildingType.Value, "Farmhouse", StringComparison.OrdinalIgnoreCase));
+                    if (farmhouse?.GetIndoors() is Cabin cabin)
+                    {
+                        int targetX = cabin.warps.Count > 0 ? cabin.warps[0].X : 3;
+                        int targetY = cabin.warps.Count > 0 ? cabin.warps[0].Y - 1 : 10;
+                        Game1.currentLocation.playSound("doorClose");
+                        Game1.warpFarmer(cabin.NameOrUniqueName, targetX, targetY, 0);
+                        return;
+                    }
+                }
+            }
+
+            // Interacción para salir del interior Cabin hacia el exterior de la granja privada
+            if (Game1.currentLocation is Cabin insideCabin && insideCabin.NameOrUniqueName.EndsWith("_Home", StringComparison.OrdinalIgnoreCase))
+            {
+                if (insideCabin.warps.Count > 0 && Math.Abs(insideCabin.warps[0].X - (int)targetTile.X) <= 1 && Math.Abs(insideCabin.warps[0].Y - (int)targetTile.Y) <= 1)
+                {
+                    Warp exitWarp = insideCabin.warps[0];
+                    Game1.currentLocation.playSound("doorClose");
+                    Game1.warpFarmer(exitWarp.TargetName, exitWarp.TargetX, exitWarp.TargetY, 2);
+                    return;
+                }
+            }
+
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
                 string.Equals(string.IsNullOrWhiteSpace(d.LocationName) ? "Town" : d.LocationName, curLoc, StringComparison.OrdinalIgnoreCase)
                 && Math.Abs(d.TownTileX - (int)targetTile.X) <= 1
@@ -655,6 +780,11 @@ namespace Pelican4Ever.Modules
             // Ubicar coordenadas de llegada de la cabaña según la plantilla elegida
             DoorAssignment? assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId);
             var template = FarmTemplateCatalog.GetTemplate(assignment?.FarmType);
+
+            if (Game1.getLocationFromName(farmSlotId) is Farm farm)
+            {
+                EnsureFarmSlotBuildings(farm, assignment);
+            }
 
             Game1.warpFarmer(farmSlotId, template.CabinTileX, template.CabinTileY + 2, 2);
         }
@@ -857,37 +987,23 @@ namespace Pelican4Ever.Modules
                 float bounce = (dist <= 2.5f) ? (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f : 0f;
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(door.TownTileX * 64f + 32f, (door.TownTileY - 1) * 64f + bounce));
 
-                // Dibujar marcador visual en el suelo (poste con cartel de entrada)
-                Vector2 worldTilePos = new Vector2(door.TownTileX * 64f, door.TownTileY * 64f);
-                Vector2 localTilePos = Game1.GlobalToLocal(Game1.viewport, worldTilePos);
-
-                if (Game1.objectSpriteSheet != null)
+                // Dibujar marcador visual en el suelo (poste con cartel de entrada BigCraftable)
+                if (Game1.bigCraftableSpriteSheet != null)
                 {
-                    // Poste de madera (Wood Sign)
+                    Vector2 signWorldPos = new Vector2(door.TownTileX * 64f, door.TownTileY * 64f - 64f);
+                    Vector2 signLocalPos = Game1.GlobalToLocal(Game1.viewport, signWorldPos);
+                    Rectangle signSrcRect = StardewValley.Object.getSourceRectForBigCraftable(37);
+
                     e.SpriteBatch.Draw(
-                        Game1.objectSpriteSheet,
-                        new Vector2(localTilePos.X + 16f, localTilePos.Y + 8f),
-                        GameLocation.getSourceRectForObject(37),
+                        Game1.bigCraftableSpriteSheet,
+                        signLocalPos,
+                        signSrcRect,
                         Color.White,
                         0f,
                         Vector2.Zero,
-                        2.5f,
+                        4f,
                         SpriteEffects.None,
-                        (float)(door.TownTileY * 64 + 32) / 10000f
-                    );
-
-                    // Icono de casita coloreado
-                    Color iconTint = isClaimed ? (isMine ? Color.Cyan : Color.LightGoldenrodYellow) : Color.LightGreen;
-                    e.SpriteBatch.Draw(
-                        Game1.mouseCursors,
-                        new Vector2(localTilePos.X + 22f, localTilePos.Y + 12f),
-                        new Rectangle(64, 448, 16, 16),
-                        iconTint,
-                        0f,
-                        Vector2.Zero,
-                        1.2f,
-                        SpriteEffects.None,
-                        (float)(door.TownTileY * 64 + 33) / 10000f
+                        Math.Max(0f, (float)((door.TownTileY + 1) * 64 - 24) / 10000f)
                     );
                 }
 
