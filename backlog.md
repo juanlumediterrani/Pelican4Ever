@@ -139,3 +139,115 @@ Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documen
 - [x] **TASK-403: Reprogramación de Festivales y Ventana de Tarde/Noche (`18:00–23:50`)**
   - **Prioridad:** Media (Post-MVP)
   - **Descripción:** Comando `p4e_festival_move` sobre `Data/Festivals/FestivalDates`, ajuste de horario a `1800 2350` y diálogo al entrar a `Town` para permitir cruzar el pueblo sin bloquear a los demás jugadores.
+
+---
+
+## 🚀 3. Backlog de Expansión Post-MVP (Mundo Persistente Completo)
+
+Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 1.6.15** y desglosadas con criterios de aceptación exactos.
+
+### Épica 5: Comunicación e Inmersión Comunitaria
+> **Objetivo:** Facilitar la vida compartida en Pelican Town mediante interacción asíncrona y multicanal.
+
+- [ ] **TASK-501: Buzones Urbanos Interactivos en Fachadas (`TownMailboxInterceptor`)**
+  * **Análisis Técnico:** En `GameLocation.performAction`, el caso `"Mailbox"` (línea 9953) solo se ejecuta si la ubicación es `Farm` o comprueba si pertenece al jugador. Al pulsar sobre el tile del buzón en `Town`, podemos registrar una acción de tile personalizada `"Pelican4Ever.TownMailbox <doorId>"` o interceptarla en `ButtonPressed`. Si la puerta pertenece a `Game1.player.UniqueMultiplayerID`, se llama a `GameLocation.mailbox()`, abriendo las cartas sin obligar a entrar a la granja. Si hay cartas pendientes (`Game1.mailbox.Count > 0`), se inyecta un `TemporaryAnimatedSprite` de banderita alzada sobre el buzón.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Cada puerta asignada en `Town` cuenta con un buzón interactivo contiguo.
+    2. Al interactuar con el buzón de la residencia propia, se abre la interfaz nativa de lectura de correo (`LetterViewerMenu`).
+    3. Si el buzón pertenece a otro jugador, muestra el mensaje estándar: `"Buzón de [NombreVecino]"`.
+    4. El sprite exterior refleja si hay correo por leer.
+
+- [ ] **TASK-502: Chat Multicanal y de Proximidad (`ChatChannelModule.cs`)**
+  * **Análisis Técnico:** `Multiplayer.sendChatMessage` (línea 1127) envía el mensaje 10 con `recipientID`. Si `recipientID == AllPlayers (-1)`, es global. Al interceptar `ChatBox.textBoxEnter` (línea 130), podemos capturar prefijos:
+    - `/l` o `/local`: Se envía un mensaje SMAPI o mensaje filtrado a los jugadores cuya `Farmer.currentLocation.NameOrUniqueName == Game1.player.currentLocation.NameOrUniqueName`.
+    - `/g` o `/global`: Transmisión global estándar.
+    - `/w <jugador> <mensaje>`: Susurro privado aprovechando el `chatKind = 3` nativo de `ChatBox.receiveChatMessage`.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Escribir `/l <texto>` envía el mensaje únicamente a los jugadores en el mismo mapa o a menos de 30 casillas de distancia, con color diferenciado (ej. verde claro).
+    2. Escribir `/w <nombre> <texto>` envía un mensaje privado directo que solo ven el emisor y el receptor.
+    3. Escribir texto estándar o `/g <texto>` lo transmite al canal global.
+
+- [ ] **TASK-503: Tablón de Mercado Vecinal Asíncrono (`CommunityMarketModule.cs`)**
+  * **Análisis Técnico:** En un servidor 24/7, los jugadores tienen horarios distintos. Usando un cofre especial registrado en el Host o un menú `ItemGrabMenu` personalizado colocado frente a la tienda de Pierre, se serializa en `ServerWorldState.MarketListings` una lista de ofertas `(ListingId, SellerUid, ItemData, PriceGold)`. Cuando un comprador abona el oro, el Host retira el ítem, lo transfiere al inventario del comprador y deposita el oro directamente en la cartera personal (`Farmer.Money`) del vendedor mediante `GetPlayer(sellerUid)`.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Interacción con el tablón de Pierre abre el menú del "Mercado Vecinal".
+    2. Cualquier jugador puede poner a la venta un ítem de su inventario fijando un precio en oro.
+    3. Los compradores autorizados pueden adquirir el producto descontando su oro personal y recibiendo el ítem al instante, incluso si el vendedor está desconectado.
+
+---
+
+### Épica 6: Escalabilidad Urbana y Variedad de Granjas (8–16 Jugadores)
+> **Objetivo:** Ampliar la capacidad residencial del servidor sin disparar el uso de red ni saturar el pueblo.
+
+- [ ] **TASK-601: Expansión del Catálogo a 16 Residencias Urbanas y Rurales**
+  * **Análisis Técnico:** Extender `assets/doors.json` para mapear 12 puertas adicionales en coordenadas transitables que no bloqueen rutas de NPCs:
+    - 4 en `Town` (fachadas este y sur adicionales).
+    - 4 en `BusStop` y alrededores de la carretera.
+    - 4 en `Mountain` (cerca del lago y la carpintería de Robin) y `Forest`.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. El archivo `assets/doors.json` contiene 16 entradas no colisionantes con objetos ni NPCs.
+    2. `FarmSlotCount` configurable hasta 16 en `ServerConfig`.
+    3. El comando `p4e_status` reporta el estado y ocupación de las 16 residencias.
+
+- [ ] **TASK-602: Elección de Plantilla de Mapa al Reclamar Granja**
+  * **Análisis Técnico:** Actualmente `CreateLocationData` en `FarmSlotModule` fija `"Maps\\Farm"`. Ampliar la definición para permitir que al reclamar la puerta por primera vez, el jugador elija entre: Standard, Forest, Hilltop, Wilderness, FourCorners, Beach, Meadowlands o Riverland. El mod inyecta la plantilla correspondiente (`"Maps\\Farm_Forest"`, `"Maps\\Farm_Beach"`, etc.) y calcula el punto de spawn de la cabaña usando las coordenadas específicas de cada mapa (ej. Standard en 64,15; Beach en 72,18; etc.).
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Al interactuar con una puerta libre, el diálogo muestra un submenú con los 8 tipos de granja.
+    2. La ubicación `Pelican4Ever_Farm_XX` carga el mapa seleccionado por el jugador.
+    3. La cabaña y buzón se posicionan en las coordenadas correctas del tipo de granja elegido.
+
+- [ ] **TASK-603: Culling Dinámico de Red para Granjas Inactivas (`LocationCullingModule.cs`)**
+  * **Análisis Técnico:** En `Multiplayer.isAlwaysActiveLocation(loc)` (línea 1306), si devuelve `true`, todos los objetos, cultivos y animales de esa granja se transmiten a todos los clientes conectados. Para 16 granjas, esto generaría un consumo de ancho de banda innecesario. Parcheando `isAlwaysActiveLocation`: si la ubicación es `Pelican4Ever_Farm_XX` y ningún jugador está dentro de ella ni su dueño está online, devuelve `false`. En cuanto un jugador cruza el warp hacia esa granja, se marca temporalmente como activa.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Las granjas de jugadores desconectados que no tienen visitantes no sincronizan paquetes delta continuos.
+    2. Al entrar un visitante a una granja inactiva, se sincroniza en caliente en menos de 500 ms sin pérdida de estado.
+
+---
+
+### Épica 7: Minijuegos de Festivales y Eventos Comunitarios Asíncronos
+> **Objetivo:** Participación individual o grupal flexible en festivales sin congelar el servidor.
+
+- [ ] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados**
+  * **Análisis Técnico:** En festivales como la Fiesta del Huevo (`spring13`) o el Festival de Hielo (`winter08`), el minijuego activa un temporizador sincrónico (`Event.drawFestivalScore`). Modificar `Event.answerDialogueQuestion` para que la participación en el minijuego sea instanciada por jugador: cada cliente ejecuta su temporizador localmente y al terminar, reporta su puntuación al Host. El Host registra las puntuaciones del día en `ServerWorldState` y a las 23:50 otorga el premio (ej. Sombrero de Paja) al jugador con la puntuación más alta de la jornada.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Un jugador puede realizar la búsqueda de huevos a las 19:00 y otro a las 22:00 de forma independiente.
+    2. Las puntuaciones individuales se consolidan en una tabla comunitaria en el tablón del evento.
+    3. El ganador de la jornada recibe el premio automáticamente al finalizar la ventana del festival.
+
+- [ ] **TASK-702: Ceremonias Comunitarias Programadas en Vivo**
+  * **Análisis Técnico:** Para eventos comunitarios sin minijuego (Luau, Danza de las Medusas), se programa una hora comunitaria por defecto (ej. 21:00 hora real). A las 20:45 se emite un aviso HUD global: *"La ceremonia comenzará en 15 minutos en la playa"*. A las 21:00, los jugadores presentes en la zona inician la cinemática grupal sincronizada mediante `ReadyCheckDialog("ceremony")`, mientras que los jugadores que están en las minas o en su granja continúan su juego sin interrupción.
+  * **Prioridad:** Baja
+  * **Criterios de Aceptación:**
+    1. Las cinemáticas grupales solo arrastran a los jugadores que se encuentran dentro del mapa del evento a la hora señalada.
+    2. Los jugadores ausentes no sufren congelación de pantalla ni teletransporte forzoso.
+
+---
+
+### Épica 8: Panel de Administración Web y Telemetría (DevOps)
+> **Objetivo:** Administración y monitorización del servidor 24/7 sin comandos de consola.
+
+- [ ] **TASK-801: API REST Ligera de Gestión Interna (`AdminApiModule.cs`)**
+  * **Análisis Técnico:** Iniciar un `HttpListener` ligero en un puerto configurable (por defecto `8085`), autenticado mediante cabecera `Authorization: Bearer <token_en_config>`.
+    - `GET /api/status`: Retorna JSON con hora real, hora de juego, total de días, jugadores online/offline y estado de granjas.
+    - `POST /api/rollover`: Invoca `DailyRolloverModule.ExecuteRollover()`.
+    - `POST /api/festival/reschedule`: Modifica y refresca fechas de festivales.
+    - `POST /api/mines/reset`: Fuerza la regeneración del turno minero.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Endpoint protegido por token que responde con JSON estructurado.
+    2. Comandos críticos de administración ejecutables vía curl o panel web.
+
+- [ ] **TASK-802: Panel Web Dashboard Integrado (Frontend Ligero)**
+  * **Análisis Técnico:** Servir una SPA mínima en HTML5/Vanilla JS o React estático desde el propio servidor o empaquetada en el contenedor de Docker Compose, conectada a los endpoints de la API REST.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Interfaz accesible por navegador que muestra el mapa visual de las 4–16 puertas y sus propietarios.
+    2. Visualización de jugadores conectados, su energía actual y su estado de descanso.
+    3. Botones rápidos para lanzar Rollover o limpiar minas con un solo clic.
