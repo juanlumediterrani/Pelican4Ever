@@ -9,6 +9,7 @@ services:
       - "24642:24642/udp" # Lidgren / Galaxy multiplayer port
       - "5900:5900"       # VNC port (opcional para depuración visual)
       - "8080:8080"       # Web GUI de JunimoServer
+      - "8085:8085"       # Pelican 4Ever Admin REST API & Web Dashboard
     environment:
       - STEAM_USERNAME=${STEAM_USERNAME}
       - STEAM_PASSWORD=${STEAM_PASSWORD}
