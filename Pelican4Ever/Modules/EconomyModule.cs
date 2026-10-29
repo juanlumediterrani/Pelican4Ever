@@ -122,7 +122,14 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private void ResetMines()
+        public static void TriggerMineResetManual()
+        {
+            if (context == null) return;
+            context.Monitor.Log("[EconomyModule] Limpieza manual de minas invocada...", LogLevel.Info);
+            ResetMines();
+        }
+
+        private static void ResetMines()
         {
             isCleaningMines = true;
             try

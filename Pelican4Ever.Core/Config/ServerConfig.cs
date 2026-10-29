@@ -109,6 +109,14 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations.</summary>
         public int FarmSlotCount { get; set; } = 4;
 
+        // ─────────────────────────── Panel de Administración y API REST ───────────────────────────
+
+        /// <summary>Puerto HTTP del servidor de administración y Dashboard web (TASK-801 y TASK-802).</summary>
+        public int AdminApiPort { get; set; } = 8085;
+
+        /// <summary>Token Bearer para autenticación en la API de administración.</summary>
+        public string AdminApiToken { get; set; } = "pelican4ever_secret_admin_token";
+
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
 
@@ -165,6 +173,8 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(SpaRegenSeconds)} debe ser > 0.");
             if (FarmSlotCount is < 1 or > 16)
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
+            if (AdminApiPort is < 1024 or > 65535)
+                errors.Add($"{nameof(AdminApiPort)} debe situarse entre 1024 y 65535.");
             if (FestivalWindowStart >= FestivalWindowEnd || FestivalWindowEnd > 2550)
                 errors.Add($"La ventana de festival ({FestivalWindowStart}-{FestivalWindowEnd}) debe ser creciente y terminar como muy tarde a las 2550.");
 

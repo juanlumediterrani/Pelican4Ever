@@ -16,6 +16,7 @@ namespace Pelican4Ever.Modules
     public sealed class RealTimeClockModule : IModule
     {
         private static ModContext? context;
+        public static bool IsNightHold { get; private set; }
 
         public string Name => "RealTimeClock";
 
@@ -69,6 +70,7 @@ namespace Pelican4Ever.Modules
             var cfg = context.Config;
             DateTime now = ServerTime.LocalNow(cfg.TimeZoneId);
             ClockReading reading = GameClock.Read(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+            IsNightHold = reading.IsNightHold;
 
             // Sincronizar gameTimeInterval para iluminación ambiental (ms dentro del slot actual de 10 min)
             Game1.gameTimeInterval = reading.MillisecondsIntoSlot;

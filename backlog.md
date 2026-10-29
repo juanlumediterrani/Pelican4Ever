@@ -233,7 +233,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 ### Épica 8: Panel de Administración Web y Telemetría (DevOps)
 > **Objetivo:** Administración y monitorización del servidor 24/7 sin comandos de consola.
 
-- [ ] **TASK-801: API REST Ligera de Gestión Interna (`AdminApiModule.cs`)**
+- [x] **TASK-801: API REST Ligera de Gestión Interna (`AdminApiModule.cs`)**
   * **Análisis Técnico:** Iniciar un `HttpListener` ligero en un puerto configurable (por defecto `8085`), autenticado mediante cabecera `Authorization: Bearer <token_en_config>`.
     - `GET /api/status`: Retorna JSON con hora real, hora de juego, total de días, jugadores online/offline y estado de granjas.
     - `POST /api/rollover`: Invoca `DailyRolloverModule.ExecuteRollover()`.
@@ -244,7 +244,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Endpoint protegido por token que responde con JSON estructurado.
     2. Comandos críticos de administración ejecutables vía curl o panel web.
 
-- [ ] **TASK-802: Panel Web Dashboard Integrado (Frontend Ligero)**
+- [x] **TASK-802: Panel Web Dashboard Integrado (Frontend Ligero)**
   * **Análisis Técnico:** Servir una SPA mínima en HTML5/Vanilla JS o React estático desde el propio servidor o empaquetada en el contenedor de Docker Compose, conectada a los endpoints de la API REST.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**

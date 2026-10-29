@@ -16,7 +16,7 @@ namespace Pelican4Ever.Modules
     /// </summary>
     public sealed class DailyRolloverModule : IModule
     {
-        private ModContext context = null!;
+        private static ModContext context = null!;
         private bool warned15 = false;
         private bool warned5 = false;
         private bool warned1 = false;
@@ -152,8 +152,21 @@ namespace Pelican4Ever.Modules
         private void OnForceRollover(string command, string[] args)
         {
             context.Monitor.Log("[DailyRolloverModule] Ejecutando Rollover forzado vía consola...", LogLevel.Info);
+            TriggerRolloverManual();
+        }
+
+        public static void TriggerRolloverManual()
+        {
+            if (context == null) return;
             BroadcastHUDMessage("Atención: Un administrador ha activado el Rollover diario inmediato.", HUDMessage.error_type);
-            ExecuteRollover();
+            try
+            {
+                Game1.PassOutNewDay();
+            }
+            catch (Exception ex)
+            {
+                context.Monitor.Log($"[DailyRolloverModule] Error al iniciar NewDay nativo: {ex}", LogLevel.Error);
+            }
         }
 
         private void ExecuteRollover()
@@ -169,10 +182,10 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private void BroadcastHUDMessage(string message, int type)
+        private static void BroadcastHUDMessage(string message, int type)
         {
             Game1.addHUDMessage(new HUDMessage(message, type));
-            context.Monitor.Log($"[HUD] {message}", LogLevel.Info);
+            context?.Monitor.Log($"[HUD] {message}", LogLevel.Info);
         }
 
         private void FreezeFriendshipDecayForOfflinePlayers()

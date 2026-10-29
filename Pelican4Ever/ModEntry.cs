@@ -44,7 +44,8 @@ namespace Pelican4Ever
                 new CommunityMarketModule(),
                 new EconomyModule(),
                 new WorldLifeModule(),
-                new FestivalMinigameModule()
+                new FestivalMinigameModule(),
+                new AdminApiModule()
             );
 
             Monitor.Log($"Cargado (Rollover {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
