@@ -8,5 +8,6 @@ obj/
 .vscode/
 local.props
 .env
+config.json
 data/
 TestResults/

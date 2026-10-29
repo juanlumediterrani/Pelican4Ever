@@ -1,0 +1,35 @@
+{
+  "DayStartTime": "06:00",
+  "NightHoldStartTime": "01:50",
+  "RolloverWarningMinutes": [
+    15,
+    5,
+    1
+  ],
+  "CalendarEpoch": "2026-10-26",
+  "MaxCatchUpRollovers": 3,
+  "TimeZoneId": "Europe/Madrid",
+  "PenaltyGoldPercent": 0.1,
+  "PenaltyGoldCap": 1000,
+  "PenaltyEnergyFraction": 0.5,
+  "DailySatietyFraction": 0.5,
+  "MaxDailyWellFedBuffs": 2,
+  "WellFedRegenPerMinute": 1,
+  "WellFedDurationMinutes": 60,
+  "SpaRegenSeconds": 30,
+  "SpaDailyCap": 60,
+  "CropPriceMultiplier": 1.0,
+  "ArtisanPriceMultiplier": 1.0,
+  "MineResetTimes": [
+    "06:00",
+    "18:00"
+  ],
+  "FestivalWindowStart": 1800,
+  "FestivalWindowEnd": 2350,
+  "DedicatedServerMode": false,
+  "RequireClientMod": true,
+  "FarmSlotCount": 16,
+  "AdminApiPort": 8085,
+  "AdminApiToken": "pelican_admin_2026",
+  "Modules": {}
+}
