@@ -38,15 +38,20 @@ namespace Pelican4Ever.Modules
             if (!e.Button.IsActionButton())
                 return;
 
-            if (Game1.currentLocation == null || Game1.currentLocation.Name != "Town")
+            if (Game1.currentLocation == null)
                 return;
 
+            string currentLoc = Game1.currentLocation.Name;
             Vector2 targetTile = e.Cursor.GrabTile;
             int targetX = (int)targetTile.X;
             int targetY = (int)targetTile.Y;
 
             foreach (DoorModel door in FarmSlotModule.RegisteredDoors)
             {
+                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                if (!string.Equals(currentLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
                 if (TownMailboxLogic.IsMailboxTarget(targetX, targetY, mbX, mbY))
                 {
@@ -101,15 +106,20 @@ namespace Pelican4Ever.Modules
             if (!Context.IsWorldReady || context == null)
                 return;
 
-            if (Game1.currentLocation == null || Game1.currentLocation.Name != "Town")
+            if (Game1.currentLocation == null)
                 return;
 
+            string currentLoc = Game1.currentLocation.Name;
             long myId = Game1.player.UniqueMultiplayerID;
             if (Game1.mailbox.Count == 0)
                 return;
 
             foreach (DoorModel door in FarmSlotModule.RegisteredDoors)
             {
+                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                if (!string.Equals(currentLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 if (context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment) && assignment.OwnerId == myId)
                 {
                     var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);

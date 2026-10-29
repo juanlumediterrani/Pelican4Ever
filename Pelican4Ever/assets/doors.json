@@ -1,6 +1,7 @@
 [
   {
     "DoorId": "Town_Door_01",
+    "LocationName": "Town",
     "TownTileX": 53,
     "TownTileY": 70,
     "MailboxTileX": 54,
@@ -10,6 +11,7 @@
   },
   {
     "DoorId": "Town_Door_02",
+    "LocationName": "Town",
     "TownTileX": 60,
     "TownTileY": 53,
     "MailboxTileX": 61,
@@ -19,6 +21,7 @@
   },
   {
     "DoorId": "Town_Door_03",
+    "LocationName": "Town",
     "TownTileX": 42,
     "TownTileY": 40,
     "MailboxTileX": 43,
@@ -28,11 +31,132 @@
   },
   {
     "DoorId": "Town_Door_04",
+    "LocationName": "Town",
     "TownTileX": 30,
     "TownTileY": 25,
     "MailboxTileX": 31,
     "MailboxTileY": 25,
     "DefaultSlotId": "Pelican4Ever_Farm_04",
     "Description": "Casa norte de Pelican Town (Camino al centro comunitario)"
+  },
+  {
+    "DoorId": "Town_Door_05",
+    "LocationName": "Town",
+    "TownTileX": 18,
+    "TownTileY": 60,
+    "MailboxTileX": 19,
+    "MailboxTileY": 60,
+    "DefaultSlotId": "Pelican4Ever_Farm_05",
+    "Description": "Cabaña sudoeste de Pelican Town (Camino al bosque)"
+  },
+  {
+    "DoorId": "Town_Door_06",
+    "LocationName": "Town",
+    "TownTileX": 73,
+    "TownTileY": 82,
+    "MailboxTileX": 74,
+    "MailboxTileY": 82,
+    "DefaultSlotId": "Pelican4Ever_Farm_06",
+    "Description": "Residencia sudeste de Pelican Town (Camino a la playa)"
+  },
+  {
+    "DoorId": "Town_Door_07",
+    "LocationName": "Town",
+    "TownTileX": 35,
+    "TownTileY": 85,
+    "MailboxTileX": 36,
+    "MailboxTileY": 85,
+    "DefaultSlotId": "Pelican4Ever_Farm_07",
+    "Description": "Villa ribera sur de Pelican Town"
+  },
+  {
+    "DoorId": "Town_Door_08",
+    "LocationName": "Town",
+    "TownTileX": 58,
+    "TownTileY": 16,
+    "MailboxTileX": 59,
+    "MailboxTileY": 16,
+    "DefaultSlotId": "Pelican4Ever_Farm_08",
+    "Description": "Chalet noreste de Pelican Town (Camino a la montaña)"
+  },
+  {
+    "DoorId": "BusStop_Door_01",
+    "LocationName": "BusStop",
+    "TownTileX": 12,
+    "TownTileY": 10,
+    "MailboxTileX": 13,
+    "MailboxTileY": 10,
+    "DefaultSlotId": "Pelican4Ever_Farm_09",
+    "Description": "Refugio carretero noroeste de Bus Stop"
+  },
+  {
+    "DoorId": "BusStop_Door_02",
+    "LocationName": "BusStop",
+    "TownTileX": 25,
+    "TownTileY": 10,
+    "MailboxTileX": 26,
+    "MailboxTileY": 10,
+    "DefaultSlotId": "Pelican4Ever_Farm_10",
+    "Description": "Lodge carretero noreste de Bus Stop"
+  },
+  {
+    "DoorId": "BusStop_Door_03",
+    "LocationName": "BusStop",
+    "TownTileX": 12,
+    "TownTileY": 16,
+    "MailboxTileX": 13,
+    "MailboxTileY": 16,
+    "DefaultSlotId": "Pelican4Ever_Farm_11",
+    "Description": "Cabaña de parada sur de Bus Stop"
+  },
+  {
+    "DoorId": "BusStop_Door_04",
+    "LocationName": "BusStop",
+    "TownTileX": 28,
+    "TownTileY": 16,
+    "MailboxTileX": 29,
+    "MailboxTileY": 16,
+    "DefaultSlotId": "Pelican4Ever_Farm_12",
+    "Description": "Residencia vial este de Bus Stop"
+  },
+  {
+    "DoorId": "Mountain_Door_01",
+    "LocationName": "Mountain",
+    "TownTileX": 28,
+    "TownTileY": 38,
+    "MailboxTileX": 29,
+    "MailboxTileY": 38,
+    "DefaultSlotId": "Pelican4Ever_Farm_13",
+    "Description": "Cabaña del lago en la Montaña"
+  },
+  {
+    "DoorId": "Mountain_Door_02",
+    "LocationName": "Mountain",
+    "TownTileX": 65,
+    "TownTileY": 15,
+    "MailboxTileX": 66,
+    "MailboxTileY": 15,
+    "DefaultSlotId": "Pelican4Ever_Farm_14",
+    "Description": "Refugio minero junto a la Cantera"
+  },
+  {
+    "DoorId": "Forest_Door_01",
+    "LocationName": "Forest",
+    "TownTileX": 80,
+    "TownTileY": 18,
+    "MailboxTileX": 81,
+    "MailboxTileY": 18,
+    "DefaultSlotId": "Pelican4Ever_Farm_15",
+    "Description": "Pabellón rural del Bosque (Junto al Rancho)"
+  },
+  {
+    "DoorId": "Forest_Door_02",
+    "LocationName": "Forest",
+    "TownTileX": 30,
+    "TownTileY": 35,
+    "MailboxTileX": 31,
+    "MailboxTileY": 35,
+    "DefaultSlotId": "Pelican4Ever_Farm_16",
+    "Description": "Ermita boscosa del Lago del Mago"
   }
 ]

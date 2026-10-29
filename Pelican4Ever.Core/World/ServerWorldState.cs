@@ -25,6 +25,8 @@ namespace Pelican4Ever.Core.World
 
         public string FarmSlotId { get; set; } = string.Empty;
 
+        public string FarmType { get; set; } = "Standard";
+
         public long OwnerId { get; set; }
 
         public AccessPolicy Policy { get; set; } = AccessPolicy.Locked;

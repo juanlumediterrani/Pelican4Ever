@@ -3,6 +3,7 @@ namespace Pelican4Ever.Models
     public class DoorModel
     {
         public string DoorId { get; set; } = string.Empty;
+        public string LocationName { get; set; } = "Town";
         public int TownTileX { get; set; }
         public int TownTileY { get; set; }
         public int? MailboxTileX { get; set; }
@@ -20,6 +21,7 @@ namespace Pelican4Ever.Models
     public class ClaimDoorPayload
     {
         public string DoorId { get; set; } = string.Empty;
+        public string FarmType { get; set; } = "Standard";
     }
 
     public class ChangePolicyPayload

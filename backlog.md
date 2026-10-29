@@ -182,7 +182,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 ### Épica 6: Escalabilidad Urbana y Variedad de Granjas (8–16 Jugadores)
 > **Objetivo:** Ampliar la capacidad residencial del servidor sin disparar el uso de red ni saturar el pueblo.
 
-- [ ] **TASK-601: Expansión del Catálogo a 16 Residencias Urbanas y Rurales**
+- [x] **TASK-601: Expansión del Catálogo a 16 Residencias Urbanas y Rurales**
   * **Análisis Técnico:** Extender `assets/doors.json` para mapear 12 puertas adicionales en coordenadas transitables que no bloqueen rutas de NPCs:
     - 4 en `Town` (fachadas este y sur adicionales).
     - 4 en `BusStop` y alrededores de la carretera.
@@ -193,7 +193,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. `FarmSlotCount` configurable hasta 16 en `ServerConfig`.
     3. El comando `p4e_status` reporta el estado y ocupación de las 16 residencias.
 
-- [ ] **TASK-602: Elección de Plantilla de Mapa al Reclamar Granja**
+- [x] **TASK-602: Elección de Plantilla de Mapa al Reclamar Granja**
   * **Análisis Técnico:** Actualmente `CreateLocationData` en `FarmSlotModule` fija `"Maps\\Farm"`. Ampliar la definición para permitir que al reclamar la puerta por primera vez, el jugador elija entre: Standard, Forest, Hilltop, Wilderness, FourCorners, Beach, Meadowlands o Riverland. El mod inyecta la plantilla correspondiente (`"Maps\\Farm_Forest"`, `"Maps\\Farm_Beach"`, etc.) y calcula el punto de spawn de la cabaña usando las coordenadas específicas de cada mapa (ej. Standard en 64,15; Beach en 72,18; etc.).
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
@@ -201,7 +201,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. La ubicación `Pelican4Ever_Farm_XX` carga el mapa seleccionado por el jugador.
     3. La cabaña y buzón se posicionan en las coordenadas correctas del tipo de granja elegido.
 
-- [ ] **TASK-603: Culling Dinámico de Red para Granjas Inactivas (`LocationCullingModule.cs`)**
+- [x] **TASK-603: Culling Dinámico de Red para Granjas Inactivas (`LocationCullingModule.cs`)**
   * **Análisis Técnico:** En `Multiplayer.isAlwaysActiveLocation(loc)` (línea 1306), si devuelve `true`, todos los objetos, cultivos y animales de esa granja se transmiten a todos los clientes conectados. Para 16 granjas, esto generaría un consumo de ancho de banda innecesario. Parcheando `isAlwaysActiveLocation`: si la ubicación es `Pelican4Ever_Farm_XX` y ningún jugador está dentro de ella ni su dueño está online, devuelve `false`. En cuanto un jugador cruza el warp hacia esa granja, se marca temporalmente como activa.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**

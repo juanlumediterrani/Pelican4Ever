@@ -56,12 +56,21 @@ namespace Pelican4Ever.Modules
                 return;
 
             var state = context.WorldState;
-            log.Log($"Jugadores registrados: {state.Players.Count} | Puertas asignadas: {state.Doors.Count}", LogLevel.Info);
+            log.Log($"Jugadores registrados: {state.Players.Count} | Puertas asignadas: {state.Doors.Count}/{FarmSlotModule.RegisteredDoors.Count}", LogLevel.Info);
             int today = Game1.Date.TotalDays;
             foreach (PlayerRecord player in state.Players.Values)
             {
                 bool online = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == player.UniqueMultiplayerID);
                 log.Log($"  - {player.PlayerName} ({player.UniqueMultiplayerID}): {SleepPolicy.GetState(player, today, online)}, granja={player.FarmSlotId ?? "—"}", LogLevel.Info);
+            }
+
+            log.Log($"Residencias registradas ({FarmSlotModule.RegisteredDoors.Count} disponibles):", LogLevel.Info);
+            foreach (var door in FarmSlotModule.RegisteredDoors)
+            {
+                string status = state.Doors.TryGetValue(door.DoorId, out var ass)
+                    ? $"Ocupada por {(state.Players.TryGetValue(ass.OwnerId, out var p) ? p.PlayerName : ass.OwnerId.ToString())} [Tipo: {ass.FarmType}, Acceso: {ass.Policy}]"
+                    : "Libre";
+                log.Log($"  [{door.DoorId}] {door.LocationName ?? "Town"} ({door.TownTileX},{door.TownTileY}) -> {door.DefaultSlotId}: {status}", LogLevel.Info);
             }
         }
     }
