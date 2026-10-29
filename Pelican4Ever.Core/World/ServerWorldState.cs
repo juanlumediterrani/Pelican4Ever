@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Pelican4Ever.Core.Economy;
+using Pelican4Ever.Core.Festivals;
 using Pelican4Ever.Core.Players;
 
 namespace Pelican4Ever.Core.World
@@ -58,6 +59,9 @@ namespace Pelican4Ever.Core.World
         /// <summary>Festivales reprogramados: clave fecha original ("spring13"), valor nueva fecha ("spring16").</summary>
         public Dictionary<string, string> RescheduledFestivals { get; set; } = new();
 
+        /// <summary>Puntuaciones de minijuegos en festivales asíncronos (TASK-701).</summary>
+        public List<FestivalScoreEntry> FestivalScores { get; set; } = new();
+
         /// <summary>Último día de juego cerrado por un Rollover (TotalDays), o -1.</summary>
         public int LastRolloverGameDay { get; set; } = -1;
 
@@ -99,6 +103,12 @@ namespace Pelican4Ever.Core.World
             if (MarketListings == null)
             {
                 MarketListings = new List<MarketListing>();
+                changed = true;
+            }
+
+            if (FestivalScores == null)
+            {
+                FestivalScores = new List<FestivalScoreEntry>();
                 changed = true;
             }
 

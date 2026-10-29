@@ -213,7 +213,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 ### Épica 7: Minijuegos de Festivales y Eventos Comunitarios Asíncronos
 > **Objetivo:** Participación individual o grupal flexible en festivales sin congelar el servidor.
 
-- [ ] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados**
+- [x] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados**
   * **Análisis Técnico:** En festivales como la Fiesta del Huevo (`spring13`) o el Festival de Hielo (`winter08`), el minijuego activa un temporizador sincrónico (`Event.drawFestivalScore`). Modificar `Event.answerDialogueQuestion` para que la participación en el minijuego sea instanciada por jugador: cada cliente ejecuta su temporizador localmente y al terminar, reporta su puntuación al Host. El Host registra las puntuaciones del día en `ServerWorldState` y a las 23:50 otorga el premio (ej. Sombrero de Paja) al jugador con la puntuación más alta de la jornada.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
@@ -221,7 +221,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Las puntuaciones individuales se consolidan en una tabla comunitaria en el tablón del evento.
     3. El ganador de la jornada recibe el premio automáticamente al finalizar la ventana del festival.
 
-- [ ] **TASK-702: Ceremonias Comunitarias Programadas en Vivo**
+- [x] **TASK-702: Ceremonias Comunitarias Programadas en Vivo**
   * **Análisis Técnico:** Para eventos comunitarios sin minijuego (Luau, Danza de las Medusas), se programa una hora comunitaria por defecto (ej. 21:00 hora real). A las 20:45 se emite un aviso HUD global: *"La ceremonia comenzará en 15 minutos en la playa"*. A las 21:00, los jugadores presentes en la zona inician la cinemática grupal sincronizada mediante `ReadyCheckDialog("ceremony")`, mientras que los jugadores que están en las minas o en su granja continúan su juego sin interrupción.
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**
