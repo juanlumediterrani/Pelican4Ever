@@ -6,3 +6,5 @@ obj/
 .vs/
 .idea/
 .vscode/
+local.props
+TestResults/

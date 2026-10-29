@@ -1,15 +1,27 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!--
+    Ruta del juego: ModBuildConfig la detecta sola en instalaciones estándar de Steam.
+    Si tu instalación no es estándar, copia local.props.example a local.props (ignorado por git)
+    y define ahí <GamePath>.
+  -->
+  <Import Project="..\local.props" Condition="Exists('..\local.props')" />
+
   <PropertyGroup>
     <TargetFramework>net6.0</TargetFramework>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <EnableHarmony>true</EnableHarmony>
-    <GamePath Condition="'$(GamePath)' == ''">/home/mtx/.steam/debian-installation/steamapps/common/Stardew Valley</GamePath>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Pelican4Ever.Core\Pelican4Ever.Core.csproj" />
   </ItemGroup>
 
 </Project>

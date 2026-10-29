@@ -1,73 +1,65 @@
 using System;
+using System.Collections.Generic;
 using HarmonyLib;
-using Pelican4Ever.Config;
-using Pelican4Ever.Models;
+using Pelican4Ever.Core.Config;
+using Pelican4Ever.Framework;
+using Pelican4Ever.Modules;
 using StardewModdingAPI;
-using StardewModdingAPI.Events;
 
 namespace Pelican4Ever
 {
+    /// <summary>
+    /// Punto de entrada SMAPI. El mismo DLL se instala en el servidor y en todos los clientes;
+    /// cada módulo declara si su lógica es de host, de cliente o de ambos (ver ADR-0004).
+    /// </summary>
     public class ModEntry : Mod
     {
-        public static ModEntry Instance { get; private set; } = null!;
-        public static ServerConfig Config { get; private set; } = null!;
-        public static IMonitor ModMonitor => Instance.Monitor;
-        public static Harmony HarmonyInstance { get; private set; } = null!;
-        public static ServerWorldState WorldState { get; private set; } = new();
+        private ModContext context = null!;
 
         public override void Entry(IModHelper helper)
         {
-            Instance = this;
-
-            // Load or generate configuration
-            Config = helper.ReadConfig<ServerConfig>();
-            ModMonitor.Log($"[Pelican 4Ever] Loaded configuration (Rollover: {Config.RolloverTime}, Crops: {Config.CropPriceMultiplier}x, DedicatedMode: {Config.DedicatedServerMode}).", LogLevel.Info);
-
-            // Initialize Harmony
-            HarmonyInstance = new Harmony(ModManifest.UniqueID);
-            try
+            ServerConfig config = helper.ReadConfig<ServerConfig>();
+            IReadOnlyList<string> errors = config.Validate();
+            if (errors.Count > 0)
             {
-                HarmonyInstance.PatchAll();
-                ModMonitor.Log($"[Pelican 4Ever] Harmony patches registered successfully.", LogLevel.Info);
-            }
-            catch (Exception ex)
-            {
-                ModMonitor.Log($"[Pelican 4Ever] Failed applying Harmony patches: {ex}", LogLevel.Error);
+                foreach (string error in errors)
+                    Monitor.Log($"config.json: {error}", LogLevel.Error);
+                Monitor.Log("Configuración inválida: Pelican 4Ever queda DESACTIVADO hasta corregir config.json.", LogLevel.Error);
+                return;
             }
 
-            // Hook events for WorldState persistence
-            helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-            helper.Events.GameLoop.Saving += OnSaving;
+            context = new ModContext(helper, Monitor, ModManifest, config, new Harmony(ModManifest.UniqueID));
 
-            // Register management console commands
-            helper.ConsoleCommands.Add("p4e_status", "Displays current Pelican 4Ever server status.", OnStatusCheckCommand);
+            // Orden de registro = orden de dependencia. Cada iteración del backlog añade aquí sus módulos.
+            RegisterModules(
+                new PersistenceModule(),
+                new ClientVersionGuardModule(),
+                new StatusCommandModule()
+            );
+
+            Monitor.Log($"Cargado (Rollover {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
         }
 
-        private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        private void RegisterModules(params IModule[] modules)
         {
-            if (!Context.IsMainPlayer)
-                return;
+            foreach (IModule module in modules)
+            {
+                if (!context.Config.IsModuleEnabled(module.Name))
+                {
+                    Monitor.Log($"Módulo '{module.Name}' desactivado en config.json.", LogLevel.Info);
+                    continue;
+                }
 
-            WorldState = Helper.Data.ReadSaveData<ServerWorldState>(ServerWorldState.SaveDataKey) ?? new ServerWorldState();
-            ModMonitor.Log($"[Pelican 4Ever] Loaded ServerWorldState: {WorldState.DoorAssignments.Count} assigned doors, {WorldState.RescheduledFestivals.Count} rescheduled festivals.", LogLevel.Info);
-        }
-
-        private void OnSaving(object? sender, SavingEventArgs e)
-        {
-            if (!Context.IsMainPlayer)
-                return;
-
-            Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, WorldState);
-            ModMonitor.Log($"[Pelican 4Ever] Persisted ServerWorldState to master save.", LogLevel.Trace);
-        }
-
-        private void OnStatusCheckCommand(string command, string[] args)
-        {
-            ModMonitor.Log($"=== Pelican 4Ever ({ModManifest.Version}) ===", LogLevel.Info);
-            ModMonitor.Log($"Is Master Game: {Context.IsMainPlayer}", LogLevel.Info);
-            ModMonitor.Log($"Rollover Target: {Config.RolloverTime}", LogLevel.Info);
-            ModMonitor.Log($"Assigned Doors: {WorldState.DoorAssignments.Count}", LogLevel.Info);
-            ModMonitor.Log($"Rescheduled Festivals: {WorldState.RescheduledFestivals.Count}", LogLevel.Info);
+                try
+                {
+                    module.Register(context);
+                    Monitor.Log($"Módulo '{module.Name}' ({module.Side}) registrado.", LogLevel.Trace);
+                }
+                catch (Exception ex)
+                {
+                    Monitor.Log($"Módulo '{module.Name}' falló al registrarse y queda desactivado:\n{ex}", LogLevel.Error);
+                }
+            }
         }
     }
 }

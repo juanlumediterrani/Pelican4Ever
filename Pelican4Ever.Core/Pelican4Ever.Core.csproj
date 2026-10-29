@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Lógica de dominio pura de Pelican 4Ever: SIN referencias a Stardew Valley, SMAPI ni Harmony.
+    Todo lo que se pueda expresar como función de (hora real, configuración, estado persistido)
+    vive aquí para poder probarlo con tests unitarios sin arrancar el juego.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <RootNamespace>Pelican4Ever.Core</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Pelican4Ever.Tests" />
+  </ItemGroup>
+
+</Project>

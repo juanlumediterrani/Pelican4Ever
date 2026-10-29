@@ -1,176 +1,141 @@
-# Product & Technical Backlog — *Pelican 4Ever* (`SV-RTMP`)
+# Backlog Técnico y de Producto — *Pelican 4Ever* (`SV-RTMP`)
 
-Basado en las especificaciones de [design.md](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/design.md) y [architecture.md](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/architecture.md).
-
----
-
-## 🛠️ 1. Herramientas Necesarias (Toolchain & Entorno)
-
-### 1.1. Desarrollo y Compilación (.NET / SMAPI)
-* **.NET SDK 6.0 / 8.0 (`dotnet-sdk`)**: Stardew Valley 1.6.x corre sobre .NET 6.0; requerido para compilar el proyecto C# (`Pelican4Ever.csproj`).
-* **NuGet Package — `Pathoschild.Stardew.ModBuildConfig` (v4.1+)**: Automatiza las referencias a las DLLs del juego (`Stardew Valley.dll`, `StardewValley.GameData.dll`), SMAPI y `0Harmony.dll` (`EnableHarmony = true`), además de empaquetar y desplegar el mod en la carpeta `Mods/`.
-* **SMAPI 4.x+ (Stardew Modding API)**: API base para eventos del ciclo de vida, comandos de consola, inyección de assets (`AssetRequested`) y persistencia (`modData` / `WriteSaveData`).
-* **Harmony 2.x (`Lib.Harmony`)**: Incluido con SMAPI para parches `Prefix`, `Postfix` y `Transpiler` en métodos internos del motor.
-* **IDE C#**: JetBrains Rider, Visual Studio Code (con *C# Dev Kit*) o Visual Studio, configurado con depuración adjunta al proceso `Stardew Valley`.
-
-### 1.2. Ingeniería Inversa e Inspección del Motor
-* **ILSpy / AvaloniaILSpy** (o **dotPeek**): Imprescindible en Linux para descompilar `Stardew Valley.dll` y verificar firmas exactas de métodos (`Game1.UpdateGameClock`, `Farmer.passOutFromTired`, `MineShaft.clearActiveMines`, `Event.tryToLoadFestival`, etc.).
-* **Decompilado de Contenido (`StardewXnbHack`)**: Herramienta para desempaquetar los archivos `.xnb` de `Content/` (mapas `.tmx`, `Data/Festivals/*`, `Data/Objects`, `Data/Machines`) y consultar coordenadas de puertas, warps y horarios de NPCs.
-
-### 1.3. Edición de Mapas y Coordenadas
-* **Tiled Map Editor**: Para inspeccionar `Town.tmx` y las plantillas de granja (`Farm.tmx`, `Farm_Forest.tmx`, etc.), identificar coordenadas de puertas interactivas en Pelican Town, posicionar las `Cabin`/`FarmHouse` en `(64, 14)` y definir propiedades `Action` / `TouchAction`.
-* **Debug Mode (Mod de SMAPI)**: Mod de soporte durante el desarrollo para visualizar coordenadas de casillas (`Tile X, Y`), nombres de mapas e inspeccionar `Warps` en vivo.
-
-### 1.4. Entorno de Pruebas Multijugador Local y Servidor Dedicado
-* **Instancias Múltiples en Local**: Configuración de lanzamiento con argumentos `--mods-path` o clientes secundarios en ventana para probar flujos `Host (MasterGame)` + múltiples `Farmhands` en una misma máquina.
-* **Docker + Docker Compose**: Basado en `JunimoServer` o imagen Linux (`ubuntu`/`debian`) con:
-  * **Xvfb** (*X Virtual Framebuffer*) o **Xorg dummy** para renderizado headless.
-  * **x11vnc / noVNC**: Acceso visual ligero vía navegador para depurar el estado del Host oculto.
-  * **SteamCMD**: Descarga y actualización automatizada de los binarios de Stardew Valley 1.6 (64-bit Linux).
+Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/design.md) y [architecture.md](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/architecture.md), y verificado sobre el código decompilado de **Stardew Valley 1.6.15** y **SMAPI 4.5.2**.
 
 ---
 
-## 📋 2. Backlog del Proyecto por Épicas e Iteraciones
+## 🛠️ 1. Toolchain y Entorno del Proyecto
 
-### Fase 0: Fundamentos, Scaffolding y Modelos de Datos
-> **Objetivo:** Inicializar la solución C#, la configuración del servidor y el contrato de datos sincronizado en `modData`.
-
-- [x] **TASK-001: Inicialización de la solución `Pelican4Ever` y `manifest.json`**
-  - **Prioridad:** Alta (Bloqueante)
-  - **Descripción:** Crear `Pelican4Ever.csproj` con `Pathoschild.Stardew.ModBuildConfig`, habilitar Harmony (`<EnableHarmony>true</EnableHarmony>`), definir `manifest.json` y el punto de entrada `ModEntry.cs`.
-  - **Criterios de Aceptación:** El proyecto compila sin errores en Linux y SMAPI carga el mod mostrando su versión en consola.
-- [x] **TASK-002: Configuración del servidor (`ServerConfig.cs`)**
-  - **Prioridad:** Alta
-  - **Descripción:** Implementar el modelo de configuración serializable en `config.json` con: hora de Rollover (`05:30`), turnos de reinicio de minas (`05:30`, `17:30`), multiplicadores económicos (`2.2x` cosechas, `1.8x` procesados), límite de stacks de saciedad (`2`) y huso horario.
-  - **Criterios de Aceptación:** Se genera `config.json` automáticamente en el primer arranque con valores por defecto válidos.
-- [x] **TASK-003: Definición de `ModDataKeys`, `PlayerPersistentData` y `ServerWorldState`**
-  - **Prioridad:** Alta
-  - **Descripción:** Implementar las constantes de `ModDataKeys` para `Farmer.modData` (`SleepState`, `AssignedFarmId`, `FarmMapType`, `SatietyStacks`, `LastLoginDay`) y `GameLocation.modData` (`FarmOwnerId`, `DoorAccessPolicy`), junto con los modelos de estado global guardados vía `Helper.Data.WriteSaveData`.
-  - **Criterios de Aceptación:** Lectura/escritura tipada mediante métodos de extensión sobre `Farmer` y `GameLocation`, sincronizada por `NetFields`.
+* **.NET SDK 8.0**: Compila `Pelican4Ever.Core` y `Pelican4Ever` hacia `net6.0` (runtime del juego) y ejecuta `Pelican4Ever.Tests` sobre `net8.0`.
+* **`Pathoschild.Stardew.ModBuildConfig` (v4.3.2)**: Empaqueta y despliega automáticamente el mod en la carpeta `Mods/Pelican4Ever` al compilar. La ruta local del juego se define en `local.props` (no versionado; usar `local.props.example` como plantilla).
+* **ILSpy CLI (`ilspycmd`)**: Decompilador de línea de comandos para inspeccionar `Stardew Valley.dll`.
+* **xUnit (`Pelican4Ever.Tests`)**: Suite de pruebas unitarias rápidas sobre toda la lógica pura de tiempo, calendario, sueño y saciedad (`dotnet test`).
+* **JunimoServer / Docker**: Contenedor con `xvfb` y `noVNC` apoyado sobre el modo dedicado nativo de Stardew Valley 1.6.15 (`Game1.HasDedicatedHost`).
 
 ---
 
-### Iteración 1: El Motor Temporal y Sueño Asíncrono (Épica 1)
-> **Objetivo:** Sincronizar el reloj del servidor 1:1 con la hora real, eliminar el colapso de las 02:00 AM, habilitar el *Bed-Logout* y ejecutar el *Daily Rollover* a las 05:30 AM sin dormir.
+## 📋 2. Backlog por Fases e Iteraciones
 
-- [ ] **TASK-101: Parche de Reloj en Tiempo Real 1:1 (`RealTimeClockPatcher.cs`)**
-  - **Prioridad:** Crítica
-  - **Descripción:**
-    - Parche `Prefix` en `Game1.UpdateGameClock` (solo en `Game1.IsMasterGame`) fijando `Game1.gameTimeInterval = 0`.
-    - En `OneSecondUpdateTicked`, sincronizar `Game1.timeOfDay` con `DateTime.Now` en saltos de 10 minutos para disparar máquinas y horarios de NPCs correctamente durante las 24h (`00:00` a `23:59`).
-  - **Criterios de Aceptación:** El reloj del juego refleja la hora del sistema anfitrión y no avanza por el temporizador nativo de 7 segundos.
-- [ ] **TASK-102: Curva de iluminación ambiental continua de 24 horas**
-  - **Prioridad:** Media
-  - **Descripción:** Ajustar el cálculo de luz ambiental del motor para cubrir los tramos `06:00–07:30` (amanecer gradual), `07:30–18:30` (luz diurna estacional), `18:30–20:30` (atardecer progresivo) y `20:30–06:00` (noche cerrada con farolas y antorchas activas).
-  - **Criterios de Aceptación:** No se producen saltos bruscos de color a medianoche ni a las 02:00 AM.
-- [ ] **TASK-103: Supresión del desmayo a las 02:00 AM (`Farmer.passOutFromTired`)**
-  - **Prioridad:** Crítica
-  - **Descripción:** Parche `Prefix` en `Farmer.passOutFromTired` que devuelve `false` cuando la causa es el horario, manteniendo intacto el desmayo por llegar a `0` de Energía o Salud.
-  - **Criterios de Aceptación:** Un jugador conectado a las 02:00 AM o 03:30 AM continúa jugando con normalidad.
-- [ ] **TASK-104: Sincronización perpetua de Calendario (Día 1 = Lunes, 28 días)**
-  - **Prioridad:** Media
-  - **Descripción:** Alinear el cálculo de `Game1.dayOfMonth` con la semana real para que el Día 1 de cada estación sea siempre Lunes y el Día 7 sea Domingo. Añadir comando de consola `sv_sync_calendar` para inicializar la partida maestra alineada al día de la semana actual.
-  - **Criterios de Aceptación:** Eventos semanales (Carro Ambulante viernes/domingos, cierre de Pierre miércoles) coinciden con la semana real.
-- [ ] **TASK-105: Mecánica de Sueño Asíncrono y *Bed-Logout* (`BedLogoutPatch`)**
-  - **Prioridad:** Crítica
-  - **Descripción:**
-    - Al conectar un jugador (`PeerConnected` / `SaveLoaded`), cambiar su estado `ModDataKeys.SleepState` a `"Awake"`.
-    - Parche `Prefix` en `GameLocation.answerDialogueAction` para `"Sleep_Yes"`: registrar `SleepState = "Rested"`, mostrar `HUDMessage` de confirmación y ejecutar `Game1.ExitToTitle()` tras 1500ms sin iniciar el cierre de día global.
-  - **Criterios de Aceptación:** Un jugador que duerme en su cama se desconecta limpiamente con estado `"Rested"` mientras los demás siguen jugando en el servidor.
-- [ ] **TASK-106: Gestor del Rollover Diario en Caliente a las 05:30 AM (`DailyRolloverManager.cs`)**
-  - **Prioridad:** Crítica
-  - **Descripción:**
-    - Aviso HUD 60 segundos antes (`05:29:00`) a los jugadores conectados y bloqueo breve de input durante la transición.
-    - A las `05:30:00`: incrementar `Game1.dayOfMonth` (y rotar `Game1.currentSeason` / `Game1.year` tras el día 28), ejecutar `location.DayUpdate(Game1.dayOfMonth)` en todas las ubicaciones (incluidas granjas instanciadas), liquidar `Shipping Bins`, repartir correo y regenerar forraje.
-    - Evaluar la máquina de estados de sueño en todos los `Farmer`:
-      - `Rested` $\rightarrow$ `Offline_Safe` (100% Energía).
-      - `Awake` $\rightarrow$ `Offline_Penalized` (cargo médico único del 10% de oro hasta 1.000g y Energía al 50%).
-      - `Offline_Safe` / `Offline_Penalized` sin conexión $\rightarrow$ se mantienen sin penalizaciones adicionales.
-    - Ejecutar guardado maestro y comando de prueba manual `rollover_now`.
-  - **Criterios de Aceptación:** Al ejecutar `rollover_now` o llegar las 05:30 AM, los cultivos regados avanzan de fase, se cobra la caja de envíos y se aplican los estados de energía/penalización sin reiniciar el servidor.
+### Fase 0: Fundamentos, Arquitectura Limpia y Suite de Tests (Completada)
+> **Objetivo:** Separar la lógica de dominio pura (`Pelican4Ever.Core`) del mod SMAPI (`Pelican4Ever`), validar configuración al arranque, asegurar versión de clientes y cubrir todas las reglas temporales y de balance con tests unitarios.
+
+- [x] **TASK-001: Solución multiproyecto (`Pelican4Ever.Core`, `Pelican4Ever`, `Pelican4Ever.Tests`)**
+  - **Criterios de Aceptación:** `dotnet build Pelican4Ever.sln` compila con `0` advertencias (`TreatWarningsAsErrors = true`) y despliega `Pelican4Ever.dll` + `Pelican4Ever.Core.dll` en `Mods/Pelican4Ever`.
+- [x] **TASK-002: Configuración tipada con validación al arranque (`ServerConfig.cs`)**
+  - **Criterios de Aceptación:** `ServerConfig.Validate()` comprueba formatos `HH:mm`, `DayStartTime == 06:00`, `NightHoldStartTime <= 01:50`, `CalendarEpoch` en lunes y rangos numéricos. Si hay errores, el mod los registra y se desactiva limpiamente.
+- [x] **TASK-003: Lógica pura de Reloj, Calendario por Época, Sueño y Saciedad (`Pelican4Ever.Core`)**
+  - **Criterios de Aceptación:** Implementados `GameClock`, `ServerCalendar`, `ServerTime`, `PlayerRecord`, `SleepPolicy`, `SatietyBudget` y `ServerWorldState` (esquema v2 con migración), cubiertos por **59 tests unitarios** en `Pelican4Ever.Tests`.
+- [x] **TASK-004: Registro modular aislado (`IModule`, `ModContext`), `PersistenceModule`, `ClientVersionGuardModule` y `StatusCommandModule`**
+  - **Criterios de Aceptación:** Cada módulo se registra con su propio `try/catch` y puede activarse/desactivarse en `config.json`. `ClientVersionGuardModule` expulsa clientes sin el mod o con versión incompatible. El comando `p4e_status` muestra reloj esperado, fecha derivada y estado de jugadores.
 
 ---
 
-### Iteración 2: Vivienda Urbana y Enrutador de Granjas Instanciadas (Épica 2)
-> **Objetivo:** Permitir que cada jugador reclame una puerta en Pelican Town, elija su plantilla de granja y disponga de una instancia aislada sincronizada con el netcode nativo (`Cabin`).
+### Fase 0.5: Spikes de Validación de Motor (Antes de Iteración 1)
+> **Objetivo:** Validar con prototipos mínimos en el juego real los 4 puntos de fricción del motor identificados en la revisión de arquitectura.
 
-- [ ] **TASK-201: Cargador dinámico de Granjas Instanciadas (`DynamicFarmLoader.cs`)**
-  - **Prioridad:** Crítica
-  - **Descripción:** Instanciar objetos `Farm(mapAssetPath, $"Farm_{player.UniqueMultiplayerID}")` según la plantilla elegida (*Estándar, Bosque, Cuatro Esquinas, Playa, Salvaje, Colina, Pradera*) y registrarlos en `Game1.locations` del Host.
-  - **Criterios de Aceptación:** Dos clientes conectados pueden estar simultáneamente en sus respectivas granjas `Farm_<UID>` sin colisión de objetos ni cultivos.
-- [ ] **TASK-202: Reubicación y camuflaje de `Cabin` como `FarmHouse` (`CabinVaultManager.cs`)**
-  - **Prioridad:** Crítica
-  - **Descripción:** Mover la instancia de `Cabin` asignada al `Farmhand` desde la granja base del Host hacia su granja instanciada `Farm_<UID>` en las coordenadas `(64, 14)`, aplicando la textura de `FarmHouse` principal.
-  - **Criterios de Aceptación:** El buzón propio, el punto de aparición al entrar al servidor y las mejoras de casa con Robin funcionan sobre la granja instanciada del jugador.
-- [ ] **TASK-203: Registro de puertas en Pelican Town y flujo de reclamación inicial (`TownDoorInterceptor.cs`)**
-  - **Prioridad:** Alta
-  - **Descripción:**
-    - Definir el catálogo de coordenadas de puertas reclamables en `Town`.
-    - Si un jugador sin `AssignedFarmId` interactúa con una puerta libre, mostrar menú de selección de plantilla de granja, crear su instancia y vincular la puerta.
-    - Si interactúa con una puerta ya asignada, mostrar diálogo: *"Ir a mi granja"*, *"Visitar a un vecino..."* o *"Cancelar"*.
-    - Parchear `Game1.warpFarmer` al salir de `"Farm_*"` hacia `BusStop`/`Town` para devolver al jugador frente a su puerta asignada en Pelican Town.
-  - **Criterios de Aceptación:** El ciclo de entrada desde Pelican Town a la granja instanciada y salida de vuelta a la puerta del pueblo funciona en ambos sentidos.
-- [ ] **TASK-204: Sistema de permisos de visita y protección anti-griefing**
-  - **Prioridad:** Media
-  - **Descripción:**
-    - Menú interior en la puerta de la granja para configurar `DoorAccessPolicy`: `Public`, `Friends` o `Locked`.
-    - En granjas donde `Game1.player.UniqueMultiplayerID != FarmOwnerId`, bloquear uso de picos, hachas, azadas destructivas, bombas y apertura de cofres (permitiendo usar la regadera en modo `Public`/`Friends`).
-  - **Criterios de Aceptación:** Un visitante no autorizado no puede entrar si está `Locked`, y dentro de una granja ajena no puede destruir cultivos ni abrir cofres.
+- [ ] **SPIKE-01: Disparo automático de `NewDay` + `Save` nativo con clientes conectados**
+  - **Pregunta:** ¿Se puede iniciar la transición diaria nativa a las `06:00 AM` (o con comando `p4e_rollover_now`) cuando hay `Farmhands` conectados fuera de la cama sin colgar el `ReadyCheck` `"sleep"`?
+  - **Criterio de Éxito:** El día avanza, la partida se guarda en disco y los clientes continúan conectados en el nuevo día.
+- [ ] **SPIKE-02: Persistencia de `Pelican4Ever_Farm_01` declarada en `Data/Locations` con una `Cabin`**
+  - **Pregunta:** ¿Guarda y recarga `SaveGame.loadDataToLocations` todos los cultivos, objetos y la `Cabin` de un `Farmhand` dentro de una ubicación personalizada `Pelican4Ever_Farm_01`?
+  - **Criterio de Éxito:** Tras plantar cultivos, colocar un cofre y reiniciar el servidor, todo permanece intacto y el `Farmhand` conserva su punto de aparición.
+- [ ] **SPIKE-03: Reloj 1:1 con `realMilliSecondsPerGameTenMinutes = 600_000` y `NightHold` en `2550`**
+  - **Pregunta:** ¿Avanzan correctamente hornos, rutas de NPCs e iluminación ambiental entre `0600` y `2550`, y se mantiene el jugador sin desmayarse durante el tramo `01:50–06:00` (`2550`)?
+  - **Criterio de Éxito:** Cero desmayos a las `02:00 AM` y las máquinas descuentan los 250 minutos de madrugada (`2550 → 0600`) durante el Rollover nativo.
+- [ ] **SPIKE-04: Interacción con el modo dedicado nativo 1.6.15 (`Game1.HasDedicatedHost` / `DedicatedServer`)**
+  - **Pregunta:** ¿Qué ajustes necesita `DedicatedServer.Tick()` para que no pause `Game1.netWorldState.Value.IsPaused` cuando no hay jugadores conectados (`onlineIds.Count == 0`)?
+  - **Criterio de Éxito:** El reloj del servidor sigue avanzando y ejecuta el Rollover de las `06:00 AM` con `0` clientes conectados.
 
 ---
 
-### Iteración 3: Economía, Energía, Procesado Real y Minas Persistentes (Épica 3)
-> **Objetivo:** Equilibrar el presupuesto diario de energía con la velocidad de juego en tiempo real, escalar el procesado industrial y mantener las minas persistentes en turnos de 12 horas.
+### Iteración 1: El Motor Temporal, Rollover Nativo y Sueño Asíncrono (Épica 1)
+> **Objetivo:** Conectar `GameClock`, `ServerCalendar` y `SleepPolicy` con el bucle de Stardew Valley.
 
-- [ ] **TASK-301: Reforma de Comida y Saciedad Pasiva (`StaminaFoodPatcher.cs`)**
-  - **Prioridad:** Alta
+- [ ] **TASK-101: Módulo de Reloj en Tiempo Real y `NightHold` (`RealTimeClockModule.cs`)**
+  - **Prioridad:** Crítica
   - **Descripción:**
-    - Parche `Prefix`/`Postfix` en `Farmer.doneEating` para restaurar `__instance.Stamina` a su valor previo, conservando la curación de `Health` y los `Buffs`.
-    - Implementar el sistema de *Saciedad* (`ModDataKeys.SatietyStacks`, máx. 2 platos diarios) que regenera `+1 Energía` cada 60 segundos reales durante 60 minutos, y ajustar el Spa para restaurar `+1 Energía` cada 30 segundos reales en reposo. Resetear `SatietyStacks` en el Rollover de las 05:30 AM.
-  - **Criterios de Aceptación:** Comer alimentos cura vida y aplica buffs sin subir energía de golpe; comer un plato del día activa el tick pasivo de +1 energía/minuto.
-- [ ] **TASK-302: Minas Persistentes por Turnos de 12 Horas (`PersistentMineManager.cs`)**
-  - **Prioridad:** Alta
+    - Fijar `Game1.realMilliSecondsPerGameTenMinutes = 600_000` y sincronizar `gameTimeInterval = clockReading.MillisecondsIntoSlot` para mantener la interpolación nativa de luz ambiental.
+    - En el Host, controlar los pasos de `Game1.performTenMinuteClockUpdate()` mediante `GameClock.TicksToReach(Game1.timeOfDay, clockReading.TimeOfDay)` y congelar el reloj en `2550` durante `IsNightHold` (`01:50–06:00` reales).
+    - Parchear `Game1.shouldTimePass` y `DedicatedServer.Tick` para que el tiempo no se pause por menús ni por ausencia de jugadores.
+  - **Criterios de Aceptación:** El reloj refleja la hora real entre `06:00` y `01:50`, se mantiene en `2550` de `01:50` a `06:00` sin provocar desmayo y las máquinas procesan el tramo restante al cambiar de día.
+- [ ] **TASK-102: Módulo de *Bed-Logout* y mensajería al Host (`BedLogoutModule.cs`)**
+  - **Prioridad:** Crítica
   - **Descripción:**
-    - Parche `Prefix` en `MineShaft.clearActiveMines` que impide el vaciado de `MineShaft.activeMines` cuando el conteo de jugadores llega a 0.
-    - Cronjob en el servidor a las `05:30 AM` y `17:30 PM` reales que invoca la limpieza real de `MineShaft.activeMines` y notifica por HUD el inicio de un nuevo turno minero.
-  - **Criterios de Aceptación:** Si un jugador pica todas las rocas del piso 5, sale de la mina y otro jugador entra 20 minutos después (dentro del mismo turno de 12h), el piso 5 sigue limpio.
-- [ ] **TASK-303: Escalado de máquinas en tiempo real**
-  - **Prioridad:** Media
-  - **Descripción:** Ajustar `minutesUntilReady` de las máquinas procesadoras (hornos ~30 min reales, envasadoras 2–3 días reales, barriles 6–7 días reales) para que operen de forma coherente con el reloj 1:1 y con el `DayUpdate` del Rollover.
-  - **Criterios de Aceptación:** Un horno funde un lingote tras 30 minutos reales; barriles y envasadoras descuentan el tiempo correctamente cada 10 minutos y durante el Rollover.
-- [ ] **TASK-304: Multiplicadores de precios agrícolas y artesanales (`PriceMultiplierPatcher.cs`)**
-  - **Prioridad:** Media
-  - **Descripción:** Parche `Postfix` en `StardewValley.Object.sellToStorePrice` aplicando los multiplicadores de `ServerConfig` (`2.2x` para cosechas directas y `1.8x` para productos artesanales/procesados).
-  - **Criterios de Aceptación:** El valor de venta en tiendas y en la Caja de Envíos refleja los multiplicadores configurados.
+    - Al conectar un jugador (`PeerConnected` / `SaveLoaded`), actualizar `PlayerRecord.LastActiveGameDay = Game1.Date.TotalDays`.
+    - Parche `Prefix` en `GameLocation.answerDialogueAction` para `"Sleep_Yes"`: enviar mensaje `BedLogoutRequest` al Host (que registra `RestedOnGameDay = Game1.Date.TotalDays`), mostrar confirmación en el HUD y desconectar al menú (`Game1.ExitToTitle()`) tras `1500 ms` sin activar el cierre de día global.
+  - **Criterios de Aceptación:** Dormir en la cama desconecta al jugador con estado `Rested` (`p4e_status`) mientras los demás siguen jugando.
+- [ ] **TASK-103: Gestor del Rollover Diario Nativo a las `06:00 AM` y `CatchUpPlan` (`DailyRolloverModule.cs`)**
+  - **Prioridad:** Crítica
+  - **Descripción:**
+    - Emitir avisos en el HUD a los jugadores conectados `15`, `5` y `1` minuto antes de las `06:00 AM`.
+    - A las `06:00:00` reales (o mediante el comando `p4e_rollover_now`), lanzar la transición nativa de fin de día y guardado, aplicando `ServerCalendar.PlanCatchUp` si el servidor estuvo apagado.
+    - En `DayStarted`, evaluar `SleepPolicy.Evaluate` para cada `PlayerRecord`, aplicar `WakeUpEnergy` y `MedicalFee` sobre cada `Farmer` (con `useSeparateWallets = true`), congelar la caída de amistad de jugadores `Offline_*` y crear copia de seguridad rotativa del save.
+  - **Criterios de Aceptación:** Los cultivos avanzan, se liquidan las `Shipping Bins` personales y los jugadores ausentes varios días seguidos no reciben penalizaciones adicionales.
 
 ---
 
-### Iteración 4: Vida Urbana (NPCs), Festivales e Infraestructura (Épica 4)
-> **Objetivo:** Dotar de vida continua a los NPCs en horario 1:1, instanciar festivales en horario *Prime-Time* (18:00–23:59) sin bloquear el pueblo y empaquetar el servidor dedicado.
+### Iteración 2: 4 Huecos de Granja y Puertas en Pelican Town (Épica 2)
+> **Objetivo:** Habilitar 4 granjas privadas estándar (`Pelican4Ever_Farm_01..04`) conectadas a puertas de Pelican Town para el MVP de 4 jugadores.
 
-- [ ] **TASK-401: Controlador de *Micro-Wandering* de NPCs (`NpcMicroWanderController.cs`)**
-  - **Prioridad:** Media
-  - **Descripción:**
-    - Reducir un 50% la velocidad de desplazamiento en ruta de los NPCs (paso de paseo).
-    - En `OneSecondUpdateTicked` (Host), registrar el `Tile` de destino como ancla cuando el NPC termina su ruta. Cada 45–90 segundos reales, mover al NPC con `PathFindController` a una casilla libre dentro de un área segura de $4\times 4$ ($\pm 2$ casillas) verificando colisiones y evitando `Warps`, alternando orientaciones y bocadillos de texto ambiental.
-    - Limpiar el ancla en `NPC.checkSchedule` cuando toque cambiar de destino horario.
-  - **Criterios de Aceptación:** Los NPCs no permanecen estáticos durante horas en su punto de destino y nunca activan un `Warp` accidentalmente al deambular.
-- [ ] **TASK-402: Reprogramación dinámica de Festivales (`FestivalInstanceManager.cs`)**
-  - **Prioridad:** Media
-  - **Descripción:**
-    - Comando SMAPI `festival_reschedule <season> <oldDay> <newDay>` y comando de chat `/festival move <oldDay> <newDay>` para administradores.
-    - Interceptar `Data/Festivals/FestivalDates` mediante `Helper.Events.Content.AssetRequested` y refrescar en vivo con `InvalidateCache`.
-  - **Criterios de Aceptación:** Al mover un festival de día, el calendario frente a la tienda de Pierre refleja la nueva fecha inmediatamente sin reiniciar el servidor.
-- [ ] **TASK-403: Festivales Instanciados en Prime-Time (18:00 – 23:59) sin bloqueo de tránsito**
+- [ ] **TASK-201: Inyección declarativa de los 4 huecos en `Data/Locations` (`FarmSlotModule.cs`)**
+  - **Prioridad:** Crítica
+  - **Descripción:** Suscribirse a `AssetRequested` para `"Data/Locations"` y registrar `Pelican4Ever_Farm_01` a `Pelican4Ever_Farm_04` (según `Config.FarmSlotCount`) con `CreateOnLoad` y `AlwaysActive = true`. Activar `Game1.player.team.useSeparateWallets.Value = true` al cargar o crear la partida maestra.
+  - **Criterios de Aceptación:** Las 4 ubicaciones existen en `Game1.locations` al cargar la partida, permiten plantar y construir con Robin, y persisten en el XML del guardado.
+- [ ] **TASK-202: Reubicación de `Cabin` por hueco de granja (`CabinVaultManager.cs`)**
+  - **Prioridad:** Crítica
+  - **Descripción:** Al reclamar una puerta, mover o vincular la `Cabin` asociada al `Farmhand` dentro de su ubicación `Pelican4Ever_Farm_0X` en las coordenadas de la casa principal (`64, 14` de la plantilla Estándar).
+  - **Criterios de Aceptación:** El buzón, las mejoras de casa y el punto de aparición del jugador operan dentro de su hueco asignado.
+- [ ] **TASK-203: Catálogo de puertas en Pelican Town (`assets/doors.json`) y enrutado bidireccional**
   - **Prioridad:** Alta
   - **Descripción:**
-    - Parchear `Event.tryToLoadFestival` para evitar el bloqueo global (`NetReady`) de todos los jugadores conectados.
-    - Entre las `18:00` y las `23:59` de un día de festival, cargar la instancia paralela `Town_Festival` conservando el mapa `Town` ordinario abierto al tránsito.
-    - Al cruzar un `Warp` hacia `Town` en esa franja, preguntar al jugador: *"¿Entrar al Festival de [Nombre] o cruzar el pueblo normalmente?"*, registrando su asistencia individual, compras y conversaciones con NPCs.
-  - **Criterios de Aceptación:** Un jugador puede asistir al festival a las 19:30 mientras otro jugador cruza `Town` hacia la playa sin ser arrastrado al evento.
-- [ ] **TASK-404: Modo Host Headless y Contenedor Docker (`JunimoServer`)**
+    - Definir en `assets/doors.json` las 4 puertas reclamables de `Town` y sus coordenadas de llegada.
+    - Al interactuar con una puerta en `Town`, mostrar diálogo para reclamar puerta libre, entrar a la granja propia o visitar la granja de un vecino autorizado (validado por el Host en `ServerWorldState.Doors`).
+    - Redirigir las salidas de `Pelican4Ever_Farm_0X` de vuelta a la puerta correspondiente en `Town`.
+  - **Criterios de Aceptación:** Cada uno de los 4 jugadores entra y sale de su granja privada desde su puerta de Pelican Town.
+- [ ] **TASK-204: Políticas de visita (`Locked`, `Friends`, `Public`) y protección anti-griefing**
   - **Prioridad:** Media
   - **Descripción:**
-    - Lógica de servidor dedicado en `ModEntry`: si se ejecuta en modo Host dedicado, mantener a `Game1.player` oculto, invulnerable, con estado de sueño ignorado y congelado fuera de los límites del mapa.
-    - Crear `Dockerfile` y `docker-compose.yml` para desplegar el servidor con `Pelican4Ever` preinstalado, volúmenes persistentes para `Saves/` y `config.json`.
-  - **Criterios de Aceptación:** El contenedor levanta la partida automáticamente en Linux, acepta conexiones entrantes 24/7 y ejecuta el Rollover de las 05:30 AM sin intervención humana.
+    - Permitir al propietario cambiar la política de acceso desde su puerta (enviando petición al Host, que actualiza `ServerWorldState.Doors` y replica en `location.modData`).
+    - En granjas donde `GetFarmOwnerId() != Game1.player.UniqueMultiplayerID`, bloquear picos, hachas, azadas sobre cultivos, bombas y apertura de cofres, permitiendo usar la regadera.
+  - **Criterios de Aceptación:** Un visitante no puede entrar si la puerta está en `Locked` ni destruir objetos o abrir cofres en granjas ajenas.
+
+---
+
+### Iteración 3: Economía, Presupuesto de Saciedad y Minas Persistentes (Épica 3)
+> **Objetivo:** Equilibrar el gasto diario de energía con la comida, el Spa, los precios y los turnos de 12 horas en las minas.
+
+- [ ] **TASK-301: Presupuesto de Saciedad en Comida, Platos Cocinados y Tope del Spa (`EconomyModule.cs`)**
+  - **Prioridad:** Alta
+  - **Descripción:**
+    - Parche `Prefix`/`Postfix` en `Farmer.doneEating`: recortar la ganancia instantánea de energía usando `SatietyBudget.AllowedGain` (hasta el 50% de `MaxStamina` por día real), conservando siempre la curación de `Health`, los `Buffs` y los ítems especiales (`Stardrop`).
+    - Si se consume un plato cocinado y quedan usos en `MaxDailyWellFedBuffs` (`2`), activar regeneración pasiva (`+1 Energía / 60s reales` durante 60 min).
+    - Limitar la regeneración del Spa a `1 punto / 30s reales` con tope diario `SpaDailyCap` (`60`) mediante `SatietyBudget.AllowedSpaGain`.
+  - **Criterios de Aceptación:** La comida restaura energía hasta agotar el presupuesto diario de Saciedad; a partir de ahí sigue curando vida y dando buffs sin sumar energía instantánea.
+- [ ] **TASK-302: Minas Persistentes por Turnos de 12 Horas (`06:00` y `18:00`)**
+  - **Prioridad:** Alta
+  - **Descripción:**
+    - Parche `Prefix` en `MineShaft.clearInactiveMines` (llamado cada 10 minutos desde `MineShaft.UpdateMines10Minutes`) que impide descargar niveles vacíos durante el turno.
+    - A las `06:00` y `18:00` reales (`Config.ParsedMineResetTimes`), limpiar los niveles de `MineShaft.activeMines` y `VolcanoDungeon` en los que no haya jugadores dentro y mostrar aviso en el HUD.
+  - **Criterios de Aceptación:** Los pisos minados permanecen vacíos de rocas durante todo el turno de 12 horas aunque todos los jugadores salgan de la mina.
+- [ ] **TASK-303: Multiplicadores de precios configurables por categoría (`PriceMultiplierPatcher.cs`)**
+  - **Prioridad:** Media
+  - **Descripción:** Si `CropPriceMultiplier != 1.0f` o `ArtisanPriceMultiplier != 1.0f`, aplicar el multiplicador en `StardewValley.Object.sellToStorePrice` según `Category` (`Vegetable`/`Fruit`/`Flower` vs. `ArtisanGoods`).
+  - **Criterios de Aceptación:** El precio de venta en tiendas y `Shipping Bin` refleja los multiplicadores de `config.json`.
+
+---
+
+### Iteración 4: Contenedor Dedicado y Vida Urbana (Épica 4 / Post-MVP)
+> **Objetivo:** Desplegar el servidor 24/7 en Docker y añadir mejoras de inmersión para NPCs y festivales.
+
+- [ ] **TASK-401: Integración con Host Dedicado Nativo (`Game1.HasDedicatedHost`) y Docker Compose**
+  - **Prioridad:** Alta
+  - **Descripción:**
+    - Activar `Game1.player.team.hasDedicatedHost.Value = true` cuando `Config.DedicatedServerMode == true`.
+    - Crear `docker-compose.yml` y scripts de arranque/backup sobre `JunimoServer` con volúmenes persistentes para `Saves/`, `Mods/Pelican4Ever/config.json` y copias de seguridad diarias.
+  - **Criterios de Aceptación:** El contenedor levanta la partida 24/7 en Linux y acepta a los 4 clientes del MVP.
+- [ ] **TASK-402: Controlador de *Micro-Wandering* de NPCs (`NpcMicroWanderController.cs`)**
+  - **Prioridad:** Media (Post-MVP)
+  - **Descripción:** Reducir la velocidad en ruta de los NPCs y hacer que deambulen cada 45–90 segundos reales en un radio $\pm 2$ alrededor de su casilla de destino sin pisar `Warps`.
+- [ ] **TASK-403: Reprogramación de Festivales y Ventana de Tarde/Noche (`18:00–23:50`)**
+  - **Prioridad:** Media (Post-MVP)
+  - **Descripción:** Comando `p4e_festival_move` sobre `Data/Festivals/FestivalDates`, ajuste de horario a `1800 2350` y diálogo al entrar a `Town` para permitir cruzar el pueblo sin bloquear a los demás jugadores.

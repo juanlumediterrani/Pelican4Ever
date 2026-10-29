@@ -1,223 +1,151 @@
-# `ARCHITECTURE.md` (Technical Architecture Document)
+# `ARCHITECTURE.md` — Documento de Arquitectura Técnica (*Pelican 4Ever*)
 
-## 1. Stack Tecnológico y Topología de Red
+## 1. Stack Tecnológico y Topología
 
-* **Plataforma objetivo:** Stardew Valley 1.6.x (64-bit) sobre Linux (x86_64).
-* **Frameworks de inyección:** SMAPI 4.x+ y **Harmony 2.x** (`Lib.Harmony`).
-* **Infraestructura de Servidor Dedicado:** Basado en contenedor Docker (**JunimoServer** o imagen propia con `xvfb` + servidor VNC ligero para depuración). El proceso principal ejecuta el binario del juego con `Game1.IsMasterGame == true`, manteniendo al personaje Host (`Game1.player`) oculto, invulnerable y congelado en una coordenada fuera de los límites del mapa.
-* **Protocolo de Transporte:** Capa nativa de red de Stardew Valley (`NetRoot`, `NetFields`, `Lidgren.Network` / `GalaxyNet`).
+* **Plataforma objetivo:** Stardew Valley **1.6.15** (64-bit) sobre Linux (`x86_64`), ejecutado con **SMAPI 4.1+** (probado sobre SMAPI 4.5.2) y **Harmony 2.x** (`Lib.Harmony`).
+* **Servidor Dedicado (Nativo 1.6 + Contenedor):**
+  * Stardew Valley 1.6.15 incorpora soporte nativo de host automatizado (`Game1.HasDedicatedHost`, `Game1.IsDedicatedHost`, `Farmer.IsDedicatedPlayer` y la clase `StardewValley.Network.Dedicated.DedicatedServer` activada mediante `player.team.hasDedicatedHost.Value = true`).
+  * El despliegue se apoya en **JunimoServer** (o contenedor Docker Linux con `xvfb` + `noVNC`) combinando el bot nativo `DedicatedServer` con las reglas de reloj continuo de `Pelican 4Ever` (impidiendo que `DedicatedServer.Tick()` pause el mundo cuando `onlineIds.Count == 0`).
+* **Topología Cliente-Servidor y Confianza:**
+  * El **mismo paquete del mod (`Pelican4Ever.dll` + `Pelican4Ever.Core.dll`) es obligatorio en Host y Clientes** (`ClientVersionGuardModule` expulsa en `PeerContextReceived` a cualquier cliente sin SMAPI o con distinta versión `Major.Minor`).
+  * **Host (`Context.IsMainPlayer`) = Fuente Única de la Verdad** para el reloj, el calendario, la asignación de puertas/granjas y el registro de jugadores (`ServerWorldState`).
+  * **Cliente (`Context.IsLocalPlayer`) = Ejecutor de Interfaz y Jugador Local** para el recorte de energía al comer (`Farmer.doneEating`), bloqueo local de herramientas en granjas ajenas, diálogos de puerta y cama. Todas las mutaciones de estado compartido se solicitan al Host vía `Helper.Multiplayer.SendMessage`.
 
 ---
 
-## 2. Estructura de la Solución (C#)
+## 2. Estructura de la Solución (.NET)
+
+La solución se divide en tres proyectos para separar completamente la lógica de dominio pura de las dependencias de `Stardew Valley.dll` y poder ejecutar pruebas unitarias en milisegundos:
 
 ```text
-Pelican4Ever/
-├── manifest.json
-├── Pelican4Ever.csproj
-├── ModEntry.cs                      # Punto de entrada SMAPI, registro de eventos y Harmony
-├── Config/
-│   └── ServerConfig.cs              # Multiplicadores, hora de Rollover, cooldowns de mina
-├── Models/
-│   ├── ModDataKeys.cs               # Claves de modData y métodos de extensión
-│   ├── PlayerPersistentData.cs      # Estado de sueño, ID de granja, stacks de saciedad
-│   └── ServerWorldState.cs          # Registro de granjas instanciadas y calendario de festivales
-├── Core/
-│   ├── RealTimeClockPatcher.cs      # Sincronización 1:1 con DateTime.Now y bloqueo de 2:00 AM
-│   └── DailyRolloverManager.cs      # Cronjob de las 05:30 AM, ejecución de DayUpdate() en caliente
-├── FarmRouter/
-│   ├── DynamicFarmLoader.cs         # Instanciación de mapas .tmx en Game1.locations
-│   ├── CabinVaultManager.cs         # Vinculación silenciosa de Cabins para el netcode nativo
-│   └── TownDoorInterceptor.cs       # Hooks de interacción en puertas de Pelican Town y permisos
-├── Economy/
-│   ├── StaminaFoodPatcher.cs        # Parche en Farmer.eatObject y regeneración pasiva
-│   ├── PersistentMineManager.cs     # Retención de MineShaft en memoria y limpieza cada 12h
-│   └── PriceMultiplierPatcher.cs    # Ajuste en Object.sellToStorePrice
-└── WorldLife/
-    ├── NpcMicroWanderController.cs  # Máquina de estados de movimiento local en puntos de ruta
-    └── FestivalInstanceManager.cs   # Clonación de mapas de evento y comando de reprogramación
+Pelican4Ever.sln
+├── local.props.example                  # Plantilla de ruta local a Stardew Valley (copiar a local.props)
+├── Pelican4Ever.Core/                   # Lógica pura (.NET 6, CERO referencias a Stardew/SMAPI/Harmony)
+│   ├── Config/
+│   │   └── ServerConfig.cs              # Configuración + validador determinista Validate()
+│   ├── Time/
+│   │   ├── GameClock.cs                 # Conversión hora real -> timeOfDay (0600..2550) + NightHold
+│   │   ├── ServerCalendar.cs            # Calendario perpetuo derivado de CalendarEpoch y CatchUpPlan
+│   │   └── ServerTime.cs                # Resolución de TimeZoneInfo IANA y reloj UTC -> Local
+│   ├── Players/
+│   │   ├── PlayerRecord.cs              # Registro autoritativo por jugador (días en TotalDays)
+│   │   └── SleepPolicy.cs               # Derivación de SleepState, evaluación de Rollover y cargo médico
+│   ├── Economy/
+│   │   └── SatietyBudget.cs             # Presupuesto diario de Saciedad (comida) y tope del Spa
+│   └── World/
+│       └── ServerWorldState.cs          # Estado persistido en el Host + migración de esquema (v2)
+├── Pelican4Ever/                        # Mod SMAPI (.NET 6, referencia a Pelican4Ever.Core)
+│   ├── manifest.json
+│   ├── ModEntry.cs                      # Validación de config y registro aislado de módulos (IModule)
+│   ├── Framework/
+│   │   ├── IModule.cs                   # Contrato IModule { Name, Side, Register(ModContext) }
+│   │   └── ModContext.cs                # Contenedor inyectado (Helper, Monitor, Config, Harmony, WorldState)
+│   ├── Models/
+│   │   └── ModDataKeys.cs               # Claves de GameLocation.modData (vista replicada de solo lectura)
+│   └── Modules/
+│       ├── PersistenceModule.cs         # Carga, migración y guardado de ServerWorldState en el Host
+│       ├── ClientVersionGuardModule.cs  # Verificación de versión del mod al conectar un par
+│       ├── StatusCommandModule.cs       # Comando de diagnóstico p4e_status
+│       ├── RealTimeClockModule.cs       # (Iteración 1) Sincronización 1:1, NightHold y bloqueo de pausa
+│       ├── DailyRolloverModule.cs       # (Iteración 1) Avisos, disparo de NewDay nativo y SleepPolicy
+│       ├── BedLogoutModule.cs           # (Iteración 1) Intercepción de Sleep_Yes y mensaje al Host
+│       ├── FarmSlotModule.cs            # (Iteración 2) Registro en Data/Locations, Cabins y puertas
+│       ├── EconomyModule.cs             # (Iteración 3) SatietyBudget, Spa, precios y minas 12h
+│       └── WorldLifeModule.cs           # (Iteración 4) Micro-wandering de NPCs y festivales
+└── Pelican4Ever.Tests/                  # Suite xUnit (.NET 8) sobre Pelican4Ever.Core (59 tests)
 ```
 
 ---
 
-## 3. Modelo de Datos y Claves de Persistencia (`modData`)
+## 3. Modelo de Datos y Fuente Única de la Verdad
 
-Para garantizar que los clientes no necesiten bases de datos externas y el estado viaje automáticamente por los `NetFields` nativos del juego, se utiliza el diccionario sincronizado `modData` en las entidades `Farmer` y `GameLocation`, respaldado por `Helper.Data.WriteSaveData` en el servidor:
+### 3.1. Estado Autoritativo en el Host (`ServerWorldState`)
 
-```csharp
-public static class ModDataKeys
-{
-    // Claves en Farmer.modData (sincronizadas por red automáticamente)
-    public const string SleepState = "Pelican4Ever.SleepState";       // "Awake" | "Rested" | "Offline_Safe" | "Offline_Penalized"
-    public const string AssignedFarmId = "Pelican4Ever.FarmLocation"; // Ej: "Farm_u_76561198000000000"
-    public const string FarmMapType = "Pelican4Ever.FarmMapType";     // "Standard" | "Forest" | "Beach" | "FourCorners" | "Meadowlands"
-    public const string SatietyStacks = "Pelican4Ever.SatietyStacks"; // "0" | "1" | "2"
-    public const string LastLoginDay = "Pelican4Ever.LastLoginDay";   // int serializado
+Para evitar condiciones de carrera sobre `Farmer.modData` (cuyo `NetRoot` pertenece al cliente de cada `Farmhand`), toda la información persistente de los jugadores vive en `ServerWorldState` (serializado en la partida maestra mediante `Helper.Data.WriteSaveData("Pelican4Ever.ServerWorldState", state)`):
 
-    // Claves en GameLocation.modData (para control de acceso a granjas)
-    public const string FarmOwnerId = "Pelican4Ever.OwnerUniqueMultiplayerID";
-    public const string DoorAccessPolicy = "Pelican4Ever.AccessPolicy"; // "Public" | "Friends" | "Locked"
-}
+* **`Players` (`Dictionary<long, PlayerRecord>`):**
+  * `LastActiveGameDay`, `RestedOnGameDay` (expresados en `Game1.Date.TotalDays`, nunca en `dayOfMonth`).
+  * `LastOutcome` (`Untouched` | `Rested` | `Penalized`), del que `SleepPolicy.GetState` deriva `Awake`, `Rested`, `OfflineSafe` u `OfflinePenalized`.
+  * Contadores diarios con auto-reset por día de juego (`SatietyGameDay`, `SatietyUsed`, `WellFedBuffsUsed`, `SpaEnergyUsed`).
+* **`Doors` (`Dictionary<string, DoorAssignment>`):** Vincula cada `DoorId` del pueblo con su `FarmSlotId` (`Pelican4Ever_Farm_01..04`), su `OwnerId`, su `AccessPolicy` (`Locked`, `Friends`, `Public`) y su conjunto `Friends`.
 
-```
+### 3.2. Vista Replicada en Ubicaciones (`GameLocation.modData`)
+
+Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.modData` como vista de lectura para la interfaz y el bloqueo local de herramientas en los clientes:
+* `Pelican4Ever.OwnerId` (`long`)
+* `Pelican4Ever.AccessPolicy` (`Locked` | `Friends` | `Public`)
 
 ---
 
-## 4. Especificación de Subsistemas y Parches Harmony
+## 4. Especificación Técnica de Subsistemas (Verificada contra Stardew Valley 1.6.15)
 
-### 4.1. Subsistema 1: Reloj en Tiempo Real y Rollover Diario (`RealTimeClockPatcher`)
+### 4.1. Subsistema 1: Reloj 1:1, `NightHold` y Rollover Nativo
 
-Stardew Valley representa la hora en formato entero militar (`0600` a `2600`) en `Game1.timeOfDay` y avanza 10 minutos cada vez que `Game1.gameTimeInterval` supera los `7000ms` (más modificadores de ubicación).
+#### A. Cómo funciona el reloj en Stardew Valley 1.6.15 (Decompilado)
+1. En `Game1.UpdateGameClock(GameTime time)` (líneas 6050–6090), el Host acumula `gameTimeInterval += time.ElapsedGameTime.Milliseconds` cuando `shouldTimePass() && !IsClient`.
+2. Cuando `gameTimeInterval > realMilliSecondsPerGameTenMinutes + ExtraMillisecondsPerInGameMinute * 10` (por defecto `7000 ms`), invoca `Game1.performTenMinuteClockUpdate()`.
+3. En `performTenMinuteClockUpdate()` (líneas 5882–6024), el Host suma `timeOfDay += 10`, normaliza minutos (`% 100 >= 60`), aplica `timeOfDay = Math.Min(timeOfDay, 2600)`, ejecuta `location.performTenMinuteUpdate(timeOfDay)`, `MineShaft.UpdateMines10Minutes(timeOfDay)` y propaga el estado a los clientes mediante `netWorldState.Value.UpdateFromGame1()`.
+4. Cuando un cliente recibe `NetWorldState` en `Multiplayer.receiveWorldState` (línea 506) y detecta `timeOfDay != Game1.timeOfDay`, ejecuta localmente su propio `Game1.performTenMinuteClockUpdate()`.
+5. En `Game1.Update` (línea 6452): `if (timeOfDay >= 2600 || player.stamina <= -15f)` dispara `player.startToPassOut()`.
 
-* **Parche 1 (`Prefix` en `Game1.UpdateGameClock`):**
-* **Acción:** Se intercepta el método en el servidor (`Game1.IsMasterGame`). Se fija `Game1.gameTimeInterval = 0` permanentemente para anular el avance nativo.
-* **Sincronización con hora del sistema:** Cada segundo real (evento `OneSecondUpdateTicked` de SMAPI), se lee `DateTime.Now`. Dado que el motor de Stardew dispara la lógica de máquinas y rutas en incrementos de 10 minutos, el reloj interno se actualiza cuando el minuto real es múltiplo de 10, mapeando las horas de madrugada (`00:00` – `05:20`) al formato extendido o manteniendo el ciclo de 24h con iluminación forzada.
+#### B. Diseño del Parche Temporal (`RealTimeClockModule`)
+* **Sin desmayo por horario gracias a `NightHold`:**
+  * `GameClock.Read` mapea `06:00 → 0600` hasta `01:50 → 2550`. Entre las `01:50` y las `06:00` reales devuelve `TimeOfDay = 2550, IsNightHold = true`.
+  * Como `Game1.timeOfDay` **nunca alcanza `2600`**, la condición `timeOfDay >= 2600` de `Game1.Update` (línea 6452) jamás se activa por el reloj, mientras que el desmayo por agotamiento (`player.stamina <= -15f`) y por vida (`health <= 0`) sigue funcionando de forma 100% nativa sin tocar `Farmer.passOutFromTired`.
+* **Sincronización 1:1 dirigida por el Host:**
+  * Se fija `Game1.realMilliSecondsPerGameTenMinutes = 600_000` (10 minutos reales) para que la interpolación de luz ambiental de `UpdateGameClock` (líneas 6059 y 6065) use el divisor real y `gameTimeInterval = clockReading.MillisecondsIntoSlot`.
+  * En `UpdateTicked` (Host), se bloquea el acumulador libre y se calcula `GameClock.TicksToReach(Game1.timeOfDay, clockReading.TimeOfDay)`: cuando el reloj real cruza un múltiplo de 10 minutos (y no estamos en `IsNightHold`), el Host invoca `Game1.performTenMinuteClockUpdate()` el número exacto de pasos necesarios. Los clientes reciben el cambio por `NetWorldState` y ejecutan su tick automáticamente.
+* **Tiempo continuo sin pausas:**
+  * Se parchea `Game1.shouldTimePass` (y en modo servidor dedicado se impide que `DedicatedServer.Tick` fije `Game1.netWorldState.Value.IsPaused = true` cuando no hay jugadores conectados y que los menús/eventos individuales pausen `IsTimePaused`).
 
-
-* **Parche 2 (`Prefix` en `Farmer.passOutFromTired`):**
-* **Acción:** Devuelve `false` (cancela la ejecución original) si el motivo es la hora del reloj, permitiendo jugar pasada la medianoche sin desmayarse.
-
-
-* **Ejecución del Rollover en caliente (`DailyRolloverManager`):**
-* A las `05:30:00` reales, el servidor ejecuta la transición diaria sin requerir que los jugadores estén en la cama:
-1. Si hay jugadores conectados en ese instante, les muestra un *HUD Message* de aviso 60 segundos antes y los teletransporta temporalmente a su habitación o congela su input durante los ~4 segundos que dura el proceso.
-2. Incrementa `Game1.dayOfMonth` (y cambia `Game1.currentSeason` si supera el día 28).
-3. Itera sobre `Game1.locations` (incluyendo todas las granjas instanciadas) invocando `location.DayUpdate(Game1.dayOfMonth)`.
-4. Evalúa la máquina de estados `ModDataKeys.SleepState` sobre `Game1.getAllFarmers()` aplicando las reglas de energía y penalización.
-5. Dispara el guardado maestro asíncrono.
-
-
-
-
-
-```csharp
-[HarmonyPatch(typeof(GameLocation), nameof(GameLocation.answerDialogueAction))]
-public static class BedLogoutPatch
-{
-    public static bool Prefix(string questionAndAnswer, ref bool __result)
-    {
-        if (questionAndAnswer == "Sleep_Yes")
-        {
-            // En lugar de iniciar el cierre del día para todo el servidor:
-            Game1.player.modData[ModDataKeys.SleepState] = "Rested";
-            Game1.addHUDMessage(new HUDMessage("Descanso registrado. Desconectando de forma segura...", 2));
-            
-            // Desconexión limpia del cliente hacia el menú principal tras 1.5s
-            DelayedAction.functionAfterDelay(() => Game1.ExitToTitle(), 1500);
-            __result = true;
-            return false; // Cancela la transición de noche nativa de Stardew
-        }
-        return true;
-    }
-}
-
-```
+#### C. Rollover Diario Nativo a las `06:00 AM` (`DailyRolloverModule`)
+* A las `06:00:00` reales, el Host sincroniza la fecha objetivo con `ServerCalendar` y fuerza la transición diaria nativa (`Game1.NewDay(0f)` / `ReadyCheck` de sueño automático), dejando que `_newDayAfterFade()` ejecute todo el pipeline de cambio de día y `SaveGame.Save()`.
+* En `DayStarted`:
+  * Evalúa `SleepPolicy.Evaluate` sobre cada `PlayerRecord` del día que acaba de cerrarse.
+  * Aplica `SleepPolicy.WakeUpEnergy` y `SleepPolicy.MedicalFee` sobre el `Farmer` correspondiente (usando carteras separadas `useSeparateWallets`).
+  * Verifica con `ServerCalendar.PlanCatchUp` si la fecha de la partida coincide con la fecha real derivada de `CalendarEpoch`.
 
 ---
 
-### 4.2. Subsistema 2: Enrutador de Granjas Instanciadas y Vínculo de `Cabins`
+### 4.2. Subsistema 2: Huecos de Granja Declarativos (`FarmSlotModule`)
 
-El protocolo de red de Stardew Valley exige que cada jugador invitado (`Farmhand`) tenga asignada una instancia de la clase `Cabin` para sincronizar su perfil, buzón e inventario desconectado.
-
-* **Creación de la Granja Instanciada (`DynamicFarmLoader`):**
-1. Cuando un jugador elige su tipo de granja, el servidor instancia un nuevo objeto `Farm(mapAssetPath, $"Farm_{player.UniqueMultiplayerID}")`.
-2. Se añade a `Game1.locations` en el Host. Al estar en `Game1.locations` con su propio `NetRoot`, SMAPI y el motor sincronizan el mapa automáticamente a todos los clientes conectados.
-
-
-* **Resolución del requisito de `Cabin` (`CabinVaultManager`):**
-* En lugar de dejar las cabañas amontonadas en la granja base del Host, el servidor mueve el edificio `Cabin` vinculado al `UniqueMultiplayerID` del jugador dentro de su nueva granja instanciada `Farm_{UID}`, reemplazando sus coordenadas por las de la `FarmHouse` principal (64, 14) y aplicando la textura exterior de casa de granja completa. Así, el buzón, las mejoras de casa con Robin y el punto de aparición al conectar funcionan con el código nativo del juego sin parches adicionales.
-
-
-* **Intercepción de Puertas en el Pueblo (`TownDoorInterceptor`):**
-* Se suscribe a `Helper.Events.Input.ButtonPressed`. Cuando el jugador pulsa el botón de acción frente a las coordenadas de una puerta registrada en el mapa `Town`:
-* Muestra un diálogo `createQuestionDialogue` con las opciones: `Ir a mi granja` | `Visitar a un vecino...` | `Cancelar`.
-* Al elegir un destino autorizado, ejecuta `Game1.warpFarmer(targetFarmName, entryX, entryY, 2)`.
-
-
-* Para el camino de salida de la granja instanciada (hacia el Bus Stop / Town), un parche en `Game1.warpFarmer` detecta si el origen empieza por `"Farm_"` y redirige las coordenadas de llegada exactamente frente a la puerta del pueblo correspondiente a esa granja.
-
-
+1. **Registro en `Data/Locations` (Sin ubicaciones huérfanas al cargar):**
+   * En `SaveGame.loadDataToLocations`, Stardew Valley 1.6 crea las ubicaciones a partir de `Data/Locations` (`CreateOnLoad`).
+   * Mediante `Helper.Events.Content.AssetRequested` sobre `"Data/Locations"`, el mod inyecta `FarmSlotCount` (4 en el MVP) entradas fijas `Pelican4Ever_Farm_01` .. `Pelican4Ever_Farm_04` clonadas de la entrada `"Farm"`, con `CreateOnLoad = new CreateLocationData { MapPath = "Maps\\Farm", Type = "StardewValley.Farm, Stardew Valley", AlwaysActive = true }`.
+   * Nota de motor (verificada en `GameLocation.cs` línea 2459): `CanBuildHere()` exige que `Game1.multiplayer.isAlwaysActiveLocation(this)` sea `true`. Para 4 jugadores del MVP se mantiene `AlwaysActive = true`, lo que garantiza compatibilidad total con Robin, edificios y animales con un coste de red despreciable para 4 pares.
+2. **Vinculación de `Cabins` y Puertas en Pelican Town:**
+   * Cada hueco `Pelican4Ever_Farm_0X` aloja la `Cabin` asociada al `Farmhand` propietario y publica `OwnerId` y `AccessPolicy` en `location.modData`.
+   * Las coordenadas de las 4 puertas en `Town` se cargan desde `assets/doors.json`. Al interactuar, el cliente muestra el menú de reclamación o visita y envía un mensaje `Helper.Multiplayer.SendMessage` al Host para reclamar puerta o cambiar `AccessPolicy`.
+   * Al salir por los bordes de `Pelican4Ever_Farm_0X` hacia `BusStop`/`Backwoods`, se intercepta el warp para dejar al jugador frente a su puerta en `Town`.
 
 ---
 
-### 4.3. Subsistema 3: Economía, Energía y Minas Persistentes
+### 4.3. Subsistema 3: Energía, Saciedad, Precios y Minas 12h (`EconomyModule`)
 
-* **Reforma de Comida (`StaminaFoodPatcher`):**
-* Se aplica un parche `Prefix` y `Postfix` sobre `Farmer.doneEating`:
-
-
-
-```csharp
-[HarmonyPatch(typeof(Farmer), nameof(Farmer.doneEating))]
-public static class StaminaFoodPatcher
-{
-    public static void Prefix(Farmer __instance, out float __state)
-    {
-        // Guardamos la energía exacta que tenía el jugador antes de que el método sume la comida
-        __state = __instance.Stamina;
-    }
-
-    public static void Postfix(Farmer __instance, float __state)
-    {
-        // Revertimos la ganancia instantánea de energía manteniendo la curación de Health y los Buffs
-        __instance.Stamina = __state;
-        
-        // Opcional: Si el plato otorga regeneración pasiva y no ha superado el límite diario (2)
-        int stacks = int.TryParse(__instance.modData.GetValueOrDefault(ModDataKeys.SatietyStacks, "0"), out int s) ? s : 0;
-        if (stacks < 2)
-        {
-            __instance.modData[ModDataKeys.SatietyStacks] = (stacks + 1).ToString();
-            Game1.addHUDMessage(new HUDMessage("Saciedad activada: Regeneración pasiva de energía.", 2));
-        }
-    }
-}
-
-```
-
-* **Persistencia de Minas por Turnos de 12 Horas (`PersistentMineManager`):**
-* En Stardew Valley vanilla, `MineShaft.UpdateWhenCurrentLocation` y el bucle principal invocan `MineShaft.clearActiveMines()` en cuanto el conteo de jugadores dentro de la mina llega a `0`.
-* **Parche (`Prefix` en `MineShaft.clearActiveMines`):** Se bloquea su ejecución ordinaria devolviendo `false`. El método original solo se invoca mediante un flag interno desde el cronjob del servidor a las `05:30 AM` y a las `17:30 PM` reales, vaciando la lista estática `MineShaft.activeMines` dos veces al día.
-
-
+1. **Presupuesto de Saciedad en `Farmer.doneEating` (líneas 8851–8945):**
+   * En `Farmer.doneEating()`, el motor suma `Stamina = Math.Min(MaxStamina, Stamina + @object.staminaRecoveredOnConsumption())` y `health = Math.Min(maxHealth, health + @object.healthRecoveredOnConsumption())` y aplica los `GetFoodOrDrinkBuffs()`.
+   * `Prefix` guarda `float prevStamina = __instance.Stamina`.
+   * `Postfix` calcula `int requestedGain = (int)Math.Round(__instance.Stamina - prevStamina)`, consulta `SatietyBudget.AllowedGain(requestedGain, record.SatietyUsed, budget)` y fija `__instance.Stamina = prevStamina + allowedGain` (respetando casos especiales como `Stardrop (O)434`). Si el ítem es un plato cocinado (`Category == Object.CookingCategory`) y quedan huecos en `MaxDailyWellFedBuffs`, activa el contador de regeneración pasiva (`+1 Energía / 60s reales`).
+2. **Persistencia de Minas por Turnos de 12h (`06:00` y `18:00`):**
+   * En `MineShaft.UpdateMines10Minutes` (línea 4788), el motor llama en cada tick de 10 minutos a `MineShaft.clearInactiveMines()` (privado estático, línea 4704), que descarga todos los niveles donde no hay jugadores. Al cambiar de día (`Game1.cs` línea 7925) llama a `MineShaft.clearActiveMines()`.
+   * Se aplica un `Prefix` sobre `MineShaft.clearInactiveMines` que devuelve `false` durante el turno normal, y a las `06:00` y `18:00` reales el Host invoca la limpieza sobre los pisos sin jugadores activos (notificando por HUD el nuevo turno minero).
 
 ---
 
-### 4.4. Subsistema 4: Controlador de Deambulación de NPCs (`NpcMicroWanderController`)
+### 4.4. Subsistema 4: Vida Urbana y Festivales (`WorldLifeModule` — Post-MVP)
 
-Para evitar editar archivos JSON de rutas y mantener compatibilidad total con otros mods, se inyecta un controlador ligero en el evento `OneSecondUpdateTicked` (ejecutado únicamente en el Host):
-
-1. El servidor mantiene un `Dictionary<string, Vector2> NpcScheduleAnchors` en memoria.
-2. Cuando un `NPC` finaliza un desplazamiento de su horario (`npc.controller == null` y `!npc.isMoving()`), si no tiene un ancla registrada para esa franja horaria, se guarda su `npc.Tile` actual como centro de su zona de estancia.
-3. Cada 45–90 segundos (aleatorizado por instancia de NPC), el servidor elige una casilla candidata dentro de un radio de $\pm 2$ casillas respecto al ancla:
-* Verifica `location.isTilePassable(new Location(x, y), Game1.viewport)` y que no colisione con muebles ni salidas de mapa (`Warp`).
-* Si es válida, asigna un nuevo `PathFindController(npc, location, targetTile, randomDirection)` de corto alcance y reduce temporalmente `npc.speed = 1` (paso de paseo).
-
-
-4. Al cambiar la hora del horario oficial (`NPC.checkSchedule`), se limpia el ancla para que el NPC camine hacia su siguiente ubicación del pueblo.
+* **Micro-Wandering de NPCs (`NpcMicroWanderController`):** En el Host, cuando un `NPC` finaliza su `PathFindController` horario, guarda su casilla ancla y cada 45–90 segundos reales camina (`speed = 1`) a una casilla libre en un radio $\pm 2$ que no sea `Warp` ni colisione.
+* **Festivales en Tarde/Noche (`FestivalInstanceManager`):**
+  * Reprogramación de fechas editando `Data/Festivals/FestivalDates` en `AssetRequested` + `InvalidateCache`.
+  * En `Data/Festivals/<season><day>`, se reescribe el segundo token de `conditions` a `"1800 2350"` para trasladar la ventana de acceso a las `18:00–23:50` reales y se intercepta el bloqueo `ReadyCheckDialog("festivalStart")` de `Game1.warpFarmer` (línea 9978) para permitir el tránsito normal por `Town` a quienes elijan no entrar al evento.
 
 ---
 
-### 4.5. Subsistema 5: Festivales Instanciados y Reprogramables (`FestivalInstanceManager`)
+## 5. Registro de Decisiones de Arquitectura (ADRs)
 
-* **Reprogramación de Fechas en Caliente:**
-* Se registra un comando de consola en SMAPI (`festival_reschedule <season> <oldDay> <newDay>`) y un comando de chat de administrador (`/festival move <oldDay> <newDay>`).
-* Suscripción al evento `Helper.Events.Content.AssetRequested`: si `e.NameWithoutLocale.IsEquivalentTo("Data/Festivals/FestivalDates")`, el mod intercepta el diccionario `IDictionary<string, string>` y reemplaza la clave `"<season><oldDay>"` por `"<season><newDay>"`. Al ejecutar el comando, se llama a `Helper.GameContent.InvalidateCache("Data/Festivals/FestivalDates")`, actualizando al instante todos los calendarios del pueblo.
+Las decisiones arquitectónicas clave y sus alternativas descartadas están documentadas en [`docs/adr/`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/adr):
 
-
-* **Instanciación Paralela en Prime-Time (18:00 – 23:59):**
-* Se parchea `Event.tryToLoadFestival` para que no fuerce el bloqueo global del servidor ni exija que todos los jugadores estén presentes (`NetReady`).
-* Cuando el reloj del servidor marca las `18:00` en un día de festival, el servidor instancia una ubicación temporal `Town_Festival` cargando el asset del festival (`Maps/Town-EggFestival`, etc.).
-* Cuando un jugador cruza un `Warp` hacia `Town` entre las `18:00` y las `23:59`, se intercepta la transición mostrando el diálogo de elección: si elige asistir, se le redirige a `Town_Festival`, se incrementa su contador de participación y se le permite interactuar con los NPCs y tiendas del evento de forma independiente al resto de jugadores.
-
-
-
----
-
-## 5. Hoja de Ruta de Implementación (Fases del MVP)
-
-Para validar la arquitectura sin acumular deuda técnica, el orden óptimo de desarrollo es:
-
-1. **Iteración 1 (El Motor Temporal):** Implementar `RealTimeClockPatcher`, el bloqueo de las 02:00 AM, el parche `BedLogoutPatch` y el `DailyRolloverManager` a las 05:30 AM. Probar en local que los cultivos avanzan de fase al disparar el comando de Rollover sin necesidad de dormir.
-2. **Iteración 2 (El Enrutador de Granjas):** Implementar `DynamicFarmLoader` y `TownDoorInterceptor`. Validar que dos clientes conectados ven sus respectivas granjas aisladas al cruzar su puerta en Pelican Town y que los objetos colocados persisten tras el Rollover.
-3. **Iteración 3 (El Parche de Economía):** Activar `StaminaFoodPatcher`, el retén de 12 horas en `PersistentMineManager` y los multiplicadores de precios.
-4. **Iteración 4 (Vida Urbana y Despliegue):** Añadir `NpcMicroWanderController`, el instanciador de festivales y empaquetar el mod sobre el contenedor Docker de `JunimoServer`.
+* **ADR-0001:** Rollover diario mediante el pipeline nativo `NewDay` + `Save` a las `06:00 AM`.
+* **ADR-0002:** Reloj 1:1 (`0600–2550`) con congelación en Madrugada (`NightHold`) y calendario derivado de `CalendarEpoch`.
+* **ADR-0003:** 4 huecos de granja declarativos (`Data/Locations`) con plantilla Estándar para el MVP.
+* **ADR-0004:** Autoridad en el Host (`ServerWorldState`), mod obligatorio en clientes y registro modular aislado (`IModule`).

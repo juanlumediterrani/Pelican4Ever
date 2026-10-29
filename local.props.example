@@ -1,0 +1,6 @@
+<Project>
+  <!-- Copia este fichero como local.props (ignorado por git) y ajusta la ruta a tu instalación. -->
+  <PropertyGroup>
+    <GamePath>/home/USUARIO/.steam/debian-installation/steamapps/common/Stardew Valley</GamePath>
+  </PropertyGroup>
+</Project>

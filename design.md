@@ -2,108 +2,112 @@
 
 * **Nombre:** *Pelican 4Ever* (`SV-RTMP`)
 * **Concepto nuclear:** Transformar Stardew Valley de un juego cooperativo de sesiones síncronas y turnos rápidos a un **mundo persistente en tiempo real (escala 1:1)** alojado en un servidor dedicado 24/7.
-* **Pilar de experiencia:** Un "segundo hogar" virtual. El jugador entra entre 30 y 90 minutos al día para cuidar su granja privada (conectada a una puerta de Pelican Town), gestionar su industria pasiva, gastar su presupuesto diario de energía en las minas o la pesca y coincidir en el pueblo o en festivales de tarde/noche con el resto de la comunidad.
+* **Escala y Modelo de Confianza (MVP):** Diseñado para comunidades pequeñas (**4 jugadores en el MVP**, escalable a ~8–12). Funciona bajo un modelo de **servidor entre amigos con cliente modificado obligatorio** (`RequireClientMod = true`): tanto el servidor como los clientes instalan `Pelican 4Ever`.
+* **Pilar de experiencia:** Un "segundo hogar" virtual. El jugador entra entre 30 y 90 minutos al día para cuidar su granja privada (conectada a una puerta de Pelican Town), gestionar su industria pasiva, gastar su presupuesto diario de energía + saciedad en las minas o la pesca y coincidir en el pueblo o en festivales de tarde/noche con el resto de la comunidad.
 
 ---
 
 ## 2. Sistema Temporal y Calendario
 
-### 2.1. Reloj en Tiempo Real (1:1)
+### 2.1. Reloj en Tiempo Real (1:1) y "Madrugada" (`NightHold`)
 
-* El reloj del servidor está vinculado a la hora real del sistema anfitrión (ej. `CET/CEST`).
-* **Sin colapso a las 02:00 AM:** El ciclo horario cubre las 24 horas del día real (`00:00` a `23:59`). Se elimina el desmayo forzoso de las 02:00 AM.
-* **Iluminación ambiental continua:**
-* `06:00 – 07:30`: Amanecer gradual.
-* `07:30 – 18:30`: Luz diurna (ajustada según la estación).
-* `18:30 – 20:30`: Atardecer progresivo.
-* `20:30 – 06:00`: Noche cerrada (iluminación de farolas y antorchas activa).
+El motor de Stardew Valley codifica el reloj en formato entero (`0600` a `2600`) y fuerza el desmayo en cuanto alcanza `2600` (`Game1.Update` / `performTenMinuteClockUpdate`). Para evitar desmayos forzosos sin reescribir las constantes internas del motor:
 
+* **Inicio del día (`06:00` real = `0600` juego):** El día de juego comienza a las **06:00 AM** de la zona horaria del servidor (ej. `Europe/Madrid`).
+* **Avance 1:1 (`06:00` a `01:50` real → `0600` a `2550` juego):** Cada 10 minutos reales el reloj avanza 10 minutos de juego (`600` → `2400` a medianoche → `2550` a las `01:50 AM`).
+* **Tramo de Madrugada (`01:50` a `06:00` real → congelado en `2550`):** A partir de las `01:50 AM` reales, el reloj entra en estado **`NightHold`** (congelado en `2550`, nunca llega a `2600`). Los jugadores noctámbulos pueden seguir pescando, minando o decorando sin sufrir desmayo por horario; al llegar el Rollover de las `06:00 AM`, el motor procesa automáticamente los minutos restantes de madrugada (`2550 → 0600`) sobre hornos y máquinas mediante `Utility.CalculateMinutesUntilMorning`.
+* **Iluminación ambiental continua:** Interpolada suavemente en cada tramo de 10 minutos reales (`MillisecondsIntoSlot` sobre `600.000 ms`).
 
+### 2.2. Calendario Perpetuo Basado en Época (`CalendarEpoch`)
 
-### 2.2. Estructura de Estaciones y Año
+* **Duración de estación:** Se mantiene el mes nativo de **28 días reales** (4 semanas exactas; 112 días reales por año de juego).
+* **Sincronización perpetua por Época:** La fecha del juego (`Year`, `Season`, `Day`) se **calcula matemáticamente** a partir de una fecha lunes real configurada (`CalendarEpoch`, p. ej. `2026-11-02` = Día 1 de Primavera, Año 1).
+  * El Día 1 de cada estación es siempre **Lunes real** y el Día 7 es siempre **Domingo real**.
+  * Si el servidor sufre una caída durante la noche, al arrancar compara `Game1.Date.TotalDays` con la fecha derivada del calendario real y aplica el plan de recuperación (`CatchUpPlan`: ejecuta hasta `MaxCatchUpRollovers` seguidos o salta a la fecha actual).
 
-* **Duración de estación:** Se mantiene el mes nativo de **28 días reales** (4 semanas exactas).
-* **Sincronización perpetua de días:** El Día 1 de cada estación es siempre Lunes real; el Día 7 es siempre Domingo real. Los eventos semanales del juego (Carro Ambulante los viernes y domingos, cierre de Pierre los miércoles, días de suerte o programas de TV) coinciden permanentemente con los días de la semana del mundo real.
-* **Duración del año:** 112 días reales (~3,7 meses reales por año de juego; ~3,25 años de juego por año natural).
+### 2.3. El "Rollover" Diario Nativo (`06:00 AM`)
 
-### 2.3. El "Rollover" Diario (Cambio de Día del Servidor)
+Todos los días a las **06:00 AM (hora del servidor)** se ejecuta la transición diaria apoyándose en el **flujo nativo del motor (`Game1.NewDay` + `SaveGame.Save`)**:
 
-* Todos los días a las **05:30 AM (hora del servidor)** se ejecuta el corte de mantenimiento y simulación diaria (*Daily Rollover*), con una duración aproximada de 5 a 10 segundos:
-1. Se procesa el avance de fase de todos los cultivos regados y árboles.
-2. Se liquida el contenido de las Cajas de Envíos (*Shipping Bins*) y se ingresa el oro a cada jugador.
-3. Se reparten las cartas en los buzones y se renueva el forraje del mundo.
-4. Se evalúa el estado de descanso (*Sleep State*) de los jugadores y se guarda la partida maestra.
-
-
+1. **Avisos previos:** Se notifican avisos en el HUD a los jugadores conectados **15, 5 y 1 minuto** antes del corte (`05:45`, `05:55`, `05:59`).
+2. **Transición nativa segura:** Si hay jugadores conectados a las `06:00 AM`, verán la pantalla nativa de fin de día y guardado (10–25 segundos). Forzar el flujo nativo garantiza que se ejecuten sin fisuras todas las rutinas de Stardew Valley 1.6 (crecimiento de cultivos, `Shipping Bins` personales, correo, clima, suerte, animales, amistad, `netWorldState` y serialización XML).
+3. **Resolución de descanso y copia de seguridad:** Al completarse el cambio de día se evalúa la política de sueño de cada jugador registrado y se guarda un backup rotativo de la carpeta del save.
 
 ---
 
 ## 3. Mecánica de Sueño Asíncrono ("Bed-Logout")
 
-Para evitar que todos los jugadores tengan que dormir a la vez y prevenir penalizaciones injustas por inactividad prolongada, cada jugador posee una máquina de estados de descanso persistente con cuatro estados posibles:
+El estado autoritativo de cada jugador reside únicamente en el servidor (`ServerWorldState.Players[UID]`). Los estados `SleepState` se **derivan** a partir de `LastActiveGameDay`, `RestedOnGameDay` y `LastOutcome`:
 
-| Estado | Cómo se alcanza | Efecto en el Rollover (05:30 AM) |
+| Estado Derivado | Condición | Efecto al cerrar el día en el Rollover (`06:00 AM`) |
 | --- | --- | --- |
-| **`Awake`** | El jugador se conecta al servidor e inicia sesión activa en cualquier momento del día. | Si llega el Rollover de las 05:30 AM y sigue en `Awake` (cerró el juego fuera de la cama o sigue despierto), **sufre penalización** y pasa a `Offline_Penalized`. |
-| **`Rested`** | El jugador se mete en su cama, selecciona *"Descansar y Desconectar"* y sale de la partida (o permanece en cama sin moverse). | No sufre penalización. Recupera el **100% de su Energía** para la jornada siguiente y pasa a `Offline_Safe`. |
-| **`Offline_Safe`** | Estado automático tras procesar un Rollover desde `Rested`. | Si el jugador no entra al servidor durante varios días seguidos, permanece en este estado sin sufrir ninguna penalización. |
-| **`Offline_Penalized`** | Estado automático tras procesar un Rollover desde `Awake` (no durmió en su cama el día que jugó). | Aplica **una única vez** el cargo médico (10% del oro hasta un tope de 1.000g) y deja la Energía al **50%**. En días posteriores sin conectarse, no vuelve a penalizar. |
+| **`Awake`** | Conectado hoy (`isOnline` o `LastActiveGameDay == hoy`) y aún no ha usado la cama (`RestedOnGameDay != hoy`). | Si llega el Rollover de las `06:00 AM` sin haber descansado (o sigue conectado fuera de la cama), **sufre penalización única** (`RolloverOutcome.Penalized`) y pasa a `OfflinePenalized`. |
+| **`Rested`** | El jugador se mete en su cama, selecciona *"Descansar y Desconectar"* (`RestedOnGameDay == hoy`) y sale al menú. | Sin penalización (`RolloverOutcome.Rested`). Despierta con el **100% de su Energía** y pasa a `OfflineSafe`. |
+| **`OfflineSafe`** | No ha entrado en el día en curso y su último resultado fue `Rested` o `Untouched`. | Permanece intacto (`RolloverOutcome.Untouched`) aunque pase días o semanas sin conectarse. |
+| **`OfflinePenalized`** | No ha entrado en el día en curso y su último resultado fue `Penalized`. | La penalización (10% del oro personal hasta `1.000g` y **50% de Energía**) se aplica **una sola vez**. En días posteriores sin conectarse devuelve `Untouched` y no vuelve a penalizar. |
+
+* **Amistad congelada en ausencia:** Mientras un jugador está en `OfflineSafe` u `OfflinePenalized`, se bloquea la caída diaria de amistad por no hablar con los NPCs.
 
 ---
 
 ## 4. Economía y Balanceo (Pasivo vs. Activo)
 
-Dado que el tiempo real ralentiza la agricultura (días reales) pero mantiene la velocidad de las animaciones del jugador (segundos reales), se aplican cuatro reglas de equilibrio:
-
-1. **Presupuesto Diario de Energía (*Hard Stamina Cap*):**
-* El jugador dispone de su barra de energía diaria (270 base + aumentos por *Stardrops*).
-* **Reforma de la Comida:** Comer alimentos restaura **Salud (*Health*)** para el combate en las minas y aplica **Bonificadores (*Buffs*)** de estadísticas (+Pesca, +Minería, +Velocidad), pero **no devuelve Energía instantánea**.
-* **Saciedad y Spa:** El jugador puede consumir hasta 2 platos "del día" en el Saloon o cocinados en casa que otorgan un bono de *Regeneración Pasiva* (+1 Energía cada minuto real durante 60 minutos). El Spa restaura 1 punto de Energía cada 30 segundos reales de reposo.
-
+1. **Presupuesto Diario de Energía + Saciedad (`SatietyBudget`):**
+   * **Barra base:** El jugador empieza la jornada con su barra de energía (`270` base + *Stardrops*).
+   * **Presupuesto de Saciedad (Comida con sentido):** Comer alimentos **sí restaura Energía instantánea**, además de Salud (*Health*) y *Buffs*, pero hasta un **tope diario de Saciedad** equivalente al **50% de su energía máxima** (`DailySatietyFraction = 0.5`, es decir, `+135` de energía extra en una barra de 270). Una vez agotado el presupuesto diario de Saciedad, se puede seguir comiendo para curar Vida en combate o mantener *Buffs*, pero la ganancia de Energía instantánea se recorta a `0`.
+   * **Platos Cocinados ("Bien comido"):** Hasta **2 veces al día** (`MaxDailyWellFedBuffs = 2`), comer un plato cocinado activa regeneración pasiva (`+1 Energía/minuto real` durante 60 minutos).
+   * **Spa con tope diario:** El Spa restaura `1 punto de Energía cada 30 segundos reales`, con un **tope máximo de `+60 Energía` por día real** (`SpaDailyCap = 60`) para evitar el abuso por AFK.
 
 2. **Persistencia de Minas por Turnos (12 Horas):**
-* Los pisos de las Minas y la Caverna Calavera no se reinician al salir por la escalera.
-* El estado de cada piso visitado permanece en memoria en el servidor y **solo se regenera dos veces al día real (`05:30 AM` y `17:30 PM`)**. Las vetas de mineral son un recurso compartido y finito por turno.
+   * Se bloquea la descarga automática de pisos vacíos (`MineShaft.clearInactiveMines`).
+   * Los pisos visitados de las Minas, Caverna Calavera y Volcán permanecen en memoria y **solo se regeneran dos veces al día real (`06:00` y `18:00`)**, salvo los pisos donde haya un jugador dentro en ese instante (que se limpian en cuanto salga).
 
+3. **Procesado Industrial 1:1 Nativo:**
+   * Al ir el reloj 1:1 con el tiempo real, los `MinutesUntilReady` nativos de Stardew Valley ya escalan de forma natural sin tocar cada máquina: un horno tarda **30 minutos reales**, una envasadora **~2,8 días reales** y un barril **~6,9 días reales**.
 
-3. **Procesado Industrial en Tiempo Real:**
-* Las máquinas operan con el reloj real: un horno funde lingotes en 30 minutos reales; una envasadora tarda 2-3 días reales; un barril de vino tarda 6-7 días reales.
-
-
-4. **Revalorización Agrícola y Artesanal:**
-* Los cultivos y productos animales/artesanales reciben un multiplicador de valor base configurable (por defecto `2.2x` en cosechas directas y `1.8x` en procesados) para compensar su ciclo de maduración en días reales.
-
-
+4. **Multiplicadores Agrícolas y Artesanales Configurables:**
+   * Se incluye soporte en `ServerConfig` (`CropPriceMultiplier`, `ArtisanPriceMultiplier`, por defecto `1.0x` hasta calibrar con telemetría real del grupo de 4 jugadores) aplicables por categoría (`Category`).
 
 ---
 
-## 5. Vivienda Urbana y Granjas Instanciadas
+## 5. Vivienda Urbana y Huecos de Granja (`Farm Slots`)
 
-* **Puertas en Pelican Town:** Se habilitan fachadas y puertas interactivas distribuidas por el pueblo y sus afueras.
-* **Asignación y Elección de Mapa:** Al entrar por primera vez al servidor, el jugador reclama una puerta libre y selecciona mediante un menú su plantilla de granja preferida (*Estándar, Bosque, Cuatro Esquinas, Playa, Salvaje, Colina o Pradera*).
-* **Sistema de Visitas y Permisos:**
-* Al interactuar con una puerta del pueblo, se abre un submenú: *"Entrar a mi granja"* o *"Visitar granja de [Nombre de Jugador]"*.
-* El propietario puede configurar su puerta desde dentro en tres modos: **Pública** (cualquiera puede entrar a ver o regar), **Amigos** (permite interacción autorizada) o **Cerrada con llave**.
-* En granjas ajenas, el servidor bloquea el uso de herramientas destructivas (picos, hachas, bombas) y la apertura de cofres privados.
-
-
-
----
-
-## 6. Vida del Pueblo (NPCs) y Festivales
-
-### 6.1. Comportamiento Autónomo de NPCs (*Micro-Wandering*)
-
-* Los aldeanos mantienen sus horarios reales (`08:00`, `12:00`, `17:00`, etc.), pero su velocidad de desplazamiento entre rutas se reduce un 50% (paso de paseo).
-* Al llegar a un destino de su horario, en lugar de quedarse congelados durante horas reales, entran en modo **Deambulación Local (*Micro-Wandering*)**: se mueven libremente dentro de un área segura de 4x4 casillas alrededor de su punto de destino cada 45–90 segundos reales, alternando orientaciones, animaciones contextuales y bocadillos de texto ambiental.
-
-### 6.2. Festivales en Prime-Time e Instanciados
-
-* **Ventana horaria adaptada:** Todos los festivales abren sus puertas de **18:00 a 23:59 (hora del servidor)** para coincidir con el horario de ocio real de los jugadores.
-* **Mapa en paralelo (Sin bloqueo de tránsito):** Durante la ventana del festival, el mapa `Town` normal sigue existiendo para que los jugadores puedan cruzar hacia la playa o las tiendas. Al entrar a la zona del evento, un diálogo pregunta: *"¿Entrar al Festival de [Nombre] o cruzar el pueblo normalmente?"*.
-* **Asistencia individual:** Entrar a la instancia del festival registra la asistencia del jugador, le permite hablar con los NPCs, comprar en el puesto del evento y participar en la actividad principal sin requerir que el resto del servidor esté conectado al mismo tiempo.
-* **Comando de agenda comunitaria:** Los administradores disponen de un comando para mover la fecha de un festival a cualquier otro día dentro de la misma estación (ej. mover un festival que cae en miércoles al sábado o domingo de esa misma semana).
+* **MVP de 4 Huecos Estándar Declarativos:**
+  * En lugar de instanciar mapas arbitrarios por UID en tiempo de ejecución (que rompen `SaveGame.loadDataToLocations` y dependen del estado global `Game1.whichFarm`), el mod registra **4 ubicaciones fijas** (`Pelican4Ever_Farm_01` a `Pelican4Ever_Farm_04`) en `Data/Locations` con `CreateOnLoad` usando la plantilla `Farm` estándar.
+* **Puertas en Pelican Town:**
+  * Se habilitan 4 puertas reclamables en Pelican Town (definidas en `assets/doors.json`).
+  * Al reclamar una puerta libre, el servidor asigna ese `FarmSlotId` al jugador, vincula su `Cabin` (camuflada como `FarmHouse`) dentro de ese hueco y activa las carteras separadas (`useSeparateWallets = true`).
+* **Visitas y Permisos Validados por el Host:**
+  * El propietario configura su puerta en modo **`Locked`**, **`Friends`** o **`Public`**.
+  * En granjas ajenas, el mod bloquea herramientas destructivas (picos, hachas, azadas sobre cultivos, bombas) y apertura de cofres, permitiendo regar en modo `Friends`/`Public`.
 
 ---
 
+## 6. Progreso Compartido vs. Individual
+
+| Ámbito | Regla en *Pelican 4Ever* |
+| --- | --- |
+| **Economía y Cajas de Envío** | **Individual** (`team.useSeparateWallets = true`). Cada jugador tiene su propio oro y su `personalShippingBin`. |
+| **Granja, Casa y Mejoras** | **Individual** por hueco (`Pelican4Ever_Farm_01..04`). |
+| **Centro Cívico / Museo / Joja** | **Compartido (Comunitario)** para todo el servidor. |
+| **Ascensor de las Minas** | **Individual** o compartido según configuración del grupo (los pisos generados sí son compartidos durante cada turno de 12h). |
+| **Relaciones con NPCs** | **Individual** por jugador, sin decaimiento mientras el jugador está en estado `Offline_*`. |
+
 ---
+
+## 7. Vida del Pueblo (NPCs) y Festivales (Post-MVP / Iteración 4)
+
+* **Comportamiento Autónomo de NPCs (*Micro-Wandering*):**
+  * Los aldeanos reducen un 50% su velocidad en ruta y, al llegar a su destino horario, deambulan dentro de un radio seguro de $\pm 2$ casillas cada 45–90 segundos reales (evitando colisiones y `Warps`).
+* **Festivales en Ventana de Tarde/Noche (`18:00 – 23:50`) y Reprogramables:**
+  * Comando de administrador (`p4e_festival_move <season> <oldDay> <newDay>`) para mover festivales al fin de semana real mediante `Data/Festivals/FestivalDates`.
+  * Adaptación de la ventana horaria del festival al horario de tarde/noche (`1800` a `2350`) evitando secuestrar el tránsito por `Town`.
+
+---
+
+## 8. Riesgos Conocidos y Límites de Alcance
+
+* **Pérdida máxima en caso de crash del host:** Como Stardew Valley solo serializa el guardado completo en `NewDay`, una caída abrupta del contenedor antes de las `06:00 AM` puede perder el progreso del día en curso. Se mitiga con contenedor supervisado (`restart: unless-stopped`), backups automáticos tras cada Rollover y comando de guardado de emergencia (`p4e_rollover_now`) para administradores.
+* **Fuera de alcance del MVP:**
+  * Anti-cheat criptográfico contra clientes que modifiquen la DLL local (se asume servidor privado con comprobación de versión en `ClientVersionGuardModule`).
+  * Reglas específicas de `Game1.whichFarm` por jugador (en el MVP las 4 granjas usan la plantilla Estándar).
