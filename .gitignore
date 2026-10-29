@@ -7,4 +7,6 @@ obj/
 .idea/
 .vscode/
 local.props
+.env
+data/
 TestResults/
