@@ -113,7 +113,47 @@ public class WorldStateAndDoorsTests
 
             Assert.True(isWest || isEast || isNorth || isSouth,
                 $"El portal {door.DoorId} no está en un extremo del mapa: ({door.TownTileX}, {door.TownTileY})");
+
+            // Verificar que el cartel / buzón no colisione con el umbral de entrada (2 tiles de ancho)
+            (int t1X, int t1Y) = (door.TownTileX, door.TownTileY);
+            (int t2X, int t2Y) = (isWest || isEast)
+                ? (door.TownTileX, door.TownTileY + 1)
+                : (door.TownTileX + 1, door.TownTileY);
+
+            int mbX = door.MailboxTileX.Value;
+            int mbY = door.MailboxTileY.Value;
+
+            Assert.False(mbX == t1X && mbY == t1Y, $"El cartel de {door.DoorId} colisiona con el primer tile del portal.");
+            Assert.False(mbX == t2X && mbY == t2Y, $"El cartel de {door.DoorId} colisiona con el segundo tile del portal.");
+
+            // El cartel debe estar adyacente (distancia <= 2 tiles)
+            int distToT1 = Math.Abs(mbX - t1X) + Math.Abs(mbY - t1Y);
+            int distToT2 = Math.Abs(mbX - t2X) + Math.Abs(mbY - t2Y);
+            Assert.True(Math.Min(distToT1, distToT2) <= 2, $"El cartel de {door.DoorId} está demasiado lejos de la entrada.");
         }
+    }
+
+    [Theory]
+    [InlineData(1, 16, true, 1, 16, 1, 17)]   // West
+    [InlineData(78, 26, true, 78, 26, 78, 27)] // East
+    [InlineData(18, 1, false, 18, 1, 19, 1)]  // North
+    [InlineData(18, 63, false, 18, 63, 19, 63)] // South
+    public void PortalOpening_OrientationDeterminesTwoTileSpan(
+        int townX, int townY, bool isVertical,
+        int expectedT1X, int expectedT1Y, int expectedT2X, int expectedT2Y)
+    {
+        bool isBorderVertical = townX <= 2 || townX >= 75;
+        Assert.Equal(isVertical, isBorderVertical);
+
+        (int t1X, int t1Y) = (townX, townY);
+        (int t2X, int t2Y) = isBorderVertical
+            ? (townX, townY + 1)
+            : (townX + 1, townY);
+
+        Assert.Equal(expectedT1X, t1X);
+        Assert.Equal(expectedT1Y, t1Y);
+        Assert.Equal(expectedT2X, t2X);
+        Assert.Equal(expectedT2Y, t2Y);
     }
 
     private sealed class DoorCatalogEntry

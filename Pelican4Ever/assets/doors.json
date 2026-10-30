@@ -4,7 +4,7 @@
     "LocationName": "Farm",
     "TownTileX": 1,
     "TownTileY": 16,
-    "MailboxTileX": 1,
+    "MailboxTileX": 2,
     "MailboxTileY": 15,
     "DefaultSlotId": "Pelican4Ever_Farm_01",
     "Description": "Parcela 01 (Bosque Oeste - Senda del Roble)"
@@ -14,7 +14,7 @@
     "LocationName": "Farm",
     "TownTileX": 1,
     "TownTileY": 26,
-    "MailboxTileX": 1,
+    "MailboxTileX": 2,
     "MailboxTileY": 25,
     "DefaultSlotId": "Pelican4Ever_Farm_02",
     "Description": "Parcela 02 (Bosque Oeste - Claro del Sauce)"
@@ -24,7 +24,7 @@
     "LocationName": "Farm",
     "TownTileX": 1,
     "TownTileY": 36,
-    "MailboxTileX": 1,
+    "MailboxTileX": 2,
     "MailboxTileY": 35,
     "DefaultSlotId": "Pelican4Ever_Farm_03",
     "Description": "Parcela 03 (Bosque Oeste - Arroyo Silencioso)"
@@ -34,7 +34,7 @@
     "LocationName": "Farm",
     "TownTileX": 1,
     "TownTileY": 46,
-    "MailboxTileX": 1,
+    "MailboxTileX": 2,
     "MailboxTileY": 45,
     "DefaultSlotId": "Pelican4Ever_Farm_04",
     "Description": "Parcela 04 (Bosque Oeste - Rincón Umbrío)"
@@ -45,7 +45,7 @@
     "TownTileX": 18,
     "TownTileY": 1,
     "MailboxTileX": 17,
-    "MailboxTileY": 1,
+    "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_05",
     "Description": "Parcela 05 (Paso de la Montaña - Desfiladero)"
   },
@@ -55,7 +55,7 @@
     "TownTileX": 28,
     "TownTileY": 1,
     "MailboxTileX": 27,
-    "MailboxTileY": 1,
+    "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_06",
     "Description": "Parcela 06 (Paso de la Montaña - Riscos Altos)"
   },
@@ -65,7 +65,7 @@
     "TownTileX": 52,
     "TownTileY": 1,
     "MailboxTileX": 51,
-    "MailboxTileY": 1,
+    "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_07",
     "Description": "Parcela 07 (Paso de la Montaña - Peñasco Este)"
   },
@@ -75,7 +75,7 @@
     "TownTileX": 62,
     "TownTileY": 1,
     "MailboxTileX": 61,
-    "MailboxTileY": 1,
+    "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_08",
     "Description": "Parcela 08 (Paso de la Montaña - Mirador del Valle)"
   },
@@ -85,7 +85,7 @@
     "TownTileX": 18,
     "TownTileY": 63,
     "MailboxTileX": 17,
-    "MailboxTileY": 63,
+    "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_09",
     "Description": "Parcela 09 (Ribera Sur - Valle Escondido)"
   },
@@ -95,7 +95,7 @@
     "TownTileX": 28,
     "TownTileY": 63,
     "MailboxTileX": 27,
-    "MailboxTileY": 63,
+    "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_10",
     "Description": "Parcela 10 (Ribera Sur - Paso del Molino)"
   },
@@ -105,7 +105,7 @@
     "TownTileX": 52,
     "TownTileY": 63,
     "MailboxTileX": 51,
-    "MailboxTileY": 63,
+    "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_11",
     "Description": "Parcela 11 (Ribera Sur - Cañada del Sur)"
   },
@@ -115,7 +115,7 @@
     "TownTileX": 62,
     "TownTileY": 63,
     "MailboxTileX": 61,
-    "MailboxTileY": 63,
+    "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_12",
     "Description": "Parcela 12 (Ribera Sur - Pradera Baja)"
   },
@@ -124,7 +124,7 @@
     "LocationName": "Farm",
     "TownTileX": 78,
     "TownTileY": 26,
-    "MailboxTileX": 78,
+    "MailboxTileX": 77,
     "MailboxTileY": 25,
     "DefaultSlotId": "Pelican4Ever_Farm_13",
     "Description": "Parcela 13 (Sendero Este - Camino del Robledal)"
@@ -134,7 +134,7 @@
     "LocationName": "Farm",
     "TownTileX": 78,
     "TownTileY": 36,
-    "MailboxTileX": 78,
+    "MailboxTileX": 77,
     "MailboxTileY": 35,
     "DefaultSlotId": "Pelican4Ever_Farm_14",
     "Description": "Parcela 14 (Sendero Este - Lindero del Este)"
@@ -144,7 +144,7 @@
     "LocationName": "Farm",
     "TownTileX": 78,
     "TownTileY": 46,
-    "MailboxTileX": 78,
+    "MailboxTileX": 77,
     "MailboxTileY": 45,
     "DefaultSlotId": "Pelican4Ever_Farm_15",
     "Description": "Parcela 15 (Sendero Este - Pradera Florida)"
@@ -154,7 +154,7 @@
     "LocationName": "Farm",
     "TownTileX": 78,
     "TownTileY": 56,
-    "MailboxTileX": 78,
+    "MailboxTileX": 77,
     "MailboxTileY": 55,
     "DefaultSlotId": "Pelican4Ever_Farm_16",
     "Description": "Parcela 16 (Sendero Este - Solana Oriental)"
