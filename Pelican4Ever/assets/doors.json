@@ -152,11 +152,11 @@
   {
     "DoorId": "Farm_Portal_16",
     "LocationName": "Farm",
-    "TownTileX": 72,
+    "TownTileX": 47,
     "TownTileY": 63,
-    "MailboxTileX": 71,
+    "MailboxTileX": 46,
     "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_16",
-    "Description": "Parcela 16 (Ribera Sur - Rincón Sureste)"
+    "Description": "Parcela 16 (Ribera Sur - Cañada Central)"
   }
 ]

@@ -205,6 +205,11 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        public static void GetResidenceArrivalCoordinates(DoorModel door, out int targetX, out int targetY, out int facingDirection)
+        {
+            SpatialWarpRouter.GetResidenceArrivalCoordinates(door.TownTileX, door.TownTileY, out targetX, out targetY, out facingDirection);
+        }
+
         public static bool IsInOpening(DoorModel door, int tileX, int tileY)
         {
             var (t1, t2) = GetOpeningTiles(door);
@@ -214,17 +219,20 @@ namespace Pelican4Ever.Modules
         public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
             var (t1, t2) = GetOpeningTiles(door);
-            if ((tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y))
-                return true;
-
-            if (door.TownTileX <= 2 && (tileX == 0 && (tileY == t1.Y || tileY == t2.Y)))
-                return true;
-            if (door.TownTileX >= 75 && (tileX == 79 && (tileY == t1.Y || tileY == t2.Y)))
-                return true;
-            if (door.TownTileY <= 2 && (tileY == 0 && (tileX == t1.X || tileX == t2.X)))
-                return true;
-            if (door.TownTileY >= 60 && (tileY == 64 && (tileX == t1.X || tileX == t2.X)))
-                return true;
+            if (tileX == t1.X || tileX == t2.X)
+            {
+                if (door.TownTileY <= 2 && tileY >= 0 && tileY <= 4)
+                    return true;
+                if (door.TownTileY >= 60 && tileY >= 60 && tileY <= 64)
+                    return true;
+            }
+            if (tileY == t1.Y || tileY == t2.Y)
+            {
+                if (door.TownTileX <= 2 && tileX >= 0 && tileX <= 3)
+                    return true;
+                if (door.TownTileX >= 75 && tileX >= 76 && tileX <= 79)
+                    return true;
+            }
 
             return false;
         }
@@ -239,91 +247,52 @@ namespace Pelican4Ever.Modules
         {
             var (t1, t2) = GetOpeningTiles(door);
 
-            int minX, maxX, minY, maxY;
-            if (door.TownTileX <= 2)
-            {
-                minX = 0;
-                maxX = 3;
-                minY = Math.Max(0, t1.Y - 3);
-                maxY = Math.Min(bld?.LayerHeight ?? 65, t2.Y + 2);
-            }
-            else if (door.TownTileX >= 75)
-            {
-                minX = 76;
-                maxX = 79;
-                minY = Math.Max(0, t1.Y - 3);
-                maxY = Math.Min(bld?.LayerHeight ?? 65, t2.Y + 2);
-            }
-            else if (door.TownTileY <= 2)
-            {
-                minX = Math.Max(0, t1.X - 2);
-                maxX = Math.Min(bld?.LayerWidth ?? 80, t2.X + 2);
-                minY = 0;
-                maxY = 3;
-            }
-            else
-            {
-                minX = Math.Max(0, t1.X - 2);
-                maxX = Math.Min(bld?.LayerWidth ?? 80, t2.X + 2);
-                minY = 61;
-                maxY = 64;
-            }
-
-            // Despejar copas de árboles en Front y AlwaysFront en toda el área circundante
-            for (int x = minX; x <= maxX; x++)
-            {
-                for (int y = minY; y <= maxY; y++)
-                {
-                    if (front != null && x >= 0 && x < front.LayerWidth && y >= 0 && y < front.LayerHeight)
-                        front.Tiles[x, y] = null;
-                    if (alwaysFront != null && x >= 0 && x < alwaysFront.LayerWidth && y >= 0 && y < alwaysFront.LayerHeight)
-                        alwaysFront.Tiles[x, y] = null;
-                }
-            }
-
-            // Casillas del paso peatonal
+            // Casillas del paso peatonal (EXCLUSIVAMENTE en las 2 columnas/filas del umbral)
+            // No se tocan las columnas adyacentes para que los muros, vallas y copas vecinas queden íntegros
             var passTiles = new List<Point> { t1, t2 };
             if (door.TownTileX <= 2)
             {
-                passTiles.Add(new Point(0, t1.Y));
-                passTiles.Add(new Point(0, t2.Y));
-                passTiles.Add(new Point(door.TownTileX + 1, t1.Y));
-                passTiles.Add(new Point(door.TownTileX + 1, t2.Y));
-                passTiles.Add(new Point(door.TownTileX + 2, t1.Y));
-                passTiles.Add(new Point(door.TownTileX + 2, t2.Y));
+                for (int x = 0; x <= 3; x++)
+                {
+                    passTiles.Add(new Point(x, t1.Y));
+                    passTiles.Add(new Point(x, t2.Y));
+                }
             }
             else if (door.TownTileX >= 75)
             {
-                passTiles.Add(new Point(79, t1.Y));
-                passTiles.Add(new Point(79, t2.Y));
-                passTiles.Add(new Point(door.TownTileX - 1, t1.Y));
-                passTiles.Add(new Point(door.TownTileX - 1, t2.Y));
-                passTiles.Add(new Point(door.TownTileX - 2, t1.Y));
-                passTiles.Add(new Point(door.TownTileX - 2, t2.Y));
+                for (int x = 76; x <= 79; x++)
+                {
+                    passTiles.Add(new Point(x, t1.Y));
+                    passTiles.Add(new Point(x, t2.Y));
+                }
             }
             else if (door.TownTileY <= 2)
             {
-                passTiles.Add(new Point(t1.X, 0));
-                passTiles.Add(new Point(t2.X, 0));
-                passTiles.Add(new Point(t1.X, door.TownTileY + 1));
-                passTiles.Add(new Point(t2.X, door.TownTileY + 1));
-                passTiles.Add(new Point(t1.X, door.TownTileY + 2));
-                passTiles.Add(new Point(t2.X, door.TownTileY + 2));
+                for (int y = 0; y <= 4; y++)
+                {
+                    passTiles.Add(new Point(t1.X, y));
+                    passTiles.Add(new Point(t2.X, y));
+                }
             }
             else
             {
-                passTiles.Add(new Point(t1.X, 64));
-                passTiles.Add(new Point(t2.X, 64));
-                passTiles.Add(new Point(t1.X, door.TownTileY - 1));
-                passTiles.Add(new Point(t2.X, door.TownTileY - 1));
-                passTiles.Add(new Point(t1.X, door.TownTileY - 2));
-                passTiles.Add(new Point(t2.X, door.TownTileY - 2));
+                for (int y = 60; y <= 64; y++)
+                {
+                    passTiles.Add(new Point(t1.X, y));
+                    passTiles.Add(new Point(t2.X, y));
+                }
             }
 
             foreach (var pt in passTiles)
             {
                 if (bld != null && pt.X >= 0 && pt.X < bld.LayerWidth && pt.Y >= 0 && pt.Y < bld.LayerHeight)
                     bld.Tiles[pt.X, pt.Y] = null;
+
+                if (front != null && pt.X >= 0 && pt.X < front.LayerWidth && pt.Y >= 0 && pt.Y < front.LayerHeight)
+                    front.Tiles[pt.X, pt.Y] = null;
+
+                if (alwaysFront != null && pt.X >= 0 && pt.X < alwaysFront.LayerWidth && pt.Y >= 0 && pt.Y < alwaysFront.LayerHeight)
+                    alwaysFront.Tiles[pt.X, pt.Y] = null;
 
                 if (back != null && pt.X >= 0 && pt.X < back.LayerWidth && pt.Y >= 0 && pt.Y < back.LayerHeight)
                 {
@@ -610,9 +579,7 @@ namespace Pelican4Ever.Modules
 
                 if (isClaimed && assignment != null)
                 {
-                    var template = FarmTemplateCatalog.GetTemplate(assignment.FarmType);
-                    int targetX = template.CabinTileX;
-                    int targetY = template.CabinTileY + 2;
+                    GetResidenceArrivalCoordinates(door, out int targetX, out int targetY, out _);
 
                     UpdateOrCreateWarp(farm, t1.X, t1.Y, assignment.FarmSlotId, targetX, targetY);
                     UpdateOrCreateWarp(farm, t2.X, t2.Y, assignment.FarmSlotId, targetX, targetY);
@@ -754,6 +721,11 @@ namespace Pelican4Ever.Modules
             {
                 Game1.locations.Add(cabin);
             }
+
+            // Despejar puntos de llegada cardinales para que nunca haya ramas, maleza o escombros bloqueando el warp
+            farm.removeEverythingFromThisTile(40, 1);
+            farm.removeEverythingFromThisTile(40, 63);
+            farm.removeEverythingFromThisTile(78, 17);
 
             // 4. Configurar warps de entrada y salida
             int doorX = entryDoor.X != 0 ? entryDoor.X : (farmhouse.tileX.Value + farmhouse.humanDoor.X);
@@ -1238,16 +1210,28 @@ namespace Pelican4Ever.Modules
 
         public static void WarpToFarm(string farmSlotId)
         {
-            // Ubicar coordenadas de llegada de la cabaña según la plantilla elegida
             DoorAssignment? assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId);
-            var template = FarmTemplateCatalog.GetTemplate(assignment?.FarmType);
+            DoorModel? door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == farmSlotId);
 
             if (Game1.getLocationFromName(farmSlotId) is Farm farm)
             {
                 EnsureFarmSlotBuildings(farm, assignment);
             }
 
-            Game1.warpFarmer(farmSlotId, template.CabinTileX, template.CabinTileY + 2, 2);
+            int targetX, targetY, facingDir;
+            if (door != null)
+            {
+                GetResidenceArrivalCoordinates(door, out targetX, out targetY, out facingDir);
+            }
+            else
+            {
+                var template = FarmTemplateCatalog.GetTemplate(assignment?.FarmType);
+                targetX = template.CabinTileX;
+                targetY = template.CabinTileY + 2;
+                facingDir = 2;
+            }
+
+            Game1.warpFarmer(farmSlotId, targetX, targetY, facingDir);
         }
 
         private void ApplyHarmonyPatches(Harmony harmony)
@@ -1256,7 +1240,7 @@ namespace Pelican4Ever.Modules
             {
                 // Parche para redirigir la salida de una granja Pelican4Ever_Farm_XX hacia su puerta residencial
                 harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(string), typeof(int), typeof(int), typeof(int) }),
+                    original: AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_WarpFarmer))
                 );
 
@@ -1337,9 +1321,11 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
-        public static bool Prefix_WarpFarmer(ref string locationName, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
+        public static bool Prefix_WarpFarmer(ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
-            string targetLoc = locationName;
+            if (locationRequest == null) return true;
+
+            string targetLoc = locationRequest.Name;
 
             // Control de acceso continuo a granjas privadas instanciadas (Opción B: Bloqueo si está Locked)
             if (targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
@@ -1360,21 +1346,30 @@ namespace Pelican4Ever.Modules
                         return false;
                     }
                 }
+
+                // Ajustar orientación adecuada al entrar a la residencia desde un warp continuo del host
+                var doorTarget = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == targetLoc);
+                if (doorTarget != null)
+                {
+                    GetResidenceArrivalCoordinates(doorTarget, out _, out _, out int facingDir);
+                    facingDirectionAfterWarp = facingDir;
+                }
             }
 
             // Si el jugador está saliendo de una cabaña hacia la granja principal
-            if (Game1.currentLocation is Cabin && locationName == "Farm")
+            if (Game1.currentLocation is Cabin && targetLoc == "Farm")
             {
                 var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
                 if (assignment != null && RegisteredDoors.FirstOrDefault(d => d.DoorId == assignment.DoorId) is { } door)
                 {
-                    locationName = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
+                    string dest = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
+                    locationRequest = Game1.getLocationRequest(dest);
                     RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
                 }
                 else
                 {
                     // Si aún no tiene parcela reclamada, ubicarlo en la plaza central de la Granja Host
-                    locationName = "Farm";
+                    locationRequest = Game1.getLocationRequest("Farm");
                     tileX = 64;
                     tileY = 16;
                     facingDirectionAfterWarp = 2;
@@ -1389,51 +1384,10 @@ namespace Pelican4Ever.Modules
                 var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
                 if (door != null)
                 {
-                    bool shouldReturnToHost = false;
-
-                    if (door.TownTileY >= 60)
+                    if (SpatialWarpRouter.ShouldReturnToHostFarm(door.TownTileX, door.TownTileY, targetLoc))
                     {
-                        // Puerta en el SUR del Host (abajo):
-                        // Para volver a la Plaza Central se usa la salida de ARRIBA (Norte: Backwoods / Montaña).
-                        // Las demás salidas (Forest al sur y BusStop al este) se mantienen vanilla.
-                        if (string.Equals(locationName, "Backwoods", StringComparison.OrdinalIgnoreCase)
-                            || string.Equals(locationName, "Mountain", StringComparison.OrdinalIgnoreCase))
-                        {
-                            shouldReturnToHost = true;
-                        }
-                    }
-                    else if (door.TownTileY <= 2)
-                    {
-                        // Puerta en el NORTE del Host (arriba):
-                        // Para volver a la Plaza Central se usa la salida de ABAJO (Sur: Forest / Casa de Marnie).
-                        // Las demás salidas (Backwoods al norte y BusStop al este) se mantienen vanilla.
-                        if (string.Equals(locationName, "Forest", StringComparison.OrdinalIgnoreCase))
-                        {
-                            shouldReturnToHost = true;
-                        }
-                    }
-                    else if (door.TownTileX <= 2)
-                    {
-                        // Puerta en el OESTE del Host (izquierda):
-                        // Para volver a la Plaza Central se usa la salida de la DERECHA (Este: BusStop).
-                        // Las demás salidas (Backwoods al norte y Forest al sur) se mantienen vanilla.
-                        if (string.Equals(locationName, "BusStop", StringComparison.OrdinalIgnoreCase))
-                        {
-                            shouldReturnToHost = true;
-                        }
-                    }
-                    else
-                    {
-                        // Puerta en el ESTE del Host (derecha):
-                        if (string.Equals(locationName, "BusStop", StringComparison.OrdinalIgnoreCase))
-                        {
-                            shouldReturnToHost = true;
-                        }
-                    }
-
-                    if (shouldReturnToHost)
-                    {
-                        locationName = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
+                        string dest = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
+                        locationRequest = Game1.getLocationRequest(dest);
                         RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
                     }
                 }
@@ -1443,30 +1397,7 @@ namespace Pelican4Ever.Modules
 
         private static void RepositionToPortalExit(DoorModel door, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
-            if (door.TownTileX <= 2)
-            {
-                tileX = door.TownTileX + 1;
-                tileY = door.TownTileY;
-                facingDirectionAfterWarp = 1; // Mirando hacia el Este (hacia el interior)
-            }
-            else if (door.TownTileX >= 75)
-            {
-                tileX = door.TownTileX - 1;
-                tileY = door.TownTileY;
-                facingDirectionAfterWarp = 3; // Mirando hacia el Oeste
-            }
-            else if (door.TownTileY <= 2)
-            {
-                tileX = door.TownTileX;
-                tileY = door.TownTileY + 1;
-                facingDirectionAfterWarp = 2; // Mirando hacia el Sur
-            }
-            else
-            {
-                tileX = door.TownTileX;
-                tileY = door.TownTileY - 1;
-                facingDirectionAfterWarp = 0; // Mirando hacia el Norte
-            }
+            SpatialWarpRouter.GetHostFarmReturnCoordinates(door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
         }
 
         public static bool Prefix_ApplyWakeUpPosition(Farmer who)
