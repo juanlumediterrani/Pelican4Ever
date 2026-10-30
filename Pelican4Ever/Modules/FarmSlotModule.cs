@@ -156,9 +156,10 @@ namespace Pelican4Ever.Modules
                     var hostMap = MapCloneHelper.CloneMap(baseMap);
                     var bldLayer = hostMap.GetLayer("Buildings");
                     var frontLayer = hostMap.GetLayer("Front");
+                    var alwaysFrontLayer = hostMap.GetLayer("AlwaysFront");
                     var backLayer = hostMap.GetLayer("Back");
 
-                    // Localizar una baldosa de suelo válida en el interior de la granja para rellenar el suelo bajo las vallas
+                    // Localizar una baldosa de suelo válida en el interior de la granja para rellenar el suelo
                     xTile.Tiles.Tile? sampleTile = null;
                     if (backLayer != null)
                     {
@@ -183,30 +184,7 @@ namespace Pelican4Ever.Modules
                     {
                         if (string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
                         {
-                            var (t1, t2) = GetOpeningTiles(door);
-                            ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, t1.Y, sampleTile);
-                            ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, t2.Y, sampleTile);
-
-                            if (door.TownTileX <= 2)
-                            {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 0, t1.Y, sampleTile);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 0, t2.Y, sampleTile);
-                            }
-                            else if (door.TownTileX >= 75)
-                            {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 79, t1.Y, sampleTile);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 79, t2.Y, sampleTile);
-                            }
-                            else if (door.TownTileY <= 2)
-                            {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, 0, sampleTile);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, 0, sampleTile);
-                            }
-                            else
-                            {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, 64, sampleTile);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, 64, sampleTile);
-                            }
+                            ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
                         }
                     }
 
@@ -233,21 +211,131 @@ namespace Pelican4Ever.Modules
             return (tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y);
         }
 
-        private static void ClearMapTile(xTile.Layers.Layer? bld, xTile.Layers.Layer? front, xTile.Layers.Layer? back, int x, int y, xTile.Tiles.Tile? sampleTile)
+        public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
-            if (bld != null && x >= 0 && x < bld.LayerWidth && y >= 0 && y < bld.LayerHeight)
-                bld.Tiles[x, y] = null;
-            if (front != null && x >= 0 && x < front.LayerWidth && y >= 0 && y < front.LayerHeight)
-                front.Tiles[x, y] = null;
-            if (back != null && x >= 0 && x < back.LayerWidth && y >= 0 && y < back.LayerHeight)
+            var (t1, t2) = GetOpeningTiles(door);
+            if ((tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y))
+                return true;
+
+            if (door.TownTileX <= 2 && (tileX == 0 && (tileY == t1.Y || tileY == t2.Y)))
+                return true;
+            if (door.TownTileX >= 75 && (tileX == 79 && (tileY == t1.Y || tileY == t2.Y)))
+                return true;
+            if (door.TownTileY <= 2 && (tileY == 0 && (tileX == t1.X || tileX == t2.X)))
+                return true;
+            if (door.TownTileY >= 60 && (tileY == 64 && (tileX == t1.X || tileX == t2.X)))
+                return true;
+
+            return false;
+        }
+
+        public static void ClearDoorAreaOnMap(
+            xTile.Layers.Layer? bld,
+            xTile.Layers.Layer? front,
+            xTile.Layers.Layer? alwaysFront,
+            xTile.Layers.Layer? back,
+            DoorModel door,
+            xTile.Tiles.Tile? sampleTile)
+        {
+            var (t1, t2) = GetOpeningTiles(door);
+
+            int minX, maxX, minY, maxY;
+            if (door.TownTileX <= 2)
             {
-                if (back.Tiles[x, y] == null && sampleTile != null)
+                minX = 0;
+                maxX = 3;
+                minY = Math.Max(0, t1.Y - 3);
+                maxY = Math.Min(bld?.LayerHeight ?? 65, t2.Y + 2);
+            }
+            else if (door.TownTileX >= 75)
+            {
+                minX = 76;
+                maxX = 79;
+                minY = Math.Max(0, t1.Y - 3);
+                maxY = Math.Min(bld?.LayerHeight ?? 65, t2.Y + 2);
+            }
+            else if (door.TownTileY <= 2)
+            {
+                minX = Math.Max(0, t1.X - 2);
+                maxX = Math.Min(bld?.LayerWidth ?? 80, t2.X + 2);
+                minY = 0;
+                maxY = 3;
+            }
+            else
+            {
+                minX = Math.Max(0, t1.X - 2);
+                maxX = Math.Min(bld?.LayerWidth ?? 80, t2.X + 2);
+                minY = 61;
+                maxY = 64;
+            }
+
+            // Despejar copas de árboles en Front y AlwaysFront en toda el área circundante
+            for (int x = minX; x <= maxX; x++)
+            {
+                for (int y = minY; y <= maxY; y++)
                 {
-                    back.Tiles[x, y] = sampleTile.Clone(back);
+                    if (front != null && x >= 0 && x < front.LayerWidth && y >= 0 && y < front.LayerHeight)
+                        front.Tiles[x, y] = null;
+                    if (alwaysFront != null && x >= 0 && x < alwaysFront.LayerWidth && y >= 0 && y < alwaysFront.LayerHeight)
+                        alwaysFront.Tiles[x, y] = null;
                 }
-                if (back.Tiles[x, y] != null)
+            }
+
+            // Casillas del paso peatonal
+            var passTiles = new List<Point> { t1, t2 };
+            if (door.TownTileX <= 2)
+            {
+                passTiles.Add(new Point(0, t1.Y));
+                passTiles.Add(new Point(0, t2.Y));
+                passTiles.Add(new Point(door.TownTileX + 1, t1.Y));
+                passTiles.Add(new Point(door.TownTileX + 1, t2.Y));
+                passTiles.Add(new Point(door.TownTileX + 2, t1.Y));
+                passTiles.Add(new Point(door.TownTileX + 2, t2.Y));
+            }
+            else if (door.TownTileX >= 75)
+            {
+                passTiles.Add(new Point(79, t1.Y));
+                passTiles.Add(new Point(79, t2.Y));
+                passTiles.Add(new Point(door.TownTileX - 1, t1.Y));
+                passTiles.Add(new Point(door.TownTileX - 1, t2.Y));
+                passTiles.Add(new Point(door.TownTileX - 2, t1.Y));
+                passTiles.Add(new Point(door.TownTileX - 2, t2.Y));
+            }
+            else if (door.TownTileY <= 2)
+            {
+                passTiles.Add(new Point(t1.X, 0));
+                passTiles.Add(new Point(t2.X, 0));
+                passTiles.Add(new Point(t1.X, door.TownTileY + 1));
+                passTiles.Add(new Point(t2.X, door.TownTileY + 1));
+                passTiles.Add(new Point(t1.X, door.TownTileY + 2));
+                passTiles.Add(new Point(t2.X, door.TownTileY + 2));
+            }
+            else
+            {
+                passTiles.Add(new Point(t1.X, 64));
+                passTiles.Add(new Point(t2.X, 64));
+                passTiles.Add(new Point(t1.X, door.TownTileY - 1));
+                passTiles.Add(new Point(t2.X, door.TownTileY - 1));
+                passTiles.Add(new Point(t1.X, door.TownTileY - 2));
+                passTiles.Add(new Point(t2.X, door.TownTileY - 2));
+            }
+
+            foreach (var pt in passTiles)
+            {
+                if (bld != null && pt.X >= 0 && pt.X < bld.LayerWidth && pt.Y >= 0 && pt.Y < bld.LayerHeight)
+                    bld.Tiles[pt.X, pt.Y] = null;
+
+                if (back != null && pt.X >= 0 && pt.X < back.LayerWidth && pt.Y >= 0 && pt.Y < back.LayerHeight)
                 {
-                    back.Tiles[x, y].Properties["Passable"] = "T";
+                    if (back.Tiles[pt.X, pt.Y] == null && sampleTile != null)
+                    {
+                        back.Tiles[pt.X, pt.Y] = sampleTile.Clone(back);
+                    }
+                    if (back.Tiles[pt.X, pt.Y] != null)
+                    {
+                        back.Tiles[pt.X, pt.Y].Properties.Remove("Passable");
+                        back.Tiles[pt.X, pt.Y].TileIndexProperties.Remove("Passable");
+                    }
                 }
             }
         }
@@ -412,7 +500,7 @@ namespace Pelican4Ever.Modules
             Vector2 playerTile = Game1.player.Tile;
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
                 string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase)
-                && IsInOpening(d, (int)playerTile.X, (int)playerTile.Y));
+                && IsInOpeningOrBorder(d, (int)playerTile.X, (int)playerTile.Y));
 
             if (door != null && !context.WorldState.Doors.ContainsKey(door.DoorId))
             {
@@ -432,25 +520,16 @@ namespace Pelican4Ever.Modules
         {
             if (farm == null || context == null) return;
 
-            var backLayer = farm.Map?.GetLayer("Back");
+            var hostMap = farm.Map;
+            var bldLayer = hostMap?.GetLayer("Buildings");
+            var frontLayer = hostMap?.GetLayer("Front");
+            var alwaysFrontLayer = hostMap?.GetLayer("AlwaysFront");
+            var backLayer = hostMap?.GetLayer("Back");
+
             xTile.Tiles.Tile? sampleTile = null;
             if (backLayer != null)
             {
                 sampleTile = backLayer.Tiles[40, 30] ?? backLayer.Tiles[64, 15] ?? backLayer.Tiles[20, 20];
-                if (sampleTile == null)
-                {
-                    for (int sy = 5; sy < backLayer.LayerHeight - 5 && sampleTile == null; sy++)
-                    {
-                        for (int sx = 5; sx < backLayer.LayerWidth - 5; sx++)
-                        {
-                            if (backLayer.Tiles[sx, sy] != null)
-                            {
-                                sampleTile = backLayer.Tiles[sx, sy];
-                                break;
-                            }
-                        }
-                    }
-                }
             }
 
             foreach (DoorModel door in RegisteredDoors)
@@ -458,69 +537,62 @@ namespace Pelican4Ever.Modules
                 if (!string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
                     continue;
 
+                // 1. Limpiar copas de árboles, ramas, troncos y suelo en el mapa del runtime
+                ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
+
                 var (t1, t2) = GetOpeningTiles(door);
 
-                // 1. Pavimentar el umbral físico continuo (t1, t2) en la apertura de la valla con suelo adoquinado
-                PavePathTile(farm, t1.X, t1.Y, sampleTile);
-                PavePathTile(farm, t2.X, t2.Y, sampleTile);
+                // 2. Limpiar objetos, escombros, tocones y piedras
+                farm.removeEverythingFromThisTile(t1.X, t1.Y);
+                farm.removeEverythingFromThisTile(t2.X, t2.Y);
+                farm.removeTileProperty(t1.X, t1.Y, "Back", "Passable");
+                farm.removeTileProperty(t2.X, t2.Y, "Back", "Passable");
 
-                // Limpiar también la loseta del borde exterior para una vista panorámica despejada
+                // Eliminar tocones o troncos grandes que caigan sobre el umbral
+                for (int i = farm.resourceClumps.Count - 1; i >= 0; i--)
+                {
+                    var clump = farm.resourceClumps[i];
+                    if (IsClumpOverTile(clump, t1.X, t1.Y) || IsClumpOverTile(clump, t2.X, t2.Y))
+                    {
+                        farm.resourceClumps.RemoveAt(i);
+                    }
+                }
+
+                // Limpiar casillas de borde exterior
                 if (door.TownTileX <= 2)
                 {
-                    ClearPortalTile(farm, 0, t1.Y, sampleTile);
-                    ClearPortalTile(farm, 0, t2.Y, sampleTile);
+                    farm.removeEverythingFromThisTile(0, t1.Y);
+                    farm.removeEverythingFromThisTile(0, t2.Y);
+                    farm.removeTileProperty(0, t1.Y, "Back", "Passable");
+                    farm.removeTileProperty(0, t2.Y, "Back", "Passable");
                 }
                 else if (door.TownTileX >= 75)
                 {
-                    ClearPortalTile(farm, 79, t1.Y, sampleTile);
-                    ClearPortalTile(farm, 79, t2.Y, sampleTile);
+                    farm.removeEverythingFromThisTile(79, t1.Y);
+                    farm.removeEverythingFromThisTile(79, t2.Y);
+                    farm.removeTileProperty(79, t1.Y, "Back", "Passable");
+                    farm.removeTileProperty(79, t2.Y, "Back", "Passable");
                 }
                 else if (door.TownTileY <= 2)
                 {
-                    ClearPortalTile(farm, t1.X, 0, sampleTile);
-                    ClearPortalTile(farm, t2.X, 0, sampleTile);
+                    farm.removeEverythingFromThisTile(t1.X, 0);
+                    farm.removeEverythingFromThisTile(t2.X, 0);
+                    farm.removeTileProperty(t1.X, 0, "Back", "Passable");
+                    farm.removeTileProperty(t2.X, 0, "Back", "Passable");
                 }
                 else
                 {
-                    ClearPortalTile(farm, t1.X, 64, sampleTile);
-                    ClearPortalTile(farm, t2.X, 64, sampleTile);
-                }
-
-                // 2. Pavimentar sendero de 2 losetas de ancho conectando el portal hacia el interior de la granja
-                if (door.TownTileX <= 2)
-                {
-                    PavePathTile(farm, door.TownTileX + 1, t1.Y, sampleTile);
-                    PavePathTile(farm, door.TownTileX + 1, t2.Y, sampleTile);
-                    PavePathTile(farm, door.TownTileX + 2, t1.Y, sampleTile);
-                    PavePathTile(farm, door.TownTileX + 2, t2.Y, sampleTile);
-                }
-                else if (door.TownTileX >= 75)
-                {
-                    PavePathTile(farm, door.TownTileX - 1, t1.Y, sampleTile);
-                    PavePathTile(farm, door.TownTileX - 1, t2.Y, sampleTile);
-                    PavePathTile(farm, door.TownTileX - 2, t1.Y, sampleTile);
-                    PavePathTile(farm, door.TownTileX - 2, t2.Y, sampleTile);
-                }
-                else if (door.TownTileY <= 2)
-                {
-                    PavePathTile(farm, t1.X, door.TownTileY + 1, sampleTile);
-                    PavePathTile(farm, t2.X, door.TownTileY + 1, sampleTile);
-                    PavePathTile(farm, t1.X, door.TownTileY + 2, sampleTile);
-                    PavePathTile(farm, t2.X, door.TownTileY + 2, sampleTile);
-                }
-                else
-                {
-                    PavePathTile(farm, t1.X, door.TownTileY - 1, sampleTile);
-                    PavePathTile(farm, t2.X, door.TownTileY - 1, sampleTile);
-                    PavePathTile(farm, t1.X, door.TownTileY - 2, sampleTile);
-                    PavePathTile(farm, t2.X, door.TownTileY - 2, sampleTile);
+                    farm.removeEverythingFromThisTile(t1.X, 64);
+                    farm.removeEverythingFromThisTile(t2.X, 64);
+                    farm.removeTileProperty(t1.X, 64, "Back", "Passable");
+                    farm.removeTileProperty(t2.X, 64, "Back", "Passable");
                 }
 
                 // 3. Colocar poste con cartel de madera físico (Sign ID 37 - BigCraftable) en la casilla designada
                 int signX = door.MailboxTileX ?? (door.TownTileX + 1);
                 int signY = door.MailboxTileY ?? door.TownTileY;
                 Vector2 signTile = new Vector2(signX, signY);
-                ClearPortalTile(farm, signX, signY, sampleTile);
+                farm.removeEverythingFromThisTile(signX, signY);
 
                 if (!farm.objects.ContainsKey(signTile))
                 {
@@ -595,30 +667,10 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void ClearPortalTile(Farm farm, int x, int y, xTile.Tiles.Tile? sampleTile)
+        private static bool IsClumpOverTile(StardewValley.TerrainFeatures.ResourceClump clump, int x, int y)
         {
-            try
-            {
-                farm.removeTile(x, y, "Buildings");
-                farm.removeTile(x, y, "Front");
-                var backLayer = farm.Map?.GetLayer("Back");
-                if (backLayer != null && x >= 0 && x < backLayer.LayerWidth && y >= 0 && y < backLayer.LayerHeight)
-                {
-                    if (backLayer.Tiles[x, y] == null && sampleTile != null)
-                    {
-                        backLayer.Tiles[x, y] = sampleTile.Clone(backLayer);
-                    }
-                    if (backLayer.Tiles[x, y] != null)
-                    {
-                        backLayer.Tiles[x, y].Properties["Passable"] = "T";
-                    }
-                }
-                farm.setTileProperty(x, y, "Back", "Passable", "T");
-                farm.removeEverythingFromThisTile(x, y);
-            }
-            catch
-            {
-            }
+            return x >= (int)clump.Tile.X && x < (int)clump.Tile.X + clump.width.Value
+                && y >= (int)clump.Tile.Y && y < (int)clump.Tile.Y + clump.height.Value;
         }
 
         private static void UpdateOrCreateWarp(Farm farm, int x, int y, string targetLocation, int targetX, int targetY)
@@ -644,20 +696,6 @@ namespace Pelican4Ever.Modules
                 {
                     farm.warps.RemoveAt(i);
                 }
-            }
-        }
-
-        private static void PavePathTile(Farm farm, int x, int y, xTile.Tiles.Tile? sampleTile)
-        {
-            Vector2 tile = new Vector2(x, y);
-            try
-            {
-                ClearPortalTile(farm, x, y, sampleTile);
-                farm.terrainFeatures[tile] = new Flooring("5"); // Cobblestone Path
-            }
-            catch
-            {
-                // Ignorar si el tipo de loseta no permite pavimento
             }
         }
 
@@ -1015,7 +1053,7 @@ namespace Pelican4Ever.Modules
 
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
                 string.Equals(string.IsNullOrWhiteSpace(d.LocationName) ? "Farm" : d.LocationName, curLoc, StringComparison.OrdinalIgnoreCase)
-                && (IsInOpening(d, (int)targetTile.X, (int)targetTile.Y)
+                && (IsInOpeningOrBorder(d, (int)targetTile.X, (int)targetTile.Y)
                     || ((d.MailboxTileX ?? (d.TownTileX + 1)) == (int)targetTile.X && (d.MailboxTileY ?? d.TownTileY) == (int)targetTile.Y)));
 
             if (door != null)
@@ -1245,12 +1283,58 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition))
                 );
 
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red y protección de despertar aplicados.", LogLevel.Trace);
+                // Parche de paso libre sin colisión en los portales residenciales de la Plaza Central
+                harmony.Patch(
+                    original: AccessTools.Method(
+                        typeof(GameLocation),
+                        nameof(GameLocation.isCollidingPosition),
+                        new[] {
+                            typeof(Microsoft.Xna.Framework.Rectangle),
+                            typeof(xTile.Dimensions.Rectangle),
+                            typeof(bool),
+                            typeof(int),
+                            typeof(bool),
+                            typeof(Character),
+                            typeof(bool),
+                            typeof(bool),
+                            typeof(bool),
+                            typeof(bool)
+                        }
+                    ),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IsCollidingPosition))
+                );
+
+                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión y protección de despertar aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
                 context?.Monitor.Log($"[FarmSlotModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
             }
+        }
+
+        public static bool Prefix_IsCollidingPosition(GameLocation __instance, Microsoft.Xna.Framework.Rectangle position, ref bool __result)
+        {
+            if (__instance is Farm farm && farm.Name == "Farm")
+            {
+                int leftTile = position.Left / 64;
+                int rightTile = position.Right / 64;
+                int centerTile = position.Center.X / 64;
+                int bottomTile = position.Bottom / 64;
+                int topTile = position.Top / 64;
+
+                foreach (var door in RegisteredDoors)
+                {
+                    if (IsInOpeningOrBorder(door, centerTile, bottomTile)
+                        || IsInOpeningOrBorder(door, leftTile, bottomTile)
+                        || IsInOpeningOrBorder(door, rightTile, bottomTile)
+                        || IsInOpeningOrBorder(door, centerTile, topTile))
+                    {
+                        __result = false;
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         public static bool Prefix_WarpFarmer(ref string locationName, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
