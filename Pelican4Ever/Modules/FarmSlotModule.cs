@@ -221,23 +221,23 @@ namespace Pelican4Ever.Modules
             var (t1, t2) = GetOpeningTiles(door);
             if (tileX == t1.X || tileX == t2.X)
             {
-                if (door.TownTileY <= 2 && tileY >= 0 && tileY <= 4)
+                if (door.TownTileY <= 2 && tileY >= 0 && tileY <= 10)
                     return true;
                 if (door.TownTileY >= 60 && tileY >= 60 && tileY <= 64)
                     return true;
             }
             if (tileY == t1.Y || tileY == t2.Y)
             {
-                if (door.TownTileX <= 2 && tileX >= 0 && tileX <= 3)
+                if (door.TownTileX <= 2 && tileX >= 0 && tileX <= 7)
                     return true;
-                if (door.TownTileX >= 75 && tileX >= 76 && tileX <= 79)
+                if (door.TownTileX >= 75 && tileX >= 75 && tileX <= 79)
                     return true;
             }
 
             return false;
         }
 
-        public static void ClearDoorAreaOnMap(
+        public static List<Point> ClearDoorAreaOnMap(
             xTile.Layers.Layer? bld,
             xTile.Layers.Layer? front,
             xTile.Layers.Layer? alwaysFront,
@@ -246,13 +246,16 @@ namespace Pelican4Ever.Modules
             xTile.Tiles.Tile? sampleTile)
         {
             var (t1, t2) = GetOpeningTiles(door);
-
-            // Casillas del paso peatonal (EXCLUSIVAMENTE en las 2 columnas/filas del umbral)
-            // No se tocan las columnas adyacentes para que los muros, vallas y copas vecinas queden íntegros
             var passTiles = new List<Point> { t1, t2 };
+
+            var sheet = bld?.Map?.GetTileSheet("untitled tile sheet")
+                     ?? front?.Map?.GetTileSheet("untitled tile sheet")
+                     ?? sampleTile?.TileSheet;
+
             if (door.TownTileX <= 2)
             {
-                for (int x = 0; x <= 3; x++)
+                int maxDepthX = (door.DoorId == "Farm_Portal_02") ? 6 : 4;
+                for (int x = 0; x <= maxDepthX; x++)
                 {
                     passTiles.Add(new Point(x, t1.Y));
                     passTiles.Add(new Point(x, t2.Y));
@@ -268,7 +271,8 @@ namespace Pelican4Ever.Modules
             }
             else if (door.TownTileY <= 2)
             {
-                for (int y = 0; y <= 4; y++)
+                int maxDepthY = (door.DoorId is "Farm_Portal_08" or "Farm_Portal_14") ? 9 : 8;
+                for (int y = 0; y <= maxDepthY; y++)
                 {
                     passTiles.Add(new Point(t1.X, y));
                     passTiles.Add(new Point(t2.X, y));
@@ -280,6 +284,39 @@ namespace Pelican4Ever.Modules
                 {
                     passTiles.Add(new Point(t1.X, y));
                     passTiles.Add(new Point(t2.X, y));
+                }
+
+                // Remate de valla con postes auténticos de madera vanilla a ambos lados de la apertura
+                if (sheet != null && bld != null)
+                {
+                    int leftX = t1.X - 1;
+                    int rightX = t2.X + 1;
+
+                    if (leftX >= 0 && leftX < bld.LayerWidth)
+                    {
+                        bld.Tiles[leftX, 62] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 394);
+                        bld.Tiles[leftX, 63] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 419);
+                        bld.Tiles[leftX, 64] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 419);
+
+                        if (front != null)
+                        {
+                            front.Tiles[leftX, 61] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 438);
+                            front.Tiles[leftX, 62] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 394);
+                        }
+                    }
+
+                    if (rightX >= 0 && rightX < bld.LayerWidth)
+                    {
+                        bld.Tiles[rightX, 62] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 391);
+                        bld.Tiles[rightX, 63] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 416);
+                        bld.Tiles[rightX, 64] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 391);
+
+                        if (front != null)
+                        {
+                            front.Tiles[rightX, 61] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 439);
+                            front.Tiles[rightX, 62] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 391);
+                        }
+                    }
                 }
             }
 
@@ -296,10 +333,16 @@ namespace Pelican4Ever.Modules
 
                 if (back != null && pt.X >= 0 && pt.X < back.LayerWidth && pt.Y >= 0 && pt.Y < back.LayerHeight)
                 {
-                    if (back.Tiles[pt.X, pt.Y] == null && sampleTile != null)
+                    if (sheet != null)
+                    {
+                        // Pavimentar con senda de grava/tierra natural (tile 587 vanilla)
+                        back.Tiles[pt.X, pt.Y] = new xTile.Tiles.StaticTile(back, sheet, xTile.Tiles.BlendMode.Alpha, 587);
+                    }
+                    else if (back.Tiles[pt.X, pt.Y] == null && sampleTile != null)
                     {
                         back.Tiles[pt.X, pt.Y] = sampleTile.Clone(back);
                     }
+
                     if (back.Tiles[pt.X, pt.Y] != null)
                     {
                         back.Tiles[pt.X, pt.Y].Properties.Remove("Passable");
@@ -307,6 +350,16 @@ namespace Pelican4Ever.Modules
                     }
                 }
             }
+
+            // Despejar casilla del cartel para que ningún gráfico de mapa colisione con el poste físico
+            int signX = door.MailboxTileX ?? (door.TownTileX + 1);
+            int signY = door.MailboxTileY ?? door.TownTileY;
+            if (bld != null && signX >= 0 && signX < bld.LayerWidth && signY >= 0 && signY < bld.LayerHeight)
+                bld.Tiles[signX, signY] = null;
+            if (front != null && signX >= 0 && signX < front.LayerWidth && signY >= 0 && signY < front.LayerHeight)
+                front.Tiles[signX, signY] = null;
+
+            return passTiles;
         }
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
@@ -507,54 +560,24 @@ namespace Pelican4Ever.Modules
                     continue;
 
                 // 1. Limpiar copas de árboles, ramas, troncos y suelo en el mapa del runtime
-                ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
+                var passTiles = ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
 
                 var (t1, t2) = GetOpeningTiles(door);
 
-                // 2. Limpiar objetos, escombros, tocones y piedras
-                farm.removeEverythingFromThisTile(t1.X, t1.Y);
-                farm.removeEverythingFromThisTile(t2.X, t2.Y);
-                farm.removeTileProperty(t1.X, t1.Y, "Back", "Passable");
-                farm.removeTileProperty(t2.X, t2.Y, "Back", "Passable");
-
-                // Eliminar tocones o troncos grandes que caigan sobre el umbral
-                for (int i = farm.resourceClumps.Count - 1; i >= 0; i--)
+                // 2. Limpiar objetos, escombros, tocones, piedras y propiedades Passable a lo largo de todo el paso
+                foreach (var pt in passTiles)
                 {
-                    var clump = farm.resourceClumps[i];
-                    if (IsClumpOverTile(clump, t1.X, t1.Y) || IsClumpOverTile(clump, t2.X, t2.Y))
+                    farm.removeEverythingFromThisTile(pt.X, pt.Y);
+                    farm.removeTileProperty(pt.X, pt.Y, "Back", "Passable");
+
+                    for (int i = farm.resourceClumps.Count - 1; i >= 0; i--)
                     {
-                        farm.resourceClumps.RemoveAt(i);
+                        var clump = farm.resourceClumps[i];
+                        if (IsClumpOverTile(clump, pt.X, pt.Y))
+                        {
+                            farm.resourceClumps.RemoveAt(i);
+                        }
                     }
-                }
-
-                // Limpiar casillas de borde exterior
-                if (door.TownTileX <= 2)
-                {
-                    farm.removeEverythingFromThisTile(0, t1.Y);
-                    farm.removeEverythingFromThisTile(0, t2.Y);
-                    farm.removeTileProperty(0, t1.Y, "Back", "Passable");
-                    farm.removeTileProperty(0, t2.Y, "Back", "Passable");
-                }
-                else if (door.TownTileX >= 75)
-                {
-                    farm.removeEverythingFromThisTile(79, t1.Y);
-                    farm.removeEverythingFromThisTile(79, t2.Y);
-                    farm.removeTileProperty(79, t1.Y, "Back", "Passable");
-                    farm.removeTileProperty(79, t2.Y, "Back", "Passable");
-                }
-                else if (door.TownTileY <= 2)
-                {
-                    farm.removeEverythingFromThisTile(t1.X, 0);
-                    farm.removeEverythingFromThisTile(t2.X, 0);
-                    farm.removeTileProperty(t1.X, 0, "Back", "Passable");
-                    farm.removeTileProperty(t2.X, 0, "Back", "Passable");
-                }
-                else
-                {
-                    farm.removeEverythingFromThisTile(t1.X, 64);
-                    farm.removeEverythingFromThisTile(t2.X, 64);
-                    farm.removeTileProperty(t1.X, 64, "Back", "Passable");
-                    farm.removeTileProperty(t2.X, 64, "Back", "Passable");
                 }
 
                 // 3. Colocar poste con cartel de madera físico (Sign ID 37 - BigCraftable) en la casilla designada

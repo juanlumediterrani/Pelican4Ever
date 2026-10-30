@@ -123,5 +123,52 @@ namespace Pelican4Ever.Tests
 
             Assert.True(found16, "Farm_Portal_16 must be configured in doors.json");
         }
+
+        [Fact]
+        public void AllDoors_HaveValidMailboxTile_AdjacentAndNonColliding()
+        {
+            string baseDir = AppContext.BaseDirectory;
+            string doorsPath = Path.GetFullPath(Path.Combine(baseDir, "../../../../Pelican4Ever/assets/doors.json"));
+            if (!File.Exists(doorsPath))
+            {
+                doorsPath = Path.GetFullPath(Path.Combine(baseDir, "../../../Pelican4Ever/assets/doors.json"));
+            }
+            if (!File.Exists(doorsPath))
+            {
+                doorsPath = Path.Combine(Directory.GetCurrentDirectory(), "assets", "doors.json");
+            }
+
+            Assert.True(File.Exists(doorsPath));
+            string json = File.ReadAllText(doorsPath);
+            using var doc = JsonDocument.Parse(json);
+
+            var seenSigns = new System.Collections.Generic.HashSet<(int, int)>();
+            foreach (var el in doc.RootElement.EnumerateArray())
+            {
+                string id = el.GetProperty("DoorId").GetString()!;
+                int x = el.GetProperty("TownTileX").GetInt32();
+                int y = el.GetProperty("TownTileY").GetInt32();
+                int mx = el.GetProperty("MailboxTileX").GetInt32();
+                int my = el.GetProperty("MailboxTileY").GetInt32();
+
+                bool isVertical = x <= 2 || x >= 75;
+                (int t1x, int t1y) = (x, y);
+                (int t2x, int t2y) = isVertical ? (x, y + 1) : (x + 1, y);
+
+                // No debe superponerse con el paso peatonal
+                Assert.False(mx == t1x && my == t1y, $"{id} sign overlaps t1");
+                Assert.False(mx == t2x && my == t2y, $"{id} sign overlaps t2");
+
+                // Distancia Manhattan al umbral <= 2
+                int d1 = Math.Abs(mx - t1x) + Math.Abs(my - t1y);
+                int d2 = Math.Abs(mx - t2x) + Math.Abs(my - t2y);
+                Assert.True(Math.Min(d1, d2) <= 2, $"{id} sign is too far (dist={Math.Min(d1, d2)})");
+
+                // Cada poste/buzón es único
+                Assert.True(seenSigns.Add((mx, my)), $"Duplicate sign tile at ({mx}, {my}) for {id}");
+            }
+
+            Assert.Equal(16, seenSigns.Count);
+        }
     }
 }
