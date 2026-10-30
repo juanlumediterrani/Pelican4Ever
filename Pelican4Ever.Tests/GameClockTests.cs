@@ -77,4 +77,17 @@ public class GameClockTests
         Assert.Equal(minutes, GameClock.ToMinutes(time));
         Assert.Equal(time, GameClock.FromMinutes(minutes));
     }
+
+    [Theory]
+    [InlineData(12, 0, 2, 1400)]   // 12:00 + 2h -> 14:00
+    [InlineData(12, 0, -1, 1100)]  // 12:00 - 1h -> 11:00
+    [InlineData(8, 0, 0.5, 830)]   // 08:00 + 30m -> 08:30
+    public void Read_WithTimeOffset_ShiftsGameClockAccurately(int hour, int minute, double offsetHours, int expectedTime)
+    {
+        DateTime baseTime = new DateTime(2026, 10, 30, hour, minute, 0);
+        DateTime shifted = baseTime.AddHours(offsetHours);
+        ClockReading reading = GameClock.Read(shifted.TimeOfDay, DayStart, HoldStart);
+
+        Assert.Equal(expectedTime, reading.TimeOfDay);
+    }
 }

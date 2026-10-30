@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Time;
@@ -6,17 +7,21 @@ using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Menus;
 using StardewValley.Network.Dedicated;
 
 namespace Pelican4Ever.Modules
 {
     /// <summary>
     /// Sincroniza el reloj del juego 1:1 con la hora real y evita pausas indeseadas (TASK-101 / ADR-0002).
+    /// Permite además al anfitrión ajustar u omitir horas con comandos /time +X, -X o reset.
     /// </summary>
     public sealed class RealTimeClockModule : IModule
     {
         private static ModContext? context;
         public static bool IsNightHold { get; private set; }
+        public static TimeSpan ManualTimeOffset { get; set; } = TimeSpan.Zero;
+        private static bool timeChatCommandsRegistered;
 
         public string Name => "RealTimeClock";
 
@@ -37,8 +42,146 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
 
+            // Comandos para host para forzar o adelantar/retrasar horas (+X, -X, reset)
+            ctx.Helper.ConsoleCommands.Add(
+                "p4e_time",
+                "Ajusta o fuerza la hora del juego en el servidor. Uso: p4e_time <+X|-X|reset|set HH:mm> (ej: p4e_time +2, p4e_time -1, p4e_time reset)",
+                OnConsoleTime
+            );
+            ctx.Helper.Events.GameLoop.GameLaunched += (s, e) => RegisterTimeChatCommands();
+
             // Parches Harmony
             ApplyHarmonyPatches(ctx.Harmony);
+        }
+
+        private static void RegisterTimeChatCommands()
+        {
+            if (timeChatCommandsRegistered) return;
+            try
+            {
+                if (!ChatCommands.Exists("time"))
+                {
+                    ChatCommands.Register(
+                        "time",
+                        HandleTimeChatCommand,
+                        name => "Ajusta la hora del juego en el servidor (/time o /hora <+X|-X|reset|set HH:mm>)",
+                        new[] { "hora" },
+                        mainOnly: true,
+                        multiplayerOnly: false,
+                        cheatsOnly: false
+                    );
+                }
+                timeChatCommandsRegistered = true;
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[RealTimeClockModule] Error registrando comando de chat /time: {ex}", LogLevel.Warn);
+            }
+        }
+
+        private static void HandleTimeChatCommand(string[] command, ChatBox chat)
+        {
+            string arg = command.Length > 1 ? string.Join(" ", command.Skip(1)) : string.Empty;
+            AdjustTime(arg, out string message);
+            chat.addInfoMessage(message);
+        }
+
+        private void OnConsoleTime(string command, string[] args)
+        {
+            string arg = string.Join(" ", args);
+            AdjustTime(arg, out string message);
+            context?.Monitor.Log(message, LogLevel.Info);
+        }
+
+        public static bool AdjustTime(string input, out string message)
+        {
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                message = $"[Reloj] Offset actual: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}. Uso: /time <+X|-X|reset|set HH:mm>";
+                return false;
+            }
+
+            input = input.Trim().ToLowerInvariant();
+
+            if (input == "reset")
+            {
+                ManualTimeOffset = TimeSpan.Zero;
+                ApplyCurrentClock();
+                message = $"[Reloj] Restablecido a hora real. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}.";
+                return true;
+            }
+
+            if (input.StartsWith("set ") || input.StartsWith("set="))
+            {
+                string val = input.Substring(4).Trim();
+                if (TimeSpan.TryParse(val, out TimeSpan targetSpan) || (int.TryParse(val, out int rawTime) && TryConvertRawTimeToSpan(rawTime, out targetSpan)))
+                {
+                    DateTime baseNow = ServerTime.LocalNow(context?.Config.TimeZoneId ?? "Europe/Madrid");
+                    ManualTimeOffset = targetSpan - baseNow.TimeOfDay;
+                    ApplyCurrentClock();
+                    message = $"[Reloj] Hora fijada a {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                    return true;
+                }
+                message = "[Reloj] Formato de hora no válido. Usa HH:mm (ej: /time set 14:00 o /time set 08:30).";
+                return false;
+            }
+
+            bool isMinus = input.StartsWith("-");
+            bool isPlus = input.StartsWith("+");
+            string numStr = input.TrimStart('+', '-').TrimEnd('h');
+
+            if (numStr.EndsWith("m"))
+            {
+                if (double.TryParse(numStr.TrimEnd('m'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double minutes))
+                {
+                    TimeSpan delta = TimeSpan.FromMinutes(isMinus ? -minutes : minutes);
+                    ManualTimeOffset += delta;
+                    ApplyCurrentClock();
+                    message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{minutes} min. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                    return true;
+                }
+            }
+            else if (double.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double hours))
+            {
+                TimeSpan delta = TimeSpan.FromHours(isMinus ? -hours : hours);
+                ManualTimeOffset += delta;
+                ApplyCurrentClock();
+                message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{hours}h. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                return true;
+            }
+
+            message = "[Reloj] Formato no válido. Ejemplos válidos: /time +2, /time -1, /time +30m, /time reset, /time set 14:00";
+            return false;
+        }
+
+        private static bool TryConvertRawTimeToSpan(int raw, out TimeSpan span)
+        {
+            int hours = raw / 100;
+            int mins = raw % 100;
+            if (hours >= 0 && hours < 24 && mins >= 0 && mins < 60)
+            {
+                span = new TimeSpan(hours, mins, 0);
+                return true;
+            }
+            span = TimeSpan.Zero;
+            return false;
+        }
+
+        public static void ApplyCurrentClock()
+        {
+            if (context == null || !Context.IsMainPlayer) return;
+
+            var cfg = context.Config;
+            DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
+            ClockReading reading = GameClock.Read(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+            IsNightHold = reading.IsNightHold;
+            Game1.timeOfDay = reading.TimeOfDay;
+            Game1.gameTimeInterval = reading.MillisecondsIntoSlot;
+
+            if (Game1.netWorldState?.Value != null)
+            {
+                Game1.netWorldState.Value.UpdateFromGame1();
+            }
         }
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
@@ -68,7 +211,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             var cfg = context.Config;
-            DateTime now = ServerTime.LocalNow(cfg.TimeZoneId);
+            DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
             ClockReading reading = GameClock.Read(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
             IsNightHold = reading.IsNightHold;
 
@@ -89,8 +232,16 @@ namespace Pelican4Ever.Modules
             // Calcular cuántos pasos de 10 minutos necesitamos para alcanzar la hora real actual
             int ticksNeeded = GameClock.TicksToReach(Game1.timeOfDay, reading.TimeOfDay);
 
-            // Si por alguna razón la hora del juego está desfasada (o al cargar la partida por primera vez)
-            if (ticksNeeded > 0)
+            if (Game1.timeOfDay > reading.TimeOfDay)
+            {
+                // Si la hora del juego quedó por delante (ej. retroceso manual con /time -X o DST), sincronizar hacia atrás
+                Game1.timeOfDay = reading.TimeOfDay;
+                if (Game1.netWorldState?.Value != null)
+                {
+                    Game1.netWorldState.Value.UpdateFromGame1();
+                }
+            }
+            else if (ticksNeeded > 0)
             {
                 // Si el salto es muy grande (> 3 horas = 18 ticks), ajustamos directamente para evitar spam de eventos
                 if (ticksNeeded > 18)

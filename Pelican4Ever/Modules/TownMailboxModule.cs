@@ -93,7 +93,33 @@ namespace Pelican4Ever.Modules
 
             if (eval.Status == MailboxAccessStatus.Owner)
             {
-                Game1.currentLocation.mailbox();
+                Response[] choices = new[]
+                {
+                    new Response("Enter", "🏠 Entrar a mi granja"),
+                    new Response("Mailbox", "📬 Revisar correo"),
+                    new Response("Policy", $"🔒 Configurar acceso (Actual: {assignment?.Policy})"),
+                    new Response("Cancel", "Cancelar")
+                };
+
+                Game1.currentLocation.createQuestionDialogue(
+                    $"Tu buzón / poste residencial ({door.Description}).",
+                    choices,
+                    (who, whichAnswer) =>
+                    {
+                        if (whichAnswer == "Enter")
+                        {
+                            FarmSlotModule.WarpToFarm(door.DefaultSlotId);
+                        }
+                        else if (whichAnswer == "Mailbox")
+                        {
+                            Game1.currentLocation.mailbox();
+                        }
+                        else if (whichAnswer == "Policy")
+                        {
+                            FarmSlotModule.ShowPolicySelectionDialog(door.DefaultSlotId);
+                        }
+                    }
+                );
             }
             else if (eval.Status == MailboxAccessStatus.Unassigned)
             {
@@ -101,7 +127,30 @@ namespace Pelican4Ever.Modules
             }
             else
             {
-                Game1.drawObjectDialogue(eval.Message);
+                if (assignment != null && assignment.Policy != AccessPolicy.Locked)
+                {
+                    Response[] choices = new[]
+                    {
+                        new Response("Visit", $"🏠 Visitar granja de {ownerName}"),
+                        new Response("Cancel", "Cancelar")
+                    };
+
+                    Game1.currentLocation.createQuestionDialogue(
+                        $"{door.Description}.\nPropiedad de {ownerName}. Estado: {assignment.Policy}.",
+                        choices,
+                        (who, whichAnswer) =>
+                        {
+                            if (whichAnswer == "Visit")
+                            {
+                                FarmSlotModule.WarpToFarm(door.DefaultSlotId);
+                            }
+                        }
+                    );
+                }
+                else
+                {
+                    Game1.drawObjectDialogue($"Esta residencia pertenece a {ownerName}. La entrada está restringida y el buzón es privado.");
+                }
             }
         }
 

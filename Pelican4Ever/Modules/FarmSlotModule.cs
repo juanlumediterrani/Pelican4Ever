@@ -158,33 +158,54 @@ namespace Pelican4Ever.Modules
                     var frontLayer = hostMap.GetLayer("Front");
                     var backLayer = hostMap.GetLayer("Back");
 
+                    // Localizar una baldosa de suelo válida en el interior de la granja para rellenar el suelo bajo las vallas
+                    xTile.Tiles.Tile? sampleTile = null;
+                    if (backLayer != null)
+                    {
+                        sampleTile = backLayer.Tiles[40, 30] ?? backLayer.Tiles[64, 15] ?? backLayer.Tiles[20, 20];
+                        if (sampleTile == null)
+                        {
+                            for (int sy = 5; sy < backLayer.LayerHeight - 5 && sampleTile == null; sy++)
+                            {
+                                for (int sx = 5; sx < backLayer.LayerWidth - 5; sx++)
+                                {
+                                    if (backLayer.Tiles[sx, sy] != null)
+                                    {
+                                        sampleTile = backLayer.Tiles[sx, sy];
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     foreach (var door in RegisteredDoors)
                     {
                         if (string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
                         {
                             var (t1, t2) = GetOpeningTiles(door);
-                            ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, t1.Y);
-                            ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, t2.Y);
+                            ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, t1.Y, sampleTile);
+                            ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, t2.Y, sampleTile);
 
                             if (door.TownTileX <= 2)
                             {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 0, t1.Y);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 0, t2.Y);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, 0, t1.Y, sampleTile);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, 0, t2.Y, sampleTile);
                             }
                             else if (door.TownTileX >= 75)
                             {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 79, t1.Y);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, 79, t2.Y);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, 79, t1.Y, sampleTile);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, 79, t2.Y, sampleTile);
                             }
                             else if (door.TownTileY <= 2)
                             {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, 0);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, 0);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, 0, sampleTile);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, 0, sampleTile);
                             }
                             else
                             {
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, 64);
-                                ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, 64);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, t1.X, 64, sampleTile);
+                                ClearMapTile(bldLayer, frontLayer, backLayer, t2.X, 64, sampleTile);
                             }
                         }
                     }
@@ -212,14 +233,23 @@ namespace Pelican4Ever.Modules
             return (tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y);
         }
 
-        private static void ClearMapTile(xTile.Layers.Layer? bld, xTile.Layers.Layer? front, xTile.Layers.Layer? back, int x, int y)
+        private static void ClearMapTile(xTile.Layers.Layer? bld, xTile.Layers.Layer? front, xTile.Layers.Layer? back, int x, int y, xTile.Tiles.Tile? sampleTile)
         {
             if (bld != null && x >= 0 && x < bld.LayerWidth && y >= 0 && y < bld.LayerHeight)
                 bld.Tiles[x, y] = null;
             if (front != null && x >= 0 && x < front.LayerWidth && y >= 0 && y < front.LayerHeight)
                 front.Tiles[x, y] = null;
             if (back != null && x >= 0 && x < back.LayerWidth && y >= 0 && y < back.LayerHeight)
-                back.Properties["Passable"] = "T";
+            {
+                if (back.Tiles[x, y] == null && sampleTile != null)
+                {
+                    back.Tiles[x, y] = sampleTile.Clone(back);
+                }
+                if (back.Tiles[x, y] != null)
+                {
+                    back.Tiles[x, y].Properties["Passable"] = "T";
+                }
+            }
         }
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
@@ -402,6 +432,27 @@ namespace Pelican4Ever.Modules
         {
             if (farm == null || context == null) return;
 
+            var backLayer = farm.Map?.GetLayer("Back");
+            xTile.Tiles.Tile? sampleTile = null;
+            if (backLayer != null)
+            {
+                sampleTile = backLayer.Tiles[40, 30] ?? backLayer.Tiles[64, 15] ?? backLayer.Tiles[20, 20];
+                if (sampleTile == null)
+                {
+                    for (int sy = 5; sy < backLayer.LayerHeight - 5 && sampleTile == null; sy++)
+                    {
+                        for (int sx = 5; sx < backLayer.LayerWidth - 5; sx++)
+                        {
+                            if (backLayer.Tiles[sx, sy] != null)
+                            {
+                                sampleTile = backLayer.Tiles[sx, sy];
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
             foreach (DoorModel door in RegisteredDoors)
             {
                 if (!string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
@@ -409,67 +460,67 @@ namespace Pelican4Ever.Modules
 
                 var (t1, t2) = GetOpeningTiles(door);
 
-                // 1. Limpiar colisión y obstáculos en ambos tiles del umbral en el borde del mapa
-                ClearPortalTile(farm, t1.X, t1.Y);
-                ClearPortalTile(farm, t2.X, t2.Y);
+                // 1. Pavimentar el umbral físico continuo (t1, t2) en la apertura de la valla con suelo adoquinado
+                PavePathTile(farm, t1.X, t1.Y, sampleTile);
+                PavePathTile(farm, t2.X, t2.Y, sampleTile);
 
                 // Limpiar también la loseta del borde exterior para una vista panorámica despejada
                 if (door.TownTileX <= 2)
                 {
-                    ClearPortalTile(farm, 0, t1.Y);
-                    ClearPortalTile(farm, 0, t2.Y);
+                    ClearPortalTile(farm, 0, t1.Y, sampleTile);
+                    ClearPortalTile(farm, 0, t2.Y, sampleTile);
                 }
                 else if (door.TownTileX >= 75)
                 {
-                    ClearPortalTile(farm, 79, t1.Y);
-                    ClearPortalTile(farm, 79, t2.Y);
+                    ClearPortalTile(farm, 79, t1.Y, sampleTile);
+                    ClearPortalTile(farm, 79, t2.Y, sampleTile);
                 }
                 else if (door.TownTileY <= 2)
                 {
-                    ClearPortalTile(farm, t1.X, 0);
-                    ClearPortalTile(farm, t2.X, 0);
+                    ClearPortalTile(farm, t1.X, 0, sampleTile);
+                    ClearPortalTile(farm, t2.X, 0, sampleTile);
                 }
                 else
                 {
-                    ClearPortalTile(farm, t1.X, 64);
-                    ClearPortalTile(farm, t2.X, 64);
+                    ClearPortalTile(farm, t1.X, 64, sampleTile);
+                    ClearPortalTile(farm, t2.X, 64, sampleTile);
                 }
 
                 // 2. Pavimentar sendero de 2 losetas de ancho conectando el portal hacia el interior de la granja
                 if (door.TownTileX <= 2)
                 {
-                    PavePathTile(farm, door.TownTileX + 1, t1.Y);
-                    PavePathTile(farm, door.TownTileX + 1, t2.Y);
-                    PavePathTile(farm, door.TownTileX + 2, t1.Y);
-                    PavePathTile(farm, door.TownTileX + 2, t2.Y);
+                    PavePathTile(farm, door.TownTileX + 1, t1.Y, sampleTile);
+                    PavePathTile(farm, door.TownTileX + 1, t2.Y, sampleTile);
+                    PavePathTile(farm, door.TownTileX + 2, t1.Y, sampleTile);
+                    PavePathTile(farm, door.TownTileX + 2, t2.Y, sampleTile);
                 }
                 else if (door.TownTileX >= 75)
                 {
-                    PavePathTile(farm, door.TownTileX - 1, t1.Y);
-                    PavePathTile(farm, door.TownTileX - 1, t2.Y);
-                    PavePathTile(farm, door.TownTileX - 2, t1.Y);
-                    PavePathTile(farm, door.TownTileX - 2, t2.Y);
+                    PavePathTile(farm, door.TownTileX - 1, t1.Y, sampleTile);
+                    PavePathTile(farm, door.TownTileX - 1, t2.Y, sampleTile);
+                    PavePathTile(farm, door.TownTileX - 2, t1.Y, sampleTile);
+                    PavePathTile(farm, door.TownTileX - 2, t2.Y, sampleTile);
                 }
                 else if (door.TownTileY <= 2)
                 {
-                    PavePathTile(farm, t1.X, door.TownTileY + 1);
-                    PavePathTile(farm, t2.X, door.TownTileY + 1);
-                    PavePathTile(farm, t1.X, door.TownTileY + 2);
-                    PavePathTile(farm, t2.X, door.TownTileY + 2);
+                    PavePathTile(farm, t1.X, door.TownTileY + 1, sampleTile);
+                    PavePathTile(farm, t2.X, door.TownTileY + 1, sampleTile);
+                    PavePathTile(farm, t1.X, door.TownTileY + 2, sampleTile);
+                    PavePathTile(farm, t2.X, door.TownTileY + 2, sampleTile);
                 }
                 else
                 {
-                    PavePathTile(farm, t1.X, door.TownTileY - 1);
-                    PavePathTile(farm, t2.X, door.TownTileY - 1);
-                    PavePathTile(farm, t1.X, door.TownTileY - 2);
-                    PavePathTile(farm, t2.X, door.TownTileY - 2);
+                    PavePathTile(farm, t1.X, door.TownTileY - 1, sampleTile);
+                    PavePathTile(farm, t2.X, door.TownTileY - 1, sampleTile);
+                    PavePathTile(farm, t1.X, door.TownTileY - 2, sampleTile);
+                    PavePathTile(farm, t2.X, door.TownTileY - 2, sampleTile);
                 }
 
                 // 3. Colocar poste con cartel de madera físico (Sign ID 37 - BigCraftable) en la casilla designada
                 int signX = door.MailboxTileX ?? (door.TownTileX + 1);
                 int signY = door.MailboxTileY ?? door.TownTileY;
                 Vector2 signTile = new Vector2(signX, signY);
-                ClearPortalTile(farm, signX, signY);
+                ClearPortalTile(farm, signX, signY, sampleTile);
 
                 if (!farm.objects.ContainsKey(signTile))
                 {
@@ -544,12 +595,24 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void ClearPortalTile(Farm farm, int x, int y)
+        private static void ClearPortalTile(Farm farm, int x, int y, xTile.Tiles.Tile? sampleTile)
         {
             try
             {
                 farm.removeTile(x, y, "Buildings");
                 farm.removeTile(x, y, "Front");
+                var backLayer = farm.Map?.GetLayer("Back");
+                if (backLayer != null && x >= 0 && x < backLayer.LayerWidth && y >= 0 && y < backLayer.LayerHeight)
+                {
+                    if (backLayer.Tiles[x, y] == null && sampleTile != null)
+                    {
+                        backLayer.Tiles[x, y] = sampleTile.Clone(backLayer);
+                    }
+                    if (backLayer.Tiles[x, y] != null)
+                    {
+                        backLayer.Tiles[x, y].Properties["Passable"] = "T";
+                    }
+                }
                 farm.setTileProperty(x, y, "Back", "Passable", "T");
                 farm.removeEverythingFromThisTile(x, y);
             }
@@ -584,15 +647,12 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void PavePathTile(Farm farm, int x, int y)
+        private static void PavePathTile(Farm farm, int x, int y, xTile.Tiles.Tile? sampleTile)
         {
             Vector2 tile = new Vector2(x, y);
             try
             {
-                farm.removeTile(x, y, "Buildings");
-                farm.removeTile(x, y, "Front");
-                farm.setTileProperty(x, y, "Back", "Passable", "T");
-                farm.removeEverythingFromThisTile(x, y);
+                ClearPortalTile(farm, x, y, sampleTile);
                 farm.terrainFeatures[tile] = new Flooring("5"); // Cobblestone Path
             }
             catch
@@ -1101,7 +1161,7 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void ShowPolicySelectionDialog(string farmSlotId)
+        public static void ShowPolicySelectionDialog(string farmSlotId)
         {
             if (context == null || Game1.currentLocation == null) return;
 
