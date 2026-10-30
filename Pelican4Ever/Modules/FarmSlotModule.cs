@@ -1382,14 +1382,56 @@ namespace Pelican4Ever.Modules
                 return true;
             }
 
-            // Si el jugador está saliendo de una granja instanciada hacia el exterior, redirigir a su portal en la Granja Host
-            if (Game1.currentLocation != null && Game1.currentLocation.Name.StartsWith(LocationCullingLogic.FarmPrefix))
+            // Si el jugador está saliendo de una granja instanciada privada hacia el exterior
+            string curLoc = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                if (locationName is "BusStop" or "Backwoods" or "Town" or "Farm")
+                var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
+                if (door != null)
                 {
-                    string currentFarm = Game1.currentLocation.Name;
-                    var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == currentFarm);
-                    if (door != null)
+                    bool shouldReturnToHost = false;
+
+                    if (door.TownTileY >= 60)
+                    {
+                        // Puerta en el SUR del Host (abajo):
+                        // Para volver a la Plaza Central se usa la salida de ARRIBA (Norte: Backwoods / Montaña).
+                        // Las demás salidas (Forest al sur y BusStop al este) se mantienen vanilla.
+                        if (string.Equals(locationName, "Backwoods", StringComparison.OrdinalIgnoreCase)
+                            || string.Equals(locationName, "Mountain", StringComparison.OrdinalIgnoreCase))
+                        {
+                            shouldReturnToHost = true;
+                        }
+                    }
+                    else if (door.TownTileY <= 2)
+                    {
+                        // Puerta en el NORTE del Host (arriba):
+                        // Para volver a la Plaza Central se usa la salida de ABAJO (Sur: Forest / Casa de Marnie).
+                        // Las demás salidas (Backwoods al norte y BusStop al este) se mantienen vanilla.
+                        if (string.Equals(locationName, "Forest", StringComparison.OrdinalIgnoreCase))
+                        {
+                            shouldReturnToHost = true;
+                        }
+                    }
+                    else if (door.TownTileX <= 2)
+                    {
+                        // Puerta en el OESTE del Host (izquierda):
+                        // Para volver a la Plaza Central se usa la salida de la DERECHA (Este: BusStop).
+                        // Las demás salidas (Backwoods al norte y Forest al sur) se mantienen vanilla.
+                        if (string.Equals(locationName, "BusStop", StringComparison.OrdinalIgnoreCase))
+                        {
+                            shouldReturnToHost = true;
+                        }
+                    }
+                    else
+                    {
+                        // Puerta en el ESTE del Host (derecha):
+                        if (string.Equals(locationName, "BusStop", StringComparison.OrdinalIgnoreCase))
+                        {
+                            shouldReturnToHost = true;
+                        }
+                    }
+
+                    if (shouldReturnToHost)
                     {
                         locationName = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
                         RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);

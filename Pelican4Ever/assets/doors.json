@@ -122,41 +122,41 @@
   {
     "DoorId": "Farm_Portal_13",
     "LocationName": "Farm",
-    "TownTileX": 78,
-    "TownTileY": 26,
-    "MailboxTileX": 77,
-    "MailboxTileY": 25,
+    "TownTileX": 8,
+    "TownTileY": 1,
+    "MailboxTileX": 7,
+    "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_13",
-    "Description": "Parcela 13 (Sendero Este - Camino del Robledal)"
+    "Description": "Parcela 13 (Paso de la Montaña - Rincón Noroeste)"
   },
   {
     "DoorId": "Farm_Portal_14",
     "LocationName": "Farm",
-    "TownTileX": 78,
-    "TownTileY": 36,
-    "MailboxTileX": 77,
-    "MailboxTileY": 35,
+    "TownTileX": 72,
+    "TownTileY": 1,
+    "MailboxTileX": 71,
+    "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_14",
-    "Description": "Parcela 14 (Sendero Este - Lindero del Este)"
+    "Description": "Parcela 14 (Paso de la Montaña - Rincón Noreste)"
   },
   {
     "DoorId": "Farm_Portal_15",
     "LocationName": "Farm",
-    "TownTileX": 78,
-    "TownTileY": 46,
-    "MailboxTileX": 77,
-    "MailboxTileY": 45,
+    "TownTileX": 8,
+    "TownTileY": 63,
+    "MailboxTileX": 7,
+    "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_15",
-    "Description": "Parcela 15 (Sendero Este - Pradera Florida)"
+    "Description": "Parcela 15 (Ribera Sur - Rincón Suroeste)"
   },
   {
     "DoorId": "Farm_Portal_16",
     "LocationName": "Farm",
-    "TownTileX": 78,
-    "TownTileY": 56,
-    "MailboxTileX": 77,
-    "MailboxTileY": 55,
+    "TownTileX": 72,
+    "TownTileY": 63,
+    "MailboxTileX": 71,
+    "MailboxTileY": 62,
     "DefaultSlotId": "Pelican4Ever_Farm_16",
-    "Description": "Parcela 16 (Sendero Este - Solana Oriental)"
+    "Description": "Parcela 16 (Ribera Sur - Rincón Sureste)"
   }
 ]
