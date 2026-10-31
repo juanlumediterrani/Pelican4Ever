@@ -263,6 +263,23 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Las cinemáticas grupales solo arrastran a los jugadores que se encuentran dentro del mapa del evento a la hora señalada.
     2. Los jugadores ausentes no sufren congelación de pantalla ni teletransporte forzoso.
 
+- [x] **TASK-703: Entrada y salida libre de festivales sin salto de cámara (`FestivalAccessModule.cs`)**
+  * **Análisis Técnico:** En multijugador vanilla, entrar en el mapa del festival abre `ReadyCheckDialog("festivalStart")` para todos, y el guion `set-up` de `Data/Festivals/<fecha>` fija la cámara, teletransporta al jugador a una casilla fija (p. ej. 12,54 en la Fiesta del Huevo), oculta la vista con `viewport -1000 -1000` y la devuelve con `globalFadeToClear`. Salir abre `ReadyCheckDialog("festivalEnd")` y `Event.exitEvent` termina el festival para el servidor: hora a las 22:00 (24:00 en `summer28`/`fall27`), máquinas adelantadas esas horas, aldeanos a casa (host), jugadores a la granja y mensaje `endFest` a todos los clientes. Cambios:
+    - `Game1.warpFarmer`: se oculta `weatherIcon == 1` durante la llamada; el mapa del festival se entra como cualquier otro, sin confirmación ni bloqueo antes de la hora.
+    - `Event.tryToLoadFestival`: `FestivalEntryScript.KeepPlayerInPlace` deja la cámara en `follow`, al jugador en su casilla de llegada y quita la vista oculta y el fundido. Si esa casilla está ocupada en el mapa temporal del festival, se usa la entrada vanilla.
+    - `Event.TryStartEndFestivalDialogue`: al tocar el borde, sale por el warp más cercano del mapa real con `isFestival = false` antes de `endBehaviors`, sin `endFest`.
+    - Si el festival abre con el jugador ya dentro del mapa, empieza en ese momento y en su sitio.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Entrar al festival no mueve la cámara ni teletransporta al jugador.
+    2. Un jugador puede salir y volver a entrar varias veces el mismo día; la hora del servidor no cambia y los demás siguen en el festival.
+    3. Sin verificar en partida (pendiente de prueba con dos instancias).
+
+- [ ] **TASK-704: Evento principal del festival sin esperar a todos los jugadores conectados**
+  * **Análisis Técnico:** El evento principal (búsqueda de huevos, baile, concurso…) arranca con `CheckOthersReady("MainEvent_<id>")`, que espera a todos los jugadores conectados. Con TASK-703 ya no están obligados a estar en el festival, así que el evento principal puede quedarse esperando a quien esté en su granja o en las minas. Hay que limitar esa espera a los jugadores presentes en el mapa del festival, o sustituirla por los minijuegos y ceremonias de TASK-701/702.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:** con un jugador en el festival y otro fuera, el del festival puede iniciar y terminar el evento principal.
+
 ---
 
 ### Épica 8: Panel de Administración Web y Telemetría (DevOps)

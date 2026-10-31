@@ -46,6 +46,7 @@ namespace Pelican4Ever
                 new EconomyModule(),
                 new WorldLifeModule(),
                 new FestivalMinigameModule(),
+                new FestivalAccessModule(),
                 new AdminApiModule()
             );
 
