@@ -455,6 +455,11 @@ namespace Pelican4Ever.Modules
                 var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farm.NameOrUniqueName);
                 EnsureFarmSlotBuildings(farm, assignment);
             }
+
+            if (e.NewLocation is Cabin cabin && cabin.NameOrUniqueName.EndsWith("_Home", StringComparison.OrdinalIgnoreCase))
+            {
+                CleanAndArrangeResidenceInterior(cabin);
+            }
         }
 
         public static void RemoveHostCabins(Farm farm)
@@ -1620,13 +1625,15 @@ namespace Pelican4Ever.Modules
 
         /// <summary>
         /// Reordena el mobiliario y objetos de inicio del interior de una residencia (Cabin)
-        /// para garantizar un espacio acogedor, transitable y sin apelotonamiento en la pared norte.
+        /// para garantizar un espacio acogedor, transitable y sin apelotonamiento en la pared norte,
+        /// restaurando además la chimenea, ventana, cuadro y alfombra si la cabaña carecía de ellos.
         /// </summary>
         public static void CleanAndArrangeResidenceInterior(Cabin cabin)
         {
             if (cabin == null) return;
 
             RepositionResidenceFurniture(cabin);
+            EnsureStarterDecorations(cabin);
             RepositionStarterChests(cabin);
         }
 
@@ -1639,12 +1646,15 @@ namespace Pelican4Ever.Modules
                 string name = furn.Name ?? string.Empty;
                 int curX = (int)furn.TileLocation.X;
                 int curY = (int)furn.TileLocation.Y;
+                int curRot = furn.currentRotation.Value;
 
-                if (ResidenceInteriorLogic.IsCrampedNorthWallPlacement(name, curX, curY))
+                if (ResidenceInteriorLogic.IsMisplacedStarterFurniture(name, curX, curY, curRot))
                 {
                     if (name.Contains("Table", StringComparison.OrdinalIgnoreCase))
                     {
                         furn.TileLocation = new Vector2(ResidenceInteriorLogic.DiningTablePlacement.TargetX, ResidenceInteriorLogic.DiningTablePlacement.TargetY);
+                        furn.currentRotation.Value = ResidenceInteriorLogic.DiningTablePlacement.Rotation;
+                        furn.updateRotation();
                         furn.RecalculateBoundingBox();
                         furn.updateDrawPosition();
                     }
@@ -1664,6 +1674,165 @@ namespace Pelican4Ever.Modules
                         furn.RecalculateBoundingBox();
                         furn.updateDrawPosition();
                     }
+                    else if (furn is BedFurniture || name.Contains("Bed", StringComparison.OrdinalIgnoreCase))
+                    {
+                        furn.TileLocation = new Vector2(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
+                        furn.currentRotation.Value = ResidenceInteriorLogic.BedPlacement.Rotation;
+                        furn.updateRotation();
+                        furn.RecalculateBoundingBox();
+                        furn.updateDrawPosition();
+                    }
+                    else if (name.Contains("Plant", StringComparison.OrdinalIgnoreCase))
+                    {
+                        furn.TileLocation = new Vector2(ResidenceInteriorLogic.PlantPlacement.TargetX, ResidenceInteriorLogic.PlantPlacement.TargetY);
+                        furn.currentRotation.Value = ResidenceInteriorLogic.PlantPlacement.Rotation;
+                        furn.updateRotation();
+                        furn.RecalculateBoundingBox();
+                        furn.updateDrawPosition();
+                    }
+                }
+            }
+        }
+
+        private static void EnsureStarterDecorations(Cabin cabin)
+        {
+            if (cabin == null || cabin.furniture == null) return;
+
+            // 1. Cama individual
+            bool hasBed = cabin.furniture.Any(f => f is BedFurniture || (f.Name != null && f.Name.Contains("Bed", StringComparison.OrdinalIgnoreCase)));
+            if (!hasBed)
+            {
+                var bed = new BedFurniture(BedFurniture.DEFAULT_BED_INDEX, new Vector2(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY));
+                cabin.furniture.Add(bed);
+            }
+
+            // 2. Planta de interior en la esquina inferior izquierda
+            bool hasPlant = cabin.furniture.Any(f => f.ItemId == "1376" || (f.Name != null && f.Name.Contains("Plant", StringComparison.OrdinalIgnoreCase)));
+            if (!hasPlant)
+            {
+                var plant = ItemRegistry.Create<Furniture>("(F)1376");
+                if (plant != null)
+                {
+                    plant.TileLocation = new Vector2(ResidenceInteriorLogic.PlantPlacement.TargetX, ResidenceInteriorLogic.PlantPlacement.TargetY);
+                    plant.currentRotation.Value = ResidenceInteriorLogic.PlantPlacement.Rotation;
+                    plant.updateRotation();
+                    plant.RecalculateBoundingBox();
+                    plant.updateDrawPosition();
+                    cabin.furniture.Add(plant);
+                }
+            }
+
+            // 3. Chimenea de ladrillo
+            bool hasFireplace = cabin.furniture.Any(f => f.ItemId == "1792" || (f.Name != null && f.Name.Contains("Fireplace", StringComparison.OrdinalIgnoreCase)));
+            if (!hasFireplace)
+            {
+                var fireplace = ItemRegistry.Create<Furniture>("(F)1792");
+                if (fireplace != null)
+                {
+                    fireplace.TileLocation = new Vector2(ResidenceInteriorLogic.FireplacePlacement.TargetX, ResidenceInteriorLogic.FireplacePlacement.TargetY);
+                    fireplace.currentRotation.Value = ResidenceInteriorLogic.FireplacePlacement.Rotation;
+                    fireplace.updateRotation();
+                    fireplace.RecalculateBoundingBox();
+                    fireplace.updateDrawPosition();
+                    cabin.furniture.Add(fireplace);
+                }
+            }
+
+            // 4. Alfombra roja rústica
+            bool hasRug = cabin.furniture.Any(f => f.ItemId == "1618" || (f.Name != null && f.Name.Contains("Rug", StringComparison.OrdinalIgnoreCase)));
+            if (!hasRug)
+            {
+                var rug = ItemRegistry.Create<Furniture>("(F)1618");
+                if (rug != null)
+                {
+                    rug.TileLocation = new Vector2(ResidenceInteriorLogic.RugPlacement.TargetX, ResidenceInteriorLogic.RugPlacement.TargetY);
+                    rug.currentRotation.Value = ResidenceInteriorLogic.RugPlacement.Rotation;
+                    rug.updateRotation();
+                    rug.RecalculateBoundingBox();
+                    rug.updateDrawPosition();
+                    cabin.furniture.Add(rug);
+                }
+            }
+
+            // 5. Ventana básica
+            bool hasWindow = cabin.furniture.Any(f => f.ItemId == "1614" || (f.Name != null && f.Name.Contains("Window", StringComparison.OrdinalIgnoreCase)));
+            if (!hasWindow)
+            {
+                var window = ItemRegistry.Create<Furniture>("(F)1614");
+                if (window != null)
+                {
+                    window.TileLocation = new Vector2(ResidenceInteriorLogic.WindowPlacement.TargetX, ResidenceInteriorLogic.WindowPlacement.TargetY);
+                    window.currentRotation.Value = ResidenceInteriorLogic.WindowPlacement.Rotation;
+                    window.updateRotation();
+                    window.RecalculateBoundingBox();
+                    window.updateDrawPosition();
+                    cabin.furniture.Add(window);
+                }
+            }
+
+            // 6. Cuadro de arbolito
+            bool hasPainting = cabin.furniture.Any(f => f.ItemId == "1602" || (f.Name != null && (f.Name.Contains("Tree", StringComparison.OrdinalIgnoreCase) || f.Name.Contains("Painting", StringComparison.OrdinalIgnoreCase))));
+            if (!hasPainting)
+            {
+                var painting = ItemRegistry.Create<Furniture>("(F)1602");
+                if (painting != null)
+                {
+                    painting.TileLocation = new Vector2(ResidenceInteriorLogic.TreePaintingPlacement.TargetX, ResidenceInteriorLogic.TreePaintingPlacement.TargetY);
+                    painting.currentRotation.Value = ResidenceInteriorLogic.TreePaintingPlacement.Rotation;
+                    painting.updateRotation();
+                    painting.RecalculateBoundingBox();
+                    painting.updateDrawPosition();
+                    cabin.furniture.Add(painting);
+                }
+            }
+
+            // 7. TV básica
+            bool hasTv = cabin.furniture.Any(f => f.ItemId == "1466" || (f.Name != null && f.Name.Contains("TV", StringComparison.OrdinalIgnoreCase)));
+            if (!hasTv)
+            {
+                var tv = ItemRegistry.Create<Furniture>("(F)1466");
+                if (tv != null)
+                {
+                    tv.TileLocation = new Vector2(ResidenceInteriorLogic.TvPlacement.TargetX, ResidenceInteriorLogic.TvPlacement.TargetY);
+                    tv.currentRotation.Value = ResidenceInteriorLogic.TvPlacement.Rotation;
+                    tv.updateRotation();
+                    tv.RecalculateBoundingBox();
+                    tv.updateDrawPosition();
+                    cabin.furniture.Add(tv);
+                }
+            }
+
+            // 8. Mesa de comedor
+            bool hasTable = cabin.furniture.Any(f => f.ItemId == "1120" || (f.Name != null && f.Name.Contains("Table", StringComparison.OrdinalIgnoreCase)));
+            if (!hasTable)
+            {
+                var table = ItemRegistry.Create<Furniture>("(F)1120");
+                if (table != null)
+                {
+                    table.TileLocation = new Vector2(ResidenceInteriorLogic.DiningTablePlacement.TargetX, ResidenceInteriorLogic.DiningTablePlacement.TargetY);
+                    table.currentRotation.Value = ResidenceInteriorLogic.DiningTablePlacement.Rotation;
+                    table.updateRotation();
+                    var held = ItemRegistry.Create<Furniture>("(F)1364");
+                    if (held != null) table.heldObject.Value = held;
+                    table.RecalculateBoundingBox();
+                    table.updateDrawPosition();
+                    cabin.furniture.Add(table);
+                }
+            }
+
+            // 9. Silla de comedor
+            bool hasChair = cabin.furniture.Any(f => f.ItemId == "0" || (f.Name != null && f.Name.Contains("Chair", StringComparison.OrdinalIgnoreCase)));
+            if (!hasChair)
+            {
+                var chair = ItemRegistry.Create<Furniture>("(F)0");
+                if (chair != null)
+                {
+                    chair.TileLocation = new Vector2(ResidenceInteriorLogic.DiningChairPlacement.TargetX, ResidenceInteriorLogic.DiningChairPlacement.TargetY);
+                    chair.currentRotation.Value = ResidenceInteriorLogic.DiningChairPlacement.Rotation;
+                    chair.updateRotation();
+                    chair.RecalculateBoundingBox();
+                    chair.updateDrawPosition();
+                    cabin.furniture.Add(chair);
                 }
             }
         }
