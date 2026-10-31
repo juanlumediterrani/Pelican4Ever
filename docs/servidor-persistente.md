@@ -39,6 +39,13 @@ caído, al volver recupera hasta `MaxCatchUpRollovers` días.
 4. Comprueba que el servidor está arriba: `journalctl --user -u pelican4ever-host -f` muestra
    `[AutoHost] Cargando ... como anfitrión` y la API responde en `http://127.0.0.1:8085/api/v1/host/clock`.
 
+## Supervisión externa (opcional)
+
+systemd relanza las caídas, pero no una unidad detenida o que agotó su límite de arranques. Un cron
+puede cubrirlo; Stardew Voyager trae uno, `voyager --live host ensure`, que solo arranca la unidad si
+está parada y se niega si el servidor sirve otra partida que la autorizada (guía en
+`docs/pelican-servidor-persistente.md` de Stardew Voyager). Pelican 4Ever no depende de él.
+
 ## Actualizar el mod sin perder la partida
 
 1. Compila y despliega el mod nuevo en `Mods/Pelican4Ever` (el proceso en marcha no lo recarga).
