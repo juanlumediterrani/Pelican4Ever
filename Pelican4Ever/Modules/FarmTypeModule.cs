@@ -38,18 +38,26 @@ namespace Pelican4Ever.Modules
             ApplyHarmonyPatches(ctx.Harmony);
         }
 
-        /// <summary>Comportamientos de la residencia, o null si la ubicación no es una residencia. Un hueco libre cuenta como estándar.</summary>
+        /// <summary>Comportamientos de la residencia o anexo, o null si la ubicación no es ninguno. Un hueco libre cuenta como estándar.</summary>
         private static FarmTypeBehavior? BehaviorOf(GameLocation location)
         {
             if (context == null)
                 return null;
 
             string name = location.NameOrUniqueName;
-            if (!name.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
-                return null;
+            if (name.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                string? farmType = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == name)?.FarmType;
+                return FarmTypeBehaviors.For(farmType);
+            }
 
-            string? farmType = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == name)?.FarmType;
-            return FarmTypeBehaviors.For(farmType);
+            if (name.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                AnnexAssignment? annex = context.WorldState.FindAnnexById(name);
+                return AnnexTemplateCatalog.GetTemplate(annex?.TemplateId).Behavior;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -73,10 +81,36 @@ namespace Pelican4Ever.Modules
             ForestForageCache?.SetValue(farm, null);
         }
 
-        /// <summary>Simula los días de minerales con los que vanilla empieza una granja de Colinas o Cuatro Esquinas.</summary>
+        /// <summary>
+        /// Nivel 1 para anexos (TASK-902 / TASK-903): aplica las propiedades recalculadas de la plantilla 40×32.
+        /// </summary>
+        public static void ApplyAnnexMapProperties(Farm annexFarm, string? templateId)
+        {
+            var properties = annexFarm.Map?.Properties;
+            if (properties == null)
+                return;
+
+            AnnexTemplate template = AnnexTemplateCatalog.GetTemplate(templateId);
+            FarmTypeBehavior behavior = template.Behavior;
+            if (behavior.MountainOreArea is { } area)
+                properties["SpawnMountainFarmOreRect"] = area.ToMapProperty();
+            if (behavior.ForestForage)
+                properties["SpawnForestFarmForage"] = "T";
+            if (!string.IsNullOrWhiteSpace(template.FishLocationOverride))
+                properties["FarmFishLocationOverride"] = template.FishLocationOverride;
+
+            MountainOreRectCache?.SetValue(annexFarm, null);
+            ForestForageCache?.SetValue(annexFarm, null);
+        }
+
+        /// <summary>Simula los días de minerales con los que vanilla empieza una granja o anexo de Colinas o Cuatro Esquinas.</summary>
         public static void SpawnInitialOres(Farm farm, string? farmType)
         {
-            FarmTypeBehavior behavior = FarmTypeBehaviors.For(farmType);
+            bool isAnnex = farm.NameOrUniqueName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase);
+            FarmTypeBehavior behavior = isAnnex
+                ? AnnexTemplateCatalog.GetTemplate(farmType).Behavior
+                : FarmTypeBehaviors.For(farmType);
+
             if (behavior.MountainOreArea == null || !farm.ShouldSpawnMountainOres())
                 return;
 
@@ -259,15 +293,21 @@ namespace Pelican4Ever.Modules
 
             if (behavior.FourCornersExtras && Game1.whichFarm != 5)
             {
-                if (CanPlaceClump(__instance, 5, 32))
-                    __instance.resourceClumps.Add(new ResourceClump(600, 2, 2, new Vector2(5f, 32f)));
+                bool isAnnex = __instance.NameOrUniqueName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase);
+                int stumpX = isAnnex ? 6 : 5;
+                int stumpY = isAnnex ? 6 : 32;
+                float maxWeedX = isAnnex ? 20f : 36f;
+                float maxWeedY = isAnnex ? 16f : 34f;
+
+                if (CanPlaceClump(__instance, stumpX, stumpY))
+                    __instance.resourceClumps.Add(new ResourceClump(600, 2, 2, new Vector2(stumpX, stumpY)));
 
                 if (__instance.objects.Length > 0)
                 {
                     for (int i = 0; i < 6; i++)
                     {
                         if (Utility.TryGetRandom(__instance.objects, out _, out StardewValley.Object weeds)
-                            && weeds.IsWeeds() && weeds.TileLocation.X < 36f && weeds.TileLocation.Y < 34f)
+                            && weeds.IsWeeds() && weeds.TileLocation.X < maxWeedX && weeds.TileLocation.Y < maxWeedY)
                         {
                             // Mismo cambio que hace Farm.DayUpdate; SetIdAndSprite está marcado obsoleto solo para código nuevo
 #pragma warning disable CS0618
@@ -280,8 +320,8 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Siembra diaria de hierba en residencias (TASK-606). Vanilla solo añade hierba en spawnWeeds si name.Value == "Farm";
-        /// aquí replicamos esa lógica para que cada hueco gane matas silvestres (y hierba azul en Pradera).
+        /// Siembra diaria de hierba en residencias y anexos (TASK-606 / TASK-903). Vanilla solo añade hierba en spawnWeeds si name.Value == "Farm";
+        /// aquí replicamos esa lógica para que cada hueco o anexo gane matas silvestres (y hierba azul en Pradera).
         /// </summary>
         public static void SpawnDailyGrass(Farm farm)
         {
@@ -289,7 +329,8 @@ namespace Pelican4Ever.Modules
                 return;
 
             string? farmType = context?.WorldState.Doors.Values
-                .FirstOrDefault(d => d.FarmSlotId == farm.NameOrUniqueName)?.FarmType;
+                .FirstOrDefault(d => d.FarmSlotId == farm.NameOrUniqueName)?.FarmType
+                ?? context?.WorldState.FindAnnexById(farm.NameOrUniqueName)?.TemplateId;
             bool isMeadowlands = FarmGrassLogic.IsMeadowlands(farmType);
 
             var data = farm.GetData();

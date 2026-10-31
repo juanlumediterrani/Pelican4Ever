@@ -21,7 +21,8 @@ namespace Pelican4Ever.Core.World
                 return false;
 
             return string.Equals(farmType, "Meadowlands", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(farmType, "MeadowlandsFarm", StringComparison.OrdinalIgnoreCase);
+                || string.Equals(farmType, "MeadowlandsFarm", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(farmType, "Ranching", StringComparison.OrdinalIgnoreCase);
         }
 
         /// <summary>

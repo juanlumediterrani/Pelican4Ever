@@ -169,7 +169,65 @@ namespace Pelican4Ever.Modules
                             data[slotId] = slotData;
                         }
                     }
+
+                    // TASK-903: Inyectar ubicaciones de anexos adquiridos (Pelican4Ever_Annex_<NN>_<Side>) en Data/Locations
+                    if (context != null && context.WorldState.Annexes != null)
+                    {
+                        foreach (AnnexAssignment annex in context.WorldState.Annexes.Values)
+                        {
+                            if (string.IsNullOrWhiteSpace(annex.AnnexId) || data.ContainsKey(annex.AnnexId))
+                                continue;
+
+                            AnnexTemplate annexTemplate = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                            string annexMapPath = annexTemplate.GetMapAssetForSide(annex.Side);
+
+                            var annexData = new LocationData
+                            {
+                                DisplayName = $"Anexo {annex.Side} ({annexTemplate.DisplayName})",
+                                CanPlantHere = true,
+                                CreateOnLoad = new CreateLocationData
+                                {
+                                    MapPath = annexMapPath,
+                                    Type = "StardewValley.Farm, Stardew Valley",
+                                    AlwaysActive = true
+                                }
+                            };
+
+                            if (data.TryGetValue(annexTemplate.LocationDataKey, out LocationData? typeData)
+                                || data.TryGetValue("Farm_Standard", out typeData))
+                            {
+                                annexData.Fish = CloneAnnexFishData(typeData.Fish);
+                                annexData.FishAreas = CloneAnnexFishAreaData(typeData.FishAreas);
+                                annexData.Forage = typeData.Forage;
+                                annexData.ArtifactSpots = typeData.ArtifactSpots;
+                                annexData.MinDailyWeeds = typeData.MinDailyWeeds;
+                                annexData.MaxDailyWeeds = typeData.MaxDailyWeeds;
+                                annexData.FirstDayWeedMultiplier = typeData.FirstDayWeedMultiplier;
+                                annexData.MinDailyForageSpawn = typeData.MinDailyForageSpawn;
+                                annexData.MaxDailyForageSpawn = typeData.MaxDailyForageSpawn;
+                                annexData.MaxSpawnedForageAtOnce = typeData.MaxSpawnedForageAtOnce;
+                                annexData.ChanceForClay = typeData.ChanceForClay;
+                            }
+
+                            data[annex.AnnexId] = annexData;
+                        }
+                    }
                 });
+            }
+            else if (AnnexTemplateCatalog.TryParseAnnexMapAsset(e.NameWithoutLocale.BaseName, out AnnexTemplate annexTemplate, out AnnexSide annexSide))
+            {
+                // TASK-902: Genera el mapa temático de un cuarto de tamaño (40×32) para el anexo y su lado de entrada
+                e.LoadFrom(() =>
+                {
+                    var baseMap = context?.Helper.GameContent.Load<xTile.Map>(annexTemplate.SourceVanillaMap)
+                               ?? context?.Helper.GameContent.Load<xTile.Map>("Maps/Farm");
+                    if (baseMap == null)
+                    {
+                        return new xTile.Map($"Pelican4Ever_Annex_{annexTemplate.Id}_{annexSide}");
+                    }
+
+                    return MapCloneHelper.CreateAnnexMap(baseMap, annexTemplate, annexSide);
+                }, AssetLoadPriority.Medium);
             }
             else if (e.NameWithoutLocale.IsEquivalentTo("Maps/Pelican4Ever_HostFarm"))
             {
@@ -457,7 +515,10 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // Sincronizar catálogo inicial de residencias con todos los peones
+                // TASK-903: Asegurar ubicaciones de anexos adquiridos, sus mapas 40×32 y su propiedad/política heredada
+                EnsureAllAnnexLocations();
+
+                // Sincronizar catálogo inicial de residencias y anexos con todos los peones
                 BroadcastDoorsSync();
             }
             else
@@ -486,20 +547,207 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Reconstruye Data/Locations si cambió el tipo de alguna residencia: cada hueco toma peces, forraje y mapa
-        /// del estado vigente al pedirse el asset. Se ejecuta en host y clientes (cada uno pesca con sus datos).
+        /// Reconstruye Data/Locations si cambió el tipo de alguna residencia o se adquirió un anexo:
+        /// cada hueco y anexo toma peces, forraje y mapa del estado vigente al pedirse el asset.
         /// </summary>
-        private static void RefreshSlotLocationData()
+        public static void RefreshSlotLocationData()
         {
             if (context == null) return;
 
-            string signature = string.Join(";", context.WorldState.Doors.Values
+            string doorSig = string.Join(";", context.WorldState.Doors.Values
                 .Select(d => $"{d.FarmSlotId}={d.FarmType}")
                 .OrderBy(entry => entry, StringComparer.Ordinal));
+            string annexSig = string.Join(";", (context.WorldState.Annexes?.Values ?? Enumerable.Empty<AnnexAssignment>())
+                .Select(a => $"{a.AnnexId}={a.TemplateId}:{a.Side}")
+                .OrderBy(entry => entry, StringComparer.Ordinal));
+            string signature = $"{doorSig}|{annexSig}";
             if (signature == slotDataSignature) return;
 
             slotDataSignature = signature;
             context.Helper.GameContent.InvalidateCache("Data/Locations");
+        }
+
+        /// <summary>
+        /// Clona la lista de peces para un anexo 40×32 eliminando restricciones de coordenadas del mapa 80×65.
+        /// </summary>
+        private static List<SpawnFishData>? CloneAnnexFishData(List<SpawnFishData>? source)
+        {
+            if (source == null)
+                return null;
+
+            var list = new List<SpawnFishData>(source.Count);
+            foreach (SpawnFishData item in source)
+            {
+                list.Add(new SpawnFishData
+                {
+                    Id = item.Id,
+                    ItemId = item.ItemId,
+                    RandomItemId = item.RandomItemId,
+                    MaxItems = item.MaxItems,
+                    MinStack = item.MinStack,
+                    MaxStack = item.MaxStack,
+                    Quality = item.Quality,
+                    ToolUpgradeLevel = item.ToolUpgradeLevel,
+                    IsRecipe = item.IsRecipe,
+                    StackModifiers = item.StackModifiers,
+                    StackModifierMode = item.StackModifierMode,
+                    QualityModifiers = item.QualityModifiers,
+                    QualityModifierMode = item.QualityModifierMode,
+                    ModData = item.ModData,
+                    PerItemCondition = item.PerItemCondition,
+                    Condition = item.Condition,
+                    Chance = item.Chance,
+                    Season = item.Season,
+                    FishAreaId = item.FishAreaId,
+                    BobberPosition = null,
+                    PlayerPosition = null,
+                    MinFishingLevel = item.MinFishingLevel,
+                    MinDistanceFromShore = item.MinDistanceFromShore,
+                    MaxDistanceFromShore = item.MaxDistanceFromShore,
+                    ApplyDailyLuck = item.ApplyDailyLuck,
+                    CuriosityLureBuff = item.CuriosityLureBuff,
+                    SpecificBaitBuff = item.SpecificBaitBuff,
+                    SpecificBaitMultiplier = item.SpecificBaitMultiplier,
+                    CatchLimit = item.CatchLimit,
+                    CanUseTrainingRod = item.CanUseTrainingRod,
+                    IsBossFish = item.IsBossFish,
+                    SetFlagOnCatch = item.SetFlagOnCatch,
+                    RequireMagicBait = item.RequireMagicBait,
+                    Precedence = item.Precedence,
+                    IgnoreFishDataRequirements = item.IgnoreFishDataRequirements,
+                    CanBeInherited = item.CanBeInherited,
+                    ChanceModifiers = item.ChanceModifiers,
+                    ChanceModifierMode = item.ChanceModifierMode,
+                    ChanceBoostPerLuckLevel = item.ChanceBoostPerLuckLevel,
+                    UseFishCaughtSeededRandom = item.UseFishCaughtSeededRandom
+                });
+            }
+            return list;
+        }
+
+        private static Dictionary<string, FishAreaData>? CloneAnnexFishAreaData(Dictionary<string, FishAreaData>? source)
+        {
+            if (source == null)
+                return null;
+
+            var dict = new Dictionary<string, FishAreaData>(source.Count);
+            foreach (var kvp in source)
+            {
+                dict[kvp.Key] = new FishAreaData
+                {
+                    DisplayName = kvp.Value.DisplayName,
+                    Position = null,
+                    CrabPotFishTypes = kvp.Value.CrabPotFishTypes,
+                    CrabPotJunkChance = kvp.Value.CrabPotJunkChance
+                };
+            }
+            return dict;
+        }
+
+        /// <summary>
+        /// Asegura en el host todas las ubicaciones de anexos adquiridos y limpia cualquier anexo liberado (TASK-903).
+        /// </summary>
+        public static void EnsureAllAnnexLocations()
+        {
+            if (!Context.IsMainPlayer || context == null || Game1.locations == null)
+                return;
+
+            if (context.WorldState.Annexes != null)
+            {
+                foreach (AnnexAssignment annex in context.WorldState.Annexes.Values)
+                {
+                    EnsureAnnexLocation(annex, regenerate: false);
+                }
+            }
+
+            foreach (GameLocation loc in Game1.locations)
+            {
+                if (loc.NameOrUniqueName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase)
+                    && context.WorldState.FindAnnexById(loc.NameOrUniqueName) == null)
+                {
+                    loc.ClearOwnership();
+                }
+            }
+        }
+
+        /// <summary>
+        /// Crea o actualiza en el host la ubicación <see cref="Farm"/> de un anexo privado (TASK-903),
+        /// aplicando su mapa 40×32, sus propiedades de bonificación y la política de acceso heredada de la residencia.
+        /// </summary>
+        public static Farm? EnsureAnnexLocation(AnnexAssignment annex, bool regenerate)
+        {
+            if (!Context.IsMainPlayer || context == null || annex == null || string.IsNullOrWhiteSpace(annex.AnnexId))
+                return null;
+
+            AnnexTemplate template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+            string mapAsset = template.GetMapAssetForSide(annex.Side);
+
+            Farm? annexFarm = Game1.getLocationFromName(annex.AnnexId) as Farm;
+            bool newlyCreated = false;
+            if (annexFarm == null)
+            {
+                annexFarm = new Farm(mapAsset, annex.AnnexId);
+                Game1.locations.Add(annexFarm);
+                newlyCreated = true;
+            }
+            else if (!string.Equals(annexFarm.mapPath.Value?.Replace('\\', '/'), mapAsset.Replace('\\', '/'), StringComparison.OrdinalIgnoreCase))
+            {
+                annexFarm.mapPath.Value = mapAsset;
+                annexFarm.reloadMap();
+            }
+
+            // Eliminar cualquier edificio por defecto que nunca deba existir en un anexo 40×32
+            for (int i = annexFarm.buildings.Count - 1; i >= 0; i--)
+            {
+                string bType = annexFarm.buildings[i].buildingType.Value ?? string.Empty;
+                if (bType.Equals("Farmhouse", StringComparison.OrdinalIgnoreCase)
+                    || bType.Equals("Greenhouse", StringComparison.OrdinalIgnoreCase)
+                    || bType.Equals("Shipping Bin", StringComparison.OrdinalIgnoreCase)
+                    || bType.Equals("Pet Bowl", StringComparison.OrdinalIgnoreCase)
+                    || bType.EndsWith("Cabin", StringComparison.OrdinalIgnoreCase))
+                {
+                    DeleteUnclaimedFarmhandOf(annexFarm.buildings[i]);
+                    annexFarm.buildings.RemoveAt(i);
+                }
+            }
+
+            FarmTypeModule.ApplyAnnexMapProperties(annexFarm, template.Id);
+            FishLocationOverrideField?.SetValue(annexFarm, null);
+            FishChanceOverrideField?.SetValue(annexFarm, 0f);
+
+            if (regenerate || newlyCreated)
+            {
+                if (regenerate)
+                {
+                    annexFarm.objects.Clear();
+                    annexFarm.terrainFeatures.Clear();
+                    annexFarm.largeTerrainFeatures.Clear();
+                    annexFarm.resourceClumps.Clear();
+                    annexFarm.loadObjects();
+                }
+                FarmTypeModule.SpawnInitialOres(annexFarm, template.Id);
+            }
+
+            // Despejar siempre el corredor de la única entrada para que no haya rocas, maleza ni tocones bloqueando el paso
+            MapCloneHelper.GetEntranceOpeningAndCorridor(annex.Side, template.Width, template.Height, out _, out var corridorTiles);
+            foreach (var (cx, cy) in corridorTiles)
+            {
+                annexFarm.removeEverythingFromThisTile(cx, cy);
+                for (int i = annexFarm.resourceClumps.Count - 1; i >= 0; i--)
+                {
+                    if (IsClumpOverTile(annexFarm.resourceClumps[i], cx, cy))
+                        annexFarm.resourceClumps.RemoveAt(i);
+                }
+            }
+
+            DoorAssignment? parentResidence = context.WorldState.Doors.Values
+                .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase));
+            AccessPolicy policy = parentResidence?.Policy ?? AccessPolicy.Locked;
+            long ownerId = parentResidence?.OwnerId ?? annex.OwnerId;
+            annex.OwnerId = ownerId;
+
+            annexFarm.PublishOwnership(ownerId, policy);
+            return annexFarm;
         }
 
         private void OnPlayerWarped(object? sender, WarpedEventArgs e)
@@ -1086,12 +1334,21 @@ namespace Pelican4Ever.Modules
                         context.WorldState.Doors[kvp.Key] = kvp.Value;
                     }
 
+                    context.WorldState.Annexes.Clear();
+                    if (payload.Annexes != null)
+                    {
+                        foreach (var kvp in payload.Annexes)
+                        {
+                            context.WorldState.Annexes[kvp.Key] = kvp.Value;
+                        }
+                    }
+
                     foreach (var kvp in payload.Players)
                     {
                         context.WorldState.Players[kvp.Key] = kvp.Value;
                     }
 
-                    context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas).", LogLevel.Info);
+                    context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas, {context.WorldState.Annexes.Count} anexos).", LogLevel.Info);
                     RefreshSlotLocationData();
 
                     if (Game1.currentLocation is Farm curFarm && curFarm.NameOrUniqueName == "Farm")
@@ -1109,6 +1366,7 @@ namespace Pelican4Ever.Modules
             var payload = new SyncDoorsPayload
             {
                 Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
+                Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
                 Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players)
             };
 
@@ -1126,6 +1384,7 @@ namespace Pelican4Ever.Modules
             var payload = new SyncDoorsPayload
             {
                 Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
+                Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
                 Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players)
             };
 
@@ -1218,6 +1477,14 @@ namespace Pelican4Ever.Modules
                 {
                     loc.PublishOwnership(playerId, newPolicy);
                 }
+
+                // TASK-903: Propagar la política de acceso actualizada a todos los anexos de esta residencia
+                foreach (AnnexAssignment annex in worldState.GetAnnexesForResidence(farmSlotId))
+                {
+                    GameLocation? annexLoc = Game1.getLocationFromName(annex.AnnexId);
+                    annexLoc?.PublishOwnership(playerId, newPolicy);
+                }
+
                 context.Monitor.Log($"[FarmSlotModule] Política de {farmSlotId} cambiada a {newPolicy} por propietario {playerId}.", LogLevel.Info);
 
                 // Sincronizar inmediatamente a todos los peones
@@ -1569,12 +1836,68 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IsCollidingPosition))
                 );
 
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión y protección de despertar aplicados.", LogLevel.Trace);
+                // TASK-903: Asegurar que las ubicaciones de anexo guardadas en el XML de la partida existan en Game1.locations
+                // antes de que SaveGame.loadDataToLocations restaure cultivos, objetos y máquinas tras reiniciar el servidor
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(SaveGame), nameof(SaveGame.loadDataToLocations)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SaveGameLoadDataToLocations))
+                );
+
+                // TASK-903: Impedir que Farm añada Farmhouse/Greenhouse/ShippingBin/Cabins/SpousePatio/GrandpaCandles a anexos 40×32
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Farm), nameof(Farm.AddDefaultBuildings)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Farm), nameof(Farm.UpdatePatio)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Farm), nameof(Farm.addGrandpaCandles)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
+                );
+
+                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos y protección de despertar aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
                 context?.Monitor.Log($"[FarmSlotModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
             }
+        }
+
+        public static void Prefix_SaveGameLoadDataToLocations(List<GameLocation> fromLocations)
+        {
+            if (fromLocations == null || Game1.locations == null)
+                return;
+
+            foreach (GameLocation savedLoc in fromLocations)
+            {
+                string? locName = savedLoc?.NameOrUniqueName;
+                if (string.IsNullOrWhiteSpace(locName)
+                    || !locName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (Game1.getLocationFromName(locName) == null)
+                {
+                    string mapPath = !string.IsNullOrWhiteSpace(savedLoc!.mapPath.Value)
+                        ? savedLoc.mapPath.Value
+                        : "Maps/Pelican4Ever_Annex_Standard_North";
+                    var annexFarm = new Farm(mapPath, locName);
+                    Game1.locations.Add(annexFarm);
+                    context?.Monitor.Log($"[FarmSlotModule] Pre-registrada ubicación de anexo {locName} ({mapPath}) para restaurar cultivos y máquinas.", LogLevel.Trace);
+                }
+            }
+        }
+
+        public static bool Prefix_SkipOnAnnexFarm(Farm __instance)
+        {
+            if (__instance != null && __instance.NameOrUniqueName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+            return true;
         }
 
         public static bool Prefix_IsCollidingPosition(GameLocation __instance, Microsoft.Xna.Framework.Rectangle position, ref bool __result)
@@ -1634,6 +1957,26 @@ namespace Pelican4Ever.Modules
                 {
                     GetResidenceArrivalCoordinates(doorTarget, out _, out _, out int facingDir);
                     facingDirectionAfterWarp = facingDir;
+                }
+            }
+            else if (targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                // TASK-903: Control de acceso heredado de la residencia para ubicaciones de anexo
+                AnnexAssignment? annex = context?.WorldState.FindAnnexById(targetLoc);
+                DoorAssignment? parentDoor = annex != null
+                    ? context?.WorldState.Doors.Values.FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))
+                    : null;
+
+                long? ownerId = parentDoor?.OwnerId ?? annex?.OwnerId;
+                AccessPolicy policy = parentDoor?.Policy ?? AccessPolicy.Locked;
+                long myId = Game1.player.UniqueMultiplayerID;
+
+                if (ownerId.HasValue && ownerId.Value != myId && policy == AccessPolicy.Locked)
+                {
+                    Game1.showRedMessage("Este anexo es privado y está cerrado con llave.");
+                    Game1.player.Halt();
+                    Game1.player.completelyStopAnimatingOrDoingAction();
+                    return false;
                 }
             }
 
@@ -1919,7 +2262,7 @@ namespace Pelican4Ever.Modules
             if (who != Game1.player)
                 return true;
 
-            if (location != null && location.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            if (location != null && LocationCullingLogic.IsPrivateFarmOrAnnex(location.NameOrUniqueName))
             {
                 long? ownerId = location.GetFarmOwnerId();
                 if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
@@ -1941,7 +2284,7 @@ namespace Pelican4Ever.Modules
                 return true;
 
             GameLocation? loc = __instance.Location ?? Game1.currentLocation;
-            if (loc != null && loc.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            if (loc != null && LocationCullingLogic.IsPrivateFarmOrAnnex(loc.NameOrUniqueName))
             {
                 long? ownerId = loc.GetFarmOwnerId();
                 if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
@@ -1959,13 +2302,15 @@ namespace Pelican4Ever.Modules
             if (location == null || string.IsNullOrEmpty(location.NameOrUniqueName))
                 return;
 
-            if (!location.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!LocationCullingLogic.IsPrivateFarmOrAnnex(location.NameOrUniqueName))
                 return;
 
             if (context == null) return;
 
-            var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == location.NameOrUniqueName);
-            long? ownerId = assignment?.OwnerId;
+            var doorAssignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == location.NameOrUniqueName);
+            long? ownerId = doorAssignment?.OwnerId
+                         ?? context.WorldState.FindAnnexById(location.NameOrUniqueName)?.OwnerId
+                         ?? location.GetFarmOwnerId();
 
             var onlineFarmerIds = Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet();
 

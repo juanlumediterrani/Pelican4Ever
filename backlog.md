@@ -388,27 +388,26 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. `AnnexEntrance` coloca entrada y vuelta en lados coherentes para los tres lados (cubierto con tests unitarios).
     3. Un estado v2 migra a v3 sin perder residencias ni jugadores (cubierto con tests unitarios).
 
-- [ ] **TASK-902: Mapas temáticos de un cuarto de tamaño (40×32)**
-  * **Análisis Técnico:** Un mapa por tipo del catálogo (Estándar, Fluvial, Forestal, Colinas, Salvaje, Cuatro Esquinas y Pradera), con un cuarto del área de la granja vanilla (la mitad en cada dimensión). Dos opciones:
-    - **A, generada:** recortar con `MapCloneHelper` el cuadrante más representativo del mapa vanilla (el del río en la Fluvial, el de la colina de mineral en Colinas, la franja forestal en la Forestal...) y sellar los bordes con la capa `Buildings`, salvo la entrada.
-    - **B, a mano:** diseñarlos en Tiled como `.tmx` del mod.
-
-    Recomendación: A para tener los siete pronto y B después para pulirlos. Las bonificaciones que dependen de coordenadas hay que recalcularlas para el anexo:
-    - zonas de pesca (`FishAreas`) y propiedad `FarmFishLocationOverride`;
-    - `SpawnMountainFarmOreRect` (Colinas usa 5,37,22,8 en el mapa grande);
-    - la franja oeste de forraje forestal (`x < 18`) y los tocones (`Paths` índice 21);
-    - las zonas de Cuatro Esquinas.
+- [x] **TASK-902: Mapas temáticos de un cuarto de tamaño (40×32)**
+  * **Análisis Técnico:** Implementada la generación de mapas temáticos de 40×32 para los 7 tipos del catálogo (Estándar, Fluvial, Forestal, Colinas, Salvaje, Cuatro Esquinas y Pradera) mediante `MapCloneHelper.CreateAnnexMap` y `AnnexTemplateCatalog`:
+    - **Recorte y sellado (`MapCloneHelper.CreateAnnexMap`):** recorta el cuadrante 40×32 más representativo de cada mapa vanilla (`Maps/Farm`, `Maps/Farm_Fishing`, `Maps/Farm_Foraging`, `Maps/Farm_Mining`, `Maps/Farm_Combat`, `Maps/Farm_FourCorners`, `Maps/Farm_Ranching`), elimina la propiedad `Warp` y acciones `TouchAction`/`Action` de salida vanilla, y sella los cuatro bordes con `Buildings` (`Passable = F`) dejando únicamente la apertura de 2 casillas y su corredor de entrada según el lado cardinal (`AnnexSide`).
+    - **Bonificaciones recalculadas para 40×32:**
+      - `Fishing` (`Farm_Riverland`): conserva/asigna `FarmFishLocationOverride = "Town 0.7"` y garantiza poza/canal de agua pescable y orilla despejada;
+      - `Mining` (`Farm_Hilltop`): zona de mineral recalculada a `SpawnMountainFarmOreRect = "5 13 22 8"` con suelo `Type = Dirt`;
+      - `Foraging` (`Farm_Forest`): `SpawnForestFarmForage = "T"`, franja oeste `x < 18` con `Type = Grass` y marcadores de tocones renovables (`Paths` índice 21 en `(6, 8)` y `(6, 20)`);
+      - `FourCorners`: zona de mineral recalculada a `(24, 22, 10, 5)` y tocón renovable en `(6, 6)`.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Cada anexo mide 40×32, es transitable y no tiene más salida que su entrada.
     2. La Fluvial tiene agua pescable con la tabla de `Farm_Riverland`; Colinas genera mineral dentro de su zona; la Forestal genera forraje y tocones.
     3. Ningún warp del mapa lleva a una ubicación vanilla.
 
-- [ ] **TASK-903: Ubicaciones de anexo y su ciclo de vida**
+- [x] **TASK-903: Ubicaciones de anexo y su ciclo de vida**
   * **Análisis Técnico:**
-    - Entradas `Pelican4Ever_Annex_<NN>_<Lado>` en `Data/Locations`, creadas al adquirir el anexo y reconstruidas al cargar, como `RefreshSlotLocationData` en las residencias.
-    - Las mismas reglas que una residencia: culling de red (`LocationCullingLogic`, ampliando el prefijo), `PublishOwnership`, parches anti-griefing de herramientas y cofres, y política de acceso heredada de la residencia.
-    - Al liberar una residencia (`NormalizeDoorAssignments`), sus anexos se conservan para el propietario o se liberan con ella. Hay que decidir cuál.
+    - Entradas `Pelican4Ever_Annex_<NN>_<Lado>` en `Data/Locations`, inyectadas dinámicamente en `OnAssetRequested` y reconstruidas con `RefreshSlotLocationData` (clonando `Fish`, `FishAreas` sin restricciones de rectángulo 80×65, `Forage` y `ArtifactSpots` desde `LocationDataKey`).
+    - Persistencia tras reinicio del servidor: `Prefix_SaveGameLoadDataToLocations` pre-registra las ubicaciones `Pelican4Ever_Annex_*` presentes en el guardado antes de que `SaveGame.loadDataToLocations` transfiera cultivos, objetos, cofres y máquinas, y `Prefix_SkipOnAnnexFarm` evita que `Farm.AddDefaultBuildings`, `UpdatePatio` o `addGrandpaCandles` alteren el anexo 40×32.
+    - Mismas reglas de seguridad y red que una residencia: culling de red (`LocationCullingLogic.IsPrivateFarmOrAnnex` / `ShouldKeepActive` con `AnnexPrefix`), `PublishOwnership` y propagación en `HandleChangePolicy`, bloqueo de entrada si la residencia está `Locked` en `Prefix_WarpFarmer`, y parches anti-griefing de herramientas (`Prefix_ToolBeginUsing`) y cofres (`Prefix_ChestCheckForAction`).
+    - En `ServerWorldState.NormalizeDoorAssignments`, al liberarse una residencia sus anexos asociados se liberan con ella para no dejar anexos huérfanos sin residencia activa (cubierto con tests unitarios).
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Un anexo guarda y recarga cultivos, objetos y máquinas tras reiniciar el servidor.

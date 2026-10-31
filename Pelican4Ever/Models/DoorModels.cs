@@ -39,6 +39,7 @@ namespace Pelican4Ever.Models
     public class SyncDoorsPayload
     {
         public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
+        public Dictionary<string, AnnexAssignment> Annexes { get; set; } = new();
         public Dictionary<long, PlayerRecord> Players { get; set; } = new();
     }
 }

@@ -190,7 +190,7 @@ namespace Pelican4Ever.Tests
         {
             var state = new ServerWorldState();
             string annexId = ServerWorldState.BuildAnnexId("Pelican4Ever_Farm_01", AnnexSide.East);
-            Assert.Equal("Pelican4Ever_Farm_01_Annex_East", annexId);
+            Assert.Equal("Pelican4Ever_Annex_01_East", annexId);
 
             var assignment = new AnnexAssignment
             {
@@ -207,11 +207,156 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Fishing", found!.TemplateId);
             Assert.Equal(100L, found.OwnerId);
 
+            var foundById = state.FindAnnexById("pelican4ever_annex_01_east");
+            Assert.NotNull(foundById);
+            Assert.Equal(annexId, foundById!.AnnexId);
+
             Assert.Null(state.FindAnnex("Pelican4Ever_Farm_01", AnnexSide.North));
 
             var annexes = state.GetAnnexesForResidence("Pelican4Ever_Farm_01");
             Assert.Single(annexes);
             Assert.Equal(annexId, annexes[0].AnnexId);
+        }
+
+        [Fact]
+        public void AnnexTemplateCatalog_Task902_HasValid40x32CropsAndRecalculatedBonusZones()
+        {
+            foreach (var kvp in AnnexTemplateCatalog.Templates)
+            {
+                AnnexTemplate t = kvp.Value;
+                Assert.Equal(40, t.Width);
+                Assert.Equal(32, t.Height);
+                Assert.StartsWith("Maps/", t.SourceVanillaMap);
+                Assert.InRange(t.SourceCropX, 0, 40);
+                Assert.InRange(t.SourceCropY, 0, 33);
+
+                if (t.Behavior.MountainOreArea is { } area)
+                {
+                    // La zona de mineral recalculada debe caber íntegramente dentro del interior de 40×32 (sin tocar bordes)
+                    Assert.InRange(area.X, 2, t.Width - 3);
+                    Assert.InRange(area.Y, 2, t.Height - 3);
+                    Assert.InRange(area.X + area.Width, 3, t.Width - 2);
+                    Assert.InRange(area.Y + area.Height, 3, t.Height - 2);
+                }
+            }
+
+            var fishing = AnnexTemplateCatalog.GetTemplate("Fishing");
+            Assert.True(fishing.Behavior.RiverFishSplashes);
+            Assert.Equal("Town 0.7", fishing.FishLocationOverride);
+            Assert.Equal("Farm_Riverland", fishing.LocationDataKey);
+
+            var mining = AnnexTemplateCatalog.GetTemplate("Mining");
+            Assert.NotNull(mining.Behavior.MountainOreArea);
+            Assert.Equal(new TileArea(5, 13, 22, 8), mining.Behavior.MountainOreArea!.Value);
+
+            var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
+            Assert.True(foraging.Behavior.ForestForage);
+            Assert.True(foraging.Behavior.ForestStumps);
+
+            var combat = AnnexTemplateCatalog.GetTemplate("Combat");
+            Assert.True(combat.Behavior.NightMonsters);
+
+            var fourCorners = AnnexTemplateCatalog.GetTemplate("FourCorners");
+            Assert.NotNull(fourCorners.Behavior.MountainOreArea);
+            Assert.True(fourCorners.Behavior.FourCornersExtras);
+        }
+
+        [Theory]
+        [InlineData("Maps/Pelican4Ever_Annex_Fishing_East", true, "Fishing", AnnexSide.East)]
+        [InlineData("Maps\\Pelican4Ever_Annex_Mining_South", true, "Mining", AnnexSide.South)]
+        [InlineData("Maps/Pelican4Ever_Annex_Foraging", true, "Foraging", AnnexSide.North)]
+        [InlineData("Maps/Pelican4Ever_HostFarm", false, "Standard", AnnexSide.North)]
+        [InlineData("Maps/Farm", false, "Standard", AnnexSide.North)]
+        public void TryParseAnnexMapAsset_ParsesTemplateAndSideCorrectly(
+            string assetName,
+            bool expectedMatch,
+            string expectedTemplateId,
+            AnnexSide expectedSide)
+        {
+            bool matched = AnnexTemplateCatalog.TryParseAnnexMapAsset(assetName, out AnnexTemplate template, out AnnexSide side);
+            Assert.Equal(expectedMatch, matched);
+            if (expectedMatch)
+            {
+                Assert.Equal(expectedTemplateId, template.Id);
+                Assert.Equal(expectedSide, side);
+            }
+        }
+
+        [Fact]
+        public void LocationCullingLogic_Task903_CullsInactiveAnnexAndKeepsActiveWhenVisitedOrOwnerOnline()
+        {
+            string annexId = "Pelican4Ever_Annex_01_East";
+            Assert.True(LocationCullingLogic.IsPrivateFarmOrAnnex(annexId));
+
+            // Propietario desconectado y sin visitantes -> se cullea (false)
+            Assert.False(LocationCullingLogic.ShouldKeepActive(annexId, farmersInsideCount: 0, ownerId: 100L, onlinePlayerIds: new long[] { 200L }));
+
+            // Visitante dentro aunque el propietario esté desconectado -> activa (true)
+            Assert.True(LocationCullingLogic.ShouldKeepActive(annexId, farmersInsideCount: 1, ownerId: 100L, onlinePlayerIds: new long[] { 200L }));
+
+            // Propietario conectado aunque no haya nadie dentro -> activa (true)
+            Assert.True(LocationCullingLogic.ShouldKeepActive(annexId, farmersInsideCount: 0, ownerId: 100L, onlinePlayerIds: new long[] { 100L, 200L }));
+        }
+
+        [Fact]
+        public void NormalizeDoorAssignments_Task903_ReleasesAnnexesOfReleasedResidencesAndKeepsActiveOnes()
+        {
+            var state = new ServerWorldState
+            {
+                Doors = new Dictionary<string, DoorAssignment>
+                {
+                    ["Farm_Portal_01"] = new DoorAssignment
+                    {
+                        DoorId = "Farm_Portal_01",
+                        FarmSlotId = "Pelican4Ever_Farm_01",
+                        FarmType = "Standard",
+                        OwnerId = 100L
+                    },
+                    ["Obsolete_Door"] = new DoorAssignment
+                    {
+                        DoorId = "Obsolete_Door",
+                        FarmSlotId = "Pelican4Ever_Farm_99",
+                        FarmType = "Mining",
+                        OwnerId = 200L
+                    }
+                },
+                Annexes = new Dictionary<string, AnnexAssignment>
+                {
+                    ["Pelican4Ever_Annex_01_East"] = new AnnexAssignment
+                    {
+                        AnnexId = "Pelican4Ever_Annex_01_East",
+                        ResidenceSlotId = "Pelican4Ever_Farm_01",
+                        Side = AnnexSide.East,
+                        TemplateId = "InvalidTemplate",
+                        OwnerId = 999L
+                    },
+                    ["Pelican4Ever_Annex_99_North"] = new AnnexAssignment
+                    {
+                        AnnexId = "Pelican4Ever_Annex_99_North",
+                        ResidenceSlotId = "Pelican4Ever_Farm_99",
+                        Side = AnnexSide.North,
+                        TemplateId = "Mining",
+                        OwnerId = 200L
+                    }
+                }
+            };
+
+            var catalog = new Dictionary<string, string>
+            {
+                ["Farm_Portal_01"] = "Pelican4Ever_Farm_01"
+            };
+
+            var released = state.NormalizeDoorAssignments(catalog);
+
+            Assert.Single(released);
+            Assert.Equal("Obsolete_Door", released[0]);
+
+            // El anexo de la residencia liberada (Farm_99) se eliminó; el de Farm_01 se conserva y repara
+            Assert.Single(state.Annexes);
+            Assert.True(state.Annexes.ContainsKey("Pelican4Ever_Annex_01_East"));
+            Assert.False(state.Annexes.ContainsKey("Pelican4Ever_Annex_99_North"));
+            Assert.Equal(100L, state.Annexes["Pelican4Ever_Annex_01_East"].OwnerId);
+            Assert.Equal("Standard", state.Annexes["Pelican4Ever_Annex_01_East"].TemplateId);
         }
     }
 }

@@ -85,7 +85,7 @@ namespace Pelican4Ever.Core.World
         /// <summary>Puertas reclamadas (clave: DoorId del catálogo <c>assets/doors.json</c>).</summary>
         public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
 
-        /// <summary>Anexos de residencia adquiridos (clave: AnnexId ej. "Pelican4Ever_Farm_01_Annex_East").</summary>
+        /// <summary>Anexos de residencia adquiridos (clave: AnnexId ej. "Pelican4Ever_Annex_01_East").</summary>
         public Dictionary<string, AnnexAssignment> Annexes { get; set; } = new();
 
         /// <summary>Ofertas activas e históricas del mercado vecinal asíncrono (TASK-503).</summary>
@@ -142,7 +142,8 @@ namespace Pelican4Ever.Core.World
         /// <summary>
         /// Repara asignaciones heredadas: elimina puertas fuera del catálogo o con un hueco distinto al suyo,
         /// deja una sola residencia por propietario (la de <see cref="PlayerRecord.FarmSlotId"/> si existe),
-        /// normaliza tipos de granja desconocidos a "Standard" y alinea <see cref="PlayerRecord.FarmSlotId"/>.
+        /// normaliza tipos de granja desconocidos a "Standard", alinea <see cref="PlayerRecord.FarmSlotId"/>
+        /// y libera los anexos asociados a residencias liberadas o huérfanas (TASK-903).
         /// Devuelve las DoorId liberadas.
         /// </summary>
         /// <param name="catalogSlotByDoorId">DoorId del catálogo → hueco de granja por defecto.</param>
@@ -182,17 +183,60 @@ namespace Pelican4Ever.Core.World
             foreach (PlayerRecord record in Players.Values)
                 record.FarmSlotId = FindResidenceOf(record.UniqueMultiplayerID)?.FarmSlotId;
 
+            // TASK-903: al liberar una residencia, sus anexos se liberan con ella (no pueden quedar huérfanos sin residencia activa).
+            if (Annexes != null)
+            {
+                foreach (KeyValuePair<string, AnnexAssignment> annexEntry in Annexes.ToList())
+                {
+                    AnnexAssignment annex = annexEntry.Value;
+                    DoorAssignment? parentDoor = Doors.Values.FirstOrDefault(d =>
+                        string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase));
+
+                    if (parentDoor == null)
+                    {
+                        Annexes.Remove(annexEntry.Key);
+                        continue;
+                    }
+
+                    annex.OwnerId = parentDoor.OwnerId;
+                    if (string.IsNullOrWhiteSpace(annex.TemplateId) || !AnnexTemplateCatalog.Templates.ContainsKey(annex.TemplateId))
+                        annex.TemplateId = "Standard";
+                }
+            }
+
             return released;
         }
 
-        /// <summary>Genera el identificador estándar de un anexo a partir del hueco de residencia y el lado cardinal.</summary>
-        public static string BuildAnnexId(string residenceSlotId, AnnexSide side) => $"{residenceSlotId}_Annex_{side}";
+        /// <summary>
+        /// Genera el identificador estándar de un anexo a partir del hueco de residencia y el lado cardinal
+        /// (ej. "Pelican4Ever_Farm_01" + East → "Pelican4Ever_Annex_01_East").
+        /// </summary>
+        public static string BuildAnnexId(string residenceSlotId, AnnexSide side)
+        {
+            string slotNumber = residenceSlotId != null && residenceSlotId.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                ? residenceSlotId.Substring(LocationCullingLogic.FarmPrefix.Length)
+                : residenceSlotId ?? string.Empty;
+
+            return $"{LocationCullingLogic.AnnexPrefix}{slotNumber}_{side}";
+        }
+
+        /// <summary>Busca el anexo por su identificador de ubicación (ej. "Pelican4Ever_Annex_01_East"), o null si no existe.</summary>
+        public AnnexAssignment? FindAnnexById(string? annexId)
+        {
+            if (string.IsNullOrWhiteSpace(annexId) || Annexes == null)
+                return null;
+
+            if (Annexes.TryGetValue(annexId, out AnnexAssignment? direct))
+                return direct;
+
+            return Annexes.Values.FirstOrDefault(a => string.Equals(a.AnnexId, annexId, StringComparison.OrdinalIgnoreCase));
+        }
 
         /// <summary>Busca el anexo correspondiente al hueco de residencia y lado cardinal indicados, o null si no ha sido adquirido.</summary>
         public AnnexAssignment? FindAnnex(string residenceSlotId, AnnexSide side)
         {
             string id = BuildAnnexId(residenceSlotId, side);
-            return Annexes.TryGetValue(id, out var assignment) ? assignment : null;
+            return FindAnnexById(id);
         }
 
         /// <summary>Devuelve todos los anexos adquiridos asociados a una residencia privada.</summary>
