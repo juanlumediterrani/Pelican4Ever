@@ -36,6 +36,22 @@ namespace Pelican4Ever.Core.World
         public HashSet<long> Friends { get; set; } = new();
     }
 
+    /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901).</summary>
+    public class AnnexAssignment
+    {
+        public string AnnexId { get; set; } = string.Empty;
+
+        public string ResidenceSlotId { get; set; } = string.Empty;
+
+        public AnnexSide Side { get; set; }
+
+        public string TemplateId { get; set; } = "Standard";
+
+        public long OwnerId { get; set; }
+
+        public DateTimeOffset AcquiredAtUtc { get; set; } = DateTimeOffset.UtcNow;
+    }
+
     /// <summary>Motivo por el que el host rechaza el reclamo de una puerta.</summary>
     public enum DoorClaimRejection
     {
@@ -59,7 +75,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 2;
+        public const int CurrentSchemaVersion = 3;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -68,6 +84,9 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Puertas reclamadas (clave: DoorId del catálogo <c>assets/doors.json</c>).</summary>
         public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
+
+        /// <summary>Anexos de residencia adquiridos (clave: AnnexId ej. "Pelican4Ever_Farm_01_Annex_East").</summary>
+        public Dictionary<string, AnnexAssignment> Annexes { get; set; } = new();
 
         /// <summary>Ofertas activas e históricas del mercado vecinal asíncrono (TASK-503).</summary>
         public List<MarketListing> MarketListings { get; set; } = new();
@@ -166,6 +185,24 @@ namespace Pelican4Ever.Core.World
             return released;
         }
 
+        /// <summary>Genera el identificador estándar de un anexo a partir del hueco de residencia y el lado cardinal.</summary>
+        public static string BuildAnnexId(string residenceSlotId, AnnexSide side) => $"{residenceSlotId}_Annex_{side}";
+
+        /// <summary>Busca el anexo correspondiente al hueco de residencia y lado cardinal indicados, o null si no ha sido adquirido.</summary>
+        public AnnexAssignment? FindAnnex(string residenceSlotId, AnnexSide side)
+        {
+            string id = BuildAnnexId(residenceSlotId, side);
+            return Annexes.TryGetValue(id, out var assignment) ? assignment : null;
+        }
+
+        /// <summary>Devuelve todos los anexos adquiridos asociados a una residencia privada.</summary>
+        public List<AnnexAssignment> GetAnnexesForResidence(string residenceSlotId)
+        {
+            return Annexes.Values
+                .Where(a => string.Equals(a.ResidenceSlotId, residenceSlotId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
         /// <summary>Migra un estado leído de una versión anterior del esquema. Devuelve true si hubo cambios.</summary>
         public bool Migrate()
         {
@@ -183,6 +220,14 @@ namespace Pelican4Ever.Core.World
                 changed = true;
             }
 
+            // v2 → v3: soporte para anexos de residencia adquiribles (TASK-901).
+            if (SchemaVersion < 3)
+            {
+                Annexes ??= new Dictionary<string, AnnexAssignment>();
+                SchemaVersion = 3;
+                changed = true;
+            }
+
             if (MarketListings == null)
             {
                 MarketListings = new List<MarketListing>();
@@ -192,6 +237,12 @@ namespace Pelican4Ever.Core.World
             if (FestivalScores == null)
             {
                 FestivalScores = new List<FestivalScoreEntry>();
+                changed = true;
+            }
+
+            if (Annexes == null)
+            {
+                Annexes = new Dictionary<string, AnnexAssignment>();
                 changed = true;
             }
 

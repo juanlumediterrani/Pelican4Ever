@@ -38,10 +38,11 @@ public class WorldStateAndDoorsTests
         bool migrated = state.Migrate();
 
         Assert.True(migrated);
-        Assert.Equal(2, state.SchemaVersion);
+        Assert.Equal(ServerWorldState.CurrentSchemaVersion, state.SchemaVersion);
         Assert.NotNull(state.Players);
         Assert.NotNull(state.Doors);
         Assert.NotNull(state.RescheduledFestivals);
+        Assert.NotNull(state.Annexes);
     }
 
     [Fact]

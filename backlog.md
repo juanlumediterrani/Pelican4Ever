@@ -332,17 +332,17 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 - Para los portales del sur del host vuelve la de arriba (`Backwoods`); para los del norte, la de abajo (`Forest`); para los del oeste, la de la derecha (`BusStop`). Cada residencia tiene, por tanto, dos salidas vanilla libres: los huecos de anexo.
 - Las bonificaciones por tipo ya existen para residencias (TASK-604): `FarmTypeBehaviors` en Core, propiedades de mapa y parches en `FarmTypeModule`, y la copia de `Farm_<tipo>` en `Data/Locations`.
 
-- [ ] **TASK-901: Modelo de anexos y catálogo de plantillas (Core)**
-  * **Análisis Técnico:**
-    - `AnnexTemplate` (Id, tipo de granja base, asset de mapa, ancho, alto, zonas de bonificación en coordenadas del anexo) en un `AnnexTemplateCatalog` paralelo a `FarmTemplateCatalog`.
-    - `AnnexAssignment` (residencia, lado: `North`/`East`/`South`, plantilla, propietario) en `ServerWorldState`, con migración de esquema v2 → v3.
-    - Regla pura `ResidenceExits.FreeSides(door)`: los lados vanilla que no devuelven al host según `SpatialWarpRouter`.
-    - Regla pura `AnnexEntrance.For(side, ancho, alto)`: la única entrada queda en el borde opuesto al lado de acceso (salir de la residencia por el este entra al anexo por su borde oeste, centrada), junto con la casilla de vuelta a la residencia.
+- [x] **TASK-901: Modelo de anexos y catálogo de plantillas (Core)**
+  * **Análisis Técnico:** Implementadas todas las reglas puras del sistema de anexos privados en `Pelican4Ever.Core`:
+    - `AnnexTemplate` y `AnnexTemplateCatalog`: catálogo con las 7 plantillas temáticas (Estándar, Fluvial, Forestal, Colinas, Salvaje, Cuatro Esquinas y Pradera) con precio en oro, tamaño 40×32 y claves de datos de ubicación.
+    - `AnnexAssignment` y `ServerWorldState.Annexes`: persistencia de asignación por residencia y lado cardinal (`North`, `East`, `South`), con migración de esquema v2 → v3 en `ServerWorldState.Migrate()`.
+    - `ResidenceExits.FreeSides(x, y)`: determina con exactitud geométrica los dos lados libres de la residencia que no regresan a la Plaza Central para los 16 portales de `doors.json`.
+    - `AnnexEntrance.For(side, w, h)`: calcula las coordenadas simétricas de entrada en el borde opuesto y la casilla de retorno hacia la residencia con orientación cardinal coherente.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
-    1. Para cada uno de los 16 portales de `doors.json`, `FreeSides` devuelve exactamente los lados vanilla que no vuelven al host (tests con el catálogo real).
-    2. `AnnexEntrance` coloca entrada y vuelta en lados coherentes para los tres lados (tests).
-    3. Un estado v2 migra a v3 sin perder residencias.
+    1. Para cada uno de los 16 portales de `doors.json`, `FreeSides` devuelve exactamente los lados vanilla que no vuelven al host (cubierto con test sobre el catálogo real).
+    2. `AnnexEntrance` coloca entrada y vuelta en lados coherentes para los tres lados (cubierto con tests unitarios).
+    3. Un estado v2 migra a v3 sin perder residencias ni jugadores (cubierto con tests unitarios).
 
 - [ ] **TASK-902: Mapas temáticos de un cuarto de tamaño (40×32)**
   * **Análisis Técnico:** Un mapa por tipo del catálogo (Estándar, Fluvial, Forestal, Colinas, Salvaje, Cuatro Esquinas y Pradera), con un cuarto del área de la granja vanilla (la mitad en cada dimensión). Dos opciones:
