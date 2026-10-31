@@ -1,4 +1,6 @@
+using System;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using Pelican4Ever.Core.World;
 using Xunit;
@@ -151,18 +153,15 @@ namespace Pelican4Ever.Tests
                 int mx = el.GetProperty("MailboxTileX").GetInt32();
                 int my = el.GetProperty("MailboxTileY").GetInt32();
 
-                bool isVertical = x <= 2 || x >= 75;
-                (int t1x, int t1y) = (x, y);
-                (int t2x, int t2y) = isVertical ? (x, y + 1) : (x + 1, y);
+                var path = SpatialWarpRouter.GetPortalPathTiles(id, x, y);
 
-                // No debe superponerse con el paso peatonal
-                Assert.False(mx == t1x && my == t1y, $"{id} sign overlaps t1");
-                Assert.False(mx == t2x && my == t2y, $"{id} sign overlaps t2");
+                // Ni el poste ni la caja (una fila encima) pisan el camino
+                Assert.DoesNotContain((mx, my), path);
+                Assert.DoesNotContain((mx, my - 1), path);
 
-                // Distancia Manhattan al umbral <= 2
-                int d1 = Math.Abs(mx - t1x) + Math.Abs(my - t1y);
-                int d2 = Math.Abs(mx - t2x) + Math.Abs(my - t2y);
-                Assert.True(Math.Min(d1, d2) <= 2, $"{id} sign is too far (dist={Math.Min(d1, d2)})");
+                // Junto al camino: a lo sumo una casilla de hueco entre el buzón y el paso
+                int gap = path.Min(t => Math.Max(Math.Abs(mx - t.X), Math.Abs(my - t.Y)));
+                Assert.True(gap <= 2, $"{id} mailbox is too far from its path (dist={gap})");
 
                 // Cada poste/buzón es único
                 Assert.True(seenSigns.Add((mx, my)), $"Duplicate sign tile at ({mx}, {my}) for {id}");
@@ -193,6 +192,40 @@ namespace Pelican4Ever.Tests
         public void ShouldPreserveCanopyOverPath_DeterminesCanopyPreservationCorrectly(int townTileY, int tileIndex, bool expected)
         {
             Assert.Equal(expected, SpatialWarpRouter.ShouldPreserveCanopyOverPath(townTileY, tileIndex));
+        }
+
+        [Theory]
+        [InlineData(47, 63, 47, 63, true)]  // Sur: apertura
+        [InlineData(47, 63, 48, 64, true)]  // Sur: borde del mapa
+        [InlineData(47, 63, 48, 62, false)] // Sur: tercera casilla desde el borde
+        [InlineData(47, 63, 48, 60, false)] // Sur: entrada del camino desde la plaza (captura del fallo)
+        [InlineData(47, 63, 49, 64, false)] // Sur: fuera de las columnas del camino
+        [InlineData(28, 1, 29, 0, true)]    // Norte: borde
+        [InlineData(28, 1, 28, 1, true)]    // Norte: apertura
+        [InlineData(28, 1, 28, 2, false)]
+        [InlineData(28, 1, 28, 8, false)]
+        [InlineData(1, 26, 0, 27, true)]    // Oeste: borde
+        [InlineData(1, 26, 1, 26, true)]    // Oeste: apertura
+        [InlineData(1, 26, 2, 26, false)]
+        [InlineData(1, 26, 6, 27, false)]
+        public void IsPortalTriggerTile_OnlyLastTwoTilesTowardTheBorder(int townX, int townY, int tileX, int tileY, bool expected)
+        {
+            Assert.Equal(expected, SpatialWarpRouter.IsPortalTriggerTile(townX, townY, tileX, tileY));
+        }
+
+        [Fact]
+        public void PortalTriggerTiles_AreTwoTilesDeepAndInsideThePath()
+        {
+            var doors = new[] { ("Farm_Portal_02", 1, 26), ("Farm_Portal_08", 62, 1), ("Farm_Portal_16", 47, 63) };
+            foreach (var (id, x, y) in doors)
+            {
+                var path = SpatialWarpRouter.GetPortalPathTiles(id, x, y);
+                var triggers = path.Distinct().Where(t => SpatialWarpRouter.IsPortalTriggerTile(x, y, t.X, t.Y)).ToList();
+
+                // Dos de ancho por dos de fondo: la apertura y la casilla del borde
+                Assert.Equal(4, triggers.Count);
+                Assert.True(path.Distinct().Count() > triggers.Count, $"{id}: the rest of the path must not trigger");
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Xunit;
@@ -115,22 +116,16 @@ public class WorldStateAndDoorsTests
             Assert.True(isWest || isEast || isNorth || isSouth,
                 $"El portal {door.DoorId} no está en un extremo del mapa: ({door.TownTileX}, {door.TownTileY})");
 
-            // Verificar que el cartel / buzón no colisione con el umbral de entrada (2 tiles de ancho)
-            (int t1X, int t1Y) = (door.TownTileX, door.TownTileY);
-            (int t2X, int t2Y) = (isWest || isEast)
-                ? (door.TownTileX, door.TownTileY + 1)
-                : (door.TownTileX + 1, door.TownTileY);
-
+            // El buzón (poste y caja, una fila encima) queda junto al camino de la parcela, sin pisarlo
             int mbX = door.MailboxTileX.Value;
             int mbY = door.MailboxTileY.Value;
+            var path = SpatialWarpRouter.GetPortalPathTiles(door.DoorId, door.TownTileX, door.TownTileY);
 
-            Assert.False(mbX == t1X && mbY == t1Y, $"El cartel de {door.DoorId} colisiona con el primer tile del portal.");
-            Assert.False(mbX == t2X && mbY == t2Y, $"El cartel de {door.DoorId} colisiona con el segundo tile del portal.");
+            Assert.DoesNotContain((mbX, mbY), path);
+            Assert.DoesNotContain((mbX, mbY - 1), path);
 
-            // El cartel debe estar adyacente (distancia <= 2 tiles)
-            int distToT1 = Math.Abs(mbX - t1X) + Math.Abs(mbY - t1Y);
-            int distToT2 = Math.Abs(mbX - t2X) + Math.Abs(mbY - t2Y);
-            Assert.True(Math.Min(distToT1, distToT2) <= 2, $"El cartel de {door.DoorId} está demasiado lejos de la entrada.");
+            int gap = path.Min(t => Math.Max(Math.Abs(mbX - t.X), Math.Abs(mbY - t.Y)));
+            Assert.True(gap <= 2, $"El buzón de {door.DoorId} está demasiado lejos de su camino.");
         }
     }
 

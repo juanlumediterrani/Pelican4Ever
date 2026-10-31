@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Pelican4Ever.Core.World
 {
@@ -109,6 +110,82 @@ namespace Pelican4Ever.Core.World
         /// Determina si un portal está ubicado en la ribera sur de la Granja Host (TownTileY >= 60).
         /// </summary>
         public static bool IsSouthBorderPortal(int townTileY) => townTileY >= 60;
+
+        /// <summary>
+        /// Casillas del camino de una parcela en la Granja Host: las dos de la apertura y el paso de 2 tiles de ancho
+        /// que se despeja hasta la plaza. Algunas parcelas necesitan un paso más largo para salvar el acantilado o el seto.
+        /// </summary>
+        public static List<(int X, int Y)> GetPortalPathTiles(string doorId, int townTileX, int townTileY)
+        {
+            bool vertical = townTileX <= 2 || townTileX >= 75;
+            (int X, int Y) t1 = (townTileX, townTileY);
+            (int X, int Y) t2 = vertical ? (townTileX, townTileY + 1) : (townTileX + 1, townTileY);
+            var tiles = new List<(int X, int Y)> { t1, t2 };
+
+            if (townTileX <= 2)
+            {
+                int maxDepthX = doorId == "Farm_Portal_02" ? 6 : 4;
+                for (int x = 0; x <= maxDepthX; x++)
+                {
+                    tiles.Add((x, t1.Y));
+                    tiles.Add((x, t2.Y));
+                }
+            }
+            else if (townTileX >= 75)
+            {
+                for (int x = 76; x <= HostFarmMaxTileX; x++)
+                {
+                    tiles.Add((x, t1.Y));
+                    tiles.Add((x, t2.Y));
+                }
+            }
+            else if (townTileY <= 2)
+            {
+                int maxDepthY = doorId is "Farm_Portal_08" or "Farm_Portal_14" ? 9 : 8;
+                for (int y = 0; y <= maxDepthY; y++)
+                {
+                    tiles.Add((t1.X, y));
+                    tiles.Add((t2.X, y));
+                }
+            }
+            else
+            {
+                for (int y = 60; y <= HostFarmMaxTileY; y++)
+                {
+                    tiles.Add((t1.X, y));
+                    tiles.Add((t2.X, y));
+                }
+            }
+
+            return tiles;
+        }
+
+        /// <summary>Última columna (este) y última fila (sur) de la Granja Host, de 80×65 tiles.</summary>
+        public const int HostFarmMaxTileX = 79;
+        public const int HostFarmMaxTileY = 64;
+
+        /// <summary>
+        /// Casillas que disparan el portal de una parcela: las dos de la apertura y las dos del borde del mapa a
+        /// continuación, es decir, las dos últimas casillas del camino hacia el borde (las mismas que llevan warp).
+        /// El resto del camino es transitable sin abrir el diálogo de la parcela.
+        /// </summary>
+        public static bool IsPortalTriggerTile(int townTileX, int townTileY, int tileX, int tileY)
+        {
+            if (townTileX <= 2 || townTileX >= 75)
+            {
+                // Apertura vertical en el borde oeste o este: filas townTileY y townTileY + 1
+                if (tileY != townTileY && tileY != townTileY + 1)
+                    return false;
+                int borderX = townTileX <= 2 ? 0 : HostFarmMaxTileX;
+                return tileX == townTileX || tileX == borderX;
+            }
+
+            // Apertura horizontal en el borde norte o sur: columnas townTileX y townTileX + 1
+            if (tileX != townTileX && tileX != townTileX + 1)
+                return false;
+            int borderY = townTileY <= 2 ? 0 : HostFarmMaxTileY;
+            return tileY == townTileY || tileY == borderY;
+        }
 
         /// <summary>
         /// Determina si un tile de copa de árbol (hojas en tilesheet) debe conservarse visible en AlwaysFront

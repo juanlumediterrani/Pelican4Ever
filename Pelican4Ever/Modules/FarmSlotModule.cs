@@ -267,6 +267,10 @@ namespace Pelican4Ever.Modules
                         }
                     }
 
+                    var townMap = context?.Helper.GameContent.Load<xTile.Map>("Maps/Town");
+                    if (townMap != null)
+                        AddMailboxAssets(hostMap, townMap);
+
                     foreach (var door in RegisteredDoors)
                     {
                         if (string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
@@ -332,47 +336,13 @@ namespace Pelican4Ever.Modules
             DoorModel door,
             xTile.Tiles.Tile? sampleTile)
         {
-            var (t1, t2) = GetOpeningTiles(door);
-            var passTiles = new List<Point> { t1, t2 };
+            var passTiles = SpatialWarpRouter.GetPortalPathTiles(door.DoorId, door.TownTileX, door.TownTileY)
+                .Select(t => new Point(t.X, t.Y))
+                .ToList();
 
             var sheet = bld?.Map?.GetTileSheet("untitled tile sheet")
                      ?? front?.Map?.GetTileSheet("untitled tile sheet")
                      ?? sampleTile?.TileSheet;
-
-            if (door.TownTileX <= 2)
-            {
-                int maxDepthX = (door.DoorId == "Farm_Portal_02") ? 6 : 4;
-                for (int x = 0; x <= maxDepthX; x++)
-                {
-                    passTiles.Add(new Point(x, t1.Y));
-                    passTiles.Add(new Point(x, t2.Y));
-                }
-            }
-            else if (door.TownTileX >= 75)
-            {
-                for (int x = 76; x <= 79; x++)
-                {
-                    passTiles.Add(new Point(x, t1.Y));
-                    passTiles.Add(new Point(x, t2.Y));
-                }
-            }
-            else if (door.TownTileY <= 2)
-            {
-                int maxDepthY = (door.DoorId is "Farm_Portal_08" or "Farm_Portal_14") ? 9 : 8;
-                for (int y = 0; y <= maxDepthY; y++)
-                {
-                    passTiles.Add(new Point(t1.X, y));
-                    passTiles.Add(new Point(t2.X, y));
-                }
-            }
-            else
-            {
-                for (int y = 60; y <= 64; y++)
-                {
-                    passTiles.Add(new Point(t1.X, y));
-                    passTiles.Add(new Point(t2.X, y));
-                }
-            }
 
             bool isSouthDoor = SpatialWarpRouter.IsSouthBorderPortal(door.TownTileY);
 
@@ -420,15 +390,86 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // Despejar casilla del cartel para que ningún gráfico de mapa colisione con el poste físico
-            int signX = door.MailboxTileX ?? (door.TownTileX + 1);
-            int signY = door.MailboxTileY ?? door.TownTileY;
-            if (bld != null && signX >= 0 && signX < bld.LayerWidth && signY >= 0 && signY < bld.LayerHeight)
-                bld.Tiles[signX, signY] = null;
-            if (front != null && signX >= 0 && signX < front.LayerWidth && signY >= 0 && signY < front.LayerHeight)
-                front.Tiles[signX, signY] = null;
+            PlaceMailboxTiles(bld, front, back, door);
 
             return passTiles;
+        }
+
+        /// <summary>Hoja de tiles del pueblo añadida a la Granja Host para dibujar los buzones de las parcelas.</summary>
+        private const string MailboxTileSheetId = "z_Pelican4Ever_Town";
+
+        /// <summary>Buzón de las casas de Pelican Town (<c>Maps/spring_town</c>): poste en Buildings y caja una fila encima.</summary>
+        private const int MailboxPostTileIndex = 41;
+        private const int MailboxTopTileIndex = 9;
+
+        /// <summary>Capa que se dibuja sobre Front: la caja del buzón no sustituye copas ni rebordes de hierba.</summary>
+        private const string MailboxTopLayerId = "Front2";
+
+        /// <summary>
+        /// Añade al mapa de la Granja Host la hoja de tiles del pueblo y la capa <see cref="MailboxTopLayerId"/>.
+        /// La hoja se llama <c>spring_town</c> y el juego la cambia de estación como las demás.
+        /// </summary>
+        private static void AddMailboxAssets(xTile.Map map, xTile.Map townMap)
+        {
+            if (map.GetTileSheet(MailboxTileSheetId) == null)
+            {
+                xTile.Tiles.TileSheet? source = townMap.GetTileSheet("Town")
+                    ?? townMap.TileSheets.FirstOrDefault(ts => ts.ImageSource.Replace('\\', '/').EndsWith("spring_town", StringComparison.OrdinalIgnoreCase));
+                if (source == null)
+                {
+                    context?.Monitor.Log("[FarmSlotModule] Maps/Town no tiene la hoja spring_town; las parcelas quedan sin buzón.", LogLevel.Warn);
+                    return;
+                }
+
+                map.AddTileSheet(new xTile.Tiles.TileSheet(MailboxTileSheetId, map, source.ImageSource, source.SheetSize, source.TileSize));
+            }
+
+            if (map.GetLayer(MailboxTopLayerId) == null && map.GetLayer("Front") is xTile.Layers.Layer front)
+                map.AddLayer(new xTile.Layers.Layer(MailboxTopLayerId, map, front.LayerSize, front.TileSize));
+        }
+
+        /// <summary>
+        /// Dibuja el buzón de la parcela con los tiles del buzón del pueblo: el poste sustituye el tile de Buildings
+        /// (colisión de un poste real) y la caja va en <see cref="MailboxTopLayerId"/>, una fila encima.
+        /// </summary>
+        private static void PlaceMailboxTiles(xTile.Layers.Layer? bld, xTile.Layers.Layer? front, xTile.Layers.Layer? back, DoorModel door)
+        {
+            xTile.Map? map = bld?.Map;
+            xTile.Tiles.TileSheet? sheet = map?.GetTileSheet(MailboxTileSheetId);
+            xTile.Layers.Layer? top = map?.GetLayer(MailboxTopLayerId);
+            if (bld == null || sheet == null || top == null)
+                return;
+
+            var (mx, my) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
+            if (mx < 0 || mx >= bld.LayerWidth || my < 1 || my >= bld.LayerHeight)
+                return;
+
+            bld.Tiles[mx, my] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, MailboxPostTileIndex);
+            top.Tiles[mx, my - 1] = new xTile.Tiles.StaticTile(top, sheet, xTile.Tiles.BlendMode.Alpha, MailboxTopTileIndex);
+
+            // En el seto del borde sur, Front repite la hierba del Back y taparía el poste: se quita solo esa copia
+            xTile.Tiles.Tile? frontTile = front?.Tiles[mx, my];
+            xTile.Tiles.Tile? backTile = back?.Tiles[mx, my];
+            if (front != null && frontTile != null && backTile != null
+                && frontTile.TileIndex == backTile.TileIndex && frontTile.TileSheet == backTile.TileSheet)
+            {
+                front.Tiles[mx, my] = null;
+            }
+        }
+
+        /// <summary>
+        /// Casillas donde versiones anteriores ponían un cartel de madera (Sign 37) en lugar del buzón; se retira
+        /// de las partidas existentes. Las demás parcelas ya tenían el cartel en la casilla del buzón actual.
+        /// </summary>
+        private static readonly Point[] LegacySignTiles =
+        {
+            new(2, 25), new(17, 2), new(27, 2), new(51, 2), new(61, 2), new(61, 62), new(7, 2), new(71, 2), new(7, 62)
+        };
+
+        private static void RemoveLegacySign(Farm farm, Vector2 tile)
+        {
+            if (farm.objects.TryGetValue(tile, out StardewValley.Object? obj) && obj is Sign && obj.ItemId == "37")
+                farm.objects.Remove(tile);
         }
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
@@ -882,7 +923,7 @@ namespace Pelican4Ever.Modules
             Vector2 playerTile = Game1.player.Tile;
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
                 string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase)
-                && IsInOpeningOrBorder(d, (int)playerTile.X, (int)playerTile.Y));
+                && SpatialWarpRouter.IsPortalTriggerTile(d.TownTileX, d.TownTileY, (int)playerTile.X, (int)playerTile.Y));
 
             if (door != null && !context.WorldState.Doors.ContainsKey(door.DoorId))
             {
@@ -896,7 +937,7 @@ namespace Pelican4Ever.Modules
         /// <summary>
         /// Aprovisiona los portales físicos de 2 tiles y los senderos en el perímetro de la granja del anfitrión (Plaza Central).
         /// Cada parcela cuenta con un portal transitable en el borde del mapa con warps continuos hacia su granja privada,
-        /// acera adoquinada de conexión y poste señalizador de madera físico (Sign con BigCraftable).
+        /// acera adoquinada de conexión y buzón de tiles del mapa (<see cref="PlaceMailboxTiles"/>).
         /// </summary>
         public static void EnsureHostFarmPortals(Farm farm)
         {
@@ -913,6 +954,9 @@ namespace Pelican4Ever.Modules
             {
                 sampleTile = backLayer.Tiles[40, 30] ?? backLayer.Tiles[64, 15] ?? backLayer.Tiles[20, 20];
             }
+
+            foreach (Point legacy in LegacySignTiles)
+                RemoveLegacySign(farm, legacy.ToVector2());
 
             foreach (DoorModel door in RegisteredDoors)
             {
@@ -940,22 +984,9 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // 3. Colocar poste con cartel de madera físico (Sign ID 37 - BigCraftable) en la casilla designada
-                int signX = door.MailboxTileX ?? (door.TownTileX + 1);
-                int signY = door.MailboxTileY ?? door.TownTileY;
-                Vector2 signTile = new Vector2(signX, signY);
-                farm.removeEverythingFromThisTile(signX, signY);
-
-                if (!farm.objects.ContainsKey(signTile))
-                {
-                    Sign sign = new Sign(signTile, "37");
-                    sign.bigCraftable.Value = true;
-                    farm.objects[signTile] = sign;
-                }
-                else if (farm.objects[signTile] is Sign existingSign)
-                {
-                    existingSign.bigCraftable.Value = true;
-                }
+                // 3. El buzón es de tiles del mapa (PlaceMailboxTiles): despejar su casilla y retirar el cartel antiguo
+                var (mailboxX, mailboxY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
+                farm.removeEverythingFromThisTile(mailboxX, mailboxY);
 
                 // 4. Sincronizar Warps continuos en ambos tiles de la apertura (solo si la parcela está reclamada)
                 bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
