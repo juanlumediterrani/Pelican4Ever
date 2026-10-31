@@ -30,21 +30,28 @@ Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documen
 
 ---
 
-### Fase 0.5: Spikes de Validación de Motor (Antes de Iteración 1)
+### Fase 0.5: Spikes de Validación de Motor (Completada e Integrada)
 > **Objetivo:** Validar con prototipos mínimos en el juego real los 4 puntos de fricción del motor identificados en la revisión de arquitectura.
 
-- [ ] **SPIKE-01: Disparo automático de `NewDay` + `Save` nativo con clientes conectados**
+- [x] **SPIKE-01: Disparo automático de `NewDay` + `Save` nativo con clientes conectados**
   - **Pregunta:** ¿Se puede iniciar la transición diaria nativa a las `06:00 AM` (o con comando `p4e_rollover_now`) cuando hay `Farmhands` conectados fuera de la cama sin colgar el `ReadyCheck` `"sleep"`?
   - **Criterio de Éxito:** El día avanza, la partida se guarda en disco y los clientes continúan conectados en el nuevo día.
-- [ ] **SPIKE-02: Persistencia de `Pelican4Ever_Farm_01` declarada en `Data/Locations` con una `Cabin`**
+  - **Resolución:** Validado e integrado en `DailyRolloverModule.cs`. `Game1.PassOutNewDay()` en el host dispara la transición forzada global sin depender del `ReadyCheck` voluntario de sueño (`sleep`), ejecutando `_newDayAfterFade()`, `SaveGame.Save()` y la evaluación de penalizaciones médicas (`SleepPolicy`) de forma sincronizada para todos los clientes conectados.
+
+- [x] **SPIKE-02: Persistencia de `Pelican4Ever_Farm_01` declarada en `Data/Locations` con una `Cabin`**
   - **Pregunta:** ¿Guarda y recarga `SaveGame.loadDataToLocations` todos los cultivos, objetos y la `Cabin` de un `Farmhand` dentro de una ubicación personalizada `Pelican4Ever_Farm_01`?
   - **Criterio de Éxito:** Tras plantar cultivos, colocar un cofre y reiniciar el servidor, todo permanece intacto y el `Farmhand` conserva su punto de aparición.
-- [ ] **SPIKE-03: Reloj 1:1 con `realMilliSecondsPerGameTenMinutes = 600_000` y `NightHold` en `2550`**
+  - **Resolución:** Validado e integrado en `FarmSlotModule.cs`. La inyección declarativa en `Data/Locations` con `CreateOnLoad` (`AlwaysActive = true`) junto con el pre-registro en `Prefix_SaveGameLoadDataToLocations` permite a `SaveGame.loadDataToLocations` persistir y recargar cultivos, cofres, máquinas y cabañas en `Pelican4Ever_Farm_01..16` y sus anexos, preservando el punto de aparición de cada jugador.
+
+- [x] **SPIKE-03: Reloj 1:1 con `realMilliSecondsPerGameTenMinutes = 600_000` y `NightHold` en `2550`**
   - **Pregunta:** ¿Avanzan correctamente hornos, rutas de NPCs e iluminación ambiental entre `0600` y `2550`, y se mantiene el jugador sin desmayarse durante el tramo `01:50–06:00` (`2550`)?
   - **Criterio de Éxito:** Cero desmayos a las `02:00 AM` y las máquinas descuentan los 250 minutos de madrugada (`2550 → 0600`) durante el Rollover nativo.
-- [ ] **SPIKE-04: Interacción con el modo dedicado nativo 1.6.15 (`Game1.HasDedicatedHost` / `DedicatedServer`)**
+  - **Resolución:** Validado e integrado en `RealTimeClockModule.cs`. Con `Game1.realMilliSecondsPerGameTenMinutes = 600_000` e interpolación de luz con `MillisecondsIntoSlot`, el reloj avanza 1:1 hasta las 01:50 (`2550`). De 01:50 a 06:00 se mantiene en `2550` (`IsNightHold = true`), impidiendo que el motor alcance `2600` (umbral de desmayo). En el Rollover de las 06:00, las máquinas descuentan los minutos transcurridos vía `Utility.CalculateMinutesUntilMorning`.
+
+- [x] **SPIKE-04: Interacción con el modo dedicado nativo 1.6.15 (`Game1.HasDedicatedHost` / `DedicatedServer`)**
   - **Pregunta:** ¿Qué ajustes necesita `DedicatedServer.Tick()` para que no pause `Game1.netWorldState.Value.IsPaused` cuando no hay jugadores conectados (`onlineIds.Count == 0`)?
   - **Criterio de Éxito:** El reloj del servidor sigue avanzando y ejecuta el Rollover de las `06:00 AM` con `0` clientes conectados.
+  - **Resolución:** Validado e integrado en `RealTimeClockModule.cs` y `ModEntry.cs`. En `OnUpdateTicked`, el host monitoriza y despausa `Game1.netWorldState.Value.IsPaused = false` independientemente de `onlineIds.Count`, y el parche en `Game1.shouldTimePass` garantiza que el tiempo del mundo transcurra de forma continua 24/7.
 
 ---
 
@@ -381,7 +388,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Con `AgentHost`, el host descansa en la cama, queda registrado y sigue conectado; los demás jugadores se desconectan como hoy.
     2. Sin `AgentHost`, el comportamiento actual no cambia.
     3. El reinicio controlado avisa a los conectados y, en modo por defecto, espera al siguiente guardado.
-  * **Decisión pendiente:** qué progreso se acepta perder en un reinicio inmediato por causa mayor, y quién lo autoriza.
+  * **Resolución de la decisión de reinicio inmediato:** El progreso que se acepta perder en un reinicio inmediato por causa mayor es exclusivamente el progreso no guardado del día en curso (desde las 06:00 hasta el momento del reinicio, evaluado detalladamente por `ProgressAtRiskDto.Summary`). Solo puede autorizarlo un operador con acceso a la consola del servidor (`p4e_safe_restart --immediate`) o un cliente autenticado mediante token Bearer (`POST /api/v1/host/restart` con `"immediate": true`). En cualquier otro caso, el sistema opera en modo seguro (`WaitingForNextSave`), esperando a que concluya el guardado del siguiente Rollover.
 
 ---
 
