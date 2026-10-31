@@ -431,34 +431,36 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Un visitante sin permiso no puede usar herramientas ni cofres en el anexo.
     3. Un anexo sin jugadores dentro ni propietario conectado no se sincroniza por red.
 
-- [ ] **TASK-904: Sustituir las salidas vanilla de las residencias**
-  * **Análisis Técnico:** En `FarmSlotModule.Prefix_WarpFarmer`, las salidas de una residencia que no vuelven al host dejan de llevar al mapa vanilla:
-    - si el propietario tiene anexo en ese lado, van a su entrada (`AnnexEntrance`);
-    - si no lo tiene, el jugador se detiene en el borde con el cartel de compra (TASK-905).
-
-    La salida del anexo devuelve a la residencia en la casilla del borde por el que se entró. La cueva de la granja (`FarmCave`, compartida entre todos) queda fuera de esta tarea y se apunta aparte.
+- [x] **TASK-904: Sustituir las salidas vanilla de las residencias**
+  * **Análisis Técnico:** En `FarmSlotModule.Prefix_WarpFarmer`, las salidas de una residencia privada que no vuelven a la Plaza Central dejan de llevar a los mapas vanilla (`Backwoods`, `BusStop`, `Forest`):
+    - Si el propietario tiene anexo adquirido en ese lado cardinal (`worldState.FindAnnex`), el warp se redirige automáticamente a la entrada del anexo (`locationRequest = Game1.getLocationRequest(annex.AnnexId)`) con las coordenadas y dirección de llegada de `AnnexEntrance.For`.
+    - Si aún no tiene anexo adquirido, el warp vanilla se bloquea (`return false`), el jugador se detiene inmediatamente y, si es el propietario, se abre el diálogo interactivo de adquisición (`ShowBuyAnnexDialog`).
+    - Al salir del anexo, `Prefix_WarpFarmer` y los warps en los tiles de la apertura devuelven al jugador a la residencia madre en la casilla exacta de retorno (`ResidenceReturnTile`) con orientación cardinal coherente (`ResidenceReturnFacingDirection`).
+    - La salida perimetral que regresa a la Plaza Central del host (`SpatialWarpRouter.ShouldReturnToHostFarm`) se evalúa primero y permanece intacta.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Desde ninguna residencia se llega a `Backwoods`, `BusStop` ni `Forest`.
     2. Entrar y salir de un anexo deja al jugador en el lado coherente de cada mapa.
     3. La salida que vuelve a la Plaza Central no cambia.
 
-- [ ] **TASK-905: Adquirir un anexo**
+- [x] **TASK-905: Adquirir un anexo**
   * **Análisis Técnico:**
-    - Al tocar una salida libre de su residencia, el propietario ve qué plantillas puede elegir y su precio. Opcionalmente, Robin vende un «Título de anexo» que se usa en esa salida.
-    - El cobro es del monedero individual (`useSeparateWallets`).
-    - La petición va al host y se valida allí, como `HandleClaimDoor`: propietario de la residencia, lado libre, plantilla válida y fondos suficientes.
-    - Precios y límite de anexos por jugador en `config.json`.
+    - Diálogo interactivo `ShowBuyAnnexDialog` al intentar cruzar una salida libre sin anexo o al interactuar con ella mediante botón de acción [E] o clic del cursor.
+    - Menú dinámico que lista las 7 plantillas temáticas con sus precios en oro, validando fondos antes de confirmar la compra.
+    - Lógica de validación pura en `Pelican4Ever.Core.World.AnnexPurchaseLogic` (testeada unitariamente): valida propiedad de la residencia, lado libre, ausencia de anexo previo, existencia de plantilla, saldo suficiente en monedero individual (`useSeparateWallets`) y límite configurable de anexos por residencia (`MaxAnnexesPerResidence` en `config.json`, por defecto 2).
+    - Descuento del precio con `DailyRolloverModule.SetFarmerMoney`, provisión inmediata de la ubicación física con `EnsureAnnexLocation` y sincronización multijugador (`ModMessages.BuyAnnexRequest` y `BroadcastDoorsSync`) sin requerir reiniciar el servidor.
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**
     1. Solo el propietario puede adquirir anexos de su residencia, como mucho uno por lado libre.
     2. Sin fondos, la compra se rechaza sin cobrar nada.
     3. Tras comprar, la salida lleva al anexo sin reiniciar.
 
-- [ ] **TASK-906: Bonificaciones del tipo en los anexos**
+- [x] **TASK-906: Bonificaciones del tipo en los anexos**
   * **Análisis Técnico:**
-    - Extender `FarmTypeModule.BehaviorOf` y la copia de `Farm_<tipo>` en `Data/Locations` a las ubicaciones de anexo, con las zonas recalculadas por plantilla de TASK-902 en vez de las constantes vanilla de `FarmTypeBehaviors`.
-    - El tipo del anexo es el de su plantilla, aunque no coincida con el de la residencia: una residencia estándar puede tener un anexo fluvial.
+    - `FarmTypeModule.BehaviorOf` y la provisión en `Data/Locations` soportan ubicaciones de anexo (`LocationCullingLogic.AnnexPrefix`), aplicando la plantilla de cada anexo de manera independiente al tipo de la residencia madre (una residencia estándar puede tener un anexo fluvial o salvaje).
+    - Anexo fluvial (`Fishing`): pesca la tabla fluvial `Farm_Riverland`, tiene agua pescable con `FarmFishLocationOverride = "Town 0.7"` y genera burbujas de peces mediante `FarmTypeModule.Postfix_LocationTenMinuteUpdate`.
+    - Anexo minero (`Mining`): área de minerales recalculada en 40×32 (`5 13 22 8`) con generación diaria de menas mediante `doDailyMountainFarmUpdate`.
+    - Anexo salvaje (`Combat`): monstruos nocturnos activos vía `NightMonsters = true` en `Prefix_SpawnMonsters` y `Postfix_FarmTenMinuteUpdate`, mientras la residencia madre permanece libre de monstruos.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Un anexo fluvial pesca la tabla fluvial y tiene burbujas de peces.

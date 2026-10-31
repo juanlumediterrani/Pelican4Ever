@@ -358,5 +358,106 @@ namespace Pelican4Ever.Tests
             Assert.Equal(100L, state.Annexes["Pelican4Ever_Annex_01_East"].OwnerId);
             Assert.Equal("Standard", state.Annexes["Pelican4Ever_Annex_01_East"].TemplateId);
         }
+
+        [Fact]
+        public void AnnexPurchaseLogic_Task905_ValidatesOwnerFundsAndFreeSides()
+        {
+            var worldState = new ServerWorldState();
+            long ownerId = 100L;
+            long strangerId = 200L;
+            string slotId = "Pelican4Ever_Farm_01";
+            var residenceDoor = new DoorAssignment
+            {
+                DoorId = "Farm_Portal_01",
+                FarmSlotId = slotId,
+                FarmType = "Standard",
+                OwnerId = ownerId
+            };
+            var freeSides = new[] { AnnexSide.North, AnnexSide.East };
+
+            // 1. Rechazo por no ser el propietario
+            var resNotOwner = AnnexPurchaseLogic.ValidateAndPurchase(
+                strangerId, slotId, AnnexSide.North, "Fishing", 50000, residenceDoor, freeSides, worldState);
+            Assert.False(resNotOwner.Success);
+            Assert.Equal(AnnexPurchaseRejection.NotResidenceOwner, resNotOwner.Rejection);
+
+            // 2. Rechazo si el lado no es libre para esta residencia
+            var resSideNotFree = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.South, "Fishing", 50000, residenceDoor, freeSides, worldState);
+            Assert.False(resSideNotFree.Success);
+            Assert.Equal(AnnexPurchaseRejection.SideNotFree, resSideNotFree.Rejection);
+
+            // 3. Rechazo por fondos insuficientes
+            int fishingPrice = AnnexTemplateCatalog.GetTemplate("Fishing").BasePriceGold; // 30,000g
+            var resNoFunds = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.North, "Fishing", fishingPrice - 1, residenceDoor, freeSides, worldState);
+            Assert.False(resNoFunds.Success);
+            Assert.Equal(AnnexPurchaseRejection.InsufficientFunds, resNoFunds.Rejection);
+
+            // 4. Rechazo por plantilla desconocida
+            var resUnknownTpl = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.North, "PlutoniumFarm", 100000, residenceDoor, freeSides, worldState);
+            Assert.False(resUnknownTpl.Success);
+            Assert.Equal(AnnexPurchaseRejection.UnknownTemplate, resUnknownTpl.Rejection);
+
+            // 5. Compra exitosa
+            int initialMoney = 50000;
+            var resSuccess = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.North, "Fishing", initialMoney, residenceDoor, freeSides, worldState);
+            Assert.True(resSuccess.Success);
+            Assert.Equal(AnnexPurchaseRejection.None, resSuccess.Rejection);
+            Assert.NotNull(resSuccess.Assignment);
+            Assert.Equal("Pelican4Ever_Annex_01_North", resSuccess.Assignment!.AnnexId);
+            Assert.Equal("Fishing", resSuccess.Assignment.TemplateId);
+            Assert.Equal(ownerId, resSuccess.Assignment.OwnerId);
+            Assert.Equal(initialMoney - fishingPrice, resSuccess.RemainingPlayerMoney);
+
+            // Añadir la asignación al estado
+            worldState.Annexes[resSuccess.Assignment.AnnexId] = resSuccess.Assignment;
+
+            // 6. Rechazo si el anexo ya existe en ese lado
+            var resAlreadyExists = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.North, "Mining", 100000, residenceDoor, freeSides, worldState);
+            Assert.False(resAlreadyExists.Success);
+            Assert.Equal(AnnexPurchaseRejection.AnnexAlreadyExists, resAlreadyExists.Rejection);
+
+            // 7. Compra del segundo lado libre (Este)
+            var resSecond = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.East, "Mining", 100000, residenceDoor, freeSides, worldState, maxAnnexesPerResidence: 2);
+            Assert.True(resSecond.Success);
+            worldState.Annexes[resSecond.Assignment!.AnnexId] = resSecond.Assignment;
+
+            // 8. Rechazo por alcanzar el máximo de anexos
+            var resMaxReached = AnnexPurchaseLogic.ValidateAndPurchase(
+                ownerId, slotId, AnnexSide.East, "Mining", 100000, residenceDoor, freeSides, worldState, maxAnnexesPerResidence: 2);
+            Assert.False(resMaxReached.Success);
+            Assert.Equal(AnnexPurchaseRejection.AnnexAlreadyExists, resMaxReached.Rejection);
+        }
+
+        [Fact]
+        public void AnnexTypeBonuses_Task906_BehaviorAppliesPerAnnexTemplateIndependentlyOfResidence()
+        {
+            // Una residencia estándar tiene NightMonsters = false y RiverFishSplashes = false
+            var standardResidenceBehavior = FarmTypeBehaviors.For("Standard");
+            Assert.False(standardResidenceBehavior.NightMonsters);
+            Assert.False(standardResidenceBehavior.RiverFishSplashes);
+            Assert.Null(standardResidenceBehavior.MountainOreArea);
+
+            // Un anexo de combate ("Combat") tiene NightMonsters = true
+            var combatAnnex = AnnexTemplateCatalog.GetTemplate("Combat");
+            Assert.True(combatAnnex.Behavior.NightMonsters);
+
+            // Un anexo fluvial ("Fishing") tiene RiverFishSplashes = true y override de pesca
+            var fishingAnnex = AnnexTemplateCatalog.GetTemplate("Fishing");
+            Assert.True(fishingAnnex.Behavior.RiverFishSplashes);
+            Assert.Equal("Farm_Riverland", fishingAnnex.LocationDataKey);
+            Assert.Equal("Town 0.7", fishingAnnex.FishLocationOverride);
+
+            // Un anexo minero ("Mining") tiene área de mineral recalculada en 40×32
+            var miningAnnex = AnnexTemplateCatalog.GetTemplate("Mining");
+            Assert.NotNull(miningAnnex.Behavior.MountainOreArea);
+            Assert.Equal(new TileArea(5, 13, 22, 8), miningAnnex.Behavior.MountainOreArea!.Value);
+            Assert.Equal(14, miningAnnex.Behavior.InitialMountainOreDays);
+        }
     }
 }

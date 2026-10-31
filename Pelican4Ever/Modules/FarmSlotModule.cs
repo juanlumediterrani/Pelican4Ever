@@ -729,7 +729,7 @@ namespace Pelican4Ever.Modules
             }
 
             // Despejar siempre el corredor de la única entrada para que no haya rocas, maleza ni tocones bloqueando el paso
-            MapCloneHelper.GetEntranceOpeningAndCorridor(annex.Side, template.Width, template.Height, out _, out var corridorTiles);
+            MapCloneHelper.GetEntranceOpeningAndCorridor(annex.Side, template.Width, template.Height, out var openingBorderTiles, out var corridorTiles);
             foreach (var (cx, cy) in corridorTiles)
             {
                 annexFarm.removeEverythingFromThisTile(cx, cy);
@@ -738,6 +738,13 @@ namespace Pelican4Ever.Modules
                     if (IsClumpOverTile(annexFarm.resourceClumps[i], cx, cy))
                         annexFarm.resourceClumps.RemoveAt(i);
                 }
+            }
+
+            // Sincronizar warps de retorno hacia la residencia madre en la apertura del anexo (TASK-904)
+            var warpPoints = AnnexEntrance.For(annex.Side, template.Width, template.Height);
+            foreach (var (bx, by) in openingBorderTiles)
+            {
+                UpdateOrCreateWarp(annexFarm, bx, by, annex.ResidenceSlotId, warpPoints.ResidenceReturnTile.X, warpPoints.ResidenceReturnTile.Y);
             }
 
             DoorAssignment? parentResidence = context.WorldState.Doors.Values
@@ -1233,6 +1240,35 @@ namespace Pelican4Ever.Modules
                 cabin.farmhandReference.Value = null;
                 cabin.CreateFarmhand();
             }
+
+            // 6. Sincronizar warps perimetrales hacia anexos adquiridos (TASK-904)
+            if (context != null && context.WorldState.Annexes != null)
+            {
+                var annexes = context.WorldState.GetAnnexesForResidence(farm.NameOrUniqueName);
+                foreach (var annex in annexes)
+                {
+                    var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height);
+                    switch (annex.Side)
+                    {
+                        case AnnexSide.North:
+                            UpdateOrCreateWarp(farm, 39, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            UpdateOrCreateWarp(farm, 40, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            UpdateOrCreateWarp(farm, 41, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            break;
+                        case AnnexSide.East:
+                            UpdateOrCreateWarp(farm, 79, 15, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            UpdateOrCreateWarp(farm, 79, 16, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            UpdateOrCreateWarp(farm, 79, 17, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            break;
+                        case AnnexSide.South:
+                            UpdateOrCreateWarp(farm, 39, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            UpdateOrCreateWarp(farm, 40, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            UpdateOrCreateWarp(farm, 41, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            break;
+                    }
+                }
+            }
         }
 
         private static void RegisterChatCommands()
@@ -1317,6 +1353,14 @@ namespace Pelican4Ever.Modules
                 if (payload != null)
                 {
                     HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy);
+                }
+            }
+            else if (e.Type == ModMessages.BuyAnnexRequest && Context.IsMainPlayer)
+            {
+                var payload = e.ReadAs<BuyAnnexPayload>();
+                if (payload != null && Enum.TryParse(payload.Side, ignoreCase: true, out AnnexSide side))
+                {
+                    HandleBuyAnnex(e.FromPlayerID, payload.ResidenceSlotId, side, payload.TemplateId);
                 }
             }
             else if (e.Type == ModMessages.RequestDoorsSync && Context.IsMainPlayer)
@@ -1492,6 +1536,86 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        /// <summary>
+        /// Procesa en el host la compra de un anexo temático de residencia (TASK-905).
+        /// </summary>
+        public static bool HandleBuyAnnex(long playerId, string residenceSlotId, AnnexSide side, string templateId)
+        {
+            if (context == null || !Context.IsMainPlayer) return false;
+            var worldState = context.WorldState;
+
+            DoorAssignment? residenceDoor = worldState.Doors.Values
+                .FirstOrDefault(d => string.Equals(d.FarmSlotId, residenceSlotId, StringComparison.OrdinalIgnoreCase));
+            DoorModel? doorModel = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == residenceSlotId);
+
+            var freeSides = doorModel != null
+                ? ResidenceExits.FreeSides(doorModel.TownTileX, doorModel.TownTileY)
+                : (IReadOnlyCollection<AnnexSide>)Array.Empty<AnnexSide>();
+
+            Farmer? farmer = Game1.GetPlayer(playerId);
+            int playerMoney = farmer?.Money ?? 0;
+
+            int maxAnnexes = context.Config.MaxAnnexesPerResidence > 0 ? context.Config.MaxAnnexesPerResidence : 2;
+            AnnexPurchaseResult result = AnnexPurchaseLogic.ValidateAndPurchase(
+                playerId,
+                residenceSlotId,
+                side,
+                templateId,
+                playerMoney,
+                residenceDoor,
+                freeSides,
+                worldState,
+                maxAnnexes
+            );
+
+            if (!result.Success || result.Assignment == null)
+            {
+                string reason = result.Rejection switch
+                {
+                    AnnexPurchaseRejection.InsufficientFunds => "No dispones de suficiente dinero para adquirir este anexo.",
+                    AnnexPurchaseRejection.NotResidenceOwner => "Solo el propietario de la residencia puede adquirir anexos.",
+                    AnnexPurchaseRejection.AnnexAlreadyExists => "Ya existe un anexo adquirido en este acceso.",
+                    AnnexPurchaseRejection.SideNotFree => "Este acceso no admite un anexo.",
+                    AnnexPurchaseRejection.MaxAnnexesReached => "Has alcanzado el límite máximo de anexos para esta residencia.",
+                    _ => "No se pudo adquirir el anexo."
+                };
+
+                context.Monitor.Log($"[FarmSlotModule] Compra de anexo {residenceSlotId}_{side} ({templateId}) rechazada para {playerId} ({result.Rejection}).", LogLevel.Warn);
+                if (playerId == Game1.player.UniqueMultiplayerID)
+                {
+                    Game1.showRedMessage(reason);
+                }
+                return false;
+            }
+
+            if (farmer != null)
+            {
+                DailyRolloverModule.SetFarmerMoney(farmer, result.RemainingPlayerMoney);
+            }
+
+            worldState.Annexes[result.Assignment.AnnexId] = result.Assignment;
+
+            EnsureAnnexLocation(result.Assignment, regenerate: true);
+            RefreshSlotLocationData();
+
+            // Reconfigurar warps de la residencia para incluir la nueva salida hacia el anexo (TASK-904)
+            if (Game1.getLocationFromName(residenceSlotId) is Farm resFarm)
+            {
+                EnsureFarmSlotBuildings(resFarm, residenceDoor);
+            }
+
+            AnnexTemplate template = AnnexTemplateCatalog.GetTemplate(templateId);
+            context.Monitor.Log($"[FarmSlotModule] Anexo {result.Assignment.AnnexId} ({template.DisplayName}) adquirido por {playerId}.", LogLevel.Info);
+
+            if (playerId == Game1.player.UniqueMultiplayerID)
+            {
+                Game1.addHUDMessage(new HUDMessage($"¡Anexo adquirido: {template.DisplayName}! La salida ya está abierta.", HUDMessage.newQuest_type));
+            }
+
+            BroadcastDoorsSync();
+            return true;
+        }
+
         private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
         {
             if (!Context.IsWorldReady || context == null)
@@ -1546,6 +1670,41 @@ namespace Pelican4Ever.Modules
             if (door != null)
             {
                 InteractWithResidentialDoor(door);
+                return;
+            }
+
+            // TASK-904 / TASK-905: Interacción directa con accesos de anexo en la residencia privada
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var residenceDoor = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
+                if (residenceDoor != null)
+                {
+                    var freeSides = ResidenceExits.FreeSides(residenceDoor.TownTileX, residenceDoor.TownTileY);
+                    AnnexSide? clickedSide = null;
+                    if (targetTile.Y <= 2 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
+                        clickedSide = AnnexSide.North;
+                    else if (targetTile.X >= 77 && (int)targetTile.Y >= 12 && (int)targetTile.Y <= 19)
+                        clickedSide = AnnexSide.East;
+                    else if (targetTile.Y >= 63 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
+                        clickedSide = AnnexSide.South;
+
+                    if (clickedSide.HasValue && freeSides.Contains(clickedSide.Value))
+                    {
+                        var annex = context?.WorldState.FindAnnex(curLoc, clickedSide.Value);
+                        if (annex == null)
+                        {
+                            ShowBuyAnnexDialog(curLoc, clickedSide.Value);
+                            return;
+                        }
+                        else
+                        {
+                            var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                            var pts = AnnexEntrance.For(clickedSide.Value, template.Width, template.Height);
+                            Game1.warpFarmer(annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y, pts.FacingDirection);
+                            return;
+                        }
+                    }
+                }
             }
         }
 
@@ -1735,6 +1894,95 @@ namespace Pelican4Ever.Modules
                         }
 
                         Game1.addHUDMessage(new HUDMessage($"Acceso actualizado a: {whichAnswer}", HUDMessage.newQuest_type));
+                    }
+                }
+            );
+        }
+
+        /// <summary>
+        /// Muestra el diálogo interactivo para seleccionar y adquirir un anexo temático en la salida indicada (TASK-905).
+        /// </summary>
+        public static void ShowBuyAnnexDialog(string residenceSlotId, AnnexSide side)
+        {
+            if (context == null || Game1.currentLocation == null) return;
+            var worldState = context.WorldState;
+
+            long myId = Game1.player.UniqueMultiplayerID;
+            var doorAssignment = worldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == residenceSlotId);
+            if (doorAssignment == null || doorAssignment.OwnerId != myId)
+            {
+                Game1.drawObjectDialogue("Este acceso está cerrado. Solo el propietario puede adquirir una ampliación de anexo.");
+                return;
+            }
+
+            if (worldState.FindAnnex(residenceSlotId, side) != null)
+            {
+                return;
+            }
+
+            var choices = new List<Response>();
+            foreach (var kvp in AnnexTemplateCatalog.Templates)
+            {
+                AnnexTemplate t = kvp.Value;
+                choices.Add(new Response(t.Id, $"{t.DisplayName} ({t.BasePriceGold:N0}g)"));
+            }
+            choices.Add(new Response("Cancel", "Cancelar"));
+
+            string sideName = side switch
+            {
+                AnnexSide.North => "Norte",
+                AnnexSide.East => "Este",
+                AnnexSide.South => "Sur",
+                _ => side.ToString()
+            };
+
+            QuestionDialog.Ask(
+                $"Salida {sideName}: Espacio disponible para ampliación de granja.\n¿Deseas adquirir un anexo privado?",
+                choices.ToArray(),
+                (who, whichAnswer) =>
+                {
+                    if (whichAnswer != "Cancel" && AnnexTemplateCatalog.Templates.TryGetValue(whichAnswer, out AnnexTemplate? selectedTemplate))
+                    {
+                        if (Game1.player.Money < selectedTemplate.BasePriceGold)
+                        {
+                            Game1.drawObjectDialogue($"No tienes suficiente oro para adquirir {selectedTemplate.DisplayName}.\nPrecio: {selectedTemplate.BasePriceGold:N0}g (tienes {Game1.player.Money:N0}g).");
+                            return;
+                        }
+
+                        Response[] confirmChoices = new[]
+                        {
+                            new Response("Yes", $"Sí, adquirir ({selectedTemplate.BasePriceGold:N0}g)"),
+                            new Response("No", "No por ahora")
+                        };
+
+                        QuestionDialog.Ask(
+                            $"¿Confirmas la compra de '{selectedTemplate.DisplayName}' para la salida {sideName} por {selectedTemplate.BasePriceGold:N0}g?",
+                            confirmChoices,
+                            (w, a) =>
+                            {
+                                if (a == "Yes")
+                                {
+                                    if (Context.IsMainPlayer)
+                                    {
+                                        HandleBuyAnnex(myId, residenceSlotId, side, selectedTemplate.Id);
+                                    }
+                                    else
+                                    {
+                                        context.Helper.Multiplayer.SendMessage(
+                                            new BuyAnnexPayload
+                                            {
+                                                ResidenceSlotId = residenceSlotId,
+                                                Side = side.ToString(),
+                                                TemplateId = selectedTemplate.Id
+                                            },
+                                            ModMessages.BuyAnnexRequest,
+                                            new[] { context.Manifest.UniqueID },
+                                            new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                                        );
+                                    }
+                                }
+                            }
+                        );
                     }
                 }
             );
@@ -2013,7 +2261,57 @@ namespace Pelican4Ever.Modules
                         string dest = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
                         locationRequest = Game1.getLocationRequest(dest);
                         RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
+                        return true;
                     }
+
+                    // TASK-904: Sustituir salidas vanilla de las residencias (Backwoods, BusStop, Forest)
+                    AnnexSide? side = ResidenceExits.SideForVanillaTarget(targetLoc);
+                    if (side.HasValue)
+                    {
+                        var annex = context?.WorldState.FindAnnex(curLoc, side.Value);
+                        if (annex != null)
+                        {
+                            var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                            var pts = AnnexEntrance.For(side.Value, template.Width, template.Height);
+                            locationRequest = Game1.getLocationRequest(annex.AnnexId);
+                            tileX = pts.EntryTile.X;
+                            tileY = pts.EntryTile.Y;
+                            facingDirectionAfterWarp = pts.FacingDirection;
+                            return true;
+                        }
+                        else
+                        {
+                            Game1.player.Halt();
+                            Game1.player.completelyStopAnimatingOrDoingAction();
+
+                            var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc);
+                            if (assignment != null && assignment.OwnerId == Game1.player.UniqueMultiplayerID)
+                            {
+                                ShowBuyAnnexDialog(curLoc, side.Value);
+                            }
+                            else
+                            {
+                                Game1.drawObjectDialogue("Este paso está cerrado. Solo el propietario de la residencia puede adquirir una ampliación aquí.");
+                            }
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            // TASK-904: Si el jugador está saliendo de un anexo de residencia hacia la residencia madre
+            if (curLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var annex = context?.WorldState.FindAnnexById(curLoc);
+                if (annex != null)
+                {
+                    var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height);
+                    locationRequest = Game1.getLocationRequest(annex.ResidenceSlotId);
+                    tileX = pts.ResidenceReturnTile.X;
+                    tileY = pts.ResidenceReturnTile.Y;
+                    facingDirectionAfterWarp = pts.ResidenceReturnFacingDirection;
+                    return true;
                 }
             }
             return true;
@@ -2239,6 +2537,59 @@ namespace Pelican4Ever.Modules
                 float centerY = (t1.Y + t2.Y) / 2f * 64f - 24f + bounce;
                 Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(centerX, centerY));
                 DrawDoorBadge(e.SpriteBatch, badgeText, screenPos, badgeColor);
+            }
+
+            // TASK-904 / TASK-905: Indicadores sobre salidas libres y anexos en la residencia privada
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
+                if (door != null)
+                {
+                    var freeSides = ResidenceExits.FreeSides(door.TownTileX, door.TownTileY);
+                    var doorAssignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc);
+                    bool isMine = doorAssignment != null && doorAssignment.OwnerId == myId;
+
+                    foreach (AnnexSide side in freeSides)
+                    {
+                        Point sideTile = side switch
+                        {
+                            AnnexSide.North => new Point(40, 1),
+                            AnnexSide.East => new Point(78, 16),
+                            AnnexSide.South => new Point(40, 63),
+                            _ => Point.Zero
+                        };
+
+                        float dist = Vector2.Distance(playerTile, new Vector2(sideTile.X, sideTile.Y));
+                        if (dist > 3.5f) continue;
+
+                        var annex = context.WorldState.FindAnnex(curLoc, side);
+                        string badgeText;
+                        Color badgeColor;
+
+                        if (annex != null)
+                        {
+                            var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                            badgeText = $"🌲 {template.DisplayName} (Caminar para entrar)";
+                            badgeColor = Color.Cyan;
+                        }
+                        else if (isMine)
+                        {
+                            badgeText = "[E / Clic o Caminar] Adquirir Anexo";
+                            badgeColor = Color.LightGreen;
+                        }
+                        else
+                        {
+                            badgeText = "🚫 Ampliación no disponible";
+                            badgeColor = Color.LightGray;
+                        }
+
+                        float bounce = (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f;
+                        float centerX = sideTile.X * 64f + 32f;
+                        float centerY = sideTile.Y * 64f - 24f + bounce;
+                        Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(centerX, centerY));
+                        DrawDoorBadge(e.SpriteBatch, badgeText, screenPos, badgeColor);
+                    }
+                }
             }
         }
 

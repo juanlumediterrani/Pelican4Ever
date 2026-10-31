@@ -20,6 +20,7 @@ namespace Pelican4Ever.Models
     {
         public const string ClaimDoorRequest = "ClaimDoorRequest";
         public const string ChangePolicyRequest = "ChangePolicyRequest";
+        public const string BuyAnnexRequest = "BuyAnnexRequest";
         public const string SyncDoorsState = "SyncDoorsState";
         public const string RequestDoorsSync = "RequestDoorsSync";
     }
@@ -28,6 +29,13 @@ namespace Pelican4Ever.Models
     {
         public string DoorId { get; set; } = string.Empty;
         public string FarmType { get; set; } = "Standard";
+    }
+
+    public class BuyAnnexPayload
+    {
+        public string ResidenceSlotId { get; set; } = string.Empty;
+        public string Side { get; set; } = string.Empty;
+        public string TemplateId { get; set; } = string.Empty;
     }
 
     public class ChangePolicyPayload

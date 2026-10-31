@@ -109,6 +109,9 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations.</summary>
         public int FarmSlotCount { get; set; } = 4;
 
+        /// <summary>Límite máximo de anexos adquiribles por cada residencia (por defecto 2, uno por cada salida libre).</summary>
+        public int MaxAnnexesPerResidence { get; set; } = 2;
+
         // ─────────────────────────── Panel de Administración y API REST ───────────────────────────
 
         /// <summary>Puerto HTTP del servidor de administración y Dashboard web (TASK-801 y TASK-802).</summary>
@@ -173,6 +176,8 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(SpaRegenSeconds)} debe ser > 0.");
             if (FarmSlotCount is < 1 or > 16)
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
+            if (MaxAnnexesPerResidence is < 0 or > 3)
+                errors.Add($"{nameof(MaxAnnexesPerResidence)} debe estar entre 0 y 3.");
             if (AdminApiPort is < 1024 or > 65535)
                 errors.Add($"{nameof(AdminApiPort)} debe situarse entre 1024 y 65535.");
             if (FestivalWindowStart >= FestivalWindowEnd || FestivalWindowEnd > 2550)
