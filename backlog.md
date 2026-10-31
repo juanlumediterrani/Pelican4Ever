@@ -338,7 +338,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Visualización de jugadores conectados, su energía actual y su estado de descanso.
     3. Botones rápidos para lanzar Rollover o limpiar minas con un solo clic.
 
-- [ ] **TASK-803: API de anfitrión v1 y registro de sucesos (para el anfitrión agente de Stardew Voyager)**
+- [x] **TASK-803: API de anfitrión v1 y registro de sucesos (para el anfitrión agente de Stardew Voyager)**
   * **Contexto:** Un agente de OpenClaw mantendrá online la instancia host de Pelican 4Ever y la jugará con Stardew Voyager (plan `docs/planes/pelican-anfitrion-20261031.md` y tareas SV-122 a SV-131 de ese proyecto). Los deberes del anfitrión (festivales, ceremonias, anuncios, supervisión del rollover) los hará por esta API, no con el control físico del jugador.
   * **Análisis Técnico:**
     - **Endurecer la API actual antes de ampliarla** (revisión del 2026-10-31 de `AdminApiModule.cs`):
@@ -347,7 +347,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - el token por defecto (`pelican4ever_secret_admin_token`) está en el código;
       - cada petición se atiende en un hilo del `ThreadPool` y las acciones tocan el juego desde ahí (`/api/rollover` llama a `Game1.PassOutNewDay()` fuera del hilo del juego).
 
-      Cambios: escuchar solo en `127.0.0.1` salvo configuración explícita, exigir el token también para el panel, rechazar arrancar con el token por defecto y ejecutar toda acción en una cola atendida en `UpdateTicked`.
+      Cambios: escuchar solo en `127.0.0.1` salvo configuración explícita (`AdminApiBindAllInterfaces`), exigir el token también para el panel (`AdminApiLogic.CheckAccess`), rechazar arrancar con el token por defecto (`AdminApiLogic.IsTokenConfiguredSecurely`) y ejecutar toda acción en una cola atendida en `UpdateTicked` (`MainThreadActionQueue`).
     - **Espacio versionado `/api/v1/host/`:**
       - `GET clock`: hora del juego y real, madrugada, próximo rollover, y resultado y copia del último.
       - `GET players`: conectados, ubicación, residencia, si están en el festival y su `PlayerRecord` (descanso y saciedad).
@@ -356,7 +356,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - `POST festival/ceremony`: ceremonia de TASK-702.
       - `POST announce`: aviso por chat o en pantalla.
       - `POST rest`: descanso del host (TASK-804).
-    - **Registro de sucesos `GET events?since=N`:** lista de solo añadir, con inscripciones, tandas iniciadas y terminadas, rollover iniciado y completado, copia creada, y jugadores conectados y desconectados.
+    - **Registro de sucesos `GET events?since=N`:** lista de solo añadir (`HostEventLog`), con inscripciones, tandas iniciadas y terminadas, rollover iniciado y completado, copia creada, y jugadores conectados y desconectados.
     - **Contrato** documentado en `docs/host-api.md` y probado: cada ruta con su método y su forma de respuesta, sin necesidad de juego (lógica de rutas y modelos en `Pelican4Ever.Core`).
   * **Prioridad:** Alta
   * **Criterios de Aceptación:**
@@ -365,16 +365,16 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     3. Las rutas de `/api/v1/host/` coinciden con `docs/host-api.md` (test de contrato).
     4. Un suceso aparece una sola vez en `events?since=N` y en orden (test).
 
-- [ ] **TASK-804: Modo «anfitrión agente»: descanso sin desconexión y reinicio controlado**
+- [x] **TASK-804: Modo «anfitrión agente»: descanso sin desconexión y reinicio controlado**
   * **Contexto:** Para el anfitrión agente de Stardew Voyager (ver TASK-803). Voyager no pausará ni recargará la partida del servidor; necesita descansar sin salir y, solo por causa mayor, un reinicio que no pille desprevenidos a los jugadores.
   * **Análisis Técnico:**
-    - Opción `AgentHost` en `config.json`.
-    - **Descanso del host:** hoy `BedLogoutModule` registra el descanso y llama a `Game1.ExitToTitle()` para cualquier jugador, también el host, lo que tumba el servidor. Con `AgentHost`, el host registra `RestedOnGameDay` y `LastActiveGameDay` sin salir. El descanso también puede pedirse con `POST /api/v1/host/rest`.
-    - **Reinicio controlado** (`p4e_safe_restart` y `POST /api/v1/host/restart`):
-      1. Avisa a los jugadores con antelación configurable.
-      2. Indica qué progreso se perdería, porque Stardew solo guarda en el cambio de día.
-      3. Reinicia justo después del siguiente guardado salvo que se pida el inmediato.
-      4. Registra el motivo en el registro de sucesos.
+    - Opción `AgentHost` en `config.json` (`ServerConfig.AgentHost`).
+    - **Descanso del host:** hoy `BedLogoutModule` registra el descanso y llama a `Game1.ExitToTitle()` para cualquier jugador, también el host, lo que tumba el servidor. Con `AgentHost`, el host registra `RestedOnGameDay` y `LastActiveGameDay` sin salir (`AgentHostLogic.ApplyRest`). El descanso también puede pedirse con `POST /api/v1/host/rest`.
+    - **Reinicio controlado** (`p4e_safe_restart` y `POST /api/v1/host/restart` coordinados por `SafeRestartCoordinator`):
+      1. Avisa a los jugadores con antelación configurable (`SafeRestartWarningMinutes`).
+      2. Indica qué progreso se perdería, porque Stardew solo guarda en el cambio de día (`ProgressAtRiskDto`).
+      3. Reinicia justo después del siguiente guardado salvo que se pida el inmediato (`WaitingForNextSave`).
+      4. Registra el motivo en el registro de sucesos (`HostEventLog`).
   * **Prioridad:** Alta
   * **Criterios de Aceptación:**
     1. Con `AgentHost`, el host descansa en la cama, queda registrado y sigue conectado; los demás jugadores se desconectan como hoy.

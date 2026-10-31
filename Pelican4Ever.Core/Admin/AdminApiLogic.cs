@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using Pelican4Ever.Core.Config;
 
 namespace Pelican4Ever.Core.Admin
 {
+    public sealed record ApiAccessCheckResult(bool Allowed, int StatusCode, string ErrorMessage);
+
     public class ServerStatusDto
     {
         public string ServerVersion { get; set; } = string.Empty;
@@ -48,10 +51,41 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
-    /// Lógica de dominio pura para autenticación y respuestas del API de administración (TASK-801 y TASK-802).
+    /// Lógica de dominio pura para autenticación y respuestas del API de administración (TASK-801, TASK-802 y TASK-803).
     /// </summary>
     public static class AdminApiLogic
     {
+        /// <summary>
+        /// Comprueba si el token configurado es seguro para arrancar el servidor HTTP.
+        /// Rechaza tokens vacíos o iguales al token por defecto (<see cref="ServerConfig.DefaultInsecureAdminToken"/>) (TASK-803).
+        /// </summary>
+        public static bool IsTokenConfiguredSecurely(string? configuredToken)
+        {
+            if (string.IsNullOrWhiteSpace(configuredToken))
+                return false;
+
+            string trimmed = configuredToken.Trim();
+            return !string.Equals(trimmed, ServerConfig.DefaultInsecureAdminToken, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Devuelve los prefijos de escucha para <c>HttpListener</c>.
+        /// Por defecto solo escucha en loopback (<c>127.0.0.1</c> y <c>localhost</c>) salvo que se habilite <paramref name="bindAllInterfaces"/> (TASK-803).
+        /// </summary>
+        public static IReadOnlyList<string> GetListenerPrefixes(int port, bool bindAllInterfaces = false)
+        {
+            if (bindAllInterfaces)
+            {
+                return new[] { $"http://*:{port}/" };
+            }
+
+            return new[]
+            {
+                $"http://127.0.0.1:{port}/",
+                $"http://localhost:{port}/"
+            };
+        }
+
         /// <summary>
         /// Valida la cabecera HTTP de autorización con formato Bearer.
         /// </summary>
@@ -71,6 +105,39 @@ namespace Pelican4Ever.Core.Admin
             }
 
             return string.Equals(trimmed, expectedToken, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Evalúa el acceso tanto para el panel (<c>GET /</c>, <c>GET /dashboard</c>) como para cualquier ruta <c>/api/*</c> (TASK-803).
+        /// Sin token válido o si el servidor tiene el token por defecto, responde 401.
+        /// </summary>
+        public static ApiAccessCheckResult CheckAccess(
+            string path,
+            string? authHeader,
+            string? queryToken,
+            string? configuredToken)
+        {
+            if (!IsTokenConfiguredSecurely(configuredToken))
+            {
+                return new ApiAccessCheckResult(
+                    Allowed: false,
+                    StatusCode: 401,
+                    ErrorMessage: "No autorizado: el token de administración no está configurado de forma segura.");
+            }
+
+            string expected = configuredToken!.Trim();
+            bool validHeader = IsAuthorized(authHeader, expected);
+            bool validQuery = !string.IsNullOrWhiteSpace(queryToken) && IsAuthorized(queryToken, expected);
+
+            if (!validHeader && !validQuery)
+            {
+                return new ApiAccessCheckResult(
+                    Allowed: false,
+                    StatusCode: 401,
+                    ErrorMessage: "No autorizado: se requiere un token Bearer válido.");
+            }
+
+            return new ApiAccessCheckResult(Allowed: true, StatusCode: 200, ErrorMessage: string.Empty);
         }
 
         /// <summary>

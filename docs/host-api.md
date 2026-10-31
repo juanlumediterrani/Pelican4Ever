@@ -1,0 +1,255 @@
+# API de Anfitrión v1 (`Pelican 4Ever` — `TASK-803` y `TASK-804`)
+
+Contrato HTTP local para el anfitrión agente de **Stardew Voyager** / **OpenClaw**. Permite supervisar el reloj en tiempo real, consultar el estado de los vecinos, coordinar tandas y ceremonias de festivales, registrar el descanso diario del host sin desconectar la sesión y programar reinicios controlados.
+
+---
+
+## 1. Seguridad, Red y Ejecución en el Hilo Principal
+
+1. **Escucha solo en loopback por defecto:**
+   - Por defecto (`AdminApiBindAllInterfaces: false` en `config.json`), el servidor escucha únicamente en `http://127.0.0.1:{AdminApiPort}/` y `http://localhost:{AdminApiPort}/`.
+   - No se emite la cabecera `Access-Control-Allow-Origin: *`.
+2. **Rechazo de arranque con el token por defecto:**
+   - Si `AdminApiToken` está vacío o conserva el valor por defecto `pelican4ever_secret_admin_token`, `AdminApiModule` **no arranca** el `HttpListener` y registra un error en el log de SMAPI.
+3. **Autenticación obligatoria en todas las rutas:**
+   - Tanto el panel web (`GET /`, `GET /dashboard`) como cualquier ruta `/api/*` y `/api/v1/host/*` exigen `Authorization: Bearer <AdminApiToken>` (o `?token=<AdminApiToken>` para el panel web).
+   - Sin token válido, el servidor responde `401 Unauthorized`.
+4. **Despacho en el hilo principal del juego (`UpdateTicked`):**
+   - Toda consulta del mundo o acción mutadora encolada desde un hilo HTTP se ejecuta en el hilo principal de Stardew Valley a través de `MainThreadActionQueue.Drain()` durante el evento `GameLoop.UpdateTicked`.
+
+---
+
+## 2. Rutas del Espacio Versionado `/api/v1/host/`
+
+### `GET /api/v1/host/clock`
+
+Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`IsNightHold`), el instante del próximo Rollover y el resultado y copia de seguridad del último Rollover.
+
+**Respuesta `200 OK` (`HostClockDto`):**
+```json
+{
+  "RealTimeUtc": "2026-10-31T15:00:00.0000000Z",
+  "LocalTime": "2026-10-31T16:00:00",
+  "TimeZoneId": "Europe/Madrid",
+  "GameTimeOfDay": 1600,
+  "TotalGameDays": 12,
+  "Year": 1,
+  "Season": "spring",
+  "DayOfMonth": 13,
+  "IsNightHold": false,
+  "NextRolloverLocalTime": "2026-11-01T06:00:00",
+  "SecondsUntilNextRollover": 50400,
+  "LastRolloverGameDay": 11,
+  "LastRolloverOutcomeSummary": "rested=3, penalized=0, untouched=1",
+  "LastBackupFileName": "PelicanValley_20261031_060000",
+  "LastBackupCreatedUtc": "2026-10-31T05:00:00.0000000Z"
+}
+```
+
+### `GET /api/v1/host/players`
+
+Devuelve los jugadores conectados y registrados, su ubicación y coordenadas actuales, su residencia asignada, si están dentro del festival de hoy y su `PlayerRecord` completo (estado de descanso y saciedad).
+
+**Respuesta `200 OK` (`HostPlayersResponseDto`):**
+```json
+{
+  "TotalOnline": 2,
+  "TotalRegistered": 4,
+  "Players": [
+    {
+      "PlayerId": 1234567890,
+      "Name": "VoyagerHost",
+      "IsOnline": true,
+      "IsHost": true,
+      "LocationName": "Town",
+      "TileX": 28,
+      "TileY": 67,
+      "ResidenceSlotId": "Pelican4Ever_Farm_01",
+      "ResidenceDoorId": "Town_Door_01",
+      "ResidenceFarmType": "Standard",
+      "InFestival": false,
+      "SleepState": "Rested",
+      "LastActiveGameDay": 12,
+      "RestedOnGameDay": 12,
+      "LastOutcome": "Rested",
+      "SatietyUsed": 40,
+      "WellFedBuffsUsed": 1,
+      "SpaEnergyUsed": 0,
+      "SatietyGameDay": 12,
+      "PendingMarketGold": 0
+    }
+  ]
+}
+```
+
+### `GET /api/v1/host/festival`
+
+Devuelve el estado del festival de hoy, su ventana horaria, ubicación, si dispone de evento principal o ceremonia en vivo, jugadores presentes en el recinto, inscritos a la próxima tanda, tandas ejecutadas y quiénes ya han participado hoy.
+
+**Respuesta `200 OK` (`HostFestivalDto`):**
+```json
+{
+  "IsFestivalToday": true,
+  "FestivalId": "festival_spring13",
+  "FestivalName": "Festival del Huevo",
+  "Season": "spring",
+  "DayOfMonth": 13,
+  "LocationName": "Town",
+  "WindowStart": 1800,
+  "WindowEnd": 2350,
+  "IsWindowOpen": true,
+  "HasMainEvent": true,
+  "IsCeremonyFestival": false,
+  "PresentPlayerIds": [1234567890, 987654321],
+  "SignedUpPlayerIds": [987654321],
+  "PlayedPlayerIds": [],
+  "RunsCount": 0
+}
+```
+
+### `POST /api/v1/host/festival/start`
+
+Equivale a `/evento empezar` en `FestivalParticipationModule`. Cierra la inscripción actual y arranca la siguiente tanda del evento principal únicamente para los jugadores apuntados.
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "[Festival] Empieza el evento (tanda #1) con 2 participantes.",
+  "ExecutedOnThreadId": 1,
+  "EventId": 14
+}
+```
+
+### `POST /api/v1/host/festival/ceremony`
+
+Dispara la ceremonia comunitaria en vivo (`TASK-702`, Luau o Danza de las Medusas Lunares) con todos los vecinos presentes en el recinto del festival.
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "Ceremonia iniciada para 3 vecino(s) en festival_summer11.",
+  "ExecutedOnThreadId": 1,
+  "EventId": 15
+}
+```
+
+### `POST /api/v1/host/announce`
+
+Envía un aviso global a los jugadores conectados por chat, HUD o ambos canales, y lo registra en el log de sucesos.
+
+**Cuerpo de petición (`HostAnnounceRequestDto`):**
+```json
+{
+  "message": "La búsqueda de huevos comenzará en 5 minutos.",
+  "channel": "both"
+}
+```
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "Anuncio emitido (both).",
+  "ExecutedOnThreadId": 1,
+  "EventId": 16
+}
+```
+
+### `POST /api/v1/host/rest`
+
+Registra el descanso diario del jugador anfitrión (`RestedOnGameDay` y `LastActiveGameDay`) sin llamar a `Game1.ExitToTitle()` ni desconectar la sesión (`TASK-804`).
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "Descanso registrado. Modo anfitrión agente activo: el servidor permanece en línea.",
+  "ExecutedOnThreadId": 1,
+  "EventId": 17
+}
+```
+
+### `POST /api/v1/host/restart`
+
+Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente al comando de consola `p4e_safe_restart`.
+- Avisa a los jugadores conectados con antelación configurable (`warningMinutes`).
+- Calcula e informa del progreso diario no guardado en riesgo (`ProgressAtRisk`), dado que Stardew Valley solo guarda al cambiar de día.
+- Por defecto (`immediate: false`), espera hasta justo después del siguiente guardado/Rollover (`WaitingForNextSave: true`).
+- Si se solicita `immediate: true` por causa mayor, ejecuta el reinicio tras los minutos de preaviso indicados.
+
+**Cuerpo de petición (`HostRestartRequestDto`):**
+```json
+{
+  "reason": "Actualización de mantenimiento",
+  "immediate": false,
+  "warningMinutes": 5,
+  "cancel": false
+}
+```
+
+**Respuesta `200 OK` (`SafeRestartStatusDto`):**
+```json
+{
+  "IsPending": true,
+  "Mode": "after_next_save",
+  "Reason": "Actualización de mantenimiento",
+  "Immediate": false,
+  "WaitingForNextSave": true,
+  "WarningMinutes": 5,
+  "RequestedAtUtc": "2026-10-31T15:10:00.0000000Z",
+  "ExecuteNotBeforeUtc": null,
+  "WarningAnnouncement": "[Reinicio Controlado] El servidor se reiniciará justo después del próximo guardado/Rollover (preaviso de 5 min)...",
+  "ProgressAtRisk": {
+    "CurrentGameDay": 12,
+    "CurrentGameTime": 1430,
+    "GameMinutesSinceMorning": 510,
+    "OnlinePlayersCount": 2,
+    "UnrestedActivePlayersCount": 1,
+    "WouldLoseUnsavedDayProgress": true,
+    "Summary": "Progreso no guardado del día 12 (8h 30m desde las 06:00, 2 jugador(es) conectado(s), 1 sin descansar hoy). Stardew Valley solo guarda al cambiar de día (Rollover)."
+  }
+}
+```
+
+### `GET /api/v1/host/events?since=N`
+
+Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados.
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado y completado (`rollover.started`, `rollover.completed`), copia de seguridad creada (`backup.created`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
+
+**Respuesta `200 OK` (`HostEventsResponseDto`):**
+```json
+{
+  "SinceId": 0,
+  "LastEventId": 2,
+  "Events": [
+    {
+      "Id": 1,
+      "Type": "player.connected",
+      "TimestampUtc": "2026-10-31T15:01:00.0000000Z",
+      "GameDay": 12,
+      "GameTime": 1500,
+      "Summary": "Jugador conectado: Alex",
+      "Data": {
+        "playerId": 987654321,
+        "playerName": "Alex"
+      }
+    },
+    {
+      "Id": 2,
+      "Type": "festival.signup",
+      "TimestampUtc": "2026-10-31T15:02:00.0000000Z",
+      "GameDay": 12,
+      "GameTime": 1500,
+      "Summary": "Alex se apuntó a festival_spring13.",
+      "Data": {
+        "festivalId": "festival_spring13",
+        "playerId": 987654321,
+        "playerName": "Alex",
+        "signedUpCount": 1
+      }
+    }
+  ]
+}
+```

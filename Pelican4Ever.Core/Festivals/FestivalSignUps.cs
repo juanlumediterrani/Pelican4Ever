@@ -40,6 +40,12 @@ namespace Pelican4Ever.Core.Festivals
         /// <summary>Apuntados a la próxima tanda del festival actual.</summary>
         public IReadOnlyCollection<long> Participants => signedUp;
 
+        /// <summary>Jugadores que ya han participado en alguna tanda del festival actual.</summary>
+        public IReadOnlyCollection<long> PlayedPlayers => played;
+
+        /// <summary>Número de tandas iniciadas en el festival actual.</summary>
+        public int RunsCount => runs;
+
         public string FestivalId => festivalId;
 
         public SignUpResult SetSignedUp(string festival, long playerId, bool join)

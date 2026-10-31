@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Framework;
@@ -21,6 +23,10 @@ namespace Pelican4Ever.Modules
         private bool warned5 = false;
         private bool warned1 = false;
         private int lastProcessedDay = -1;
+
+        public static string LastRolloverOutcomeSummary { get; private set; } = string.Empty;
+        public static string LastBackupFileName { get; private set; } = string.Empty;
+        public static string LastBackupCreatedUtc { get; private set; } = string.Empty;
 
         public string Name => "DailyRollover";
 
@@ -59,6 +65,9 @@ namespace Pelican4Ever.Modules
             // Evaluar estado de descanso y penalizaciones para todos los jugadores registrados
             var worldState = context.WorldState;
             var cfg = context.Config;
+            int restedCount = 0;
+            int penalizedCount = 0;
+            int untouchedCount = 0;
 
             foreach (var kvp in worldState.Players)
             {
@@ -66,6 +75,19 @@ namespace Pelican4Ever.Modules
                 bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == record.UniqueMultiplayerID);
                 RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline);
                 SleepPolicy.Commit(record, outcome);
+
+                switch (outcome)
+                {
+                    case RolloverOutcome.Rested:
+                        restedCount++;
+                        break;
+                    case RolloverOutcome.Penalized:
+                        penalizedCount++;
+                        break;
+                    default:
+                        untouchedCount++;
+                        break;
+                }
 
                 // Si el jugador está conectado o en la partida, ajustar energía y aplicar gasto médico si fue penalizado
                 Farmer? farmer = Game1.GetPlayer(record.UniqueMultiplayerID);
@@ -90,6 +112,7 @@ namespace Pelican4Ever.Modules
             }
 
             worldState.LastRolloverGameDay = endedDay;
+            LastRolloverOutcomeSummary = $"rested={restedCount}, penalized={penalizedCount}, untouched={untouchedCount}";
 
             // Congelar caída de amistad por inactividad para jugadores desconectados
             FreezeFriendshipDecayForOfflinePlayers();
@@ -97,11 +120,29 @@ namespace Pelican4Ever.Modules
             // Crear copia de seguridad rotativa del guardado
             CreateSaveBackup();
 
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.RolloverCompleted,
+                newDay,
+                Game1.timeOfDay,
+                $"Rollover completado para día cerrado {endedDay} ({LastRolloverOutcomeSummary}).",
+                new Dictionary<string, object?>
+                {
+                    ["closedGameDay"] = endedDay,
+                    ["newGameDay"] = newDay,
+                    ["rested"] = restedCount,
+                    ["penalized"] = penalizedCount,
+                    ["untouched"] = untouchedCount,
+                    ["backupFileName"] = LastBackupFileName
+                });
+
             // Reiniciar banderas de aviso para el próximo rollover
             warned15 = false;
             warned5 = false;
             warned1 = false;
             lastProcessedDay = newDay;
+
+            // Notificar al coordinador de reinicio controlado (TASK-804) que el guardado ha concluido
+            AdminApiModule.NotifySaveCompleted();
         }
 
         private void OnOneSecondUpdateTicked(object? sender, OneSecondUpdateTickedEventArgs e)
@@ -160,6 +201,12 @@ namespace Pelican4Ever.Modules
         {
             if (context == null) return;
             BroadcastHUDMessage("Atención: Un administrador ha activado el Rollover diario inmediato.", HUDMessage.error_type);
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.RolloverStarted,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                "Rollover diario iniciado manualmente.",
+                new Dictionary<string, object?> { ["trigger"] = "manual", ["gameDay"] = Game1.Date.TotalDays });
             try
             {
                 Game1.PassOutNewDay();
@@ -172,6 +219,12 @@ namespace Pelican4Ever.Modules
 
         private void ExecuteRollover()
         {
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.RolloverStarted,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                "Rollover diario programado iniciado.",
+                new Dictionary<string, object?> { ["trigger"] = "scheduled", ["gameDay"] = Game1.Date.TotalDays });
             try
             {
                 // Disparo de la transición nativa de cambio de día
@@ -252,13 +305,28 @@ namespace Pelican4Ever.Modules
                     string backupDir = Path.Combine(Constants.DataPath, "Pelican4Ever_Backups");
                     Directory.CreateDirectory(backupDir);
 
-                    string dest = Path.Combine(backupDir, $"{Constants.SaveFolderName}_{DateTime.Now:yyyyMMdd_HHmmss}");
+                    string backupFolderName = $"{Constants.SaveFolderName}_{DateTime.Now:yyyyMMdd_HHmmss}";
+                    string dest = Path.Combine(backupDir, backupFolderName);
                     Directory.CreateDirectory(dest);
 
                     foreach (string file in Directory.GetFiles(savesPath))
                     {
                         File.Copy(file, Path.Combine(dest, Path.GetFileName(file)), overwrite: true);
                     }
+
+                    LastBackupFileName = backupFolderName;
+                    LastBackupCreatedUtc = DateTimeOffset.UtcNow.ToString("O");
+
+                    AdminApiModule.EventLog.Append(
+                        HostEventTypes.BackupCreated,
+                        Game1.Date.TotalDays,
+                        Game1.timeOfDay,
+                        $"Copia de seguridad creada: {backupFolderName}",
+                        new Dictionary<string, object?>
+                        {
+                            ["backupName"] = backupFolderName,
+                            ["createdAtUtc"] = LastBackupCreatedUtc
+                        });
 
                     // Limitar a los 7 backups más recientes
                     var oldBackups = new DirectoryInfo(backupDir).GetDirectories()

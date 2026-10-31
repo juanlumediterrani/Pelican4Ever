@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Festivals;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -162,6 +163,21 @@ namespace Pelican4Ever.Modules
         /// <summary>El evento del festival terminó para el jugador local (salida o final del evento principal).</summary>
         public static void OnFestivalEventEnded()
         {
+            if (Context.IsMainPlayer && activeRun != null)
+            {
+                AdminApiModule.EventLog.Append(
+                    HostEventTypes.FestivalRunEnded,
+                    Game1.Date.TotalDays,
+                    Game1.timeOfDay,
+                    $"Tanda #{activeRun.RunId} finalizada en {activeRun.FestivalId}.",
+                    new Dictionary<string, object?>
+                    {
+                        ["festivalId"] = activeRun.FestivalId,
+                        ["runId"] = activeRun.RunId,
+                        ["participants"] = activeRun.Participants.ToList()
+                    });
+            }
+
             activeRun = null;
             configuredGates.Clear();
             ReportPresence(false);
@@ -349,9 +365,33 @@ namespace Pelican4Ever.Modules
                     Reply(playerId, "Apuntado. El evento empezará cuando el anfitrión lo confirme; puedes seguir paseando por el festival.");
                     if (playerId != Game1.player.UniqueMultiplayerID)
                         Game1.chatBox?.addInfoMessage($"[Festival] {name} se ha apuntado ({SignUps.Participants.Count}). Habla con Lewis o escribe /evento empezar.");
+                    AdminApiModule.EventLog.Append(
+                        HostEventTypes.FestivalSignUp,
+                        Game1.Date.TotalDays,
+                        Game1.timeOfDay,
+                        $"{name} se apuntó a {festivalId}.",
+                        new Dictionary<string, object?>
+                        {
+                            ["festivalId"] = festivalId,
+                            ["playerId"] = playerId,
+                            ["playerName"] = name,
+                            ["signedUpCount"] = SignUps.Participants.Count
+                        });
                     break;
                 case SignUpResult.Left:
                     Reply(playerId, "Te has borrado del evento.");
+                    AdminApiModule.EventLog.Append(
+                        HostEventTypes.FestivalSignUpLeft,
+                        Game1.Date.TotalDays,
+                        Game1.timeOfDay,
+                        $"{name} canceló su inscripción en {festivalId}.",
+                        new Dictionary<string, object?>
+                        {
+                            ["festivalId"] = festivalId,
+                            ["playerId"] = playerId,
+                            ["playerName"] = name,
+                            ["signedUpCount"] = SignUps.Participants.Count
+                        });
                     break;
                 case SignUpResult.AlreadyPlayed:
                     Reply(playerId, "Ya has participado en el evento de este festival hoy.");
@@ -391,21 +431,42 @@ namespace Pelican4Ever.Modules
         /// <summary>Host: cierra la inscripción y arranca la tanda en los clientes de los apuntados.</summary>
         private static void StartRunAsHost()
         {
-            if (context == null || !Context.IsMainPlayer) return;
+            StartRunFromHostApi();
+        }
+
+        /// <summary>Host: arranca la siguiente tanda del evento principal y devuelve el resultado para la API de anfitrión (TASK-803).</summary>
+        public static (bool Started, string Message, long? EventId) StartRunFromHostApi()
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return (false, "Solo el anfitrión puede iniciar tandas del festival.", null);
 
             FestivalRun? run = SignUps.StartRun(TodaysFestivalId());
             if (run == null)
             {
                 Game1.chatBox?.addInfoMessage("[Festival] No hay nadie apuntado al evento.");
-                return;
+                return (false, "No hay ningún jugador apuntado a la tanda del festival.", null);
             }
 
             var payload = new FestivalRunPayload { FestivalId = run.FestivalId, RunId = run.RunId, Participants = run.Participants.ToList() };
             context.Helper.Multiplayer.SendMessage(payload, FestivalParticipationMessages.StartRun, new[] { context.Manifest.UniqueID });
             BroadcastSignUps();
-            Game1.chatBox?.addInfoMessage($"[Festival] Empieza el evento con {run.Participants.Count} participantes.");
+            string msg = $"[Festival] Empieza el evento (tanda #{run.RunId}) con {run.Participants.Count} participantes.";
+            Game1.chatBox?.addInfoMessage(msg);
+
+            HostEventEntry evt = AdminApiModule.EventLog.Append(
+                HostEventTypes.FestivalRunStarted,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"Tanda #{run.RunId} iniciada en {run.FestivalId} con {run.Participants.Count} participante(s).",
+                new Dictionary<string, object?>
+                {
+                    ["festivalId"] = run.FestivalId,
+                    ["runId"] = run.RunId,
+                    ["participants"] = run.Participants.ToList()
+                });
 
             JoinRunIfParticipant(payload);
+            return (true, msg, evt.Id);
         }
 
         /// <summary>Host: arranca una ceremonia comunitaria con los vecinos presentes en el mapa, sin inscripción previa.</summary>
@@ -422,8 +483,78 @@ namespace Pelican4Ever.Modules
             BroadcastSignUps();
             Game1.chatBox?.addInfoMessage($"[Ceremonia] Comienza la ceremonia comunitaria con {run.Participants.Count} vecinos presentes.");
 
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.FestivalCeremonyStarted,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"Ceremonia comunitaria (tanda #{run.RunId}) iniciada en {run.FestivalId} con {run.Participants.Count} vecino(s).",
+                new Dictionary<string, object?>
+                {
+                    ["festivalId"] = run.FestivalId,
+                    ["runId"] = run.RunId,
+                    ["participants"] = run.Participants.ToList()
+                });
+
             JoinRunIfParticipant(payload);
             return true;
+        }
+
+        /// <summary>Host: inicia la ceremonia comunitaria (TASK-702) desde <c>POST /api/v1/host/festival/ceremony</c> (TASK-803).</summary>
+        public static (bool Started, string Message, long? EventId) StartCeremonyFromHostApi()
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return (false, "Solo el anfitrión puede iniciar la ceremonia comunitaria.", null);
+
+            string season = Game1.currentSeason;
+            int day = Game1.dayOfMonth;
+            if (!CeremonyLogic.IsCeremonyFestival(season, day))
+                return (false, $"Hoy ({season}{day}) no es un festival de ceremonia comunitaria (Luau / Medusas).", null);
+
+            IReadOnlyList<long> attendees = PlayersInFestival();
+            if (attendees.Count == 0)
+                return (false, "No hay vecinos presentes en el recinto del festival para iniciar la ceremonia.", null);
+
+            string festId = TodaysFestivalId();
+            bool started = StartCeremonyRun(festId, attendees);
+            if (!started)
+                return (false, "Todos los vecinos presentes ya han participado en la ceremonia de hoy.", null);
+
+            return (true, $"Ceremonia iniciada para {attendees.Count} vecino(s) en {festId}.", AdminApiModule.EventLog.LastEventId);
+        }
+
+        /// <summary>Devuelve el estado completo del festival del día para <c>GET /api/v1/host/festival</c> (TASK-803).</summary>
+        public static HostFestivalDto GetHostFestivalSnapshot()
+        {
+            string season = Game1.currentSeason ?? "spring";
+            int day = Game1.dayOfMonth;
+            bool isFestival = Utility.isFestivalDay(day, Game1.season);
+            string festId = isFestival ? TodaysFestivalId() : string.Empty;
+            string festName = Game1.CurrentEvent?.FestivalName ?? (isFestival ? festId : string.Empty);
+            string locationName = Game1.whereIsTodaysFest ?? string.Empty;
+            int winStart = context?.Config.FestivalWindowStart ?? 1800;
+            int winEnd = context?.Config.FestivalWindowEnd ?? 2350;
+            bool isWindowOpen = isFestival && Game1.timeOfDay >= winStart && Game1.timeOfDay <= winEnd;
+            bool isCeremony = isFestival && CeremonyLogic.IsCeremonyFestival(season, day);
+            bool hasMainEvent = isFestival && !string.Equals($"{season}{day}", "fall16", StringComparison.OrdinalIgnoreCase);
+
+            return new HostFestivalDto
+            {
+                IsFestivalToday = isFestival,
+                FestivalId = festId,
+                FestivalName = festName,
+                Season = season,
+                DayOfMonth = day,
+                LocationName = locationName,
+                WindowStart = winStart,
+                WindowEnd = winEnd,
+                IsWindowOpen = isWindowOpen,
+                HasMainEvent = hasMainEvent,
+                IsCeremonyFestival = isCeremony,
+                PresentPlayerIds = isFestival ? PlayersInFestival().ToList() : new List<long>(),
+                SignedUpPlayerIds = SignUps.Participants.ToList(),
+                PlayedPlayerIds = SignUps.PlayedPlayers.ToList(),
+                RunsCount = SignUps.RunsCount
+            };
         }
 
         /// <summary>Si el jugador local está en el festival y apuntado a la tanda, empieza su evento principal.</summary>

@@ -114,11 +114,29 @@ namespace Pelican4Ever.Core.Config
 
         // ─────────────────────────── Panel de Administración y API REST ───────────────────────────
 
+        /// <summary>Valor por defecto inseguro del token; el servidor HTTP rechazará arrancar si no se cambia (TASK-803).</summary>
+        public const string DefaultInsecureAdminToken = "pelican4ever_secret_admin_token";
+
         /// <summary>Puerto HTTP del servidor de administración y Dashboard web (TASK-801 y TASK-802).</summary>
         public int AdminApiPort { get; set; } = 8085;
 
         /// <summary>Token Bearer para autenticación en la API de administración.</summary>
-        public string AdminApiToken { get; set; } = "pelican4ever_secret_admin_token";
+        public string AdminApiToken { get; set; } = DefaultInsecureAdminToken;
+
+        /// <summary>
+        /// Si es false (por defecto), la API HTTP escucha únicamente en 127.0.0.1 / localhost (TASK-803).
+        /// Si es true, escucha en todas las interfaces de red (<c>http://*:{port}/</c>).
+        /// </summary>
+        public bool AdminApiBindAllInterfaces { get; set; } = false;
+
+        /// <summary>
+        /// Modo «anfitrión agente» (TASK-804): el host puede registrar su descanso diario en la cama o vía API
+        /// sin desconectarse ni cerrar la partida (<c>Game1.ExitToTitle</c>).
+        /// </summary>
+        public bool AgentHost { get; set; } = false;
+
+        /// <summary>Minutos de antelación por defecto para avisar a los jugadores antes de un reinicio controlado (TASK-804).</summary>
+        public int SafeRestartWarningMinutes { get; set; } = 5;
 
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
