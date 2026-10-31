@@ -18,6 +18,7 @@ namespace Pelican4Ever.Modules
         public const string SignUpsSync = "FestivalSignUpsSync";
         public const string SignUpReply = "FestivalSignUpReply";
         public const string StartRun = "FestivalStartRun";
+        public const string Presence = "FestivalPresence";
     }
 
     public class FestivalSignUpPayload
@@ -35,6 +36,12 @@ namespace Pelican4Ever.Modules
     public class FestivalReplyPayload
     {
         public string Message { get; set; } = string.Empty;
+    }
+
+    public class FestivalPresencePayload
+    {
+        public string FestivalId { get; set; } = string.Empty;
+        public bool Present { get; set; }
     }
 
     public class FestivalRunPayload
@@ -56,6 +63,9 @@ namespace Pelican4Ever.Modules
 
         /// <summary>Inscripciones; solo se usan en el host.</summary>
         private static readonly FestivalSignUps SignUps = new();
+
+        /// <summary>Quién está ahora dentro del festival, según avisa cada cliente; solo se usa en el host.</summary>
+        private static readonly FestivalPresence Presence = new();
 
         /// <summary>Apuntados según el host, para mostrarlos en cada cliente.</summary>
         private static List<long> knownParticipants = new();
@@ -80,6 +90,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.GameLoop.DayStarted += (_, _) => ResetState();
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => ResetState();
+            ctx.Helper.Events.Multiplayer.PeerDisconnected += (_, e) => Presence.Leave(e.Peer.PlayerID);
             ctx.Helper.Events.GameLoop.GameLaunched += (_, _) => RegisterChatCommands();
             ApplyHarmonyPatches(ctx.Harmony);
         }
@@ -87,6 +98,7 @@ namespace Pelican4Ever.Modules
         private static void ResetState()
         {
             SignUps.Reset();
+            Presence.Reset();
             knownParticipants = new List<long>();
             activeRun = null;
             configuredGates.Clear();
@@ -152,6 +164,41 @@ namespace Pelican4Ever.Modules
         {
             activeRun = null;
             configuredGates.Clear();
+            ReportPresence(false);
+        }
+
+        /// <summary>El jugador local entra en el evento del festival o sale de él; el host lleva la cuenta.</summary>
+        public static void ReportPresence(bool present)
+        {
+            if (context == null || !Game1.IsMultiplayer)
+                return;
+
+            if (Context.IsMainPlayer)
+            {
+                ApplyPresence(Game1.player.UniqueMultiplayerID, TodaysFestivalId(), present);
+                return;
+            }
+
+            context.Helper.Multiplayer.SendMessage(
+                new FestivalPresencePayload { FestivalId = TodaysFestivalId(), Present = present },
+                FestivalParticipationMessages.Presence,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+            );
+        }
+
+        private static void ApplyPresence(long playerId, string festivalId, bool present)
+        {
+            if (present && festivalId == TodaysFestivalId())
+                Presence.Enter(festivalId, playerId);
+            else if (!present)
+                Presence.Leave(playerId);
+        }
+
+        /// <summary>Host: jugadores que están ahora dentro del festival de hoy.</summary>
+        public static IReadOnlyList<long> PlayersInFestival()
+        {
+            return Presence.Present(TodaysFestivalId());
         }
 
         private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
@@ -183,12 +230,8 @@ namespace Pelican4Ever.Modules
             // Ceremonias comunitarias en vivo (Luau, Medusas): sin inscripción individual
             if (CeremonyLogic.IsCeremonyFestival(season, day))
             {
-                string ceremonyLoc = CeremonyLogic.GetCeremonyLocation(season, day) ?? "Beach";
                 string ceremonyName = CeremonyLogic.GetCeremonyFestivalName(season, day);
-                var attendees = Game1.getOnlineFarmers()
-                    .Where(f => f.isActive() && CeremonyLogic.IsPlayerInCeremonyLocation(f.currentLocation?.Name, ceremonyLoc))
-                    .Select(f => f.UniqueMultiplayerID)
-                    .ToList();
+                IReadOnlyList<long> attendees = PlayersInFestival();
 
                 if (Context.IsMainPlayer)
                 {
@@ -430,6 +473,10 @@ namespace Pelican4Ever.Modules
                 case FestivalParticipationMessages.StartRun:
                     if (e.ReadAs<FestivalRunPayload>() is { } run)
                         JoinRunIfParticipant(run);
+                    break;
+                case FestivalParticipationMessages.Presence when Context.IsMainPlayer:
+                    if (e.ReadAs<FestivalPresencePayload>() is { } presence)
+                        ApplyPresence(e.FromPlayerID, presence.FestivalId, presence.Present);
                     break;
             }
         }

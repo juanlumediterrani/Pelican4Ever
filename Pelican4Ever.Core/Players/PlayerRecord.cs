@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Pelican4Ever.Core.Players
 {
@@ -67,6 +68,9 @@ namespace Pelican4Ever.Core.Players
 
         /// <summary>Oro acumulado por ventas en el mercado vecinal mientras el jugador estaba desconectado.</summary>
         public int PendingMarketGold { get; set; }
+
+        /// <summary>Premios de festival ganados y aún no confirmados por su cliente (claves de <c>FestivalPrizeLogic.PrizeKey</c>).</summary>
+        public List<string> PendingFestivalPrizes { get; set; } = new();
 
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;

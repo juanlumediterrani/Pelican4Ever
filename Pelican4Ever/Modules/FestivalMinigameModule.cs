@@ -16,6 +16,13 @@ namespace Pelican4Ever.Modules
     {
         public const string SubmitScore = "SubmitFestivalScore";
         public const string SyncScores = "SyncFestivalScores";
+        public const string GrantPrize = "FestivalGrantPrize";
+        public const string PrizeGranted = "FestivalPrizeGranted";
+    }
+
+    public class FestivalPrizePayload
+    {
+        public string PrizeKey { get; set; } = string.Empty;
     }
 
     public class SubmitFestivalScorePayload
@@ -34,6 +41,12 @@ namespace Pelican4Ever.Modules
         private static bool ceremonyTriggeredToday;
         private static int lastWarningDay = -1;
 
+        /// <summary>Premios recibidos del host que el jugador local aún no ha recogido (se entregan sin menús abiertos).</summary>
+        private static readonly Queue<string> localPrizeQueue = new();
+
+        /// <summary><c>Farmer.modData</c> del ganador: premios ya entregados, para no repetirlos si el aviso llega dos veces.</summary>
+        private const string GrantedPrizesKey = "Pelican4Ever.FestivalPrizesGranted";
+
         public string Name => "FestivalMinigame";
 
         public ModuleSide Side => ModuleSide.Both;
@@ -47,6 +60,8 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.Multiplayer.PeerConnected += OnPeerConnected;
+            ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += (_, _) => GrantQueuedPrizes();
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => localPrizeQueue.Clear();
 
             ApplyHarmonyPatches(ctx.Harmony);
         }
@@ -219,7 +234,6 @@ namespace Pelican4Ever.Modules
             if (Context.IsMainPlayer && CeremonyLogic.IsCeremonyFestival(season, day))
             {
                 string ceremonyName = CeremonyLogic.GetCeremonyFestivalName(season, day);
-                string ceremonyLoc = CeremonyLogic.GetCeremonyLocation(season, day) ?? "Beach";
 
                 // 1. Preaviso único a las 20:45 emitido por el host
                 if (!warningAnnouncedToday && CeremonyLogic.IsWarningWindow(e.NewTime, CeremonyLogic.DefaultCeremonyTime, CeremonyLogic.WarningLeadTimeMinutes))
@@ -232,10 +246,8 @@ namespace Pelican4Ever.Modules
                 if (!ceremonyTriggeredToday && CeremonyLogic.IsCeremonyTime(e.NewTime, CeremonyLogic.DefaultCeremonyTime))
                 {
                     ceremonyTriggeredToday = true;
-                    var attendees = Game1.getOnlineFarmers()
-                        .Where(f => f.isActive() && CeremonyLogic.IsPlayerInCeremonyLocation(f.currentLocation?.Name, ceremonyLoc))
-                        .Select(f => f.UniqueMultiplayerID)
-                        .ToList();
+                    // Presentes según el aviso de cada cliente: dentro del festival el jugador está en la ubicación «Temp»
+                    IReadOnlyList<long> attendees = FestivalParticipationModule.PlayersInFestival();
 
                     if (attendees.Count > 0)
                     {
@@ -272,66 +284,103 @@ namespace Pelican4Ever.Modules
                 winner.RewardAwarded = true;
                 Game1.chatBox?.addMessage($"[Festivales] ¡{winner.PlayerName} ha ganado el minijuego festivo de hoy con {winner.Score} puntos!", new Color(255, 215, 0));
 
-                Farmer? recipient = Game1.GetPlayer(winner.PlayerId);
-                if (recipient != null)
-                {
-                    AwardWinnerPrize(recipient, seasonDay);
-                }
+                QueuePrize(winner.PlayerId, winner.PlayerName, FestivalPrizeLogic.PrizeKey(seasonDay, today));
 
                 BroadcastFestivalSync();
             }
         }
 
-        private static void AwardWinnerPrize(Farmer recipient, string seasonDay)
+        /// <summary>
+        /// Host: deja el premio pendiente en el registro del ganador y se lo envía a su cliente si está conectado.
+        /// El inventario y el <c>mailReceived</c> de un jugador remoto los controla su cliente, así que el premio no
+        /// se añade desde el host; queda pendiente hasta que el cliente confirma, también si estaba desconectado.
+        /// </summary>
+        private static void QueuePrize(long playerId, string playerName, string prizeKey)
         {
-            List<Item> prizes = new();
-            string norm = FestivalScoreLogic.NormalizeFestivalId(seasonDay);
+            if (context == null) return;
 
-            if (norm == "spring13")
+            var record = context.WorldState.GetOrCreatePlayer(playerId, playerName);
+            record.PendingFestivalPrizes ??= new List<string>();
+            if (!record.PendingFestivalPrizes.Contains(prizeKey))
+                record.PendingFestivalPrizes.Add(prizeKey);
+
+            DeliverPendingPrizes(playerId);
+        }
+
+        private static void DeliverPendingPrizes(long playerId)
+        {
+            if (context == null || !Context.IsMainPlayer) return;
+            if (!context.WorldState.Players.TryGetValue(playerId, out var record) || record.PendingFestivalPrizes is not { Count: > 0 } pending)
+                return;
+
+            if (playerId == Game1.player.UniqueMultiplayerID)
             {
-                if (recipient.mailReceived.Add("Egg Festival"))
-                    prizes.Add(ItemRegistry.Create("(H)4")); // Sombrero de Paja
-                else
-                    prizes.Add(ItemRegistry.Create("(O)PrizeTicket"));
-            }
-            else if (norm == "winter8")
-            {
-                if (recipient.mailReceived.Add("Ice Festival"))
-                {
-                    prizes.Add(ItemRegistry.Create("(H)17")); // Gorra de Marinero
-                    prizes.Add(ItemRegistry.Create("(O)687")); // Hilandero vestido
-                    prizes.Add(ItemRegistry.Create("(O)691")); // Anzuelo con púa
-                    prizes.Add(ItemRegistry.Create("(O)703")); // Imán
-                }
-                else
-                {
-                    prizes.Add(ItemRegistry.Create("(O)PrizeTicket"));
-                }
-            }
-            else
-            {
-                prizes.Add(ItemRegistry.Create("(O)PrizeTicket"));
+                foreach (string key in pending)
+                    localPrizeQueue.Enqueue(key);
+                return;
             }
 
-            foreach (Item prize in prizes)
+            if (!Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == playerId))
+                return;
+
+            foreach (string key in pending)
             {
-                if (recipient.isActive())
-                {
-                    recipient.addItemByMenuIfNecessary(prize);
-                }
-                else
-                {
-                    if (!recipient.addItemToInventoryBool(prize))
-                    {
-                        recipient.mailForTomorrow.Add($"%item {prize.QualifiedItemId} %%[Pelican 4Ever] ¡Premio por ganar el minijuego del festival!");
-                    }
-                }
+                context.Helper.Multiplayer.SendMessage(
+                    new FestivalPrizePayload { PrizeKey = key },
+                    FestivalMessages.GrantPrize,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { playerId }
+                );
+            }
+        }
+
+        /// <summary>Entrega en el jugador local los premios recibidos, cuando el mundo está listo y no hay menús abiertos.</summary>
+        private static void GrantQueuedPrizes()
+        {
+            if (context == null || !Context.IsWorldReady || Game1.activeClickableMenu != null || localPrizeQueue.Count == 0)
+                return;
+
+            string key = localPrizeQueue.Dequeue();
+            string granted = Game1.player.modData.TryGetValue(GrantedPrizesKey, out string? list) ? list : string.Empty;
+
+            if (!FestivalPrizeLogic.ListContains(granted, key) && FestivalPrizeLogic.FestivalOfKey(key) is { } festivalId)
+            {
+                string? flag = FestivalPrizeLogic.FirstWinMailFlag(festivalId);
+                bool firstWin = flag != null && Game1.player.mailReceived.Add(flag);
+                List<Item> prizes = FestivalPrizeLogic.PrizeItems(festivalId, firstWin)
+                    .Select(id => ItemRegistry.Create(id))
+                    .ToList();
+
+                Game1.player.modData[GrantedPrizesKey] = FestivalPrizeLogic.AddToList(granted, key);
+                Game1.player.addItemsByMenuIfNecessary(prizes);
+                Game1.addHUDMessage(new HUDMessage("¡Has recibido el premio oficial por ganar el minijuego del festival!", HUDMessage.newQuest_type));
             }
 
-            if (recipient.isActive() && recipient.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
+            ConfirmPrize(key);
+        }
+
+        private static void ConfirmPrize(string key)
+        {
+            if (context == null) return;
+
+            if (Context.IsMainPlayer)
             {
-                Game1.addHUDMessage(new HUDMessage("¡Has recibido el premio oficial por ganar el minijuego festivo de hoy!", HUDMessage.newQuest_type));
+                RemovePendingPrize(Game1.player.UniqueMultiplayerID, key);
+                return;
             }
+
+            context.Helper.Multiplayer.SendMessage(
+                new FestivalPrizePayload { PrizeKey = key },
+                FestivalMessages.PrizeGranted,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+            );
+        }
+
+        private static void RemovePendingPrize(long playerId, string key)
+        {
+            if (context != null && context.WorldState.Players.TryGetValue(playerId, out var record))
+                record.PendingFestivalPrizes?.Remove(key);
         }
 
         private void OnPeerConnected(object? sender, PeerConnectedEventArgs e)
@@ -344,6 +393,9 @@ namespace Pelican4Ever.Modules
                     new[] { context.Manifest.UniqueID },
                     new[] { e.Peer.PlayerID }
                 );
+
+                // Premios ganados mientras estaba desconectado
+                DeliverPendingPrizes(e.Peer.PlayerID);
             }
         }
 
@@ -351,6 +403,20 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || e.FromModID != context.Manifest.UniqueID)
                 return;
+
+            if (e.Type == FestivalMessages.GrantPrize && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
+            {
+                if (e.ReadAs<FestivalPrizePayload>() is { } prize && !localPrizeQueue.Contains(prize.PrizeKey))
+                    localPrizeQueue.Enqueue(prize.PrizeKey);
+                return;
+            }
+
+            if (Context.IsMainPlayer && e.Type == FestivalMessages.PrizeGranted)
+            {
+                if (e.ReadAs<FestivalPrizePayload>() is { } granted)
+                    RemovePendingPrize(e.FromPlayerID, granted.PrizeKey);
+                return;
+            }
 
             if (Context.IsMainPlayer && e.Type == FestivalMessages.SubmitScore)
             {

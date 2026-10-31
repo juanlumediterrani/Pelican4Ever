@@ -87,6 +87,8 @@ namespace Pelican4Ever.Modules
             if (!__result || ev?.eventCommands == null || !Game1.IsMultiplayer)
                 return;
 
+            FestivalParticipationModule.ReportPresence(true);
+
             Point tile = Game1.player.TilePoint;
             if (IsBlockedInFestivalMap(ev.eventCommands, tile))
             {
