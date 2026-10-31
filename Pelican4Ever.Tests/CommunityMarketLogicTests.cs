@@ -136,5 +136,38 @@ namespace Pelican4Ever.Tests
 
             Assert.Equal(MarketTransactionStatus.AlreadySold, result.Status);
         }
+
+        [Theory]
+        [InlineData("Town", 58, 70, true)]   // Town fountain center
+        [InlineData("Town", 56, 68, true)]   // Town fountain corner
+        [InlineData("Town", 60, 72, true)]   // Town fountain corner
+        [InlineData("Farm", 66, 15, true)]   // Host Farm plaza center
+        [InlineData("Farm", 64, 14, true)]   // Host Farm plaza corner
+        [InlineData("Farm", 68, 17, true)]   // Host Farm plaza corner
+        [InlineData("Town", 43, 56, false)]  // Pierre's door
+        [InlineData("Town", 44, 57, false)]  // Pierre's door
+        [InlineData("Town", 10, 10, false)]  // Other Town tile
+        [InlineData("Farm", 40, 20, false)]  // Other Farm tile
+        [InlineData("Pelican4Ever_Farm_01", 66, 15, false)] // Private farm slot
+        [InlineData("", 58, 70, false)]      // Empty location
+        [InlineData(null, 58, 70, false)]    // Null location
+        public void IsMarketInteractionTile_TriggersOnlyAtDesignatedPlazas(string? locationName, int tileX, int tileY, bool expected)
+        {
+            bool isMarket = CommunityMarketLogic.IsMarketInteractionTile(locationName, tileX, tileY);
+            Assert.Equal(expected, isMarket);
+        }
+
+        [Theory]
+        [InlineData("Town", 43, 56, true)]   // Pierre's main entrance
+        [InlineData("Town", 40, 55, true)]   // Pierre's entrance zone corner
+        [InlineData("Town", 45, 58, true)]   // Pierre's entrance zone corner
+        [InlineData("Town", 58, 70, false)]  // Fountain plaza
+        [InlineData("Farm", 43, 56, false)]  // Not in Town
+        [InlineData(null, 43, 56, false)]    // Null location
+        public void IsPierresDoorArea_IdentifiesPierreShopThresholdCorrectly(string? locationName, int tileX, int tileY, bool expected)
+        {
+            bool isPierreArea = CommunityMarketLogic.IsPierresDoorArea(locationName, tileX, tileY);
+            Assert.Equal(expected, isPierreArea);
+        }
     }
 }

@@ -30,6 +30,42 @@ namespace Pelican4Ever.Core.Economy
         public const int MaxPrice = 999999;
 
         /// <summary>
+        /// Comprueba si la baldosa pulsada en la ubicación actual corresponde a un punto de interacción del Mercado Vecinal.
+        /// Se ubica en la Plaza Central de Pelican Town (fuente) o en la Plaza Central de la Granja Host.
+        /// </summary>
+        public static bool IsMarketInteractionTile(string? locationName, int tileX, int tileY)
+        {
+            if (string.IsNullOrWhiteSpace(locationName))
+                return false;
+
+            // En Pelican Town: Plaza Central / Fuente del Pueblo (tiles 56..60, Y 68..72)
+            // Completamente alejado de la tienda de Pierre (tiles 40..45, Y 55..58) para no bloquear su entrada.
+            if (string.Equals(locationName, "Town", StringComparison.OrdinalIgnoreCase))
+            {
+                return tileX >= 56 && tileX <= 60 && tileY >= 68 && tileY <= 72;
+            }
+
+            // En la Granja Host (Plaza Central): Punto de interacción cerca del tablón central (tiles 64..68, Y 14..17)
+            if (string.Equals(locationName, "Farm", StringComparison.OrdinalIgnoreCase))
+            {
+                return tileX >= 64 && tileX <= 68 && tileY >= 14 && tileY <= 17;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Determina si las coordenadas corresponden a la entrada o tablón de la tienda de Pierre en Town (tiles 40..45, Y 55..58).
+        /// </summary>
+        public static bool IsPierresDoorArea(string? locationName, int tileX, int tileY)
+        {
+            if (!string.Equals(locationName, "Town", StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return tileX >= 40 && tileX <= 45 && tileY >= 55 && tileY <= 58;
+        }
+
+        /// <summary>
         /// Valida si una nueva oferta cumple con las restricciones de precio y cantidad.
         /// </summary>
         public static (bool Valid, string Error) ValidateNewListing(string itemId, int stack, int priceGold)

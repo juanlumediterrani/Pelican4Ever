@@ -98,11 +98,11 @@ namespace Pelican4Ever.Modules
             if (!e.Button.IsActionButton())
                 return;
 
-            // Interacción cerca del tablón de Pierre en Pelican Town (tiles 40..44, Y 55..58)
-            if (Game1.currentLocation != null && Game1.currentLocation.Name == "Town")
+            // Interacción con el tablón del mercado vecinal en Town Plaza o Farm Central Plaza
+            if (Game1.currentLocation != null)
             {
                 Vector2 grabTile = e.Cursor.GrabTile;
-                if (grabTile.X >= 40 && grabTile.X <= 44 && grabTile.Y >= 55 && grabTile.Y <= 58)
+                if (CommunityMarketLogic.IsMarketInteractionTile(Game1.currentLocation.Name, (int)grabTile.X, (int)grabTile.Y))
                 {
                     OpenMarketMenu();
                     context.Helper.Input.Suppress(e.Button);

@@ -739,11 +739,15 @@ namespace Pelican4Ever.Modules
                 cabin.CreateFarmhand();
             }
 
-            // Asegurar que el interior esté en la lista global de ubicaciones para resolución por nombre
-            if (!Game1.locations.Contains(cabin))
+            // No registrar la Cabin en Game1.locations para evitar duplicación al serializar la partida.
+            // Stardew Valley 1.6 resuelve interiores dinámicamente mediante Building.GetIndoors() y findStructure.
+            if (Game1.locations != null && Game1.locations.Contains(cabin))
             {
-                Game1.locations.Add(cabin);
+                Game1.locations.Remove(cabin);
             }
+
+            // Distribuir de forma óptima el mobiliario interior para evitar que quede apelotonado contra la pared norte
+            CleanAndArrangeResidenceInterior(cabin);
 
             // Despejar puntos de llegada cardinales para que nunca haya ramas, maleza o escombros bloqueando el warp
             farm.removeEverythingFromThisTile(40, 1);
@@ -1025,6 +1029,7 @@ namespace Pelican4Ever.Modules
                                        ?? farm.buildings.FirstOrDefault(b => string.Equals(b.buildingType.Value, "Farmhouse", StringComparison.OrdinalIgnoreCase));
                     if (farmhouse?.GetIndoors() is Cabin cabin)
                     {
+                        CleanAndArrangeResidenceInterior(cabin);
                         int targetX = cabin.warps.Count > 0 ? cabin.warps[0].X : 3;
                         int targetY = cabin.warps.Count > 0 ? cabin.warps[0].Y - 1 : 10;
                         Game1.currentLocation.playSound("doorClose");
@@ -1629,6 +1634,82 @@ namespace Pelican4Ever.Modules
                 ownerId,
                 onlineFarmerIds
             );
+        }
+
+        /// <summary>
+        /// Reordena el mobiliario y objetos de inicio del interior de una residencia (Cabin)
+        /// para garantizar un espacio acogedor, transitable y sin apelotonamiento en la pared norte.
+        /// </summary>
+        public static void CleanAndArrangeResidenceInterior(Cabin cabin)
+        {
+            if (cabin == null) return;
+
+            RepositionResidenceFurniture(cabin);
+            RepositionStarterChests(cabin);
+        }
+
+        private static void RepositionResidenceFurniture(Cabin cabin)
+        {
+            if (cabin == null || cabin.furniture == null) return;
+
+            foreach (var furn in cabin.furniture)
+            {
+                string name = furn.Name ?? string.Empty;
+                int curX = (int)furn.TileLocation.X;
+                int curY = (int)furn.TileLocation.Y;
+
+                if (ResidenceInteriorLogic.IsCrampedNorthWallPlacement(name, curX, curY))
+                {
+                    if (name.Contains("Table", StringComparison.OrdinalIgnoreCase))
+                    {
+                        furn.TileLocation = new Vector2(ResidenceInteriorLogic.DiningTablePlacement.TargetX, ResidenceInteriorLogic.DiningTablePlacement.TargetY);
+                        furn.RecalculateBoundingBox();
+                        furn.updateDrawPosition();
+                    }
+                    else if (name.Contains("Chair", StringComparison.OrdinalIgnoreCase))
+                    {
+                        furn.TileLocation = new Vector2(ResidenceInteriorLogic.DiningChairPlacement.TargetX, ResidenceInteriorLogic.DiningChairPlacement.TargetY);
+                        furn.currentRotation.Value = ResidenceInteriorLogic.DiningChairPlacement.Rotation;
+                        furn.updateRotation();
+                        furn.RecalculateBoundingBox();
+                        furn.updateDrawPosition();
+                    }
+                    else if (name.Contains("TV", StringComparison.OrdinalIgnoreCase))
+                    {
+                        furn.TileLocation = new Vector2(ResidenceInteriorLogic.TvPlacement.TargetX, ResidenceInteriorLogic.TvPlacement.TargetY);
+                        furn.currentRotation.Value = ResidenceInteriorLogic.TvPlacement.Rotation;
+                        furn.updateRotation();
+                        furn.RecalculateBoundingBox();
+                        furn.updateDrawPosition();
+                    }
+                }
+            }
+        }
+
+        private static void RepositionStarterChests(Cabin cabin)
+        {
+            if (cabin == null || cabin.objects == null) return;
+
+            var toMove = new List<KeyValuePair<Vector2, StardewValley.Object>>();
+            foreach (var kvp in cabin.objects.Pairs)
+            {
+                if (ResidenceInteriorLogic.IsWalkwayTile((int)kvp.Key.X, (int)kvp.Key.Y))
+                {
+                    toMove.Add(kvp);
+                }
+            }
+
+            foreach (var kvp in toMove)
+            {
+                cabin.objects.Remove(kvp.Key);
+                Vector2 target = new Vector2(ResidenceInteriorLogic.StarterChestPlacement.TargetX, ResidenceInteriorLogic.StarterChestPlacement.TargetY);
+                if (cabin.objects.ContainsKey(target))
+                {
+                    target = new Vector2(1, 9);
+                }
+                kvp.Value.TileLocation = target;
+                cabin.objects.Add(target, kvp.Value);
+            }
         }
     }
 }
