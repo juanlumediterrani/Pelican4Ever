@@ -398,6 +398,10 @@ namespace Pelican4Ever.Modules
                 {
                     if (Game1.getLocationFromName(slotId) is Farm farm)
                     {
+                        if (assignment != null)
+                        {
+                            ApplyFarmTemplate(farm, assignment.FarmType, regenerate: false);
+                        }
                         EnsureFarmSlotBuildings(farm, assignment);
                         if (assignment == null)
                         {
@@ -740,6 +744,80 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
+        /// Aplica al hueco el mapa de la plantilla elegida. Data/Locations se edita al lanzar el juego, antes de
+        /// cargar el estado, así que todos los huecos nacen con el mapa estándar y hay que corregirlo en el host
+        /// (los clientes recargan el mapa al cambiar <c>mapPath</c>). Con <paramref name="regenerate"/> (hueco recién
+        /// reclamado) recoloca los edificios de inicio y regenera la vegetación según el mapa nuevo.
+        /// Devuelve true si cambió el mapa.
+        /// </summary>
+        public static bool ApplyFarmTemplate(Farm farm, string? farmType, bool regenerate)
+        {
+            if (!Context.IsMainPlayer) return false;
+
+            FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
+            if (string.Equals(farm.mapPath.Value?.Replace('/', '\\'), template.MapPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            farm.mapPath.Value = template.MapPath;
+            farm.reloadMap();
+            farm.mapShippingBinPosition = null;
+            farm.mainFarmhouseEntry = null;
+
+            if (regenerate)
+            {
+                // GetMainFarmHouseEntry toma la posición del edificio existente; la del mapa nuevo sale de su propiedad
+                Point entry = farm.TryGetMapPropertyAs("FarmHouseEntry", out Point parsed) ? parsed : new Point(64, 15);
+                MoveBuilding(farm, "Farmhouse", new Vector2(entry.X - 5, entry.Y - 3));
+                MoveBuilding(farm, "Greenhouse", farm.GetGreenhouseStartLocation());
+                MoveBuilding(farm, "Shipping Bin", farm.GetStarterShippingBinLocation());
+                MoveBuilding(farm, "Pet Bowl", farm.GetStarterPetBowlLocation());
+                farm.mainFarmhouseEntry = null;
+
+                farm.objects.Clear();
+                farm.terrainFeatures.Clear();
+                farm.largeTerrainFeatures.Clear();
+                farm.resourceClumps.Clear();
+                farm.loadObjects();
+            }
+            else
+            {
+                // Hueco ya jugado con otro mapa (reclamos anteriores a este arreglo): se conserva lo que haya,
+                // salvo lo que el mapa nuevo deja en el agua o dentro de un muro
+                bool Blocked(Vector2 tile) => farm.isWaterTile((int)tile.X, (int)tile.Y)
+                    || farm.getTileIndexAt((int)tile.X, (int)tile.Y, "Buildings") != -1;
+
+                foreach (Vector2 tile in farm.objects.Keys.Where(Blocked).ToList())
+                    farm.objects.Remove(tile);
+                foreach (Vector2 tile in farm.terrainFeatures.Keys.Where(Blocked).ToList())
+                    farm.terrainFeatures.Remove(tile);
+                for (int i = farm.largeTerrainFeatures.Count - 1; i >= 0; i--)
+                {
+                    if (Blocked(farm.largeTerrainFeatures[i].Tile))
+                        farm.largeTerrainFeatures.RemoveAt(i);
+                }
+                for (int i = farm.resourceClumps.Count - 1; i >= 0; i--)
+                {
+                    if (Blocked(farm.resourceClumps[i].Tile))
+                        farm.resourceClumps.RemoveAt(i);
+                }
+            }
+
+            farm.updateLayout();
+            context?.Monitor.Log($"[FarmSlotModule] {farm.NameOrUniqueName} usa ahora el mapa {template.MapPath} ({template.Id}).", LogLevel.Info);
+            return true;
+        }
+
+        private static void MoveBuilding(Farm farm, string buildingType, Vector2 tile)
+        {
+            Building? building = farm.getBuildingByType(buildingType);
+            if (building == null) return;
+
+            building.tileX.Value = (int)tile.X;
+            building.tileY.Value = (int)tile.Y;
+            building.updateInteriorWarps();
+        }
+
+        /// <summary>
         /// Asegura que la granja instanciada tenga eliminadas las cabañas automáticas no deseadas,
         /// su edificio Farmhouse principal con interior tipo Cabin dedicado, y warps de entrada/salida conectados.
         /// </summary>
@@ -1043,6 +1121,7 @@ namespace Pelican4Ever.Modules
             if (loc is Farm farmLoc)
             {
                 farmLoc.PublishOwnership(playerId, AccessPolicy.Locked);
+                ApplyFarmTemplate(farmLoc, resolvedType, regenerate: true);
                 EnsureFarmSlotBuildings(farmLoc, assignment);
             }
             else if (loc != null)

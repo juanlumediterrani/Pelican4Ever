@@ -9,6 +9,7 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Menus;
 using StardewValley.Network.Dedicated;
+using StardewValley.Pathfinding;
 
 namespace Pelican4Ever.Modules
 {
@@ -22,6 +23,15 @@ namespace Pelican4Ever.Modules
         public static bool IsNightHold { get; private set; }
         public static TimeSpan ManualTimeOffset { get; set; } = TimeSpan.Zero;
         private static bool timeChatCommandsRegistered;
+
+        /// <summary>Primera sincronización tras cargar la partida: el reloj salta de 0600 a la hora real.</summary>
+        private static bool startupSyncPending;
+
+        /// <summary>Recolocación de aldeanos aplazada porque el salto ocurrió durante un evento o festival.</summary>
+        private static bool villagerCatchUpPending;
+
+        /// <summary>Saltos mayores que esto (3 h) fijan la hora directamente en vez de simular cada tramo.</summary>
+        private const int MaxSimulatedTicks = 18;
 
         public string Name => "RealTimeClock";
 
@@ -41,6 +51,8 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
+            ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => startupSyncPending = Context.IsMainPlayer;
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => startupSyncPending = villagerCatchUpPending = false;
 
             // Comandos para host para forzar o adelantar/retrasar horas (+X, -X, reset)
             ctx.Helper.ConsoleCommands.Add(
@@ -182,7 +194,84 @@ namespace Pelican4Ever.Modules
             {
                 Game1.netWorldState.Value.UpdateFromGame1();
             }
+
+            CatchUpVillagerSchedules(Game1.timeOfDay);
         }
+
+        /// <summary>Fija la hora sin simular los tramos intermedios y pone a los aldeanos donde estarían a esa hora.</summary>
+        private static void JumpClockTo(int timeOfDay)
+        {
+            Game1.timeOfDay = timeOfDay;
+            Game1.netWorldState.Value.UpdateFromGame1();
+            CatchUpVillagerSchedules(timeOfDay);
+        }
+
+        /// <summary>
+        /// Coloca a cada aldeano al final de la última entrada de su horario que ya debería haber empezado.
+        /// Sin esto, tras un salto de reloj se quedan en su posición de las 0600: checkSchedule solo encola la
+        /// entrada de la hora exacta de cada tramo, y los tramos saltados no se vuelven a mirar.
+        /// </summary>
+        public static void CatchUpVillagerSchedules(int timeOfDay)
+        {
+            if (!Context.IsMainPlayer)
+                return;
+
+            // Durante la escena de bienvenida del día 1 o un festival, los NPC no están en su horario: reintentar después
+            villagerCatchUpPending = Game1.isFestival() || Game1.eventUp;
+            if (villagerCatchUpPending)
+                return;
+
+            int moved = 0;
+            Utility.ForEachVillager(npc =>
+            {
+                try
+                {
+                    if (CatchUpSchedule(npc, timeOfDay))
+                        moved++;
+                }
+                catch (Exception ex)
+                {
+                    context?.Monitor.Log($"[RealTimeClockModule] No se pudo poner al día el horario de {npc.Name}: {ex.Message}", LogLevel.Trace);
+                }
+                return true;
+            });
+
+            if (moved > 0)
+                context?.Monitor.Log($"[RealTimeClockModule] {moved} aldeanos recolocados según su horario de las {Game1.getTimeOfDayString(timeOfDay)}.", LogLevel.Info);
+        }
+
+        private static bool CatchUpSchedule(NPC npc, int timeOfDay)
+        {
+            if (npc.Schedule == null || npc.ignoreScheduleToday || npc.IsInvisible)
+                return false;
+
+            int? entryTime = ScheduleCatchUp.LatestEntryAtOrBefore(npc.Schedule.Keys, timeOfDay);
+            if (entryTime == null)
+                return false;
+
+            SchedulePathDescription entry = npc.Schedule[entryTime.Value];
+            GameLocation? target = Game1.getLocationFromName(entry.targetLocationName);
+            if (target == null)
+                return false;
+
+            npc.controller = null;
+            npc.temporaryController = null;
+            npc.queuedSchedulePaths.Clear();
+            npc.Halt();
+            Game1.warpCharacter(npc, target, new Vector2(entry.targetTile.X, entry.targetTile.Y));
+            npc.faceDirection(entry.facingDirection);
+            npc.previousEndPoint = entry.targetTile;
+            npc.lastAttemptedSchedule = timeOfDay;
+
+            // Animación o mensaje de fin de ruta (sentarse, trabajar en el mostrador...), como hace checkSchedule al llegar
+            if (GetRouteEndBehavior?.Invoke(npc, new object?[] { entry.endOfRouteBehavior, entry.endOfRouteMessage }) is PathFindController.endBehavior endBehavior)
+                endBehavior(npc, target);
+
+            return true;
+        }
+
+        private static readonly System.Reflection.MethodInfo? GetRouteEndBehavior =
+            AccessTools.Method(typeof(NPC), "getRouteEndBehaviorFunction");
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
@@ -218,13 +307,26 @@ namespace Pelican4Ever.Modules
             // Sincronizar gameTimeInterval para iluminación ambiental (ms dentro del slot actual de 10 min)
             Game1.gameTimeInterval = reading.MillisecondsIntoSlot;
 
+            bool startup = startupSyncPending;
+            startupSyncPending = false;
+
+            if (villagerCatchUpPending)
+                CatchUpVillagerSchedules(Game1.timeOfDay);
+
             // Si estamos en tramo nocturno congelado (NightHold), mantener la hora tope fija
             if (reading.IsNightHold)
             {
                 if (Game1.timeOfDay != reading.TimeOfDay)
                 {
-                    Game1.timeOfDay = reading.TimeOfDay;
-                    Game1.netWorldState.Value.UpdateFromGame1();
+                    if (startup || GameClock.TicksToReach(Game1.timeOfDay, reading.TimeOfDay) > MaxSimulatedTicks)
+                    {
+                        JumpClockTo(reading.TimeOfDay);
+                    }
+                    else
+                    {
+                        Game1.timeOfDay = reading.TimeOfDay;
+                        Game1.netWorldState.Value.UpdateFromGame1();
+                    }
                 }
                 return;
             }
@@ -243,11 +345,11 @@ namespace Pelican4Ever.Modules
             }
             else if (ticksNeeded > 0)
             {
-                // Si el salto es muy grande (> 3 horas = 18 ticks), ajustamos directamente para evitar spam de eventos
-                if (ticksNeeded > 18)
+                // Al arrancar el servidor o si el salto es muy grande (> 3 horas), ajustamos directamente para evitar
+                // spam de eventos y recolocamos a los aldeanos donde estarían a esa hora
+                if (startup || ticksNeeded > MaxSimulatedTicks)
                 {
-                    Game1.timeOfDay = reading.TimeOfDay;
-                    Game1.netWorldState.Value.UpdateFromGame1();
+                    JumpClockTo(reading.TimeOfDay);
                 }
                 else
                 {
