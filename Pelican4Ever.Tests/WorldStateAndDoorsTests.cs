@@ -156,30 +156,84 @@ public class WorldStateAndDoorsTests
         Assert.Equal(expectedT2Y, t2Y);
     }
 
+    private static DoorAssignment Door(string doorId, string slotId, long ownerId, string farmType = "Standard") => new()
+    {
+        DoorId = doorId,
+        FarmSlotId = slotId,
+        FarmType = farmType,
+        OwnerId = ownerId,
+        Policy = AccessPolicy.Locked
+    };
+
     [Fact]
-    public void SingleResidenceRule_DetectsPlayerAlreadyOwningResidence()
+    public void CheckDoorClaim_RejectsSecondResidenceForSameOwner()
     {
         var state = new ServerWorldState();
-        long playerId = 555666777L;
+        state.Doors["Farm_Portal_01"] = Door("Farm_Portal_01", "Pelican4Ever_Farm_01", 555L);
 
-        // Jugador reclama su primera parcela
-        state.Doors["Farm_Door_01"] = new DoorAssignment
-        {
-            DoorId = "Farm_Door_01",
-            FarmSlotId = "Pelican4Ever_Farm_01",
-            OwnerId = playerId,
-            Policy = AccessPolicy.Locked
-        };
+        Assert.Equal(DoorClaimRejection.AlreadyOwnsResidence, state.CheckDoorClaim(555L, "Farm_Portal_02", "Standard"));
+        Assert.Equal(DoorClaimRejection.None, state.CheckDoorClaim(777L, "Farm_Portal_02", "Standard"));
+    }
 
-        // Verificar que el jugador ya posee una residencia
-        var existing = state.Doors.Values.FirstOrDefault(d => d.OwnerId == playerId);
-        Assert.NotNull(existing);
-        Assert.Equal("Farm_Door_01", existing.DoorId);
+    [Fact]
+    public void CheckDoorClaim_RejectsTakenDoorAndUnknownFarmType()
+    {
+        var state = new ServerWorldState();
+        state.Doors["Farm_Portal_01"] = Door("Farm_Portal_01", "Pelican4Ever_Farm_01", 555L);
 
-        // Intento de reclamar una segunda parcela distinta: debe ser detectado y bloqueado
-        string targetDoorId = "Farm_Door_02";
-        bool alreadyOwnsAnother = state.Doors.Values.Any(d => d.OwnerId == playerId && d.DoorId != targetDoorId);
-        Assert.True(alreadyOwnsAnother, "El servidor debe detectar que el jugador ya es propietario de otra residencia.");
+        Assert.Equal(DoorClaimRejection.DoorTaken, state.CheckDoorClaim(777L, "Farm_Portal_01", "Standard"));
+        // "No"/"Yes" son respuestas del diálogo de viaje que llegaron a guardarse como tipo de granja
+        Assert.Equal(DoorClaimRejection.UnknownFarmType, state.CheckDoorClaim(777L, "Farm_Portal_02", "No"));
+    }
+
+    [Fact]
+    public void NormalizeDoorAssignments_RepairsRealCorruptedSave()
+    {
+        // Estado leído de la partida Pelican4Ever_452974881 (2026-10-31): IDs de un catálogo antiguo,
+        // varios reclamos por jugador, un hueco con dos dueños y un FarmType "No".
+        const long playerA = -271720033174368061L;
+        const long playerB = -3768150971768435367L;
+        var state = new ServerWorldState();
+        state.GetOrCreatePlayer(playerA, "A").FarmSlotId = "Pelican4Ever_Farm_07";
+        state.GetOrCreatePlayer(playerB, "B").FarmSlotId = "Pelican4Ever_Farm_10";
+        state.Doors["BusStop_Door_04"] = Door("BusStop_Door_04", "Pelican4Ever_Farm_12", playerB, "Fishing");
+        state.Doors["Farm_Portal_16"] = Door("Farm_Portal_16", "Pelican4Ever_Farm_16", playerB);
+        state.Doors["Farm_Portal_10"] = Door("Farm_Portal_10", "Pelican4Ever_Farm_10", playerB, "Foraging");
+        state.Doors["BusStop_Door_03"] = Door("BusStop_Door_03", "Pelican4Ever_Farm_11", playerA, "No");
+        state.Doors["BusStop_Door_02"] = Door("BusStop_Door_02", "Pelican4Ever_Farm_10", playerA);
+        state.Doors["Farm_Portal_11"] = Door("Farm_Portal_11", "Pelican4Ever_Farm_11", playerA);
+        state.Doors["Farm_Portal_07"] = Door("Farm_Portal_07", "Pelican4Ever_Farm_07", playerA, "Fishing");
+
+        var catalog = new Dictionary<string, string>();
+        for (int i = 1; i <= 16; i++)
+            catalog[$"Farm_Portal_{i:D2}"] = $"Pelican4Ever_Farm_{i:D2}";
+
+        List<string> released = state.NormalizeDoorAssignments(catalog);
+
+        Assert.Equal(new[] { "Farm_Portal_07", "Farm_Portal_10" }, state.Doors.Keys.OrderBy(k => k));
+        Assert.Equal(playerA, state.Doors["Farm_Portal_07"].OwnerId);
+        Assert.Equal(playerB, state.Doors["Farm_Portal_10"].OwnerId);
+        Assert.Equal(5, released.Count);
+        Assert.All(state.Doors.Values.GroupBy(d => d.OwnerId), g => Assert.Single(g));
+        Assert.All(state.Doors.Values.GroupBy(d => d.FarmSlotId), g => Assert.Single(g));
+        Assert.Equal("Pelican4Ever_Farm_07", state.Players[playerA].FarmSlotId);
+        Assert.Equal("Pelican4Ever_Farm_10", state.Players[playerB].FarmSlotId);
+    }
+
+    [Fact]
+    public void NormalizeDoorAssignments_NormalizesUnknownFarmTypeAndClearsStaleSlot()
+    {
+        var state = new ServerWorldState();
+        state.GetOrCreatePlayer(1L, "A").FarmSlotId = "Pelican4Ever_Farm_03";
+        state.GetOrCreatePlayer(2L, "B").FarmSlotId = "Pelican4Ever_Farm_09";
+        state.Doors["Farm_Portal_03"] = Door("Farm_Portal_03", "Pelican4Ever_Farm_03", 1L, "No");
+
+        var catalog = new Dictionary<string, string> { ["Farm_Portal_03"] = "Pelican4Ever_Farm_03" };
+        List<string> released = state.NormalizeDoorAssignments(catalog);
+
+        Assert.Empty(released);
+        Assert.Equal("Standard", state.Doors["Farm_Portal_03"].FarmType);
+        Assert.Null(state.Players[2L].FarmSlotId);
     }
 
     private sealed class DoorCatalogEntry

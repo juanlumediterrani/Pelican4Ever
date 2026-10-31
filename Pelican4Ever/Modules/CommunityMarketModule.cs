@@ -99,10 +99,16 @@ namespace Pelican4Ever.Modules
                 return;
 
             // Interacción con el tablón del mercado vecinal en Town Plaza o Farm Central Plaza
-            if (Game1.currentLocation != null)
+            if (Game1.currentLocation is { } location && Game1.activeClickableMenu == null)
             {
                 Vector2 grabTile = e.Cursor.GrabTile;
-                if (CommunityMarketLogic.IsMarketInteractionTile(Game1.currentLocation.NameOrUniqueName, (int)grabTile.X, (int)grabTile.Y))
+
+                // La zona del mercado es invisible: nunca secuestrar el clic de algo que ocupe la casilla
+                bool tileOccupied = location.getBuildingAt(grabTile) != null
+                    || location.objects.ContainsKey(grabTile)
+                    || location.GetFurnitureAt(grabTile) != null;
+
+                if (!tileOccupied && CommunityMarketLogic.IsMarketInteractionTile(location.NameOrUniqueName, (int)grabTile.X, (int)grabTile.Y))
                 {
                     OpenMarketMenu();
                     context.Helper.Input.Suppress(e.Button);
@@ -123,7 +129,7 @@ namespace Pelican4Ever.Modules
                 new Response("Cancel", "Salir")
             };
 
-            Game1.currentLocation.createQuestionDialogue(
+            QuestionDialog.Ask(
                 "Tablón del Mercado Vecinal de Pelican Town:",
                 choices,
                 (who, whichAnswer) =>
@@ -169,7 +175,7 @@ namespace Pelican4Ever.Modules
             }
             choices.Add(new Response("Cancel", "Volver"));
 
-            Game1.currentLocation.createQuestionDialogue(
+            QuestionDialog.Ask(
                 "Ofertas disponibles en el Mercado Vecinal:",
                 choices.ToArray(),
                 (who, whichAnswer) =>
@@ -196,7 +202,7 @@ namespace Pelican4Ever.Modules
                 new Response("Cancel", "Cancelar")
             };
 
-            Game1.currentLocation.createQuestionDialogue(
+            QuestionDialog.Ask(
                 $"¿Deseas comprar {listing.ItemDisplayName} (x{listing.Stack}) de {listing.SellerName} por {listing.PriceGold}g?",
                 choices,
                 (who, whichAnswer) =>
@@ -336,7 +342,7 @@ namespace Pelican4Ever.Modules
             }
             choices.Add(new Response("Cancel", "Volver"));
 
-            Game1.currentLocation.createQuestionDialogue(
+            QuestionDialog.Ask(
                 "Tus ofertas a la venta en el Mercado:",
                 choices.ToArray(),
                 (who, whichAnswer) =>

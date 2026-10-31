@@ -42,5 +42,12 @@ namespace Pelican4Ever.Models
             location.modData[ModDataKeys.FarmOwnerId] = ownerId.ToString();
             location.modData[ModDataKeys.AccessPolicy] = policy.ToString();
         }
+
+        /// <summary>Retira propietario y política de una ubicación liberada. Solo debe llamarse en el host.</summary>
+        public static void ClearOwnership(this GameLocation location)
+        {
+            location.modData.Remove(ModDataKeys.FarmOwnerId);
+            location.modData.Remove(ModDataKeys.AccessPolicy);
+        }
     }
 }

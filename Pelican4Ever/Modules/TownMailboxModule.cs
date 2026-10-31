@@ -101,7 +101,7 @@ namespace Pelican4Ever.Modules
                     new Response("Cancel", "Cancelar")
                 };
 
-                Game1.currentLocation.createQuestionDialogue(
+                QuestionDialog.Ask(
                     $"Tu buzón / poste residencial ({door.Description}).",
                     choices,
                     (who, whichAnswer) =>
@@ -135,7 +135,7 @@ namespace Pelican4Ever.Modules
                         new Response("Cancel", "Cancelar")
                     };
 
-                    Game1.currentLocation.createQuestionDialogue(
+                    QuestionDialog.Ask(
                         $"{door.Description}.\nPropiedad de {ownerName}. Estado: {assignment.Policy}.",
                         choices,
                         (who, whichAnswer) =>

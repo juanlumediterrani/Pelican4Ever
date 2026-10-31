@@ -372,15 +372,36 @@ namespace Pelican4Ever.Modules
                     EnsureHostFarmPortals(hostFarm);
                 }
 
-                // Asegurar edificios limpios y Farmhouse operativa en cada granja instanciada
-                int slotCount = context.Config.FarmSlotCount;
-                for (int i = 1; i <= slotCount; i++)
+                // Reparar asignaciones heredadas de reclamos múltiples o de un catálogo de puertas anterior
+                if (RegisteredDoors.Count > 0)
                 {
-                    string slotId = $"Pelican4Ever_Farm_{i:D2}";
+                    var catalogSlots = new Dictionary<string, string>();
+                    foreach (DoorModel d in RegisteredDoors)
+                        catalogSlots.TryAdd(d.DoorId, d.DefaultSlotId);
+
+                    List<string> released = context.WorldState.NormalizeDoorAssignments(catalogSlots);
+                    if (released.Count > 0)
+                    {
+                        context.Monitor.Log($"[FarmSlotModule] Liberadas {released.Count} asignaciones inválidas o duplicadas: {string.Join(", ", released)}.", LogLevel.Warn);
+                    }
+                }
+
+                // Asegurar edificios limpios y Farmhouse operativa en cada granja instanciada.
+                // Primero las reclamadas: así el hogar del dueño queda fijado antes de soltar cabañas libres.
+                int slotCount = context.Config.FarmSlotCount;
+                var slots = Enumerable.Range(1, slotCount)
+                    .Select(i => $"Pelican4Ever_Farm_{i:D2}")
+                    .Select(slotId => (slotId, assignment: context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId)))
+                    .OrderBy(s => s.assignment == null);
+                foreach (var (slotId, assignment) in slots)
+                {
                     if (Game1.getLocationFromName(slotId) is Farm farm)
                     {
-                        var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId);
                         EnsureFarmSlotBuildings(farm, assignment);
+                        if (assignment == null)
+                        {
+                            farm.ClearOwnership();
+                        }
                     }
                 }
 
@@ -726,32 +747,12 @@ namespace Pelican4Ever.Modules
                 cabin.CreateFarmhand();
             }
 
-            // Registrar la Cabin en Game1.locations para que Game1.RequireLocation y Utility.getHomeOfFarmer
-            // puedan resolverla correctamente durante la conexión multijugador y creación de personajes de peones.
-            if (Game1.locations != null && !Game1.locations.Contains(cabin))
+            // No registrar la Cabin en Game1.locations: es interior de un edificio de la granja y el juego ya la
+            // resuelve con Game1.getLocationFromName → findStructure. Duplicarla la serializaría dos veces y
+            // Utility.ForEachLocation la recorrería dos veces (DayUpdate doble).
+            if (Game1.locations != null && Game1.locations.Contains(cabin))
             {
-                Game1.locations.Add(cabin);
-            }
-
-            // Limpiar posibles warps o carteles residuales de portales del host que pudieran haber quedado en la granja privada
-            for (int i = farm.warps.Count - 1; i >= 0; i--)
-            {
-                var w = farm.warps[i];
-                if (w.TargetName != null && w.TargetName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
-                {
-                    farm.warps.RemoveAt(i);
-                }
-            }
-
-            foreach (DoorModel d in RegisteredDoors)
-            {
-                int sX = d.MailboxTileX ?? (d.TownTileX + 1);
-                int sY = d.MailboxTileY ?? d.TownTileY;
-                Vector2 sTile = new Vector2(sX, sY);
-                if (farm.objects.TryGetValue(sTile, out var obj) && obj is Sign)
-                {
-                    farm.objects.Remove(sTile);
-                }
+                Game1.locations.Remove(cabin);
             }
 
             // Distribuir de forma óptima el mobiliario interior para evitar que quede apelotonado contra la pared norte
@@ -784,8 +785,24 @@ namespace Pelican4Ever.Modules
                 Farmer? ownerFarmer = Game1.GetPlayer(assignment.OwnerId);
                 if (ownerFarmer != null)
                 {
-                    cabin.AssignFarmhand(ownerFarmer);
+                    // AssignFarmhand lanza si la cabaña ya pertenece a otro granjero real
+                    if (cabin.HasOwner && cabin.OwnerId != ownerFarmer.UniqueMultiplayerID && !cabin.owner.isUnclaimedFarmhand)
+                    {
+                        context?.Monitor.Log($"[FarmSlotModule] La cabaña de {farm.NameOrUniqueName} pertenece a {cabin.OwnerId}; no se reasigna a {ownerFarmer.UniqueMultiplayerID}.", LogLevel.Warn);
+                    }
+                    else
+                    {
+                        cabin.AssignFarmhand(ownerFarmer);
+                    }
                 }
+            }
+            else if (cabin.HasOwner && !cabin.owner.isUnclaimedFarmhand
+                && !string.Equals(cabin.owner.homeLocation.Value, cabin.NameOrUniqueName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Hueco libre atado a un granjero que ya vive en otra residencia (reclamos duplicados antiguos):
+                // se suelta la referencia sin borrar al granjero y se crea un peón nuevo para el hueco.
+                cabin.farmhandReference.Value = null;
+                cabin.CreateFarmhand();
             }
         }
 
@@ -938,32 +955,33 @@ namespace Pelican4Ever.Modules
             );
         }
 
-        private static void HandleClaimDoor(long playerId, string doorId, string farmType)
+        /// <summary>Procesa en el host un reclamo de puerta. Si lo rechaza, reenvía el estado al jugador para deshacer su copia optimista.</summary>
+        private static bool HandleClaimDoor(long playerId, string doorId, string farmType)
         {
-            if (context == null) return;
+            if (context == null) return false;
             var worldState = context.WorldState;
 
-            // Si la puerta ya está asignada a otro jugador
-            if (worldState.Doors.TryGetValue(doorId, out var existing) && existing.OwnerId != playerId)
-            {
-                context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} intentó reclamar puerta ocupada {doorId} (propietario: {existing.OwnerId}).", LogLevel.Warn);
-                return;
-            }
-
-            // Si el jugador ya posee otra residencia en el servidor, no permitir reclamar una segunda
-            var playerOwnedDoor = worldState.Doors.Values.FirstOrDefault(d => d.OwnerId == playerId && d.DoorId != doorId);
-            if (playerOwnedDoor != null)
-            {
-                context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} ya posee la residencia {playerOwnedDoor.DoorId}. Se ignora el reclamo de {doorId}.", LogLevel.Warn);
-                return;
-            }
-
-            // Buscar la puerta en catálogo
             DoorModel? door = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
-            if (door == null) return;
+            DoorClaimRejection rejection = worldState.CheckDoorClaim(playerId, doorId, farmType);
+            if (door == null || rejection != DoorClaimRejection.None)
+            {
+                string reason = door == null ? "puerta fuera del catálogo" : rejection.ToString();
+                context.Monitor.Log($"[FarmSlotModule] Reclamo de {doorId} por {playerId} rechazado ({reason}).", LogLevel.Warn);
+                if (playerId != Game1.player.UniqueMultiplayerID)
+                {
+                    SendDoorsSyncToPlayer(playerId);
+                }
+                return false;
+            }
+
+            // Reclamo repetido de la propia puerta: no reiniciar tipo, política ni amigos
+            if (worldState.Doors.ContainsKey(doorId))
+            {
+                return true;
+            }
 
             string slotId = door.DefaultSlotId;
-            var playerRecord = worldState.GetOrCreatePlayer(playerId, string.Empty);
+            var playerRecord = worldState.GetOrCreatePlayer(playerId, Game1.GetPlayer(playerId)?.Name ?? string.Empty);
             playerRecord.FarmSlotId = slotId;
 
             string resolvedType = string.IsNullOrWhiteSpace(farmType) ? "Standard" : farmType;
@@ -996,6 +1014,7 @@ namespace Pelican4Ever.Modules
 
             // Sincronizar inmediatamente a todos los peones
             BroadcastDoorsSync();
+            return true;
         }
 
         private static void HandleChangePolicy(long playerId, string farmSlotId, string policyStr)
@@ -1089,7 +1108,7 @@ namespace Pelican4Ever.Modules
             if (assignment == null)
             {
                 // Si el jugador ya posee una residencia, no permitir fundar otra
-                var existingAssignment = worldState.Doors.Values.FirstOrDefault(d => d.OwnerId == myId);
+                var existingAssignment = worldState.FindResidenceOf(myId);
                 if (existingAssignment != null)
                 {
                     var existingDoor = RegisteredDoors.FirstOrDefault(d => d.DoorId == existingAssignment.DoorId);
@@ -1110,36 +1129,43 @@ namespace Pelican4Ever.Modules
                     new Response("Cancel", "Cancelar")
                 };
 
-                Game1.currentLocation.createQuestionDialogue(
+                QuestionDialog.Ask(
                     $"{door.Description}.\nEsta residencia está libre. ¿Qué tipo de granja deseas fundar?",
                     choices,
                     (who, whichAnswer) =>
                     {
                         if (whichAnswer != "Cancel")
                         {
-                            context.Helper.Multiplayer.SendMessage(
-                                new ClaimDoorPayload { DoorId = door.DoorId, FarmType = whichAnswer },
-                                ModMessages.ClaimDoorRequest,
-                                new[] { context.Manifest.UniqueID },
-                                new[] { Game1.MasterPlayer.UniqueMultiplayerID }
-                            );
-
                             string resolvedType = string.IsNullOrWhiteSpace(whichAnswer) ? "Standard" : whichAnswer;
-                            var localAssignment = new DoorAssignment
-                            {
-                                DoorId = door.DoorId,
-                                FarmSlotId = door.DefaultSlotId,
-                                FarmType = resolvedType,
-                                OwnerId = myId,
-                                Policy = AccessPolicy.Locked
-                            };
-                            worldState.Doors[door.DoorId] = localAssignment;
-                            var playerRecord = worldState.GetOrCreatePlayer(myId, Game1.player.Name);
-                            playerRecord.FarmSlotId = door.DefaultSlotId;
 
                             if (Context.IsMainPlayer)
                             {
-                                HandleClaimDoor(myId, door.DoorId, whichAnswer);
+                                if (!HandleClaimDoor(myId, door.DoorId, whichAnswer))
+                                {
+                                    Game1.drawObjectDialogue("No se pudo fundar esta residencia.");
+                                    return;
+                                }
+                            }
+                            else
+                            {
+                                context.Helper.Multiplayer.SendMessage(
+                                    new ClaimDoorPayload { DoorId = door.DoorId, FarmType = whichAnswer },
+                                    ModMessages.ClaimDoorRequest,
+                                    new[] { context.Manifest.UniqueID },
+                                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                                );
+
+                                // Copia optimista: si el host rechaza, su resincronización la deshace
+                                worldState.Doors[door.DoorId] = new DoorAssignment
+                                {
+                                    DoorId = door.DoorId,
+                                    FarmSlotId = door.DefaultSlotId,
+                                    FarmType = resolvedType,
+                                    OwnerId = myId,
+                                    Policy = AccessPolicy.Locked
+                                };
+                                var playerRecord = worldState.GetOrCreatePlayer(myId, Game1.player.Name);
+                                playerRecord.FarmSlotId = door.DefaultSlotId;
                             }
 
                             Game1.addHUDMessage(new HUDMessage($"¡Residencia reclamada! Plantilla: {resolvedType}.", HUDMessage.newQuest_type));
@@ -1150,7 +1176,7 @@ namespace Pelican4Ever.Modules
                                 new Response("No", "No, quedarme en el pueblo")
                             };
 
-                            Game1.currentLocation.createQuestionDialogue(
+                            QuestionDialog.Ask(
                                 $"¡Enhorabuena! Has fundado tu residencia ({resolvedType}).\n¿Deseas entrar a tu granja ahora?",
                                 travelChoices,
                                 (w, a) =>
@@ -1175,7 +1201,7 @@ namespace Pelican4Ever.Modules
                     new Response("Cancel", "Cancelar")
                 };
 
-                Game1.currentLocation.createQuestionDialogue(
+                QuestionDialog.Ask(
                     $"Tu residencia en {door.LocationName ?? "Town"}. (Tipo: {assignment.FarmType})",
                     choices,
                     (who, whichAnswer) =>
@@ -1204,7 +1230,7 @@ namespace Pelican4Ever.Modules
                     new Response("Cancel", "Cancelar")
                 };
 
-                Game1.currentLocation.createQuestionDialogue(
+                QuestionDialog.Ask(
                     $"Residencia de {ownerName}. Tipo: {assignment.FarmType}. Estado: {assignment.Policy}.",
                     choices,
                     (who, whichAnswer) =>
@@ -1237,7 +1263,7 @@ namespace Pelican4Ever.Modules
                 new Response("Cancel", "Cancelar")
             };
 
-            Game1.currentLocation.createQuestionDialogue(
+            QuestionDialog.Ask(
                 "Selecciona la política de acceso para tu granja:",
                 choices,
                 (who, whichAnswer) =>
@@ -1482,18 +1508,6 @@ namespace Pelican4Ever.Modules
                     if (!string.IsNullOrEmpty(who.homeLocation.Value))
                     {
                         farmHouse = Game1.getLocationFromName(who.homeLocation.Value) as FarmHouse;
-                    }
-
-                    if (farmHouse == null)
-                    {
-                        try
-                        {
-                            farmHouse = Utility.getHomeOfFarmer(who);
-                        }
-                        catch
-                        {
-                            farmHouse = null;
-                        }
                     }
 
                     if (farmHouse != null)

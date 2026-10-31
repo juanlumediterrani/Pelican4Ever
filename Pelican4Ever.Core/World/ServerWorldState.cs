@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Festivals;
 using Pelican4Ever.Core.Players;
@@ -33,6 +34,21 @@ namespace Pelican4Ever.Core.World
         public AccessPolicy Policy { get; set; } = AccessPolicy.Locked;
 
         public HashSet<long> Friends { get; set; } = new();
+    }
+
+    /// <summary>Motivo por el que el host rechaza el reclamo de una puerta.</summary>
+    public enum DoorClaimRejection
+    {
+        None,
+
+        /// <summary>La puerta ya pertenece a otro jugador.</summary>
+        DoorTaken,
+
+        /// <summary>El jugador ya posee otra residencia (máximo una por granjero).</summary>
+        AlreadyOwnsResidence,
+
+        /// <summary>El tipo de granja no está en <see cref="FarmTemplateCatalog"/>.</summary>
+        UnknownFarmType
     }
 
     /// <summary>
@@ -81,6 +97,73 @@ namespace Pelican4Ever.Core.World
                 record.PlayerName = name;
 
             return record;
+        }
+
+        /// <summary>Residencia que posee el jugador, o null. Cada granjero posee como mucho una.</summary>
+        public DoorAssignment? FindResidenceOf(long ownerId)
+        {
+            return Doors.Values.FirstOrDefault(d => d.OwnerId == ownerId);
+        }
+
+        /// <summary>Valida en el host el reclamo de <paramref name="doorId"/> por <paramref name="playerId"/>.</summary>
+        public DoorClaimRejection CheckDoorClaim(long playerId, string doorId, string? farmType)
+        {
+            if (Doors.TryGetValue(doorId, out DoorAssignment? existing) && existing.OwnerId != playerId)
+                return DoorClaimRejection.DoorTaken;
+
+            if (Doors.Values.Any(d => d.OwnerId == playerId && d.DoorId != doorId))
+                return DoorClaimRejection.AlreadyOwnsResidence;
+
+            if (!string.IsNullOrWhiteSpace(farmType) && !FarmTemplateCatalog.Templates.ContainsKey(farmType))
+                return DoorClaimRejection.UnknownFarmType;
+
+            return DoorClaimRejection.None;
+        }
+
+        /// <summary>
+        /// Repara asignaciones heredadas: elimina puertas fuera del catálogo o con un hueco distinto al suyo,
+        /// deja una sola residencia por propietario (la de <see cref="PlayerRecord.FarmSlotId"/> si existe),
+        /// normaliza tipos de granja desconocidos a "Standard" y alinea <see cref="PlayerRecord.FarmSlotId"/>.
+        /// Devuelve las DoorId liberadas.
+        /// </summary>
+        /// <param name="catalogSlotByDoorId">DoorId del catálogo → hueco de granja por defecto.</param>
+        public List<string> NormalizeDoorAssignments(IReadOnlyDictionary<string, string> catalogSlotByDoorId)
+        {
+            var released = new List<string>();
+
+            foreach (KeyValuePair<string, DoorAssignment> entry in Doors.ToList())
+            {
+                DoorAssignment assignment = entry.Value;
+                if (!catalogSlotByDoorId.TryGetValue(entry.Key, out string? slotId)
+                    || !string.Equals(slotId, assignment.FarmSlotId, StringComparison.OrdinalIgnoreCase))
+                {
+                    Doors.Remove(entry.Key);
+                    released.Add(entry.Key);
+                    continue;
+                }
+
+                assignment.DoorId = entry.Key;
+                if (string.IsNullOrWhiteSpace(assignment.FarmType) || !FarmTemplateCatalog.Templates.ContainsKey(assignment.FarmType))
+                    assignment.FarmType = "Standard";
+            }
+
+            foreach (IGrouping<long, DoorAssignment> owned in Doors.Values.GroupBy(d => d.OwnerId).Where(g => g.Count() > 1).ToList())
+            {
+                Players.TryGetValue(owned.Key, out PlayerRecord? record);
+                DoorAssignment keep = owned.FirstOrDefault(d => string.Equals(d.FarmSlotId, record?.FarmSlotId, StringComparison.OrdinalIgnoreCase))
+                    ?? owned.OrderBy(d => d.DoorId, StringComparer.Ordinal).First();
+
+                foreach (DoorAssignment extra in owned.Where(d => !ReferenceEquals(d, keep)))
+                {
+                    Doors.Remove(extra.DoorId);
+                    released.Add(extra.DoorId);
+                }
+            }
+
+            foreach (PlayerRecord record in Players.Values)
+                record.FarmSlotId = FindResidenceOf(record.UniqueMultiplayerID)?.FarmSlotId;
+
+            return released;
         }
 
         /// <summary>Migra un estado leído de una versión anterior del esquema. Devuelve true si hubo cambios.</summary>
