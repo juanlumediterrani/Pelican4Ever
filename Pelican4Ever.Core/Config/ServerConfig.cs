@@ -117,6 +117,9 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Valor por defecto inseguro del token; el servidor HTTP rechazará arrancar si no se cambia (TASK-803).</summary>
         public const string DefaultInsecureAdminToken = "pelican4ever_secret_admin_token";
 
+        /// <summary>Marcador de <c>config.example.json</c>: es público, así que tampoco vale como token.</summary>
+        public const string ExampleAdminTokenPlaceholder = "CAMBIA-ESTE-TOKEN";
+
         /// <summary>Puerto HTTP del servidor de administración y Dashboard web (TASK-801 y TASK-802).</summary>
         public int AdminApiPort { get; set; } = 8085;
 

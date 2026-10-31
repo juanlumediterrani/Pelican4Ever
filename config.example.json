@@ -29,7 +29,11 @@
   "DedicatedServerMode": false,
   "RequireClientMod": true,
   "FarmSlotCount": 16,
+  "MaxAnnexesPerResidence": 2,
   "AdminApiPort": 8085,
-  "AdminApiToken": "pelican_admin_2026",
+  "AdminApiToken": "CAMBIA-ESTE-TOKEN",
+  "AdminApiBindAllInterfaces": false,
+  "AgentHost": false,
+  "SafeRestartWarningMinutes": 5,
   "Modules": {}
 }

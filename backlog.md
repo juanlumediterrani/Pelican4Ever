@@ -339,6 +339,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     3. Botones rápidos para lanzar Rollover o limpiar minas con un solo clic.
 
 - [x] **TASK-803: API de anfitrión v1 y registro de sucesos (para el anfitrión agente de Stardew Voyager)**
+  * **Carácter opcional:** la API de anfitrión y el modo `AgentHost` son un añadido. Pelican 4Ever funciona igual sin ellos y sin Stardew Voyager: la API no arranca sin un token propio y `AgentHost` viene desactivado.
   * **Contexto:** Un agente de OpenClaw mantendrá online la instancia host de Pelican 4Ever y la jugará con Stardew Voyager (plan `docs/planes/pelican-anfitrion-20261031.md` y tareas SV-122 a SV-131 de ese proyecto). Los deberes del anfitrión (festivales, ceremonias, anuncios, supervisión del rollover) los hará por esta API, no con el control físico del jugador.
   * **Análisis Técnico:**
     - **Endurecer la API actual antes de ampliarla** (revisión del 2026-10-31 de `AdminApiModule.cs`):

@@ -18,8 +18,10 @@ using StardewValley;
 namespace Pelican4Ever.Modules
 {
     /// <summary>
-    /// Servidor HTTP para API REST de administración, Dashboard web DevOps y API de anfitrión v1
-    /// para el agente de Stardew Voyager (TASK-801, TASK-802, TASK-803 y TASK-804).
+    /// Servidor HTTP local para la API REST de administración, el panel web y la API de anfitrión v1
+    /// (TASK-801 a TASK-804). Es opcional: no arranca hasta configurar un token propio, y Pelican 4Ever
+    /// funciona igual sin ella. Cualquier herramienta de operación puede usarla; el anfitrión agente de
+    /// Stardew Voyager es solo uno de sus clientes posibles.
     /// </summary>
     public sealed class AdminApiModule : IModule
     {

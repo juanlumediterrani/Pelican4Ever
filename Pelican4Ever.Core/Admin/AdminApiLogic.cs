@@ -65,7 +65,8 @@ namespace Pelican4Ever.Core.Admin
                 return false;
 
             string trimmed = configuredToken.Trim();
-            return !string.Equals(trimmed, ServerConfig.DefaultInsecureAdminToken, StringComparison.Ordinal);
+            return !string.Equals(trimmed, ServerConfig.DefaultInsecureAdminToken, StringComparison.Ordinal)
+                && !string.Equals(trimmed, ServerConfig.ExampleAdminTokenPlaceholder, StringComparison.Ordinal);
         }
 
         /// <summary>

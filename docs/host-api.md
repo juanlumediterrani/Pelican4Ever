@@ -1,6 +1,8 @@
 # API de Anfitrión v1 (`Pelican 4Ever` — `TASK-803` y `TASK-804`)
 
-Contrato HTTP local para el anfitrión agente de **Stardew Voyager** / **OpenClaw**. Permite supervisar el reloj en tiempo real, consultar el estado de los vecinos, coordinar tandas y ceremonias de festivales, registrar el descanso diario del host sin desconectar la sesión y programar reinicios controlados.
+Contrato HTTP local para operar un servidor Pelican 4Ever desde fuera del juego. Permite supervisar el reloj en tiempo real, consultar el estado de los vecinos, coordinar tandas y ceremonias de festivales, registrar el descanso diario del host sin desconectar la sesión y programar reinicios controlados.
+
+**Es opcional.** Pelican 4Ever funciona igual sin ella: un anfitrión humano tiene `/evento empezar`, Lewis, los comandos de consola y el rollover automático. La API no arranca hasta configurar un `AdminApiToken` propio y escucha solo en local. Un cliente posible es el anfitrión agente de **Stardew Voyager** / **OpenClaw**, que necesita además `AgentHost: true` para descansar sin desconectarse; ni este mod depende de Voyager ni Voyager de este mod.
 
 ---
 

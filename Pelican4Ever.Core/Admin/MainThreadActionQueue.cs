@@ -18,18 +18,23 @@ namespace Pelican4Ever.Core.Admin
     {
         private sealed class WorkItem
         {
-            public WorkItem(Action execute, Action<Exception> fail)
+            public WorkItem(Action execute, Action<Exception> fail, Func<bool> isAbandoned)
             {
                 Execute = execute;
                 Fail = fail;
+                IsAbandoned = isAbandoned;
             }
 
             public Action Execute { get; }
             public Action<Exception> Fail { get; }
+
+            /// <summary>Quien la encoló ya recibió una respuesta (tiempo agotado): no debe ejecutarse.</summary>
+            public Func<bool> IsAbandoned { get; }
         }
 
         private readonly ConcurrentQueue<WorkItem> queue = new();
         private long totalExecuted;
+        private long totalAbandoned;
         private int lastDrainThreadId;
 
         /// <summary>Número de acciones pendientes en la cola.</summary>
@@ -37,6 +42,9 @@ namespace Pelican4Ever.Core.Admin
 
         /// <summary>Total histórico de acciones drenadas y ejecutadas.</summary>
         public long TotalExecuted => Interlocked.Read(ref totalExecuted);
+
+        /// <summary>Acciones descartadas sin ejecutar porque su petición ya había agotado el tiempo.</summary>
+        public long TotalAbandoned => Interlocked.Read(ref totalAbandoned);
 
         /// <summary>ID del último hilo que drenó la cola (hilo principal del juego).</summary>
         public int LastDrainThreadId => Volatile.Read(ref lastDrainThreadId);
@@ -65,7 +73,10 @@ namespace Pelican4Ever.Core.Admin
                         tcs.TrySetException(ex);
                     }
                 },
-                fail: ex => tcs.TrySetException(ex)));
+                fail: ex => tcs.TrySetException(ex),
+                // Si la espera ya terminó por tiempo, el llamante respondió con error y puede reintentar:
+                // ejecutar la acción ahora aplicaría la mutación sin que nadie lo sepa (o dos veces).
+                isAbandoned: () => tcs.Task.IsCompleted));
 
             TimeSpan effectiveTimeout = timeout ?? TimeSpan.FromSeconds(10);
             using var cts = new CancellationTokenSource(effectiveTimeout);
@@ -112,6 +123,12 @@ namespace Pelican4Ever.Core.Admin
             int executed = 0;
             while (executed < maxActions && queue.TryDequeue(out WorkItem? item))
             {
+                if (item.IsAbandoned())
+                {
+                    Interlocked.Increment(ref totalAbandoned);
+                    continue;
+                }
+
                 item.Execute();
                 executed++;
                 Interlocked.Increment(ref totalExecuted);

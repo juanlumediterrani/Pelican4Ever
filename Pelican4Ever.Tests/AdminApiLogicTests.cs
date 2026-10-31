@@ -46,6 +46,7 @@ namespace Pelican4Ever.Tests
         [InlineData("   ", false)]
         [InlineData(ServerConfig.DefaultInsecureAdminToken, false)]
         [InlineData("  pelican4ever_secret_admin_token  ", false)]
+        [InlineData(ServerConfig.ExampleAdminTokenPlaceholder, false)]
         [InlineData("my_custom_production_token_9981", true)]
         public void IsTokenConfiguredSecurely_RejectsDefaultOrEmptyToken(string? configuredToken, bool expectedSecure)
         {
@@ -140,6 +141,23 @@ namespace Pelican4Ever.Tests
             Assert.Equal($"ok-on-{simulatedGameThreadId}", result.Value);
             Assert.NotEqual(workerThreadId, result.ExecutedOnThreadId);
             Assert.Equal(1, queue.TotalExecuted);
+        }
+
+        [Fact]
+        public async Task MainThreadActionQueue_DoesNotRunAnActionWhoseRequestTimedOut()
+        {
+            // Regresión: tras agotar el tiempo, la API ya respondió con error; si la acción se ejecutara después,
+            // un reintento del cliente aplicaría la mutación dos veces.
+            var queue = new MainThreadActionQueue();
+            int runs = 0;
+
+            await Assert.ThrowsAsync<TimeoutException>(() =>
+                queue.EnqueueAsync(() => { runs++; return true; }, TimeSpan.FromMilliseconds(20)));
+
+            Assert.Equal(0, queue.Drain());
+            Assert.Equal(0, runs);
+            Assert.Equal(1, queue.TotalAbandoned);
+            Assert.Equal(0, queue.TotalExecuted);
         }
 
         // ─────────────────────────── TASK-803 Criterio 3: Contrato docs/host-api.md ───────────────────────────
