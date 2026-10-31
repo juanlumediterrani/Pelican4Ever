@@ -156,6 +156,32 @@ public class WorldStateAndDoorsTests
         Assert.Equal(expectedT2Y, t2Y);
     }
 
+    [Fact]
+    public void SingleResidenceRule_DetectsPlayerAlreadyOwningResidence()
+    {
+        var state = new ServerWorldState();
+        long playerId = 555666777L;
+
+        // Jugador reclama su primera parcela
+        state.Doors["Farm_Door_01"] = new DoorAssignment
+        {
+            DoorId = "Farm_Door_01",
+            FarmSlotId = "Pelican4Ever_Farm_01",
+            OwnerId = playerId,
+            Policy = AccessPolicy.Locked
+        };
+
+        // Verificar que el jugador ya posee una residencia
+        var existing = state.Doors.Values.FirstOrDefault(d => d.OwnerId == playerId);
+        Assert.NotNull(existing);
+        Assert.Equal("Farm_Door_01", existing.DoorId);
+
+        // Intento de reclamar una segunda parcela distinta: debe ser detectado y bloqueado
+        string targetDoorId = "Farm_Door_02";
+        bool alreadyOwnsAnother = state.Doors.Values.Any(d => d.OwnerId == playerId && d.DoorId != targetDoorId);
+        Assert.True(alreadyOwnsAnother, "El servidor debe detectar que el jugador ya es propietario de otra residencia.");
+    }
+
     private sealed class DoorCatalogEntry
     {
         public string DoorId { get; set; } = string.Empty;

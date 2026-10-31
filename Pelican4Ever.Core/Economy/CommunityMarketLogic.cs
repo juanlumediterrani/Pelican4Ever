@@ -45,10 +45,11 @@ namespace Pelican4Ever.Core.Economy
                 return tileX >= 56 && tileX <= 60 && tileY >= 68 && tileY <= 72;
             }
 
-            // En la Granja Host (Plaza Central): Punto de interacción cerca del tablón central (tiles 64..68, Y 14..17)
+            // En la Granja Host (Plaza Central): Punto de interacción cerca del tablón/shipping bin (tiles 72..74, Y 14..16)
+            // Completamente alejado de la puerta de la Farmhouse (tiles 64..65, Y 14..15) para permitir entrar a la casa sin obstáculos.
             if (string.Equals(locationName, "Farm", StringComparison.OrdinalIgnoreCase))
             {
-                return tileX >= 64 && tileX <= 68 && tileY >= 14 && tileY <= 17;
+                return tileX >= 72 && tileX <= 74 && tileY >= 14 && tileY <= 16;
             }
 
             return false;

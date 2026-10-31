@@ -141,14 +141,16 @@ namespace Pelican4Ever.Tests
         [InlineData("Town", 58, 70, true)]   // Town fountain center
         [InlineData("Town", 56, 68, true)]   // Town fountain corner
         [InlineData("Town", 60, 72, true)]   // Town fountain corner
-        [InlineData("Farm", 66, 15, true)]   // Host Farm plaza center
-        [InlineData("Farm", 64, 14, true)]   // Host Farm plaza corner
-        [InlineData("Farm", 68, 17, true)]   // Host Farm plaza corner
+        [InlineData("Farm", 73, 15, true)]   // Host Farm market center (beside shipping bin)
+        [InlineData("Farm", 72, 14, true)]   // Host Farm market corner
+        [InlineData("Farm", 74, 16, true)]   // Host Farm market corner
+        [InlineData("Farm", 64, 15, false)]  // Host Farmhouse door (must NOT be market interaction)
+        [InlineData("Farm", 66, 15, false)]  // Host Farmhouse front area
         [InlineData("Town", 43, 56, false)]  // Pierre's door
         [InlineData("Town", 44, 57, false)]  // Pierre's door
         [InlineData("Town", 10, 10, false)]  // Other Town tile
         [InlineData("Farm", 40, 20, false)]  // Other Farm tile
-        [InlineData("Pelican4Ever_Farm_01", 66, 15, false)] // Private farm slot
+        [InlineData("Pelican4Ever_Farm_01", 73, 15, false)] // Private farm slot
         [InlineData("", 58, 70, false)]      // Empty location
         [InlineData(null, 58, 70, false)]    // Null location
         public void IsMarketInteractionTile_TriggersOnlyAtDesignatedPlazas(string? locationName, int tileX, int tileY, bool expected)

@@ -102,7 +102,7 @@ namespace Pelican4Ever.Modules
             if (Game1.currentLocation != null)
             {
                 Vector2 grabTile = e.Cursor.GrabTile;
-                if (CommunityMarketLogic.IsMarketInteractionTile(Game1.currentLocation.Name, (int)grabTile.X, (int)grabTile.Y))
+                if (CommunityMarketLogic.IsMarketInteractionTile(Game1.currentLocation.NameOrUniqueName, (int)grabTile.X, (int)grabTile.Y))
                 {
                     OpenMarketMenu();
                     context.Helper.Input.Suppress(e.Button);

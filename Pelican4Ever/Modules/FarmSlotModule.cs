@@ -427,7 +427,7 @@ namespace Pelican4Ever.Modules
             if (!e.IsLocalPlayer || context == null)
                 return;
 
-            if (e.NewLocation is Farm hostFarm && hostFarm.Name == "Farm")
+            if (e.NewLocation is Farm hostFarm && hostFarm.NameOrUniqueName == "Farm")
             {
                 if (!string.Equals(hostFarm.mapPath.Value, "Maps\\Pelican4Ever_HostFarm", StringComparison.OrdinalIgnoreCase)
                     && !string.Equals(hostFarm.mapPath.Value, "Maps/Pelican4Ever_HostFarm", StringComparison.OrdinalIgnoreCase))
@@ -503,7 +503,7 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            if (Game1.currentLocation is not Farm || Game1.player == null || Game1.isFestival() || Game1.activeClickableMenu != null)
+            if (Game1.currentLocation is not Farm farm || farm.NameOrUniqueName != "Farm" || Game1.player == null || Game1.isFestival() || Game1.activeClickableMenu != null)
                 return;
 
             Vector2 playerTile = Game1.player.Tile;
@@ -527,7 +527,7 @@ namespace Pelican4Ever.Modules
         /// </summary>
         public static void EnsureHostFarmPortals(Farm farm)
         {
-            if (farm == null || context == null) return;
+            if (farm == null || context == null || farm.NameOrUniqueName != "Farm") return;
 
             var hostMap = farm.Map;
             var bldLayer = hostMap?.GetLayer("Buildings");
@@ -726,11 +726,32 @@ namespace Pelican4Ever.Modules
                 cabin.CreateFarmhand();
             }
 
-            // No registrar la Cabin en Game1.locations para evitar duplicación al serializar la partida.
-            // Stardew Valley 1.6 resuelve interiores dinámicamente mediante Building.GetIndoors() y findStructure.
-            if (Game1.locations != null && Game1.locations.Contains(cabin))
+            // Registrar la Cabin en Game1.locations para que Game1.RequireLocation y Utility.getHomeOfFarmer
+            // puedan resolverla correctamente durante la conexión multijugador y creación de personajes de peones.
+            if (Game1.locations != null && !Game1.locations.Contains(cabin))
             {
-                Game1.locations.Remove(cabin);
+                Game1.locations.Add(cabin);
+            }
+
+            // Limpiar posibles warps o carteles residuales de portales del host que pudieran haber quedado en la granja privada
+            for (int i = farm.warps.Count - 1; i >= 0; i--)
+            {
+                var w = farm.warps[i];
+                if (w.TargetName != null && w.TargetName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    farm.warps.RemoveAt(i);
+                }
+            }
+
+            foreach (DoorModel d in RegisteredDoors)
+            {
+                int sX = d.MailboxTileX ?? (d.TownTileX + 1);
+                int sY = d.MailboxTileY ?? d.TownTileY;
+                Vector2 sTile = new Vector2(sX, sY);
+                if (farm.objects.TryGetValue(sTile, out var obj) && obj is Sign)
+                {
+                    farm.objects.Remove(sTile);
+                }
             }
 
             // Distribuir de forma óptima el mobiliario interior para evitar que quede apelotonado contra la pared norte
@@ -874,7 +895,7 @@ namespace Pelican4Ever.Modules
 
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas).", LogLevel.Info);
 
-                    if (Game1.currentLocation is Farm curFarm && curFarm.Name == "Farm")
+                    if (Game1.currentLocation is Farm curFarm && curFarm.NameOrUniqueName == "Farm")
                     {
                         EnsureHostFarmPortals(curFarm);
                     }
@@ -926,6 +947,14 @@ namespace Pelican4Ever.Modules
             if (worldState.Doors.TryGetValue(doorId, out var existing) && existing.OwnerId != playerId)
             {
                 context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} intentó reclamar puerta ocupada {doorId} (propietario: {existing.OwnerId}).", LogLevel.Warn);
+                return;
+            }
+
+            // Si el jugador ya posee otra residencia en el servidor, no permitir reclamar una segunda
+            var playerOwnedDoor = worldState.Doors.Values.FirstOrDefault(d => d.OwnerId == playerId && d.DoorId != doorId);
+            if (playerOwnedDoor != null)
+            {
+                context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} ya posee la residencia {playerOwnedDoor.DoorId}. Se ignora el reclamo de {doorId}.", LogLevel.Warn);
                 return;
             }
 
@@ -1003,7 +1032,7 @@ namespace Pelican4Ever.Modules
             if (Game1.currentLocation == null)
                 return;
 
-            string curLoc = Game1.currentLocation.Name;
+            string curLoc = Game1.currentLocation.NameOrUniqueName;
             Vector2 targetTile = e.Cursor.GrabTile;
 
             // Interacción con puerta de la Farmhouse en una granja privada (entrar al interior Cabin)
@@ -1059,6 +1088,16 @@ namespace Pelican4Ever.Modules
 
             if (assignment == null)
             {
+                // Si el jugador ya posee una residencia, no permitir fundar otra
+                var existingAssignment = worldState.Doors.Values.FirstOrDefault(d => d.OwnerId == myId);
+                if (existingAssignment != null)
+                {
+                    var existingDoor = RegisteredDoors.FirstOrDefault(d => d.DoorId == existingAssignment.DoorId);
+                    string desc = existingDoor?.Description ?? existingAssignment.DoorId;
+                    Game1.drawObjectDialogue($"Ya eres propietario de una residencia ({desc}). Cada granjero sólo puede poseer una parcela.");
+                    return;
+                }
+
                 // Puerta libre: submenú de elección de tipo de granja (TASK-602)
                 Response[] choices = new[]
                 {
@@ -1313,7 +1352,7 @@ namespace Pelican4Ever.Modules
 
         public static bool Prefix_IsCollidingPosition(GameLocation __instance, Microsoft.Xna.Framework.Rectangle position, ref bool __result)
         {
-            if (__instance is Farm farm && farm.Name == "Farm")
+            if (__instance is Farm farm && farm.NameOrUniqueName == "Farm")
             {
                 int leftTile = position.Left / 64;
                 int rightTile = position.Right / 64;
@@ -1445,6 +1484,18 @@ namespace Pelican4Ever.Modules
                         farmHouse = Game1.getLocationFromName(who.homeLocation.Value) as FarmHouse;
                     }
 
+                    if (farmHouse == null)
+                    {
+                        try
+                        {
+                            farmHouse = Utility.getHomeOfFarmer(who);
+                        }
+                        catch
+                        {
+                            farmHouse = null;
+                        }
+                    }
+
                     if (farmHouse != null)
                     {
                         who.currentLocation = farmHouse;
@@ -1487,7 +1538,7 @@ namespace Pelican4Ever.Modules
             if (!Context.IsWorldReady || context == null || Game1.currentLocation == null)
                 return;
 
-            string curLoc = Game1.currentLocation.Name;
+            string curLoc = Game1.currentLocation.NameOrUniqueName;
             long myId = Game1.player.UniqueMultiplayerID;
             Vector2 playerTile = Game1.player.Tile;
 
@@ -1565,7 +1616,7 @@ namespace Pelican4Ever.Modules
             if (who != Game1.player)
                 return true;
 
-            if (location != null && location.Name.StartsWith(LocationCullingLogic.FarmPrefix))
+            if (location != null && location.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 long? ownerId = location.GetFarmOwnerId();
                 if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
@@ -1587,7 +1638,7 @@ namespace Pelican4Ever.Modules
                 return true;
 
             GameLocation? loc = __instance.Location ?? Game1.currentLocation;
-            if (loc != null && loc.Name.StartsWith(LocationCullingLogic.FarmPrefix))
+            if (loc != null && loc.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 long? ownerId = loc.GetFarmOwnerId();
                 if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
