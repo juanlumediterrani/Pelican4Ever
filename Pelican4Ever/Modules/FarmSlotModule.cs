@@ -16,6 +16,7 @@ using StardewValley.Buildings;
 using StardewValley.GameData.Locations;
 using StardewValley.Locations;
 using StardewValley.Menus;
+using StardewValley.Network;
 using StardewValley.Objects;
 using StardewValley.TerrainFeatures;
 using StardewValley.Tools;
@@ -405,6 +406,9 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
+                // Antes de que entre ningún cliente: ningún peón puede quedar sin cabaña
+                RehomeOrphanFarmhands();
+
                 // Publicar modData de propiedad en las ubicaciones cargadas
                 foreach (var kvp in context.WorldState.Doors)
                 {
@@ -500,6 +504,7 @@ namespace Pelican4Ever.Modules
                 Building b = farm.buildings[i];
                 if (b.GetIndoors() is Cabin || b.buildingType.Value.EndsWith("Cabin", StringComparison.OrdinalIgnoreCase))
                 {
+                    DeleteUnclaimedFarmhandOf(b);
                     farm.buildings.RemoveAt(i);
                     removed++;
                 }
@@ -508,6 +513,43 @@ namespace Pelican4Ever.Modules
             if (removed > 0)
             {
                 context?.Monitor.Log($"[FarmSlotModule] Se eliminaron {removed} cabañas redundantes de la granja anfitriona (Plaza Central).", LogLevel.Info);
+                RehomeOrphanFarmhands();
+            }
+        }
+
+        /// <summary>Borra el peón sin reclamar de una cabaña que se va a quitar, para que no quede huérfano en farmhandData.</summary>
+        private static void DeleteUnclaimedFarmhandOf(Building building)
+        {
+            if (Context.IsMainPlayer && building.GetIndoors() is Cabin cabin && cabin.HasOwner && cabin.owner.isUnclaimedFarmhand)
+            {
+                cabin.DeleteFarmhand();
+            }
+        }
+
+        /// <summary>
+        /// Resuelve en el host los peones cuyo hogar ya no es una cabaña: borra los no reclamados y reubica los reales.
+        /// Si quedan huérfanos, GameServer.IsFarmhandAvailable los reubica mientras construye la lista de peones,
+        /// borrando el peón de una cabaña que ya iba en esa lista; al elegirlo, checkFarmhandRequest lanza
+        /// KeyNotFoundException y el cliente se queda en negro.
+        /// </summary>
+        public static void RehomeOrphanFarmhands()
+        {
+            if (!Context.IsMainPlayer || Game1.netWorldState?.Value == null) return;
+
+            foreach (Farmer farmhand in Game1.netWorldState.Value.farmhandData.Values.ToList())
+            {
+                if (Game1.getLocationFromName(farmhand.homeLocation.Value) is Cabin)
+                    continue;
+
+                if (farmhand.isUnclaimedFarmhand)
+                {
+                    Game1.player.team.DeleteFarmhand(farmhand);
+                    context?.Monitor.Log($"[FarmSlotModule] Peón sin reclamar {farmhand.UniqueMultiplayerID} sin cabaña: eliminado.", LogLevel.Trace);
+                }
+                else if (!Game1.netWorldState.Value.TryAssignFarmhandHome(farmhand))
+                {
+                    context?.Monitor.Log($"[FarmSlotModule] El granjero {farmhand.Name} ({farmhand.UniqueMultiplayerID}) no tiene cabaña libre a la que mudarse.", LogLevel.Warn);
+                }
             }
         }
 
@@ -725,6 +767,7 @@ namespace Pelican4Ever.Modules
                 Building b = farm.buildings[i];
                 if (b != farmhouse && (b.GetIndoors() is Cabin || b.buildingType.Value.EndsWith("Cabin", StringComparison.OrdinalIgnoreCase)))
                 {
+                    DeleteUnclaimedFarmhandOf(b);
                     farm.buildings.RemoveAt(i);
                 }
             }
@@ -1341,6 +1384,12 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation))
                 );
 
+                // Si el peón elegido ya no existe en el host, devolver la lista al cliente en vez de lanzar y dejarlo en negro
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_CheckFarmhandRequest))
+                );
+
                 // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
                 harmony.Patch(
                     original: AccessTools.Method(typeof(BedFurniture), nameof(BedFurniture.ApplyWakeUpPosition)),
@@ -1478,6 +1527,16 @@ namespace Pelican4Ever.Modules
         private static void RepositionToPortalExit(DoorModel door, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
             SpatialWarpRouter.GetHostFarmReturnCoordinates(door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
+        }
+
+        public static bool Prefix_CheckFarmhandRequest(GameServer __instance, string userId, string connectionId, NetFarmerRoot farmer, Action<OutgoingMessage> sendMessage)
+        {
+            if (farmer?.Value == null || Game1.netWorldState.Value.farmhandData.ContainsKey(farmer.Value.UniqueMultiplayerID))
+                return true;
+
+            context?.Monitor.Log($"[FarmSlotModule] El peón {farmer.Value.UniqueMultiplayerID} pedido por la conexión {connectionId} ya no existe; se reenvía la lista.", LogLevel.Warn);
+            __instance.sendAvailableFarmhands(userId, connectionId, sendMessage);
+            return false;
         }
 
         public static bool Prefix_ApplyWakeUpPosition(Farmer who)
