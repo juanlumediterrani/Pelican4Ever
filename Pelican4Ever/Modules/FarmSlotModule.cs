@@ -285,51 +285,33 @@ namespace Pelican4Ever.Modules
                     passTiles.Add(new Point(t1.X, y));
                     passTiles.Add(new Point(t2.X, y));
                 }
-
-                // Remate de valla con postes auténticos de madera vanilla a ambos lados de la apertura
-                if (sheet != null && bld != null)
-                {
-                    int leftX = t1.X - 1;
-                    int rightX = t2.X + 1;
-
-                    if (leftX >= 0 && leftX < bld.LayerWidth)
-                    {
-                        bld.Tiles[leftX, 62] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 394);
-                        bld.Tiles[leftX, 63] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 419);
-                        bld.Tiles[leftX, 64] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 419);
-
-                        if (front != null)
-                        {
-                            front.Tiles[leftX, 61] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 438);
-                            front.Tiles[leftX, 62] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 394);
-                        }
-                    }
-
-                    if (rightX >= 0 && rightX < bld.LayerWidth)
-                    {
-                        bld.Tiles[rightX, 62] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 391);
-                        bld.Tiles[rightX, 63] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 416);
-                        bld.Tiles[rightX, 64] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, 391);
-
-                        if (front != null)
-                        {
-                            front.Tiles[rightX, 61] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 439);
-                            front.Tiles[rightX, 62] = new xTile.Tiles.StaticTile(front, sheet, xTile.Tiles.BlendMode.Alpha, 391);
-                        }
-                    }
-                }
             }
+
+            bool isSouthDoor = SpatialWarpRouter.IsSouthBorderPortal(door.TownTileY);
 
             foreach (var pt in passTiles)
             {
+                // 1. Limpiar colisión en Buildings para que el paso sea completamente transitable sin bloqueos
                 if (bld != null && pt.X >= 0 && pt.X < bld.LayerWidth && pt.Y >= 0 && pt.Y < bld.LayerHeight)
                     bld.Tiles[pt.X, pt.Y] = null;
 
+                // 2. En Front, si hay copas de árbol las preservamos en AlwaysFront; se eliminan los rebordes de suelo/acantilado
                 if (front != null && pt.X >= 0 && pt.X < front.LayerWidth && pt.Y >= 0 && pt.Y < front.LayerHeight)
+                {
+                    var existingFront = front.Tiles[pt.X, pt.Y];
+                    if (existingFront != null && existingFront.TileIndex < 150 && alwaysFront != null && alwaysFront.Tiles[pt.X, pt.Y] == null)
+                    {
+                        alwaysFront.Tiles[pt.X, pt.Y] = existingFront.Clone(alwaysFront);
+                    }
                     front.Tiles[pt.X, pt.Y] = null;
+                }
 
-                if (alwaysFront != null && pt.X >= 0 && pt.X < alwaysFront.LayerWidth && pt.Y >= 0 && pt.Y < alwaysFront.LayerHeight)
+                // 3. En las salidas del sur hacia las residencias, MANTENER intactas las copas de los árboles en AlwaysFront.
+                // Así los árboles se ven completos y continuos por encima del camino, y el jugador camina bajo ellos sin bloqueo.
+                if (!isSouthDoor && alwaysFront != null && pt.X >= 0 && pt.X < alwaysFront.LayerWidth && pt.Y >= 0 && pt.Y < alwaysFront.LayerHeight)
+                {
                     alwaysFront.Tiles[pt.X, pt.Y] = null;
+                }
 
                 if (back != null && pt.X >= 0 && pt.X < back.LayerWidth && pt.Y >= 0 && pt.Y < back.LayerHeight)
                 {

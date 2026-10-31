@@ -170,5 +170,29 @@ namespace Pelican4Ever.Tests
 
             Assert.Equal(16, seenSigns.Count);
         }
+
+        [Theory]
+        [InlineData(63, true)]
+        [InlineData(60, true)]
+        [InlineData(64, true)]
+        [InlineData(1, false)]
+        [InlineData(16, false)]
+        [InlineData(26, false)]
+        [InlineData(0, false)]
+        public void IsSouthBorderPortal_IdentifiesSouthernResidences(int townTileY, bool expected)
+        {
+            Assert.Equal(expected, SpatialWarpRouter.IsSouthBorderPortal(townTileY));
+        }
+
+        [Theory]
+        [InlineData(63, 18, true)]  // South portal with canopy tile (leaf index 18)
+        [InlineData(63, 587, true)] // South portal: preserves all overhead AlwaysFront canopy
+        [InlineData(1, 18, true)]   // North portal with leaf index < 150
+        [InlineData(1, 326, false)] // North portal with cliff index >= 150
+        [InlineData(16, 587, false)]// West portal with gravel index >= 150
+        public void ShouldPreserveCanopyOverPath_DeterminesCanopyPreservationCorrectly(int townTileY, int tileIndex, bool expected)
+        {
+            Assert.Equal(expected, SpatialWarpRouter.ShouldPreserveCanopyOverPath(townTileY, tileIndex));
+        }
     }
 }

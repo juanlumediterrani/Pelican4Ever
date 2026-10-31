@@ -104,5 +104,19 @@ namespace Pelican4Ever.Core.World
                 facingDirection = 0; // Mirando hacia el Norte (hacia la plaza)
             }
         }
+
+        /// <summary>
+        /// Determina si un portal está ubicado en la ribera sur de la Granja Host (TownTileY >= 60).
+        /// </summary>
+        public static bool IsSouthBorderPortal(int townTileY) => townTileY >= 60;
+
+        /// <summary>
+        /// Determina si un tile de copa de árbol (hojas en tilesheet) debe conservarse visible en AlwaysFront
+        /// por encima del camino a las residencias para que no quede cortado y el jugador camine bajo él sin bloqueo.
+        /// </summary>
+        public static bool ShouldPreserveCanopyOverPath(int townTileY, int tileIndex)
+        {
+            return IsSouthBorderPortal(townTileY) || tileIndex < 150;
+        }
     }
 }
