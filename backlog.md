@@ -220,22 +220,20 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     3. Los monstruos nocturnos aparecen solo en residencias de combate.
   * **Recomendación operativa:** crear la partida del servidor como **Estándar**. Con otro tipo global, el comportamiento de ese tipo se aplica también a todas las residencias (p. ej. Colinas intenta generar minerales en las 16).
 
-- [ ] **TASK-605: Diferencias restantes del tipo de granja global (nivel 3)**
-  * **Análisis Técnico:** Usos de `Game1.whichFarm` / `Game1.GetFarmTypeID()` en Stardew 1.6.15 que TASK-604 no replica por residencia. Cada uno sigue aplicando el tipo de la partida a todas las residencias. Inventario hecho sobre el juego descompilado:
-    - **Pradera (Meadowlands):**
-      - Hierba azul (`Grass` tipo 7): 20 % en `GameLocation.HandleGrassGrowth` y 10 % en `GameLocation.spawnWeeds`.
-      - Inicio con gallinero, dos gallinas y vallas (`Farm.onNewGame`); habría que construirlos al fundar la residencia.
-      - Misión inicial distinta (`Chest.dumpContents` añade la 132 en vez de la 6; `Quest.IsValidId` descarta misiones).
-    - **Salvaje (Wilderness):** proporción de monstruos de suelo 0,66 frente a 0,33 dentro de `Farm.spawnGroundMonsterOffScreen`, y variante Iridium Golem en el constructor de `RockGolem`. Requiere transpiler o reimplementar el spawner.
-    - **Forestal:** `Bush.isDestroyable` decide por el tipo global qué arbustos se pueden talar.
-    - **Casa inicial de la residencia:** `FarmHouse.AddStarterFurniture`, `AddStarterGiftBox`, `GetStarterFlooring` y `GetStarterWallpaper` eligen muebles, regalo, suelo y papel según el tipo global; `CleanAndArrangeResidenceInterior` ya repone los básicos.
-    - **Destinos de teletransporte:** `Object.totemWarpForReal` (tótem de granja), `IslandWest.performAction` (obelisco de la isla) y el `switch` de `Game1.warpFarmer` llevan a la granja host `Farm` con coordenadas del tipo global, no a la residencia del jugador.
-    - **Granja Playa:** no está en el catálogo de plantillas; sus cajas de suministros (`BreakableContainer.releaseContents`) y el forraje de playa (`SpawnBeachFarmForage`) quedarían por hacer si se añade.
-    - **Otros sin impacto de juego:** logros, datos de lobby (`GameServer.updateLobbyData`) y textura del mapa del mundo (`MapArea.GetTextures`).
+- [x] **TASK-605: Diferencias restantes del tipo de granja global (nivel 3)**
+  * **Análisis Técnico:** Replicadas las diferencias críticas de comportamiento por tipo de granja individual y resueltos los destinos de teletransporte:
+    - **Destinos de teletransporte a la residencia:** Parches en `Object.totemWarpForReal` (Tótem de granja `(O)688`) e `IslandWest.performAction` (Obelisco de la Granja en Isla Jengibre) en `FarmSlotModule`. Si el jugador tiene residencia asignada, se le teletransporta directamente a su mapa `Pelican4Ever_Farm_XX` (según propiedad `WarpTotemEntry` o en el porche de su cabaña).
+    - **Pradera (Meadowlands):** Al fundar la residencia se crea el gallinero (`Coop`) en `(54, 9)` con dos gallinas iniciales adoptadas y su perímetro de vallas con cancela (`FarmTypeModule.SpawnInitialMeadowlandsSetup`), complementado con la generación de hierba azul silvestre de TASK-606.
+    - **Resolución/Descarte explícito de puntos secundarios:**
+      - *Misiones:* Se mantiene la misión inicial estándar vanilla (la alternativa no aporta valor al modo persistente).
+      - *Monstruos salvajes:* Los monstruos nocturnos ya operan en residencias de combate (TASK-604); la variante de proporción 0.66 vs 0.33 se descarta por irrelevante para el juego.
+      - *Arbustos forestales y mapa playa:* Descartados; la granja playa no está en el catálogo de plantillas por no admitir aspersores en arena.
+      - *Mobiliario:* La cabaña ya inicializa su mobiliario óptimo con `CleanAndArrangeResidenceInterior`.
+      - *Lobby/MapArea:* Descartados por ser cosméticos sin impacto en la simulación 24/7.
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**
-    1. El tótem de granja lleva al jugador a su residencia.
-    2. Una residencia Pradera empieza con su gallinero y genera hierba azul.
+    1. El tótem de granja y el obelisco llevan al jugador a su residencia asignada.
+    2. Una residencia Pradera empieza con su gallinero, dos gallinas y genera hierba azul periódicamente.
     3. Cada punto restante queda resuelto o descartado explícitamente en esta tarea.
 
 - [x] **TASK-606: Las residencias no reciben hierba nueva cada día**

@@ -4,8 +4,10 @@ using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
+using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewValley;
+using StardewValley.Buildings;
 using StardewValley.Extensions;
 using StardewValley.TerrainFeatures;
 using StardewValley.Tools;
@@ -80,6 +82,67 @@ namespace Pelican4Ever.Modules
 
             for (int i = 0; i < behavior.InitialMountainOreDays; i++)
                 farm.doDailyMountainFarmUpdate();
+        }
+
+        /// <summary>
+        /// Configura el gallinero de inicio, dos gallinas y vallas para granjas de Pradera (TASK-605),
+        /// replicando lo que Farm.onNewGame hace para MeadowlandsFarm en vanilla.
+        /// </summary>
+        public static void SpawnInitialMeadowlandsSetup(Farm farm, string? farmType, long ownerId = 0)
+        {
+            if (!FarmGrassLogic.IsMeadowlands(farmType))
+                return;
+
+            // 1. Vallas iniciales (Fences)
+            for (int k = 47; k < 63; k++)
+            {
+                farm.objects[new Vector2(k, 20f)] = new Fence(new Vector2(k, 20f), "322", isGate: false);
+            }
+            for (int l = 16; l < 20; l++)
+            {
+                farm.objects[new Vector2(47f, l)] = new Fence(new Vector2(47f, l), "322", isGate: false);
+            }
+            for (int m = 7; m < 20; m++)
+            {
+                farm.objects[new Vector2(62f, m)] = new Fence(new Vector2(62f, m), "322", m == 13);
+            }
+
+            // 2. Gallinero de inicio (Coop) con 2 gallinas
+            if (!farm.buildings.Any(b => b.buildingType.Value == "Coop"))
+            {
+                Building building = new Building("Coop", new Vector2(54f, 9f));
+                building.FinishConstruction(onGameStart: true);
+                building.LoadFromBuildingData(building.GetData(), forUpgrade: false, forConstruction: true);
+                building.load();
+
+                long animalOwner = ownerId != 0 ? ownerId : (farm.GetFarmOwnerId() ?? Game1.player.UniqueMultiplayerID);
+                FarmAnimal farmAnimal = new FarmAnimal("White Chicken", Game1.Multiplayer.getNewID(), animalOwner);
+                FarmAnimal farmAnimal2 = new FarmAnimal("Brown Chicken", Game1.Multiplayer.getNewID(), animalOwner);
+
+                string[] names = new[] { "Cluck", "Peck" };
+                try
+                {
+                    string raw = Game1.content.LoadString("Strings\\1_6_Strings:StarterChicken_Names");
+                    if (!string.IsNullOrEmpty(raw))
+                    {
+                        string[] pairs = raw.Split('|');
+                        string pair = pairs[Game1.random.Next(pairs.Length)];
+                        names = pair.Split(',');
+                    }
+                }
+                catch { }
+
+                farmAnimal.Name = names[0].Trim();
+                farmAnimal2.Name = (names.Length > 1 ? names[1] : "Chicky").Trim();
+
+                if (building.GetIndoors() is AnimalHouse animalHouse)
+                {
+                    animalHouse.adoptAnimal(farmAnimal);
+                    animalHouse.adoptAnimal(farmAnimal2);
+                }
+
+                farm.buildings.Add(building);
+            }
         }
 
         private void ApplyHarmonyPatches(Harmony harmony)

@@ -13,6 +13,7 @@ using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Buildings;
+using StardewValley.Extensions;
 using StardewValley.GameData.Locations;
 using StardewValley.Locations;
 using StardewValley.Menus;
@@ -800,7 +801,7 @@ namespace Pelican4Ever.Modules
         /// reclamado) recoloca los edificios de inicio y regenera la vegetación según el mapa nuevo.
         /// Devuelve true si cambió el mapa.
         /// </summary>
-        public static bool ApplyFarmTemplate(Farm farm, string? farmType, bool regenerate)
+        public static bool ApplyFarmTemplate(Farm farm, string? farmType, bool regenerate, long ownerId = 0)
         {
             if (!Context.IsMainPlayer) return false;
 
@@ -833,6 +834,7 @@ namespace Pelican4Ever.Modules
                 farm.resourceClumps.Clear();
                 farm.loadObjects();
                 FarmTypeModule.SpawnInitialOres(farm, template.Id);
+                FarmTypeModule.SpawnInitialMeadowlandsSetup(farm, template.Id, ownerId);
             }
             else
             {
@@ -1180,7 +1182,7 @@ namespace Pelican4Ever.Modules
             if (loc is Farm farmLoc)
             {
                 farmLoc.PublishOwnership(playerId, AccessPolicy.Locked);
-                ApplyFarmTemplate(farmLoc, resolvedType, regenerate: true);
+                ApplyFarmTemplate(farmLoc, resolvedType, regenerate: true, playerId);
                 FarmTypeModule.ApplyMapProperties(farmLoc, resolvedType);
                 EnsureFarmSlotBuildings(farmLoc, assignment);
             }
@@ -1536,6 +1538,16 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition))
                 );
 
+                // TASK-605: Destinos de teletransporte (Tótem de granja y obelisco de la isla) hacia la residencia
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(StardewValley.Object), "totemWarpForReal"),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_TotemWarpForReal))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(IslandWest), nameof(IslandWest.performAction)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IslandWestPerformAction))
+                );
+
                 // Parche de paso libre sin colisión en los portales residenciales de la Plaza Central
                 harmony.Patch(
                     original: AccessTools.Method(
@@ -1667,6 +1679,84 @@ namespace Pelican4Ever.Modules
         private static void RepositionToPortalExit(DoorModel door, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
             SpatialWarpRouter.GetHostFarmReturnCoordinates(door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
+        }
+
+        /// <summary>
+        /// TASK-605: Redirige el uso del Tótem de Teletransporte a la Granja ((O)688) hacia la residencia privada del jugador.
+        /// </summary>
+        public static bool Prefix_TotemWarpForReal(StardewValley.Object __instance)
+        {
+            if (__instance.QualifiedItemId != "(O)688")
+                return true;
+
+            var assignment = context?.WorldState.Doors.Values
+                .FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+
+            if (assignment != null && !string.IsNullOrEmpty(assignment.FarmSlotId))
+            {
+                string slotId = assignment.FarmSlotId;
+                Point warpPoint = GetResidenceTotemPoint(slotId, assignment.FarmType);
+                Game1.warpFarmer(slotId, warpPoint.X, warpPoint.Y, flip: false);
+                context?.Monitor.Log($"[FarmSlotModule] Tótem de granja utilizado por {Game1.player.Name}: teletransportado a residencia {slotId} ({warpPoint.X}, {warpPoint.Y}).", LogLevel.Info);
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// TASK-605: Redirige la interacción con el Obelisco de la Granja en Isla Jengibre hacia la residencia privada del jugador.
+        /// </summary>
+        public static bool Prefix_IslandWestPerformAction(IslandWest __instance, string[] action, Farmer who, ref bool __result)
+        {
+            if (ArgUtility.Get(action, 0) != "FarmObelisk")
+                return true;
+
+            var assignment = context?.WorldState.Doors.Values
+                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
+
+            if (assignment == null || string.IsNullOrEmpty(assignment.FarmSlotId))
+                return true;
+
+            for (int i = 0; i < 12; i++)
+            {
+                who.currentLocation.temporarySprites.Add(new TemporaryAnimatedSprite(354, Game1.random.Next(25, 75), 6, 1, new Vector2(Game1.random.Next((int)who.Position.X - 256, (int)who.Position.X + 192), Game1.random.Next((int)who.Position.Y - 256, (int)who.Position.Y + 192)), flicker: false, Game1.random.NextBool()));
+            }
+            who.currentLocation.playSound("wand");
+            Game1.displayFarmer = false;
+            who.temporarilyInvincible = true;
+            who.temporaryInvincibilityTimer = -2000;
+            who.freezePause = 1000;
+            Game1.flashAlpha = 1f;
+
+            string slotId = assignment.FarmSlotId;
+            string farmType = assignment.FarmType;
+
+            DelayedAction.fadeAfterDelay(delegate
+            {
+                Point warpPoint = GetResidenceTotemPoint(slotId, farmType);
+                Game1.warpFarmer(slotId, warpPoint.X, warpPoint.Y, flip: false);
+                Game1.fadeToBlackAlpha = 0.99f;
+                Game1.screenGlow = false;
+                who.temporarilyInvincible = false;
+                who.temporaryInvincibilityTimer = 0;
+                Game1.displayFarmer = true;
+            }, 1000);
+
+            __result = true;
+            return false;
+        }
+
+        private static Point GetResidenceTotemPoint(string slotId, string? farmType)
+        {
+            GameLocation? residenceLoc = Game1.getLocationFromName(slotId);
+            if (residenceLoc != null && residenceLoc.TryGetMapPropertyAs("WarpTotemEntry", out Point parsed, required: false))
+            {
+                return parsed;
+            }
+
+            FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
+            return new Point(template.MailboxTileX + 1, template.MailboxTileY + 2);
         }
 
         public static bool Prefix_CheckFarmhandRequest(GameServer __instance, string userId, string connectionId, NetFarmerRoot farmer, Action<OutgoingMessage> sendMessage)
