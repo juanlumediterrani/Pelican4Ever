@@ -208,6 +208,41 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Las granjas de jugadores desconectados que no tienen visitantes no sincronizan paquetes delta continuos.
     2. Al entrar un visitante a una granja inactiva, se sincroniza en caliente en menos de 500 ms sin pérdida de estado.
 
+- [x] **TASK-604: Comportamiento propio del tipo de granja en cada residencia (niveles 1 y 2)**
+  * **Análisis Técnico:** Stardew decide gran parte del comportamiento de una granja con un único tipo global (`Game1.whichFarm`), y solo aplica los datos `Farm_<tipo>` de `Data/Locations` a la ubicación llamada `Farm`. Sin replicarlo, una residencia fluvial pescaba solo la lista `Default` (basura). Implementado en `FarmSlotModule` (datos y mapa) y `FarmTypeModule` (comportamiento), con las reglas por tipo en `Pelican4Ever.Core/World/FarmTypeBehavior.cs`.
+    - **Datos:** cada hueco copia de `Farm_Standard`, `Farm_Riverland`, `Farm_Forest`, `Farm_Hilltop`, `Farm_Wilderness`, `Farm_FourCorners` o `Farm_MeadowlandsFarm` los peces, zonas de pesca, forraje, excavaciones, malezas y arcilla. `Data/Locations` se reconstruye al cargar, al reclamar y al sincronizar con los clientes.
+    - **Nivel 1 (propiedades de mapa que `Farm` ya lee por ubicación):** `SpawnMountainFarmOreRect` en Colinas (`5 37 22 8`, 28 días iniciales) y Cuatro Esquinas (`51 67 11 3`, 10 días); `SpawnForestFarmForage` en la forestal.
+    - **Nivel 2 (parches Harmony):** monstruos nocturnos solo en residencias de combate (y en ellas aunque el equipo no los active); burbujas de peces en residencias fluviales; tocones forestales que reaparecen; tocón fijo y forraje del cuadrante de Cuatro Esquinas.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Una residencia fluvial pesca la tabla de la granja fluvial vanilla aunque la partida sea Estándar.
+    2. Colinas y Cuatro Esquinas generan minerales a diario en su zona; la forestal genera su forraje y tocones.
+    3. Los monstruos nocturnos aparecen solo en residencias de combate.
+  * **Recomendación operativa:** crear la partida del servidor como **Estándar**. Con otro tipo global, el comportamiento de ese tipo se aplica también a todas las residencias (p. ej. Colinas intenta generar minerales en las 16).
+
+- [ ] **TASK-605: Diferencias restantes del tipo de granja global (nivel 3)**
+  * **Análisis Técnico:** Usos de `Game1.whichFarm` / `Game1.GetFarmTypeID()` en Stardew 1.6.15 que TASK-604 no replica por residencia. Cada uno sigue aplicando el tipo de la partida a todas las residencias. Inventario hecho sobre el juego descompilado:
+    - **Pradera (Meadowlands):**
+      - Hierba azul (`Grass` tipo 7): 20 % en `GameLocation.HandleGrassGrowth` y 10 % en `GameLocation.spawnWeeds`.
+      - Inicio con gallinero, dos gallinas y vallas (`Farm.onNewGame`); habría que construirlos al fundar la residencia.
+      - Misión inicial distinta (`Chest.dumpContents` añade la 132 en vez de la 6; `Quest.IsValidId` descarta misiones).
+    - **Salvaje (Wilderness):** proporción de monstruos de suelo 0,66 frente a 0,33 dentro de `Farm.spawnGroundMonsterOffScreen`, y variante Iridium Golem en el constructor de `RockGolem`. Requiere transpiler o reimplementar el spawner.
+    - **Forestal:** `Bush.isDestroyable` decide por el tipo global qué arbustos se pueden talar.
+    - **Casa inicial de la residencia:** `FarmHouse.AddStarterFurniture`, `AddStarterGiftBox`, `GetStarterFlooring` y `GetStarterWallpaper` eligen muebles, regalo, suelo y papel según el tipo global; `CleanAndArrangeResidenceInterior` ya repone los básicos.
+    - **Destinos de teletransporte:** `Object.totemWarpForReal` (tótem de granja), `IslandWest.performAction` (obelisco de la isla) y el `switch` de `Game1.warpFarmer` llevan a la granja host `Farm` con coordenadas del tipo global, no a la residencia del jugador.
+    - **Granja Playa:** no está en el catálogo de plantillas; sus cajas de suministros (`BreakableContainer.releaseContents`) y el forraje de playa (`SpawnBeachFarmForage`) quedarían por hacer si se añade.
+    - **Otros sin impacto de juego:** logros, datos de lobby (`GameServer.updateLobbyData`) y textura del mapa del mundo (`MapArea.GetTextures`).
+  * **Prioridad:** Baja
+  * **Criterios de Aceptación:**
+    1. El tótem de granja lleva al jugador a su residencia.
+    2. Una residencia Pradera empieza con su gallinero y genera hierba azul.
+    3. Cada punto restante queda resuelto o descartado explícitamente en esta tarea.
+
+- [ ] **TASK-606: Las residencias no reciben hierba nueva cada día**
+  * **Análisis Técnico:** `GameLocation.spawnWeeds` (llamado desde `Farm.DayUpdate`) solo siembra hierba nueva si `name.Value == "Farm"`; en `Pelican4Ever_Farm_XX` esa rama se salta y solo salen malezas. La hierba que ya existe puede seguir extendiéndose, pero no aparecen matas nuevas (afecta al heno y al pasto de los animales). Detectado al inventariar TASK-605; es independiente del tipo de granja. Sin verificar en partida.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:** una residencia sin intervención del jugador gana matas de hierba nuevas a diario en proporción similar a la granja host.
+
 ---
 
 ### Épica 7: Minijuegos de Festivales y Eventos Comunitarios Asíncronos

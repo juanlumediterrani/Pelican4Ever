@@ -32,6 +32,9 @@ namespace Pelican4Ever.Modules
         private static ModContext? context;
         private static bool welcomeNotified;
         private static bool chatCommandsRegistered;
+
+        /// <summary>Huecos y tipos con los que se construyó la última versión de Data/Locations.</summary>
+        private static string slotDataSignature = string.Empty;
         public static List<DoorModel> RegisteredDoors { get; private set; } = new();
 
         public string Name => "FarmSlot";
@@ -128,7 +131,7 @@ namespace Pelican4Ever.Modules
                             }
                             var template = FarmTemplateCatalog.GetTemplate(farmType);
 
-                            data[slotId] = new LocationData
+                            var slotData = new LocationData
                             {
                                 DisplayName = $"Granja {i} ({template.DisplayName})",
                                 CanPlantHere = true,
@@ -139,6 +142,30 @@ namespace Pelican4Ever.Modules
                                     AlwaysActive = true // Gestionado dinámicamente mediante LocationCullingLogic
                                 }
                             };
+
+                            // Peces, forraje y excavaciones del tipo elegido. El juego solo aplica "Farm_<tipo>" a la
+                            // granja "Farm"; sin copiarlo, una residencia solo pesca lo de "Default" (basura).
+                            if (data.TryGetValue(template.LocationDataKey, out LocationData? typeData)
+                                || data.TryGetValue("Farm_Standard", out typeData))
+                            {
+                                slotData.Fish = typeData.Fish;
+                                slotData.FishAreas = typeData.FishAreas;
+                                slotData.Forage = typeData.Forage;
+                                slotData.ArtifactSpots = typeData.ArtifactSpots;
+                                slotData.MinDailyWeeds = typeData.MinDailyWeeds;
+                                slotData.MaxDailyWeeds = typeData.MaxDailyWeeds;
+                                slotData.FirstDayWeedMultiplier = typeData.FirstDayWeedMultiplier;
+                                slotData.MinDailyForageSpawn = typeData.MinDailyForageSpawn;
+                                slotData.MaxDailyForageSpawn = typeData.MaxDailyForageSpawn;
+                                slotData.MaxSpawnedForageAtOnce = typeData.MaxSpawnedForageAtOnce;
+                                slotData.ChanceForClay = typeData.ChanceForClay;
+                            }
+                            else
+                            {
+                                context?.Monitor.Log($"[FarmSlotModule] Data/Locations no tiene '{template.LocationDataKey}' ni 'Farm_Standard'; {slotId} usará solo los peces por defecto.", LogLevel.Warn);
+                            }
+
+                            data[slotId] = slotData;
                         }
                     }
                 });
@@ -387,6 +414,9 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
+                // Data/Locations se construyó al lanzar el juego, sin el estado de la partida
+                RefreshSlotLocationData();
+
                 // Asegurar edificios limpios y Farmhouse operativa en cada granja instanciada.
                 // Primero las reclamadas: así el hogar del dueño queda fijado antes de soltar cabañas libres.
                 int slotCount = context.Config.FarmSlotCount;
@@ -401,6 +431,8 @@ namespace Pelican4Ever.Modules
                         if (assignment != null)
                         {
                             ApplyFarmTemplate(farm, assignment.FarmType, regenerate: false);
+                            // Las propiedades de mapa no se guardan con la partida: reponerlas aunque el mapa no cambie
+                            FarmTypeModule.ApplyMapProperties(farm, assignment.FarmType);
                         }
                         EnsureFarmSlotBuildings(farm, assignment);
                         if (assignment == null)
@@ -449,6 +481,24 @@ namespace Pelican4Ever.Modules
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
         {
             welcomeNotified = false;
+            RefreshSlotLocationData();
+        }
+
+        /// <summary>
+        /// Reconstruye Data/Locations si cambió el tipo de alguna residencia: cada hueco toma peces, forraje y mapa
+        /// del estado vigente al pedirse el asset. Se ejecuta en host y clientes (cada uno pesca con sus datos).
+        /// </summary>
+        private static void RefreshSlotLocationData()
+        {
+            if (context == null) return;
+
+            string signature = string.Join(";", context.WorldState.Doors.Values
+                .Select(d => $"{d.FarmSlotId}={d.FarmType}")
+                .OrderBy(entry => entry, StringComparer.Ordinal));
+            if (signature == slotDataSignature) return;
+
+            slotDataSignature = signature;
+            context.Helper.GameContent.InvalidateCache("Data/Locations");
         }
 
         private void OnPlayerWarped(object? sender, WarpedEventArgs e)
@@ -760,8 +810,12 @@ namespace Pelican4Ever.Modules
 
             farm.mapPath.Value = template.MapPath;
             farm.reloadMap();
+            FarmTypeModule.ApplyMapProperties(farm, template.Id);
             farm.mapShippingBinPosition = null;
             farm.mainFarmhouseEntry = null;
+            // Farm.getFish cachea la propiedad FarmFishLocationOverride del mapa en el primer lance
+            FishLocationOverrideField?.SetValue(farm, null);
+            FishChanceOverrideField?.SetValue(farm, 0f);
 
             if (regenerate)
             {
@@ -778,6 +832,7 @@ namespace Pelican4Ever.Modules
                 farm.largeTerrainFeatures.Clear();
                 farm.resourceClumps.Clear();
                 farm.loadObjects();
+                FarmTypeModule.SpawnInitialOres(farm, template.Id);
             }
             else
             {
@@ -806,6 +861,9 @@ namespace Pelican4Ever.Modules
             context?.Monitor.Log($"[FarmSlotModule] {farm.NameOrUniqueName} usa ahora el mapa {template.MapPath} ({template.Id}).", LogLevel.Info);
             return true;
         }
+
+        private static readonly System.Reflection.FieldInfo? FishLocationOverrideField = AccessTools.Field(typeof(Farm), "_fishLocationOverride");
+        private static readonly System.Reflection.FieldInfo? FishChanceOverrideField = AccessTools.Field(typeof(Farm), "_fishChanceOverride");
 
         private static void MoveBuilding(Farm farm, string buildingType, Vector2 tile)
         {
@@ -1032,6 +1090,7 @@ namespace Pelican4Ever.Modules
                     }
 
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas).", LogLevel.Info);
+                    RefreshSlotLocationData();
 
                     if (Game1.currentLocation is Farm curFarm && curFarm.NameOrUniqueName == "Farm")
                     {
@@ -1122,6 +1181,7 @@ namespace Pelican4Ever.Modules
             {
                 farmLoc.PublishOwnership(playerId, AccessPolicy.Locked);
                 ApplyFarmTemplate(farmLoc, resolvedType, regenerate: true);
+                FarmTypeModule.ApplyMapProperties(farmLoc, resolvedType);
                 EnsureFarmSlotBuildings(farmLoc, assignment);
             }
             else if (loc != null)
@@ -1130,6 +1190,7 @@ namespace Pelican4Ever.Modules
             }
 
             context.Monitor.Log($"[FarmSlotModule] Puerta {doorId} asignada con éxito a {playerId} (Granja: {slotId}, Tipo: {resolvedType}).", LogLevel.Info);
+            RefreshSlotLocationData();
 
             // Actualizar warps físicos continuos en la granja del anfitrión
             EnsureHostFarmPortals(Game1.getFarm());

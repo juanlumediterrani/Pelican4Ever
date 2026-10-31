@@ -26,6 +26,20 @@ namespace Pelican4Ever.Tests
             Assert.Equal(expectedCabinY, template.CabinTileY);
         }
 
+        // Claves vanilla de Data/Locations (Game1.GetFarmTypeKey): sin ellas la residencia pesca solo basura
+        [Theory]
+        [InlineData("Standard", "Farm_Standard")]
+        [InlineData("Fishing", "Farm_Riverland")]
+        [InlineData("Foraging", "Farm_Forest")]
+        [InlineData("Mining", "Farm_Hilltop")]
+        [InlineData("Combat", "Farm_Wilderness")]
+        [InlineData("FourCorners", "Farm_FourCorners")]
+        [InlineData("Ranching", "Farm_MeadowlandsFarm")]
+        public void FarmTemplateCatalog_MapsToVanillaLocationData(string templateId, string expectedKey)
+        {
+            Assert.Equal(expectedKey, FarmTemplateCatalog.GetTemplate(templateId).LocationDataKey);
+        }
+
         [Fact]
         public void FarmTemplateCatalog_UnknownTemplate_DefaultsToStandard()
         {
