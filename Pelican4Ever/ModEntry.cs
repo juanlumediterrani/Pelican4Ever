@@ -47,6 +47,7 @@ namespace Pelican4Ever
                 new WorldLifeModule(),
                 new FestivalMinigameModule(),
                 new FestivalAccessModule(),
+                new FestivalParticipationModule(),
                 new AdminApiModule()
             );
 

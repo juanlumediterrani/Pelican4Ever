@@ -248,20 +248,36 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 ### Épica 7: Minijuegos de Festivales y Eventos Comunitarios Asíncronos
 > **Objetivo:** Participación individual o grupal flexible en festivales sin congelar el servidor.
 
-- [x] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados**
+- [ ] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados** *(reabierta el 2026-10-31)*
   * **Análisis Técnico:** En festivales como la Fiesta del Huevo (`spring13`) o el Festival de Hielo (`winter08`), el minijuego activa un temporizador sincrónico (`Event.drawFestivalScore`). Modificar `Event.answerDialogueQuestion` para que la participación en el minijuego sea instanciada por jugador: cada cliente ejecuta su temporizador localmente y al terminar, reporta su puntuación al Host. El Host registra las puntuaciones del día en `ServerWorldState` y a las 23:50 otorga el premio (ej. Sombrero de Paja) al jugador con la puntuación más alta de la jornada.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Un jugador puede realizar la búsqueda de huevos a las 19:00 y otro a las 22:00 de forma independiente.
     2. Las puntuaciones individuales se consolidan en una tabla comunitaria en el tablón del evento.
     3. El ganador de la jornada recibe el premio automáticamente al finalizar la ventana del festival.
+  * **Revisión (2026-10-31): no está hecha.** El commit `9500ede` la marcó como completa, pero solo dejó el andamiaje:
+    - `FestivalMinigameModule.SubmitScore` existe pero **no se llama desde ningún sitio**: ningún minijuego envía su puntuación. Por eso la tabla de `/festival` siempre sale vacía y el premio de las 23:50 (`ResolveDailyFestivalAwards`) nunca se reparte.
+    - No hay ningún parche sobre `Event.answerDialogueQuestion` ni sobre el temporizador del minijuego; el minijuego sigue siendo el vanilla y síncrono.
+    - Solo están `FestivalScoreLogic` (registro, ganador, formato) y sus tests, que pasan sin probar nada del juego.
+  * **Punto de partida actual:** TASK-704 ya permite repetir el evento principal en tandas a distintas horas del día (criterio 1, en grupo y no por jugador).
+  * **Pendiente:**
+    - Leer `Game1.player.festivalScore` al terminar la búsqueda de huevos (`afterEggHunt`) y la pesca en el hielo (`afterIceFishing`) y llamar a `SubmitScore`.
+    - Decidir el premio: hoy el guion vanilla da el premio al ganador de cada tanda (`awardFestivalPrize`), lo que duplicaría el premio diario de las 23:50. Hay que quitar uno de los dos.
+    - Mostrar la tabla en el recinto (criterio 2), no solo por chat.
 
-- [x] **TASK-702: Ceremonias Comunitarias Programadas en Vivo**
+- [ ] **TASK-702: Ceremonias Comunitarias Programadas en Vivo** *(reabierta el 2026-10-31)*
   * **Análisis Técnico:** Para eventos comunitarios sin minijuego (Luau, Danza de las Medusas), se programa una hora comunitaria por defecto (ej. 21:00 hora real). A las 20:45 se emite un aviso HUD global: *"La ceremonia comenzará en 15 minutos en la playa"*. A las 21:00, los jugadores presentes en la zona inician la cinemática grupal sincronizada mediante `ReadyCheckDialog("ceremony")`, mientras que los jugadores que están en las minas o en su granja continúan su juego sin interrupción.
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**
     1. Las cinemáticas grupales solo arrastran a los jugadores que se encuentran dentro del mapa del evento a la hora señalada.
     2. Los jugadores ausentes no sufren congelación de pantalla ni teletransporte forzoso.
+  * **Revisión (2026-10-31): no está hecha.**
+    - Lo único activo es el aviso de las 20:45 (`FestivalMinigameModule.OnTimeChanged`). Anuncia una ceremonia a las 21:00 que no ocurre, sale en todos los días de festival (también en los que no tienen ceremonia) y se imprime en cada cliente por separado.
+    - `CeremonyLogic.IsCeremonyTime` e `IsPlayerInCeremonyLocation` no se usan en ningún sitio, y no existe ningún `ReadyCheckDialog("ceremony")`.
+    - El criterio 2 (no arrastrar a los ausentes) lo cumplen ahora TASK-703 y TASK-704, no esta tarea.
+  * **Pendiente:**
+    - Programar el arranque a la hora configurada como una tanda de TASK-704 con todos los que estén en el recinto, sin inscripción. Afecta al Luau (`summer11`) y a la Danza de las Medusas (`summer28`).
+    - Que el aviso solo salga en los festivales con ceremonia y una sola vez, desde el host.
 
 - [x] **TASK-703: Entrada y salida libre de festivales sin salto de cámara (`FestivalAccessModule.cs`)**
   * **Análisis Técnico:** En multijugador vanilla, entrar en el mapa del festival abre `ReadyCheckDialog("festivalStart")` para todos, y el guion `set-up` de `Data/Festivals/<fecha>` fija la cámara, teletransporta al jugador a una casilla fija (p. ej. 12,54 en la Fiesta del Huevo), oculta la vista con `viewport -1000 -1000` y la devuelve con `globalFadeToClear`. Salir abre `ReadyCheckDialog("festivalEnd")` y `Event.exitEvent` termina el festival para el servidor: hora a las 22:00 (24:00 en `summer28`/`fall27`), máquinas adelantadas esas horas, aldeanos a casa (host), jugadores a la granja y mensaje `endFest` a todos los clientes. Cambios:
@@ -275,10 +291,19 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Un jugador puede salir y volver a entrar varias veces el mismo día; la hora del servidor no cambia y los demás siguen en el festival.
     3. Sin verificar en partida (pendiente de prueba con dos instancias).
 
-- [ ] **TASK-704: Evento principal del festival sin esperar a todos los jugadores conectados**
-  * **Análisis Técnico:** El evento principal (búsqueda de huevos, baile, concurso…) arranca con `CheckOthersReady("MainEvent_<id>")`, que espera a todos los jugadores conectados. Con TASK-703 ya no están obligados a estar en el festival, así que el evento principal puede quedarse esperando a quien esté en su granja o en las minas. Hay que limitar esa espera a los jugadores presentes en el mapa del festival, o sustituirla por los minijuegos y ceremonias de TASK-701/702.
+- [x] **TASK-704: Evento principal del festival por inscripción, confirmado por el host (`FestivalParticipationModule.cs`)**
+  * **Análisis Técnico:** El evento principal (búsqueda de huevos, Danza de las Flores, Luau, Danza de las Medusas, pesca en el hielo) arranca en multijugador cuando el host responde a Lewis. `Event.forceFestivalContinue` envía `festivalEvent` y arrastra a todos los que están en el festival. Después, las puertas `waitForOtherPlayers` (`startContest`, `endContest`, `festivalEnd`) esperan a **todos los jugadores conectados**, y la orden `end` cierra el festival para el servidor. Cambios:
+    - **Inscripción:** cualquier jugador habla con Lewis en el recinto y se apunta o se borra sin quedarse bloqueado. El host recibe un aviso con cada inscripción.
+    - **Arranque:** el host lo confirma hablando con Lewis («Empezar ahora») o con `/evento empezar` si no está en el recinto. Solo los apuntados entran en el evento principal; los demás siguen paseando por el festival. `/evento` muestra la lista de apuntados.
+    - **Puertas:** en cada tanda se renombran a `<puerta>#<tanda>` y se limitan a sus participantes con `ReadySynchronizer.SetLocalRequiredFarmers`. Las puertas solo se reinician al cambiar de día, así que una tanda posterior heredaría las anteriores ya abiertas.
+    - **Final:** la orden `end` deja al participante en el recinto, en su sitio, sin cerrar el festival para el servidor.
+    - Cada jugador participa en una sola tanda por festival y día, para no repetir premios. La Feria (`fall16`, juicio de granjas) sigue siendo vanilla.
+    - Inscripciones en memoria del host (`FestivalSignUps`, en Core con tests); se pierden si el servidor se reinicia a mitad del festival.
   * **Prioridad:** Alta
-  * **Criterios de Aceptación:** con un jugador en el festival y otro fuera, el del festival puede iniciar y terminar el evento principal.
+  * **Criterios de Aceptación:**
+    1. Con un jugador apuntado en el festival y otro en su granja, el host arranca el evento y el apuntado lo completa sin esperar al otro.
+    2. Un jugador no apuntado que está en el recinto no entra en el evento principal.
+    3. Sin verificar en partida (pendiente de prueba con dos o tres instancias).
 
 ---
 
@@ -303,3 +328,87 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Interfaz accesible por navegador que muestra el mapa visual de las 4–16 puertas y sus propietarios.
     2. Visualización de jugadores conectados, su energía actual y su estado de descanso.
     3. Botones rápidos para lanzar Rollover o limpiar minas con un solo clic.
+
+---
+
+### Épica 9: Anexos de Residencia (Minimapas Adquiribles)
+> **Objetivo:** Sustituir las salidas de las residencias que todavía llevan a los mapas vanilla (`Backwoods`, `BusStop`, `Forest`) por anexos privados que el jugador adquiere: mapas temáticos de un cuarto del tamaño de una granja, con las mismas bonificaciones de su tipo y una única entrada coherente con el lado desde el que se accede.
+
+**Situación de partida (código actual):**
+- Las residencias usan los mapas vanilla de granja (80×65), con sus salidas vanilla al norte (`Backwoods`), al este (`BusStop`), al sur (`Forest`) y a la cueva de la granja (`FarmCave`).
+- `SpatialWarpRouter.ShouldReturnToHostFarm` convierte **una** de esas salidas en la vuelta a la Plaza Central, según el lado del portal del host. Las demás siguen llevando al mapa vanilla, que a su vez devuelve a la granja host `Farm`, no a la residencia.
+- Para los portales del sur del host vuelve la de arriba (`Backwoods`); para los del norte, la de abajo (`Forest`); para los del oeste, la de la derecha (`BusStop`). Cada residencia tiene, por tanto, dos salidas vanilla libres: los huecos de anexo.
+- Las bonificaciones por tipo ya existen para residencias (TASK-604): `FarmTypeBehaviors` en Core, propiedades de mapa y parches en `FarmTypeModule`, y la copia de `Farm_<tipo>` en `Data/Locations`.
+
+- [ ] **TASK-901: Modelo de anexos y catálogo de plantillas (Core)**
+  * **Análisis Técnico:**
+    - `AnnexTemplate` (Id, tipo de granja base, asset de mapa, ancho, alto, zonas de bonificación en coordenadas del anexo) en un `AnnexTemplateCatalog` paralelo a `FarmTemplateCatalog`.
+    - `AnnexAssignment` (residencia, lado: `North`/`East`/`South`, plantilla, propietario) en `ServerWorldState`, con migración de esquema v2 → v3.
+    - Regla pura `ResidenceExits.FreeSides(door)`: los lados vanilla que no devuelven al host según `SpatialWarpRouter`.
+    - Regla pura `AnnexEntrance.For(side, ancho, alto)`: la única entrada queda en el borde opuesto al lado de acceso (salir de la residencia por el este entra al anexo por su borde oeste, centrada), junto con la casilla de vuelta a la residencia.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Para cada uno de los 16 portales de `doors.json`, `FreeSides` devuelve exactamente los lados vanilla que no vuelven al host (tests con el catálogo real).
+    2. `AnnexEntrance` coloca entrada y vuelta en lados coherentes para los tres lados (tests).
+    3. Un estado v2 migra a v3 sin perder residencias.
+
+- [ ] **TASK-902: Mapas temáticos de un cuarto de tamaño (40×32)**
+  * **Análisis Técnico:** Un mapa por tipo del catálogo (Estándar, Fluvial, Forestal, Colinas, Salvaje, Cuatro Esquinas y Pradera), con un cuarto del área de la granja vanilla (la mitad en cada dimensión). Dos opciones:
+    - **A, generada:** recortar con `MapCloneHelper` el cuadrante más representativo del mapa vanilla (el del río en la Fluvial, el de la colina de mineral en Colinas, la franja forestal en la Forestal...) y sellar los bordes con la capa `Buildings`, salvo la entrada.
+    - **B, a mano:** diseñarlos en Tiled como `.tmx` del mod.
+
+    Recomendación: A para tener los siete pronto y B después para pulirlos. Las bonificaciones que dependen de coordenadas hay que recalcularlas para el anexo:
+    - zonas de pesca (`FishAreas`) y propiedad `FarmFishLocationOverride`;
+    - `SpawnMountainFarmOreRect` (Colinas usa 5,37,22,8 en el mapa grande);
+    - la franja oeste de forraje forestal (`x < 18`) y los tocones (`Paths` índice 21);
+    - las zonas de Cuatro Esquinas.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Cada anexo mide 40×32, es transitable y no tiene más salida que su entrada.
+    2. La Fluvial tiene agua pescable con la tabla de `Farm_Riverland`; Colinas genera mineral dentro de su zona; la Forestal genera forraje y tocones.
+    3. Ningún warp del mapa lleva a una ubicación vanilla.
+
+- [ ] **TASK-903: Ubicaciones de anexo y su ciclo de vida**
+  * **Análisis Técnico:**
+    - Entradas `Pelican4Ever_Annex_<NN>_<Lado>` en `Data/Locations`, creadas al adquirir el anexo y reconstruidas al cargar, como `RefreshSlotLocationData` en las residencias.
+    - Las mismas reglas que una residencia: culling de red (`LocationCullingLogic`, ampliando el prefijo), `PublishOwnership`, parches anti-griefing de herramientas y cofres, y política de acceso heredada de la residencia.
+    - Al liberar una residencia (`NormalizeDoorAssignments`), sus anexos se conservan para el propietario o se liberan con ella. Hay que decidir cuál.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Un anexo guarda y recarga cultivos, objetos y máquinas tras reiniciar el servidor.
+    2. Un visitante sin permiso no puede usar herramientas ni cofres en el anexo.
+    3. Un anexo sin jugadores dentro ni propietario conectado no se sincroniza por red.
+
+- [ ] **TASK-904: Sustituir las salidas vanilla de las residencias**
+  * **Análisis Técnico:** En `FarmSlotModule.Prefix_WarpFarmer`, las salidas de una residencia que no vuelven al host dejan de llevar al mapa vanilla:
+    - si el propietario tiene anexo en ese lado, van a su entrada (`AnnexEntrance`);
+    - si no lo tiene, el jugador se detiene en el borde con el cartel de compra (TASK-905).
+
+    La salida del anexo devuelve a la residencia en la casilla del borde por el que se entró. La cueva de la granja (`FarmCave`, compartida entre todos) queda fuera de esta tarea y se apunta aparte.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Desde ninguna residencia se llega a `Backwoods`, `BusStop` ni `Forest`.
+    2. Entrar y salir de un anexo deja al jugador en el lado coherente de cada mapa.
+    3. La salida que vuelve a la Plaza Central no cambia.
+
+- [ ] **TASK-905: Adquirir un anexo**
+  * **Análisis Técnico:**
+    - Al tocar una salida libre de su residencia, el propietario ve qué plantillas puede elegir y su precio. Opcionalmente, Robin vende un «Título de anexo» que se usa en esa salida.
+    - El cobro es del monedero individual (`useSeparateWallets`).
+    - La petición va al host y se valida allí, como `HandleClaimDoor`: propietario de la residencia, lado libre, plantilla válida y fondos suficientes.
+    - Precios y límite de anexos por jugador en `config.json`.
+  * **Prioridad:** Baja
+  * **Criterios de Aceptación:**
+    1. Solo el propietario puede adquirir anexos de su residencia, como mucho uno por lado libre.
+    2. Sin fondos, la compra se rechaza sin cobrar nada.
+    3. Tras comprar, la salida lleva al anexo sin reiniciar.
+
+- [ ] **TASK-906: Bonificaciones del tipo en los anexos**
+  * **Análisis Técnico:**
+    - Extender `FarmTypeModule.BehaviorOf` y la copia de `Farm_<tipo>` en `Data/Locations` a las ubicaciones de anexo, con las zonas recalculadas por plantilla de TASK-902 en vez de las constantes vanilla de `FarmTypeBehaviors`.
+    - El tipo del anexo es el de su plantilla, aunque no coincida con el de la residencia: una residencia estándar puede tener un anexo fluvial.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Un anexo fluvial pesca la tabla fluvial y tiene burbujas de peces.
+    2. Un anexo de Colinas genera mineral a diario dentro de su zona.
+    3. Un anexo salvaje tiene monstruos nocturnos y la residencia estándar a la que pertenece no.

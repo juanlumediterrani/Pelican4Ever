@@ -49,6 +49,10 @@ namespace Pelican4Ever.Modules
                     original: AccessTools.Method(typeof(Event), nameof(Event.TryStartEndFestivalDialogue)),
                     prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_TryStartEndFestivalDialogue))
                 );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Event), nameof(Event.exitEvent)),
+                    prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_ExitEvent))
+                );
 
                 context?.Monitor.Log("[FestivalAccessModule] Parches de entrada y salida libre de festivales aplicados.", LogLevel.Trace);
             }
@@ -139,6 +143,7 @@ namespace Pelican4Ever.Modules
 
             __instance.isFestival = false;
             __instance.setExitLocation(exit.TargetName, exit.TargetX, exit.TargetY);
+            FestivalParticipationModule.OnFestivalEventEnded();
             Game1.currentMinigame = null;
             Game1.exitActiveMenu();
             __instance.endBehaviors();
@@ -147,6 +152,22 @@ namespace Pelican4Ever.Modules
             context?.Monitor.Log($"[FestivalAccessModule] {who.Name} sale del festival hacia {exit.TargetName} ({exit.TargetX}, {exit.TargetY}).", LogLevel.Trace);
             __result = true;
             return false;
+        }
+
+        /// <summary>
+        /// Final del evento principal (orden <c>end</c> del guion): en vez de cerrar el festival para el servidor, el
+        /// jugador vuelve al mapa real del festival en su casilla y, al recargarse, sigue en el festival en su sitio.
+        /// </summary>
+        public static void Prefix_ExitEvent(Event __instance)
+        {
+            if (!Game1.IsMultiplayer || !__instance.isFestival)
+                return;
+
+            __instance.isFestival = false;
+            Point tile = Game1.player.TilePoint;
+            __instance.setExitLocation(Game1.whereIsTodaysFest ?? Game1.currentLocation.Name, tile.X, tile.Y);
+            FestivalParticipationModule.OnFestivalEventEnded();
+            context?.Monitor.Log($"[FestivalAccessModule] {Game1.player.Name} termina el evento del festival sin cerrarlo para el servidor.", LogLevel.Trace);
         }
 
         /// <summary>Si el festival abre con el jugador ya dentro del mapa, empieza en ese momento y en su sitio.</summary>
