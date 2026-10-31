@@ -25,7 +25,7 @@ Contrato HTTP local para operar un servidor Pelican 4Ever desde fuera del juego.
 
 ### `GET /api/v1/host/clock`
 
-Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`IsNightHold`), el instante del próximo Rollover y el resultado y copia de seguridad del último Rollover.
+Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`IsNightHold`), el instante del próximo Rollover, el resultado y copia de seguridad del último Rollover y la partida servida.
 
 **Respuesta `200 OK` (`HostClockDto`):**
 ```json
@@ -44,9 +44,13 @@ Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`
   "LastRolloverGameDay": 11,
   "LastRolloverOutcomeSummary": "rested=3, penalized=0, untouched=1",
   "LastBackupFileName": "PelicanValley_20261031_060000",
-  "LastBackupCreatedUtc": "2026-10-31T05:00:00.0000000Z"
+  "LastBackupCreatedUtc": "2026-10-31T05:00:00.0000000Z",
+  "SaveFolderName": "PelicanValley_452974881",
+  "IsMultiplayerServer": true
 }
 ```
+
+`SaveFolderName` es la carpeta de `Saves/` de la partida cargada e `IsMultiplayerServer` indica si está abierta como servidor de cooperativo; un supervisor desatendido los usa para comprobar que el servidor sirve la partida autorizada (`TASK-805`, ver `docs/servidor-persistente.md`).
 
 ### `GET /api/v1/host/players`
 

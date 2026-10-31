@@ -621,7 +621,9 @@ namespace Pelican4Ever.Modules
                 LastRolloverGameDay = context.WorldState.LastRolloverGameDay,
                 LastRolloverOutcomeSummary = DailyRolloverModule.LastRolloverOutcomeSummary,
                 LastBackupFileName = DailyRolloverModule.LastBackupFileName,
-                LastBackupCreatedUtc = DailyRolloverModule.LastBackupCreatedUtc
+                LastBackupCreatedUtc = DailyRolloverModule.LastBackupCreatedUtc,
+                SaveFolderName = Context.IsWorldReady ? Constants.SaveFolderName ?? string.Empty : string.Empty,
+                IsMultiplayerServer = Context.IsWorldReady && Game1.IsServer && Game1.server != null
             };
         }
 

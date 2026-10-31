@@ -34,6 +34,12 @@ namespace Pelican4Ever.Core.Admin
         public string LastRolloverOutcomeSummary { get; set; } = string.Empty;
         public string LastBackupFileName { get; set; } = string.Empty;
         public string LastBackupCreatedUtc { get; set; } = string.Empty;
+
+        /// <summary>Carpeta de <c>Saves/</c> de la partida cargada: un supervisor comprueba que es la autorizada (TASK-805).</summary>
+        public string SaveFolderName { get; set; } = string.Empty;
+
+        /// <summary>Si la partida está abierta como servidor de cooperativo (los jugadores pueden entrar).</summary>
+        public bool IsMultiplayerServer { get; set; }
     }
 
     /// <summary>
