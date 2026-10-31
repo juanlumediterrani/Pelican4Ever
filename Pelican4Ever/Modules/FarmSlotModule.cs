@@ -2040,6 +2040,14 @@ namespace Pelican4Ever.Modules
                 string slotId = assignment.FarmSlotId;
                 Point warpPoint = GetResidenceTotemPoint(slotId, assignment.FarmType);
                 Game1.warpFarmer(slotId, warpPoint.X, warpPoint.Y, flip: false);
+
+                // Mismo cierre que Object.totemWarpForReal: la animación del tótem dejó al jugador oculto e invulnerable
+                Game1.fadeToBlackAlpha = 0.99f;
+                Game1.screenGlow = false;
+                Game1.player.temporarilyInvincible = false;
+                Game1.player.temporaryInvincibilityTimer = 0;
+                Game1.displayFarmer = true;
+
                 context?.Monitor.Log($"[FarmSlotModule] Tótem de granja utilizado por {Game1.player.Name}: teletransportado a residencia {slotId} ({warpPoint.X}, {warpPoint.Y}).", LogLevel.Info);
                 return false;
             }
