@@ -1,0 +1,12 @@
+# Pantalla virtual local del runtime preproducción; sin VNC ni escucha TCP.
+[Unit]
+Description=Xvfb dedicado a Pelican preproducción
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/Xvfb :77 -screen 0 1280x800x24 -nolisten tcp -noreset
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

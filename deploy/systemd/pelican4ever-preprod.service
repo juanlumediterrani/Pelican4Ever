@@ -1,0 +1,25 @@
+# Pelican 4Ever · servidor persistente preproducción (no activar antes de F0/F1).
+[Unit]
+Description=Pelican 4Ever · Stardew aislado de preproducción
+Requires=pelican4ever-preprod-xvfb.service
+After=pelican4ever-preprod-xvfb.service
+StartLimitIntervalSec=900
+StartLimitBurst=5
+
+[Service]
+Type=exec
+Environment=STARDEW_DIR=%h/.local/share/pelican4ever/preprod/game
+Environment=HOME=%h/.local/share/pelican4ever/preprod/home
+Environment=XDG_CONFIG_HOME=%h/.local/share/pelican4ever/preprod/xdg/config
+Environment=XDG_DATA_HOME=%h/.local/share/pelican4ever/preprod/xdg/data
+Environment=XDG_CACHE_HOME=%h/.local/share/pelican4ever/preprod/xdg/cache
+Environment=DISPLAY=:77
+EnvironmentFile=%h/.config/pelican4ever/preprod/host.env
+WorkingDirectory=%h/.local/share/pelican4ever/preprod/game
+ExecStart=/bin/sh -c 'cd "$STARDEW_DIR" && exec ./StardewModdingAPI'
+Restart=always
+RestartSec=30
+TimeoutStopSec=120
+
+[Install]
+WantedBy=graphical-session.target
