@@ -8,7 +8,7 @@ public class ScheduleCatchUpTests
     private static readonly int[] PierreLike = { 900, 1300, 1700, 2100 };
 
     [Theory]
-    [InlineData(600, null)]    // Antes de la primera entrada: sigue en su sitio de la mañana
+    [InlineData(600, null)]    // Antes de la primera entrada: en su sitio de la mañana
     [InlineData(900, 900)]     // Justo a la hora de una entrada
     [InlineData(1300, 1300)]   // Servidor arrancado a la 1 PM
     [InlineData(1450, 1300)]   // Entre dos entradas: la última que ya empezó
@@ -28,5 +28,14 @@ public class ScheduleCatchUpTests
     public void LatestEntryAtOrBefore_EmptySchedule_ReturnsNull()
     {
         Assert.Null(ScheduleCatchUp.LatestEntryAtOrBefore(System.Array.Empty<int>(), 1300));
+    }
+
+    [Theory]
+    [InlineData(1800, 1000, 900)]   // /time -8: de vuelta al tramo de la mañana, no al de la tarde
+    [InlineData(1800, 700, null)]   // Retroceso antes del primer tramo: vuelve a su posición de la mañana
+    public void LatestEntryAtOrBefore_AfterRewind_DependsOnlyOnTheNewTime(int previousTime, int newTime, int? expected)
+    {
+        Assert.Equal(1700, ScheduleCatchUp.LatestEntryAtOrBefore(PierreLike, previousTime));
+        Assert.Equal(expected, ScheduleCatchUp.LatestEntryAtOrBefore(PierreLike, newTime));
     }
 }

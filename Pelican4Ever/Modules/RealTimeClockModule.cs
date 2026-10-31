@@ -209,7 +209,8 @@ namespace Pelican4Ever.Modules
         /// <summary>
         /// Coloca a cada aldeano al final de la última entrada de su horario que ya debería haber empezado.
         /// Sin esto, tras un salto de reloj se quedan en su posición de las 0600: checkSchedule solo encola la
-        /// entrada de la hora exacta de cada tramo, y los tramos saltados no se vuelven a mirar.
+        /// entrada de la hora exacta de cada tramo, y los tramos saltados no se vuelven a mirar. Sirve igual para
+        /// adelantar que para retrasar la hora (arranque a media jornada y comandos /time).
         /// </summary>
         public static void CatchUpVillagerSchedules(int timeOfDay)
         {
@@ -245,33 +246,83 @@ namespace Pelican4Ever.Modules
             if (npc.Schedule == null || npc.ignoreScheduleToday || npc.IsInvisible)
                 return false;
 
+            // Si la hora retrocede antes del primer tramo, el aldeano vuelve a su posición de la mañana
             int? entryTime = ScheduleCatchUp.LatestEntryAtOrBefore(npc.Schedule.Keys, timeOfDay);
-            if (entryTime == null)
-                return false;
-
-            SchedulePathDescription entry = npc.Schedule[entryTime.Value];
-            GameLocation? target = Game1.getLocationFromName(entry.targetLocationName);
+            SchedulePathDescription? entry = entryTime != null ? npc.Schedule[entryTime.Value] : null;
+            if (entry == null && npc.isMarried())
+                return false; // su posición de la mañana la decide marriageDuties, no DefaultMap
+            GameLocation? target = Game1.getLocationFromName(entry?.targetLocationName ?? npc.DefaultMap);
             if (target == null)
                 return false;
 
-            npc.controller = null;
-            npc.temporaryController = null;
-            npc.queuedSchedulePaths.Clear();
-            npc.Halt();
-            Game1.warpCharacter(npc, target, new Vector2(entry.targetTile.X, entry.targetTile.Y));
-            npc.faceDirection(entry.facingDirection);
-            npc.previousEndPoint = entry.targetTile;
+            ResetRouteState(npc);
+            if (entry != null)
+            {
+                Game1.warpCharacter(npc, target, new Vector2(entry.targetTile.X, entry.targetTile.Y));
+                npc.faceDirection(entry.facingDirection);
+                npc.previousEndPoint = entry.targetTile;
+            }
+            else
+            {
+                Game1.warpCharacter(npc, target, npc.DefaultPosition / Game1.tileSize);
+                npc.faceDirection(npc.DefaultFacingDirection);
+                npc.previousEndPoint = new Point((int)npc.DefaultPosition.X / Game1.tileSize, (int)npc.DefaultPosition.Y / Game1.tileSize);
+            }
+
+            // Tras un retroceso, checkSchedule debe volver a encolar los tramos posteriores a la nueva hora
             npc.lastAttemptedSchedule = timeOfDay;
 
-            // Animación o mensaje de fin de ruta (sentarse, trabajar en el mostrador...), como hace checkSchedule al llegar
-            if (GetRouteEndBehavior?.Invoke(npc, new object?[] { entry.endOfRouteBehavior, entry.endOfRouteMessage }) is PathFindController.endBehavior endBehavior)
+            // Animación o mensaje de fin de ruta (sentarse, trabajar en el mostrador, dormir...), como hace checkSchedule al llegar
+            if (entry != null && GetRouteEndBehavior?.Invoke(npc, new object?[] { entry.endOfRouteBehavior, entry.endOfRouteMessage }) is PathFindController.endBehavior endBehavior)
                 endBehavior(npc, target);
 
             return true;
         }
 
+        /// <summary>
+        /// Deja al aldeano sin ruta ni animación de fin de ruta en curso (dormido, sentado, paseando en cuadrado...),
+        /// como hace <c>NPC.resetForNewDay</c>; si no, conserva la pose de la hora anterior en su nueva posición.
+        /// </summary>
+        private static void ResetRouteState(NPC npc)
+        {
+            npc.controller = null;
+            npc.temporaryController = null;
+            npc.queuedSchedulePaths.Clear();
+            if (npc.doingEndOfRouteAnimation.Value)
+                RouteEndAnimationFinished?.Invoke(npc, new object?[] { null });
+
+            npc.isSleeping.Value = false;
+            npc.goingToDoEndOfRouteAnimation.Value = false;
+            npc.drawOffset = Vector2.Zero;
+            npc.appliedRouteAnimationOffset = Vector2.Zero;
+            if (npc.layingDown)
+            {
+                npc.layingDown = false;
+                npc.HideShadow = false;
+            }
+
+            // Con returningToEndPoint activo, checkSchedule no atiende ningún tramo nuevo
+            IsWalkingInSquareField?.SetValue(npc, false);
+            ReturningToEndPointField?.SetValue(npc, false);
+            StartedEndOfRouteBehaviorField?.SetValue(npc, null);
+            npc.Sprite.StopAnimation();
+            npc.Halt();
+        }
+
         private static readonly System.Reflection.MethodInfo? GetRouteEndBehavior =
             AccessTools.Method(typeof(NPC), "getRouteEndBehaviorFunction");
+
+        private static readonly System.Reflection.MethodInfo? RouteEndAnimationFinished =
+            AccessTools.Method(typeof(NPC), "routeEndAnimationFinished");
+
+        private static readonly System.Reflection.FieldInfo? IsWalkingInSquareField =
+            AccessTools.Field(typeof(NPC), "isWalkingInSquare");
+
+        private static readonly System.Reflection.FieldInfo? ReturningToEndPointField =
+            AccessTools.Field(typeof(NPC), "returningToEndPoint");
+
+        private static readonly System.Reflection.FieldInfo? StartedEndOfRouteBehaviorField =
+            AccessTools.Field(typeof(NPC), "_startedEndOfRouteBehavior");
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
@@ -337,11 +388,8 @@ namespace Pelican4Ever.Modules
             if (Game1.timeOfDay > reading.TimeOfDay)
             {
                 // Si la hora del juego quedó por delante (ej. retroceso manual con /time -X o DST), sincronizar hacia atrás
-                Game1.timeOfDay = reading.TimeOfDay;
-                if (Game1.netWorldState?.Value != null)
-                {
-                    Game1.netWorldState.Value.UpdateFromGame1();
-                }
+                // y devolver a los aldeanos a donde estarían a esa hora
+                JumpClockTo(reading.TimeOfDay);
             }
             else if (ticksNeeded > 0)
             {
