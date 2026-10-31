@@ -238,10 +238,14 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Una residencia Pradera empieza con su gallinero y genera hierba azul.
     3. Cada punto restante queda resuelto o descartado explícitamente en esta tarea.
 
-- [ ] **TASK-606: Las residencias no reciben hierba nueva cada día**
-  * **Análisis Técnico:** `GameLocation.spawnWeeds` (llamado desde `Farm.DayUpdate`) solo siembra hierba nueva si `name.Value == "Farm"`; en `Pelican4Ever_Farm_XX` esa rama se salta y solo salen malezas. La hierba que ya existe puede seguir extendiéndose, pero no aparecen matas nuevas (afecta al heno y al pasto de los animales). Detectado al inventariar TASK-605; es independiente del tipo de granja. Sin verificar en partida.
+- [x] **TASK-606: Las residencias no reciben hierba nueva cada día**
+  * **Análisis Técnico:** En el motor vanilla, `GameLocation.spawnWeeds` (llamado desde `Farm.DayUpdate`) solo siembra hierba nueva si `name.Value == "Farm"`, por lo que las residencias `Pelican4Ever_Farm_XX` omitían la generación diaria de hierba. Resuelto en `FarmTypeModule.Postfix_FarmDayUpdate` con `SpawnDailyGrass` y la lógica pura `FarmGrassLogic`:
+    - Replica el algoritmo de `spawnWeeds` con los mismos intentos (`MinDailyWeeds`..`MaxDailyWeeds`, multiplicador de 15 en primavera día 1), comprobaciones de casillas excavables y probabilidad del 15%.
+    - Soporte nativo para Pradera (`Meadowlands`): 10% de probabilidad de generar hierba azul (`Grass` tipo 7), determinado por el tipo de granja de la residencia y no por el tipo global del servidor.
   * **Prioridad:** Media
-  * **Criterios de Aceptación:** una residencia sin intervención del jugador gana matas de hierba nuevas a diario en proporción similar a la granja host.
+  * **Criterios de Aceptación:**
+    1. Una residencia sin intervención del jugador gana matas de hierba nuevas a diario en proporción similar a la granja host.
+    2. Las residencias de Pradera generan hierba azul silvestre de forma periódica.
 
 ---
 

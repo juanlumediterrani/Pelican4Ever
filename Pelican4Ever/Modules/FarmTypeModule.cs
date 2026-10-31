@@ -172,11 +172,14 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        /// <summary>Tocones forestales y extras de Cuatro Esquinas, que Farm.DayUpdate solo hace si la partida es de ese tipo.</summary>
+        /// <summary>Tocones forestales, hierba diaria y extras de Cuatro Esquinas, que Farm.DayUpdate solo hace si la partida es de ese tipo.</summary>
         public static void Postfix_FarmDayUpdate(Farm __instance)
         {
             if (!Game1.IsMasterGame || BehaviorOf(__instance) is not { } behavior)
                 return;
+
+            // TASK-606: Siembra diaria de hierba en residencias
+            SpawnDailyGrass(__instance);
 
             if (behavior.ForestStumps && Game1.whichFarm != 2)
             {
@@ -208,6 +211,66 @@ namespace Pelican4Ever.Modules
                             weeds.SetIdAndSprite(792 + Game1.seasonIndex);
 #pragma warning restore CS0618
                         }
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Siembra diaria de hierba en residencias (TASK-606). Vanilla solo añade hierba en spawnWeeds si name.Value == "Farm";
+        /// aquí replicamos esa lógica para que cada hueco gane matas silvestres (y hierba azul en Pradera).
+        /// </summary>
+        public static void SpawnDailyGrass(Farm farm)
+        {
+            if (farm.GetSeason() == Season.Winter || farm.map == null)
+                return;
+
+            string? farmType = context?.WorldState.Doors.Values
+                .FirstOrDefault(d => d.FarmSlotId == farm.NameOrUniqueName)?.FarmType;
+            bool isMeadowlands = FarmGrassLogic.IsMeadowlands(farmType);
+
+            var data = farm.GetData();
+            int minWeeds = data?.MinDailyWeeds ?? 1;
+            int maxWeeds = data?.MaxDailyWeeds ?? 5;
+            int firstDayMult = data?.FirstDayWeedMultiplier ?? 15;
+
+            int attempts = FarmGrassLogic.CalculateDailyAttempts(
+                minWeeds,
+                maxWeeds,
+                Game1.dayOfMonth,
+                Game1.IsSpring,
+                firstDayMult,
+                Game1.random.NextDouble()
+            );
+
+            int mapWidth = farm.map.DisplayWidth / 64;
+            int mapHeight = farm.map.DisplayHeight / 64;
+            if (mapWidth <= 0 || mapHeight <= 0)
+                return;
+
+            for (int i = 0; i < attempts; i++)
+            {
+                for (int retry = 0; retry < 3; retry++)
+                {
+                    if (Game1.random.NextDouble() >= FarmGrassLogic.DailyGrassChance)
+                        continue;
+
+                    int x = Game1.random.Next(mapWidth);
+                    int y = Game1.random.Next(mapHeight);
+                    Vector2 tile = new Vector2(x, y);
+
+                    bool hasDiggable = farm.doesTileHaveProperty(x, y, "Diggable", "Back") != null;
+                    bool isTileOpen = farm.isTileLocationOpen(new xTile.Dimensions.Location(x, y));
+                    bool isOccupied = farm.IsTileOccupiedBy(tile) || farm.objects.ContainsKey(tile) || farm.terrainFeatures.ContainsKey(tile);
+                    bool isWater = farm.isWaterTile(x, y);
+                    bool isNoSpawn = farm.IsNoSpawnTile(tile, "Grass");
+
+                    if (FarmGrassLogic.CanSpawnGrassOnTile(false, hasDiggable, isTileOpen, isOccupied, isWater, isNoSpawn))
+                    {
+                        int grassType = FarmGrassLogic.DetermineGrassType(isMeadowlands, Game1.random.NextDouble());
+                        int numberOfWeeds = Game1.random.Next(1, 3);
+                        farm.terrainFeatures[tile] = new Grass(grassType, numberOfWeeds);
+                        break;
                     }
                 }
             }
