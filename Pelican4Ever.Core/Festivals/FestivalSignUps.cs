@@ -74,6 +74,31 @@ namespace Pelican4Ever.Core.Festivals
             return new FestivalRun(festival, runs, participants);
         }
 
+        /// <summary>
+        /// Inicia una tanda de ceremonia comunitaria en vivo con todos los vecinos presentes en el mapa, sin requerir inscripción previa.
+        /// </summary>
+        public FestivalRun? StartCeremonyRun(string festival, IEnumerable<long> attendeeIds)
+        {
+            EnsureFestival(festival);
+            var participants = attendeeIds
+                .Where(id => !played.Contains(id))
+                .Distinct()
+                .OrderBy(id => id)
+                .ToList();
+
+            if (participants.Count == 0)
+                return null;
+
+            runs++;
+            played.UnionWith(participants);
+            foreach (long id in participants)
+            {
+                signedUp.Remove(id);
+            }
+
+            return new FestivalRun(festival, runs, participants);
+        }
+
         public void Reset()
         {
             festivalId = string.Empty;

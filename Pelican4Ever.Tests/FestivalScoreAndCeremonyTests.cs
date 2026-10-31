@@ -76,5 +76,51 @@ namespace Pelican4Ever.Tests
             bool match = CeremonyLogic.IsPlayerInCeremonyLocation(playerLoc, ceremonyLoc);
             Assert.Equal(expected, match);
         }
+
+        [Theory]
+        [InlineData("festival_spring13", "spring13")]
+        [InlineData("FESTIVAL_WINTER8", "winter8")]
+        [InlineData("spring13", "spring13")]
+        [InlineData("", "")]
+        [InlineData(null, "")]
+        public void FestivalScoreLogic_NormalizeFestivalId_NormalizesPrefixAndCase(string? input, string expected)
+        {
+            Assert.Equal(expected, FestivalScoreLogic.NormalizeFestivalId(input));
+        }
+
+        [Fact]
+        public void BuildLeaderboardLetterText_WithNoEntries_ShowsEmptyStandingsMessage()
+        {
+            var text = FestivalScoreLogic.BuildLeaderboardLetterText(new List<FestivalScoreEntry>(), "spring13", 13, "Fiesta del Huevo");
+            Assert.Contains("=== Tablón Oficial: Fiesta del Huevo ===", text);
+            Assert.Contains("Todavía no hay marcas registradas", text);
+        }
+
+        [Fact]
+        public void BuildLeaderboardLetterText_WithScores_ShowsRankedStandingsWithMedals()
+        {
+            var list = new List<FestivalScoreEntry>();
+            FestivalScoreLogic.RecordScore(list, "spring13", 13, 100L, "Alice", 9);
+            FestivalScoreLogic.RecordScore(list, "spring13", 13, 200L, "Bob", 14);
+
+            var text = FestivalScoreLogic.BuildLeaderboardLetterText(list, "spring13", 13, "Fiesta del Huevo");
+            Assert.Contains("=== Clasificación Oficial: Fiesta del Huevo ===", text);
+            Assert.Contains("1. [1er Puesto] Bob — 14 pts", text);
+            Assert.Contains("2. [2º Puesto] Alice — 9 pts", text);
+            Assert.Contains("23:50", text);
+        }
+
+        [Theory]
+        [InlineData("summer", 11, true, "Beach", "Luau")]
+        [InlineData("summer", 28, true, "Beach", "Danza de las Medusas Lunares")]
+        [InlineData("spring", 13, false, null, "Ceremonia Comunitaria")]
+        [InlineData("fall", 16, false, null, "Ceremonia Comunitaria")]
+        [InlineData("winter", 8, false, null, "Ceremonia Comunitaria")]
+        public void CeremonyLogic_FestivalDetectionAndDetails(string season, int day, bool isCeremony, string? location, string name)
+        {
+            Assert.Equal(isCeremony, CeremonyLogic.IsCeremonyFestival(season, day));
+            Assert.Equal(location, CeremonyLogic.GetCeremonyLocation(season, day));
+            Assert.Equal(name, CeremonyLogic.GetCeremonyFestivalName(season, day));
+        }
     }
 }

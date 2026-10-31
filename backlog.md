@@ -248,36 +248,26 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 ### Épica 7: Minijuegos de Festivales y Eventos Comunitarios Asíncronos
 > **Objetivo:** Participación individual o grupal flexible en festivales sin congelar el servidor.
 
-- [ ] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados** *(reabierta el 2026-10-31)*
-  * **Análisis Técnico:** En festivales como la Fiesta del Huevo (`spring13`) o el Festival de Hielo (`winter08`), el minijuego activa un temporizador sincrónico (`Event.drawFestivalScore`). Modificar `Event.answerDialogueQuestion` para que la participación en el minijuego sea instanciada por jugador: cada cliente ejecuta su temporizador localmente y al terminar, reporta su puntuación al Host. El Host registra las puntuaciones del día en `ServerWorldState` y a las 23:50 otorga el premio (ej. Sombrero de Paja) al jugador con la puntuación más alta de la jornada.
+- [x] **TASK-701: Minijuegos de Festival Asíncronos Desacoplados**
+  * **Análisis Técnico:** En festivales como la Fiesta del Huevo (`spring13`) o el Festival de Hielo (`winter08`), el minijuego activa un temporizador individual (`Event.drawFestivalScore`). Cada cliente ejecuta su minijuego localmente y al terminar (`Event.EndPlayerControlSequence`), envía su puntuación al Host mediante `FestivalMinigameModule.SubmitScore`.
+    - `Event.DefaultCommands.AwardFestivalPrize` suprime los premios inmediatos por tanda individual (`CurrentCommand += 2`), consolidando la entrega oficial al campeón de la jornada a las 23:50 vía `ResolveDailyFestivalAwards` (Sombrero de Paja / Ticket de Premio en Fiesta del Huevo; Gorra de Marinero + Aparejos / Ticket de Premio en Festival de Hielo). Si el ganador está desconectado, se deposita en su inventario o en `mailForTomorrow`.
+    - La clasificación comunitaria puede consultarse en cualquier momento hablando con Lewis («Ver clasificación de hoy»), pulsando sobre el tablón de anuncios (`Billboard`) en el mapa festivo (se abre como `LetterViewerMenu`) o con el comando `/festival`.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
-    1. Un jugador puede realizar la búsqueda de huevos a las 19:00 y otro a las 22:00 de forma independiente.
-    2. Las puntuaciones individuales se consolidan en una tabla comunitaria en el tablón del evento.
-    3. El ganador de la jornada recibe el premio automáticamente al finalizar la ventana del festival.
-  * **Revisión (2026-10-31): no está hecha.** El commit `9500ede` la marcó como completa, pero solo dejó el andamiaje:
-    - `FestivalMinigameModule.SubmitScore` existe pero **no se llama desde ningún sitio**: ningún minijuego envía su puntuación. Por eso la tabla de `/festival` siempre sale vacía y el premio de las 23:50 (`ResolveDailyFestivalAwards`) nunca se reparte.
-    - No hay ningún parche sobre `Event.answerDialogueQuestion` ni sobre el temporizador del minijuego; el minijuego sigue siendo el vanilla y síncrono.
-    - Solo están `FestivalScoreLogic` (registro, ganador, formato) y sus tests, que pasan sin probar nada del juego.
-  * **Punto de partida actual:** TASK-704 ya permite repetir el evento principal en tandas a distintas horas del día (criterio 1, en grupo y no por jugador).
-  * **Pendiente:**
-    - Leer `Game1.player.festivalScore` al terminar la búsqueda de huevos (`afterEggHunt`) y la pesca en el hielo (`afterIceFishing`) y llamar a `SubmitScore`.
-    - Decidir el premio: hoy el guion vanilla da el premio al ganador de cada tanda (`awardFestivalPrize`), lo que duplicaría el premio diario de las 23:50. Hay que quitar uno de los dos.
-    - Mostrar la tabla en el recinto (criterio 2), no solo por chat.
+    1. Un jugador puede realizar la búsqueda de huevos a las 19:00 y otro a las 22:00 en tandas independientes.
+    2. Las puntuaciones individuales se consolidan en una tabla comunitaria visible en el tablón del evento y mediante Lewis.
+    3. El ganador de la jornada recibe el premio oficial automáticamente al finalizar la ventana del festival (23:50).
 
-- [ ] **TASK-702: Ceremonias Comunitarias Programadas en Vivo** *(reabierta el 2026-10-31)*
-  * **Análisis Técnico:** Para eventos comunitarios sin minijuego (Luau, Danza de las Medusas), se programa una hora comunitaria por defecto (ej. 21:00 hora real). A las 20:45 se emite un aviso HUD global: *"La ceremonia comenzará en 15 minutos en la playa"*. A las 21:00, los jugadores presentes en la zona inician la cinemática grupal sincronizada mediante `ReadyCheckDialog("ceremony")`, mientras que los jugadores que están en las minas o en su granja continúan su juego sin interrupción.
+- [x] **TASK-702: Ceremonias Comunitarias Programadas en Vivo**
+  * **Análisis Técnico:** Para eventos comunitarios sin minijuego (Luau `summer11`, Danza de las Medusas `summer28`):
+    - A las 20:45, el Host emite un único aviso por el chat anunciando que la ceremonia comenzará en 15 minutos en la playa (`CeremonyLogic.IsWarningWindow` + `IsCeremonyFestival`).
+    - A las 21:00, el Host detecta a todos los vecinos presentes en la playa (`CeremonyLogic.IsPlayerInCeremonyLocation`) y arranca automáticamente una tanda sin inscripción previa mediante `FestivalParticipationModule.StartCeremonyRun`.
+    - Los jugadores ausentes (en minas, granjas u otros mapas) continúan jugando sin congelaciones de pantalla, tirones ni teletransporte forzoso.
+    - El diálogo de Lewis en estos festivales informa del inicio a las 21:00 y permite al Host adelantar el comienzo si los vecinos ya están reunidos.
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**
     1. Las cinemáticas grupales solo arrastran a los jugadores que se encuentran dentro del mapa del evento a la hora señalada.
     2. Los jugadores ausentes no sufren congelación de pantalla ni teletransporte forzoso.
-  * **Revisión (2026-10-31): no está hecha.**
-    - Lo único activo es el aviso de las 20:45 (`FestivalMinigameModule.OnTimeChanged`). Anuncia una ceremonia a las 21:00 que no ocurre, sale en todos los días de festival (también en los que no tienen ceremonia) y se imprime en cada cliente por separado.
-    - `CeremonyLogic.IsCeremonyTime` e `IsPlayerInCeremonyLocation` no se usan en ningún sitio, y no existe ningún `ReadyCheckDialog("ceremony")`.
-    - El criterio 2 (no arrastrar a los ausentes) lo cumplen ahora TASK-703 y TASK-704, no esta tarea.
-  * **Pendiente:**
-    - Programar el arranque a la hora configurada como una tanda de TASK-704 con todos los que estén en el recinto, sin inscripción. Afecta al Luau (`summer11`) y a la Danza de las Medusas (`summer28`).
-    - Que el aviso solo salga en los festivales con ceremonia y una sola vez, desde el host.
 
 - [x] **TASK-703: Entrada y salida libre de festivales sin salto de cámara (`FestivalAccessModule.cs`)**
   * **Análisis Técnico:** En multijugador vanilla, entrar en el mapa del festival abre `ReadyCheckDialog("festivalStart")` para todos, y el guion `set-up` de `Data/Festivals/<fecha>` fija la cámara, teletransporta al jugador a una casilla fija (p. ej. 12,54 en la Fiesta del Huevo), oculta la vista con `viewport -1000 -1000` y la devuelve con `globalFadeToClear`. Salir abre `ReadyCheckDialog("festivalEnd")` y `Event.exitEvent` termina el festival para el servidor: hora a las 22:00 (24:00 en `summer28`/`fall27`), máquinas adelantadas esas horas, aldeanos a casa (host), jugadores a la granja y mensaje `endFest` a todos los clientes. Cambios:

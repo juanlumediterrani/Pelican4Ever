@@ -46,5 +46,46 @@ namespace Pelican4Ever.Core.Festivals
 
             return string.Equals(playerLocation, ceremonyLocation, StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Identifica si la fecha corresponde a un festival con ceremonia comunitaria en vivo (sin minijuego individual).
+        /// </summary>
+        public static bool IsCeremonyFestival(string? season, int dayOfMonth)
+        {
+            if (string.IsNullOrWhiteSpace(season))
+                return false;
+
+            string s = season.Trim().ToLowerInvariant();
+            return (s == "summer" && (dayOfMonth == 11 || dayOfMonth == 28));
+        }
+
+        /// <summary>
+        /// Ubicación requerida para la ceremonia comunitaria (ej. la playa para el Luau y Danza de las Medusas).
+        /// </summary>
+        public static string? GetCeremonyLocation(string? season, int dayOfMonth)
+        {
+            if (IsCeremonyFestival(season, dayOfMonth))
+                return "Beach";
+
+            return null;
+        }
+
+        /// <summary>
+        /// Nombre descriptivo del festival ceremonial.
+        /// </summary>
+        public static string GetCeremonyFestivalName(string? season, int dayOfMonth)
+        {
+            if (string.IsNullOrWhiteSpace(season))
+                return "Ceremonia";
+
+            string s = season.Trim().ToLowerInvariant();
+            if (s == "summer")
+            {
+                if (dayOfMonth == 11) return "Luau";
+                if (dayOfMonth == 28) return "Danza de las Medusas Lunares";
+            }
+
+            return "Ceremonia Comunitaria";
+        }
     }
 }

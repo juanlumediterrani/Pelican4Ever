@@ -177,6 +177,63 @@ namespace Pelican4Ever.Modules
         private static void ShowHostDialog(Event festival)
         {
             long me = Game1.player.UniqueMultiplayerID;
+            string season = Game1.currentSeason;
+            int day = Game1.dayOfMonth;
+
+            // Ceremonias comunitarias en vivo (Luau, Medusas): sin inscripción individual
+            if (CeremonyLogic.IsCeremonyFestival(season, day))
+            {
+                string ceremonyLoc = CeremonyLogic.GetCeremonyLocation(season, day) ?? "Beach";
+                string ceremonyName = CeremonyLogic.GetCeremonyFestivalName(season, day);
+                var attendees = Game1.getOnlineFarmers()
+                    .Where(f => f.isActive() && CeremonyLogic.IsPlayerInCeremonyLocation(f.currentLocation?.Name, ceremonyLoc))
+                    .Select(f => f.UniqueMultiplayerID)
+                    .ToList();
+
+                if (Context.IsMainPlayer)
+                {
+                    var ceremonyChoices = new List<Response>
+                    {
+                        new Response("StartCeremony", $"Empezar ceremonia ahora ({attendees.Count} en la playa)"),
+                        new Response("Cancel", "Cancelar")
+                    };
+
+                    QuestionDialog.Ask(
+                        $"{festival.FestivalName}: la ceremonia de {ceremonyName} está programada para las 21:00 en la playa para todos los presentes.\n¿Deseas comenzarla ahora?",
+                        ceremonyChoices.ToArray(),
+                        (who, answer) =>
+                        {
+                            if (answer == "StartCeremony")
+                            {
+                                if (attendees.Count == 0)
+                                {
+                                    Game1.chatBox?.addInfoMessage("[Ceremonia] No hay vecinos presentes en la playa para iniciar la ceremonia.");
+                                }
+                                else
+                                {
+                                    StartCeremonyRun(TodaysFestivalId(), attendees);
+                                }
+                            }
+                        }
+                    );
+                }
+                else
+                {
+                    var ceremonyChoices = new List<Response>
+                    {
+                        new Response("Cancel", "Entendido")
+                    };
+
+                    QuestionDialog.Ask(
+                        $"{festival.FestivalName}: la ceremonia de {ceremonyName} dará comienzo a las 21:00 en la playa para todos los vecinos que se encuentren en la zona.",
+                        ceremonyChoices.ToArray(),
+                        (who, answer) => { }
+                    );
+                }
+                return;
+            }
+
+            // Minijuegos y eventos competitivos o grupales por inscripción
             bool signedUp = knownParticipants.Contains(me);
             int count = knownParticipants.Count;
 
@@ -184,7 +241,8 @@ namespace Pelican4Ever.Modules
             {
                 signedUp
                     ? new Response("Leave", "Borrarme del evento")
-                    : new Response("Join", "Apuntarme al evento")
+                    : new Response("Join", "Apuntarme al evento"),
+                new Response("Leaderboard", "Ver clasificación de hoy")
             };
             if (Context.IsMainPlayer)
                 choices.Add(new Response("Start", $"Empezar ahora ({count} apuntados)"));
@@ -200,6 +258,9 @@ namespace Pelican4Ever.Modules
                         case "Join":
                         case "Leave":
                             RequestSignUp(answer == "Join");
+                            break;
+                        case "Leaderboard":
+                            FestivalMinigameModule.ShowFestivalLeaderboardLetter();
                             break;
                         case "Start":
                             StartRunAsHost();
@@ -302,6 +363,24 @@ namespace Pelican4Ever.Modules
             Game1.chatBox?.addInfoMessage($"[Festival] Empieza el evento con {run.Participants.Count} participantes.");
 
             JoinRunIfParticipant(payload);
+        }
+
+        /// <summary>Host: arranca una ceremonia comunitaria con los vecinos presentes en el mapa, sin inscripción previa.</summary>
+        public static bool StartCeremonyRun(string festivalId, IEnumerable<long> attendeeIds)
+        {
+            if (context == null || !Context.IsMainPlayer) return false;
+
+            FestivalRun? run = SignUps.StartCeremonyRun(festivalId, attendeeIds);
+            if (run == null)
+                return false;
+
+            var payload = new FestivalRunPayload { FestivalId = run.FestivalId, RunId = run.RunId, Participants = run.Participants.ToList() };
+            context.Helper.Multiplayer.SendMessage(payload, FestivalParticipationMessages.StartRun, new[] { context.Manifest.UniqueID });
+            BroadcastSignUps();
+            Game1.chatBox?.addInfoMessage($"[Ceremonia] Comienza la ceremonia comunitaria con {run.Participants.Count} vecinos presentes.");
+
+            JoinRunIfParticipant(payload);
+            return true;
         }
 
         /// <summary>Si el jugador local está en el festival y apuntado a la tanda, empieza su evento principal.</summary>

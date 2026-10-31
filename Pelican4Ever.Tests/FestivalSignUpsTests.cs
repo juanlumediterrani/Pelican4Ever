@@ -74,4 +74,41 @@ public class FestivalSignUpsTests
         Assert.Equal(SignUpResult.Joined, signUps.SetSignedUp("festival_spring24", 10L, join: true));
         Assert.False(signUps.HasPlayed("festival_spring24", 10L));
     }
+
+    [Fact]
+    public void StartCeremonyRun_TakesAttendeeListWithoutSignUpAndMarksPlayed()
+    {
+        var signUps = new FestivalSignUps();
+        var attendees = new[] { 101L, 102L, 103L };
+
+        FestivalRun? run = signUps.StartCeremonyRun("festival_summer11", attendees);
+
+        Assert.NotNull(run);
+        Assert.Equal(1, run!.RunId);
+        Assert.Equal(new[] { 101L, 102L, 103L }, run.Participants);
+        Assert.True(signUps.HasPlayed("festival_summer11", 101L));
+        Assert.True(signUps.HasPlayed("festival_summer11", 102L));
+        Assert.True(signUps.HasPlayed("festival_summer11", 103L));
+    }
+
+    [Fact]
+    public void StartCeremonyRun_ExcludesPlayersWhoAlreadyPlayedToday()
+    {
+        var signUps = new FestivalSignUps();
+        signUps.StartCeremonyRun("festival_summer11", new[] { 101L });
+
+        // Intento de segunda ceremonia con el mismo jugador y uno nuevo
+        FestivalRun? second = signUps.StartCeremonyRun("festival_summer11", new[] { 101L, 102L });
+
+        Assert.NotNull(second);
+        Assert.Equal(2, second!.RunId);
+        Assert.Equal(new[] { 102L }, second.Participants);
+    }
+
+    [Fact]
+    public void StartCeremonyRun_WithEmptyAttendees_ReturnsNull()
+    {
+        var signUps = new FestivalSignUps();
+        Assert.Null(signUps.StartCeremonyRun("festival_summer11", System.Array.Empty<long>()));
+    }
 }
