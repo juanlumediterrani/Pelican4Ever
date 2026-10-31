@@ -41,6 +41,7 @@ Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijuga
 * [Arquitectura Técnica (`architecture.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/architecture.md)
 * [Backlog de Iteraciones y Épicas (`backlog.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/backlog.md)
 * [Especificación de la API de Anfitrión (`docs/host-api.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/host-api.md)
+* [Servidor persistente desatendido (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
 * [Decisiones de Arquitectura (`docs/adr/`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/adr)
 
 ---

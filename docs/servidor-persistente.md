@@ -1,0 +1,55 @@
+# Servidor persistente desatendido
+
+Cómo dejar una partida de Pelican 4Ever siempre disponible en una máquina con sesión gráfica (el juego
+necesita pantalla), sin nadie que la cargue a mano. Es opcional: un anfitrión humano puede seguir
+cargando la partida desde «Cooperativo → Anfitrión» como siempre.
+
+## Piezas
+
+| Pieza | Qué hace |
+| --- | --- |
+| `AutoHostSaveName` (`config.json`) | Al llegar a la pantalla de título, el host carga como anfitrión de cooperativo esa partida, por el nombre exacto de su carpeta en `Saves/`. Si no existe, no carga otra: lo registra y se queda en el título. |
+| `RestartExitsProcess` (`config.json`) | El reinicio controlado (`p4e_safe_restart`, `POST /api/v1/host/restart`) cierra el juego al llegar al título, para que systemd lo relance con el mod actualizado. Sin esta opción, vuelve al título y la carga automática reabre la partida en el mismo proceso. Requiere `AutoHostSaveName`. |
+| `AgentHost` (`config.json`) | Si el host se acuesta, registra el descanso sin salir al título. Imprescindible si el host es un agente. |
+| `deploy/systemd/pelican4ever-host.service` | Lanza SMAPI y lo relanza tras una caída o un reinicio controlado (30 s de espera, como mucho 5 veces en 15 min). No convive con `stardew-voyager-live.service`. |
+
+El tiempo no necesita supervisión: el reloj 1:1, la madrugada congelada y el cambio de día de las 06:00
+(con guardado y copia en `Pelican4Ever_Backups/`, se conservan 7) los hace el mod. Si el servidor estuvo
+caído, al volver recupera hasta `MaxCatchUpRollovers` días.
+
+## Instalación
+
+1. Crea la partida persistente desde «Cooperativo → Anfitrión → Nueva granja» y anota el nombre de su
+   carpeta en `~/.config/StardewValley/Saves/` (por ejemplo `Pelican4Ever_452974881`).
+2. En `Mods/Pelican4Ever/config.json`:
+   ```json
+   "AgentHost": true,
+   "AutoHostSaveName": "Pelican4Ever_452974881",
+   "RestartExitsProcess": true
+   ```
+3. Instala y activa el servicio de usuario:
+   ```bash
+   install -Dm644 deploy/systemd/pelican4ever-host.service ~/.config/systemd/user/pelican4ever-host.service
+   systemctl --user daemon-reload
+   systemctl --user import-environment DISPLAY XAUTHORITY
+   systemctl --user enable --now pelican4ever-host.service
+   ```
+   Si el juego no está en la ruta de Steam por defecto, pon `STARDEW_DIR=/ruta/al/juego` en
+   `~/.config/pelican4ever/host.env`.
+4. Comprueba que el servidor está arriba: `journalctl --user -u pelican4ever-host -f` muestra
+   `[AutoHost] Cargando ... como anfitrión` y la API responde en `http://127.0.0.1:8085/api/v1/host/clock`.
+
+## Actualizar el mod sin perder la partida
+
+1. Compila y despliega el mod nuevo en `Mods/Pelican4Ever` (el proceso en marcha no lo recarga).
+2. Programa un reinicio controlado: `POST /api/v1/host/restart` con `"immediate": false`. Espera al
+   siguiente guardado (cambio de día), avisa a los jugadores y cierra el juego; systemd lo relanza con el
+   mod nuevo y la carga automática reabre la partida.
+3. El estado del servidor (`ServerWorldState`) migra su esquema al cargar; los clientes con otra versión
+   del mod son expulsados hasta que actualicen (`RequireClientMod`).
+
+## Límites
+
+- Sin Steam abierto no hay códigos de invitación; los jugadores entran por IP (puerto 24642).
+- Volver al título a mano con `AutoHostSaveName` puesto reabre la partida a los 3 s: para cerrar el
+  servidor, para el servicio (`systemctl --user stop pelican4ever-host`).

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using Pelican4Ever.Core.Server;
 
 namespace Pelican4Ever.Core.Config
 {
@@ -141,6 +142,18 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Minutos de antelación por defecto para avisar a los jugadores antes de un reinicio controlado (TASK-804).</summary>
         public int SafeRestartWarningMinutes { get; set; } = 5;
 
+        /// <summary>
+        /// Partida que el host carga como anfitrión de cooperativo al llegar a la pantalla de título (carpeta exacta de
+        /// <c>Saves/</c>). Vacío (por defecto) = el anfitrión la carga a mano. Necesario para un servidor desatendido.
+        /// </summary>
+        public string AutoHostSaveName { get; set; } = string.Empty;
+
+        /// <summary>
+        /// Si es true, el reinicio controlado cierra el proceso del juego en vez de volver al título, para que el
+        /// supervisor (systemd) lo relance con el mod actualizado. Requiere <see cref="AutoHostSaveName"/>.
+        /// </summary>
+        public bool RestartExitsProcess { get; set; } = false;
+
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
 
@@ -203,6 +216,10 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(AdminApiPort)} debe situarse entre 1024 y 65535.");
             if (FestivalWindowStart >= FestivalWindowEnd || FestivalWindowEnd > 2550)
                 errors.Add($"La ventana de festival ({FestivalWindowStart}-{FestivalWindowEnd}) debe ser creciente y terminar como muy tarde a las 2550.");
+            if (!string.IsNullOrEmpty(AutoHostSaveName) && !AutoHostLogic.IsValidSaveName(AutoHostSaveName))
+                errors.Add($"{nameof(AutoHostSaveName)} debe ser el nombre exacto de una carpeta de Saves/, sin rutas. Valor: '{AutoHostSaveName}'.");
+            if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
+                errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
 
             return errors;
         }

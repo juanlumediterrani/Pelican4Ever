@@ -35,5 +35,7 @@
   "AdminApiBindAllInterfaces": false,
   "AgentHost": false,
   "SafeRestartWarningMinutes": 5,
+  "AutoHostSaveName": "",
+  "RestartExitsProcess": false,
   "Modules": {}
 }

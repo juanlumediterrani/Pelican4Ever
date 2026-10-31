@@ -390,6 +390,18 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     3. El reinicio controlado avisa a los conectados y, en modo por defecto, espera al siguiente guardado.
   * **Resolución de la decisión de reinicio inmediato:** El progreso que se acepta perder en un reinicio inmediato por causa mayor es exclusivamente el progreso no guardado del día en curso (desde las 06:00 hasta el momento del reinicio, evaluado detalladamente por `ProgressAtRiskDto.Summary`). Solo puede autorizarlo un operador con acceso a la consola del servidor (`p4e_safe_restart --immediate`) o un cliente autenticado mediante token Bearer (`POST /api/v1/host/restart` con `"immediate": true`). En cualquier otro caso, el sistema opera en modo seguro (`WaitingForNextSave`), esperando a que concluya el guardado del siguiente Rollover.
 
+- [x] **TASK-805: Servidor persistente desatendido: carga automática como anfitrión y supervisión**
+  * **Contexto:** Para que un cron (p. ej. Dr4co con Stardew Voyager) mantenga el servidor siempre disponible. Tras un reinicio controlado el juego quedaba en la pantalla de título sin nadie que reabriera la partida, y no había supervisor que lo relanzara tras una caída.
+  * **Análisis Técnico:**
+    - `AutoHostSaveName`: en la pantalla de título, `AutoHostModule` carga esa partida como anfitrión de cooperativo (`multiplayerMode = 2` y `SaveGame.Load`, como la ranura «Anfitrión» de `CoopMenu`). Nombre exacto de carpeta; nunca «la más reciente» (`AutoHostLogic.Decide`).
+    - `RestartExitsProcess`: el reinicio controlado cierra el proceso al llegar al título para que el supervisor lo relance con el mod actualizado. Requiere `AutoHostSaveName` (validado en `ServerConfig`).
+    - Unidad de usuario `deploy/systemd/pelican4ever-host.service` (`Restart=always`, límite de arranques, en conflicto con `stardew-voyager-live.service`) y guía `docs/servidor-persistente.md`.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Con `AutoHostSaveName`, el servidor arrancado sin intervención abre esa partida como anfitrión; si no existe, no abre otra y lo registra (test de `AutoHostLogic`).
+    2. Sin `AutoHostSaveName`, el comportamiento actual no cambia (el módulo no se suscribe a eventos).
+    3. `RestartExitsProcess` sin `AutoHostSaveName` es un error de configuración (test).
+
 ---
 
 ### Épica 9: Anexos de Residencia (Minimapas Adquiribles)

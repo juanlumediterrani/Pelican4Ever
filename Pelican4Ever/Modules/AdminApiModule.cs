@@ -128,6 +128,11 @@ namespace Pelican4Ever.Modules
                     ["immediate"] = triggered.Immediate
                 });
 
+            // Con RestartExitsProcess el juego se cierra al llegar al título y el supervisor lo relanza con el mod
+            // actual; si no, la carga automática (AutoHostSaveName) reabre la partida en este mismo proceso
+            bool exitsProcess = AutoHostModule.PrepareControlledRestart();
+            context.Monitor.Log($"[AdminApiModule] Reinicio controlado: {(exitsProcess ? "se cerrará el proceso" : "vuelta al título")}.", LogLevel.Info);
+
             DelayedAction.functionAfterDelay(() =>
             {
                 Game1.ExitToTitle();

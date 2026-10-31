@@ -1,0 +1,27 @@
+# Pelican 4Ever · servidor persistente bajo systemd de usuario (ver docs/servidor-persistente.md).
+# Requiere en config.json: AutoHostSaveName (la partida que se abre como anfitrión) y, para que un reinicio
+# controlado relance el proceso con el mod actualizado, RestartExitsProcess: true.
+[Unit]
+Description=Pelican 4Ever · servidor persistente de Stardew Valley (SMAPI)
+After=graphical-session.target
+PartOf=graphical-session.target
+# Una sola instancia del juego por máquina: no convive con la campaña de Stardew Voyager
+Conflicts=stardew-voyager-live.service
+# Si el juego o el mod fallan al arrancar, no entrar en un bucle de relanzamientos
+StartLimitIntervalSec=900
+StartLimitBurst=5
+
+[Service]
+Type=exec
+Environment="STARDEW_DIR=%h/.steam/debian-installation/steamapps/common/Stardew Valley"
+EnvironmentFile=-%h/.config/pelican4ever/host.env
+# systemd no expande variables en WorkingDirectory: el directorio se fija en la orden
+ExecStart=/bin/sh -c 'cd "$STARDEW_DIR" && exec ./StardewModdingAPI'
+# Relanzar tras una caída y tras un reinicio controlado (que cierra el proceso con código 0)
+Restart=always
+RestartSec=30
+# El guardado del cambio de día puede tardar: dar margen antes de matar el proceso
+TimeoutStopSec=120
+
+[Install]
+WantedBy=graphical-session.target
