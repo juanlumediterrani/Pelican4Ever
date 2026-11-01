@@ -45,6 +45,9 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Hueco de granja asignado (ej. "Pelican4Ever_Farm_02"), o null si aún no ha reclamado puerta.</summary>
         public string? FarmSlotId { get; set; }
 
+        /// <summary>Token único del equipo/cliente propietario para evitar usurpación de partida (Opción A).</summary>
+        public string? OwnerToken { get; set; }
+
         /// <summary>Último día de juego en el que el jugador estuvo conectado.</summary>
         public int LastActiveGameDay { get; set; } = -1;
 
@@ -74,6 +77,18 @@ namespace Pelican4Ever.Core.Players
 
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>Momento UTC en el que inició la sesión actual (se reinicia a MinValue al desconectar).</summary>
+        public DateTimeOffset CurrentSessionStartUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>Momento UTC desde el que se computa la regeneración de energía offline (se resetea al conectar o en Rollover).</summary>
+        public DateTimeOffset OfflineStaminaAnchorUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>
+        /// Último día de juego en el que el jugador estuvo activo ANTES de la ventana de madrugador.
+        /// Permite distinguir a un madrugador recién conectado de quien lleva jugando toda la noche o abandonó su sesión previa.
+        /// </summary>
+        public int ActiveDayPriorToGrace { get; set; } = -1;
 
         /// <summary>Resetea los contadores diarios si pertenecen a otro día.</summary>
         public void EnsureDailyCounters(int currentGameDay)

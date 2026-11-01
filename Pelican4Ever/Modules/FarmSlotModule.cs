@@ -168,6 +168,22 @@ namespace Pelican4Ever.Modules
 
                             data[slotId] = slotData;
                         }
+
+                        // TASK-Cave: Registrar la cueva privada instanciada para la residencia (Pelican4Ever_Farm_XX_Cave)
+                        string caveId = $"{slotId}_Cave";
+                        if (!data.ContainsKey(caveId))
+                        {
+                            data[caveId] = new LocationData
+                            {
+                                DisplayName = $"Cueva Parcela {i:D2}",
+                                CreateOnLoad = new CreateLocationData
+                                {
+                                    MapPath = "Maps/FarmCave",
+                                    Type = "StardewValley.Locations.FarmCave, Stardew Valley",
+                                    AlwaysActive = true
+                                }
+                            };
+                        }
                     }
 
                     // TASK-903: Inyectar ubicaciones de anexos adquiridos (Pelican4Ever_Annex_<NN>_<Side>) en Data/Locations
@@ -301,6 +317,11 @@ namespace Pelican4Ever.Modules
             SpatialWarpRouter.GetResidenceArrivalCoordinates(door.TownTileX, door.TownTileY, out targetX, out targetY, out facingDirection);
         }
 
+        public static void GetResidenceArrivalCoordinates(DoorModel door, string? farmType, out int targetX, out int targetY, out int facingDirection)
+        {
+            SpatialWarpRouter.GetResidenceArrivalCoordinates(door.TownTileX, door.TownTileY, farmType, out targetX, out targetY, out facingDirection);
+        }
+
         public static bool IsInOpening(DoorModel door, int tileX, int tileY)
         {
             var (t1, t2) = GetOpeningTiles(door);
@@ -328,6 +349,52 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
+        private static readonly Dictionary<int, int> CliffLeftEdgeMap = new()
+        {
+            [442] = 444,
+            [443] = 444,
+            [467] = 469,
+            [468] = 469,
+            [492] = 494,
+            [493] = 494,
+            [1906] = 494,
+            [1907] = 494,
+            [1908] = 494,
+            [517] = 519,
+            [518] = 519,
+            [1931] = 519,
+            [1932] = 519,
+            [1933] = 519,
+            [448] = 519,
+            [542] = 544,
+            [543] = 544,
+            [1956] = 544,
+            [1957] = 544,
+            [1958] = 544,
+            [384] = 383,
+            [417] = 419,
+            [418] = 419
+        };
+
+        private static readonly Dictionary<int, int> CliffRightEdgeMap = new()
+        {
+            [442] = 441,
+            [443] = 441,
+            [467] = 466,
+            [468] = 466,
+            [492] = 491,
+            [493] = 491,
+            [447] = 491,
+            [517] = 516,
+            [518] = 516,
+            [448] = 516,
+            [542] = 541,
+            [543] = 541,
+            [384] = 385,
+            [417] = 416,
+            [418] = 416
+        };
+
         public static List<Point> ClearDoorAreaOnMap(
             xTile.Layers.Layer? bld,
             xTile.Layers.Layer? front,
@@ -343,8 +410,6 @@ namespace Pelican4Ever.Modules
             var sheet = bld?.Map?.GetTileSheet("untitled tile sheet")
                      ?? front?.Map?.GetTileSheet("untitled tile sheet")
                      ?? sampleTile?.TileSheet;
-
-            bool isSouthDoor = SpatialWarpRouter.IsSouthBorderPortal(door.TownTileY);
 
             foreach (var pt in passTiles)
             {
@@ -363,19 +428,41 @@ namespace Pelican4Ever.Modules
                     front.Tiles[pt.X, pt.Y] = null;
                 }
 
-                // 3. En las salidas del sur hacia las residencias, MANTENER intactas las copas de los árboles en AlwaysFront.
-                // Así los árboles se ven completos y continuos por encima del camino, y el jugador camina bajo ellos sin bloqueo.
-                if (!isSouthDoor && alwaysFront != null && pt.X >= 0 && pt.X < alwaysFront.LayerWidth && pt.Y >= 0 && pt.Y < alwaysFront.LayerHeight)
+                // 3. MANTENER intactas las copas de los árboles en AlwaysFront (tanto en salidas norte como sur)
+                // para que los árboles se vean continuos y orgánicos, y el jugador camine bajo ellos sin bloqueo.
+                if (alwaysFront != null && pt.X >= 0 && pt.X < alwaysFront.LayerWidth && pt.Y >= 0 && pt.Y < alwaysFront.LayerHeight)
                 {
-                    alwaysFront.Tiles[pt.X, pt.Y] = null;
+                    var existingAf = alwaysFront.Tiles[pt.X, pt.Y];
+                    if (existingAf != null && existingAf.TileIndex >= 150)
+                    {
+                        alwaysFront.Tiles[pt.X, pt.Y] = null;
+                    }
                 }
 
                 if (back != null && pt.X >= 0 && pt.X < back.LayerWidth && pt.Y >= 0 && pt.Y < back.LayerHeight)
                 {
                     if (sheet != null)
                     {
-                        // Pavimentar con senda de grava/tierra natural (tile 587 vanilla)
-                        back.Tiles[pt.X, pt.Y] = new xTile.Tiles.StaticTile(back, sheet, xTile.Tiles.BlendMode.Alpha, 587);
+                        // Pavimentar con senda de grava/tierra natural con bordes orgánicos
+                        int tileIndex = 587; // Centro de tierra por defecto
+                        if (door.TownTileY <= 2 || door.TownTileY >= 60)
+                        {
+                            // Caminos verticales (Norte / Sur): borde izquierdo 586, borde derecho 588
+                            if (pt.X == door.TownTileX)
+                                tileIndex = 586;
+                            else if (pt.X == door.TownTileX + 1)
+                                tileIndex = 588;
+                        }
+                        else
+                        {
+                            // Caminos horizontales (Oeste / Este): borde superior 562, borde inferior 612
+                            if (pt.Y == door.TownTileY)
+                                tileIndex = 562;
+                            else if (pt.Y == door.TownTileY + 1)
+                                tileIndex = 612;
+                        }
+
+                        back.Tiles[pt.X, pt.Y] = new xTile.Tiles.StaticTile(back, sheet, xTile.Tiles.BlendMode.Alpha, tileIndex);
                     }
                     else if (back.Tiles[pt.X, pt.Y] == null && sampleTile != null)
                     {
@@ -386,6 +473,34 @@ namespace Pelican4Ever.Modules
                     {
                         back.Tiles[pt.X, pt.Y].Properties.Remove("Passable");
                         back.Tiles[pt.X, pt.Y].TileIndexProperties.Remove("Passable");
+                    }
+                }
+            }
+
+            // 4. Suavizado y remates de bordes de acantilado en los desfiladeros del norte (Buildings)
+            if (door.TownTileY <= 2 && bld != null && sheet != null)
+            {
+                int lx = door.TownTileX - 1;
+                int rx = door.TownTileX + 2;
+                int maxDepthY = door.DoorId is "Farm_Portal_08" or "Farm_Portal_14" ? 9 : 8;
+                for (int y = 0; y <= maxDepthY; y++)
+                {
+                    if (lx >= 0 && lx < bld.LayerWidth && y < bld.LayerHeight)
+                    {
+                        var leftTile = bld.Tiles[lx, y];
+                        if (leftTile != null && CliffLeftEdgeMap.TryGetValue(leftTile.TileIndex, out int newLeftIdx))
+                        {
+                            bld.Tiles[lx, y] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, newLeftIdx);
+                        }
+                    }
+
+                    if (rx >= 0 && rx < bld.LayerWidth && y < bld.LayerHeight)
+                    {
+                        var rightTile = bld.Tiles[rx, y];
+                        if (rightTile != null && CliffRightEdgeMap.TryGetValue(rightTile.TileIndex, out int newRightIdx))
+                        {
+                            bld.Tiles[rx, y] = new xTile.Tiles.StaticTile(bld, sheet, xTile.Tiles.BlendMode.Alpha, newRightIdx);
+                        }
                     }
                 }
             }
@@ -553,6 +668,21 @@ namespace Pelican4Ever.Modules
                     if (loc != null)
                     {
                         loc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    }
+                    GameLocation? caveLoc = Game1.getLocationFromName($"{assignment.FarmSlotId}_Cave");
+                    if (caveLoc != null)
+                    {
+                        caveLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    }
+                    GameLocation? cellarLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotCellarName(assignment.FarmSlotId));
+                    if (cellarLoc != null)
+                    {
+                        cellarLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    }
+                    GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(assignment.FarmSlotId));
+                    if (ghLoc != null)
+                    {
+                        ghLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
                     }
                 }
 
@@ -782,14 +912,14 @@ namespace Pelican4Ever.Modules
             }
 
             // Sincronizar warps de retorno hacia la residencia madre en la apertura del anexo (TASK-904)
-            var warpPoints = AnnexEntrance.For(annex.Side, template.Width, template.Height);
+            DoorAssignment? parentResidence = context.WorldState.Doors.Values
+                .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase));
+            var warpPoints = AnnexEntrance.For(annex.Side, template.Width, template.Height, parentResidence?.FarmType);
             foreach (var (bx, by) in openingBorderTiles)
             {
                 UpdateOrCreateWarp(annexFarm, bx, by, annex.ResidenceSlotId, warpPoints.ResidenceReturnTile.X, warpPoints.ResidenceReturnTile.Y);
             }
 
-            DoorAssignment? parentResidence = context.WorldState.Doors.Values
-                .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase));
             AccessPolicy policy = parentResidence?.Policy ?? AccessPolicy.Locked;
             long ownerId = parentResidence?.OwnerId ?? annex.OwnerId;
             annex.OwnerId = ownerId;
@@ -993,7 +1123,7 @@ namespace Pelican4Ever.Modules
 
                 if (isClaimed && assignment != null)
                 {
-                    GetResidenceArrivalCoordinates(door, out int targetX, out int targetY, out _);
+                    GetResidenceArrivalCoordinates(door, assignment.FarmType, out int targetX, out int targetY, out _);
 
                     UpdateOrCreateWarp(farm, t1.X, t1.Y, assignment.FarmSlotId, targetX, targetY);
                     UpdateOrCreateWarp(farm, t2.X, t2.Y, assignment.FarmSlotId, targetX, targetY);
@@ -1054,7 +1184,7 @@ namespace Pelican4Ever.Modules
                 && y >= (int)clump.Tile.Y && y < (int)clump.Tile.Y + clump.height.Value;
         }
 
-        private static void UpdateOrCreateWarp(Farm farm, int x, int y, string targetLocation, int targetX, int targetY)
+        private static void UpdateOrCreateWarp(GameLocation farm, int x, int y, string targetLocation, int targetX, int targetY)
         {
             Warp? existingWarp = farm.warps.FirstOrDefault(w => w.X == x && w.Y == y);
             if (existingWarp == null)
@@ -1226,9 +1356,22 @@ namespace Pelican4Ever.Modules
             CleanAndArrangeResidenceInterior(cabin);
 
             // Despejar puntos de llegada cardinales para que nunca haya ramas, maleza o escombros bloqueando el warp
-            farm.removeEverythingFromThisTile(40, 1);
-            farm.removeEverythingFromThisTile(40, 63);
-            farm.removeEverythingFromThisTile(78, 17);
+            var arrivalTemplate = FarmTemplateCatalog.GetTemplate(assignment?.FarmType);
+            farm.removeEverythingFromThisTile(arrivalTemplate.NorthArrivalTileX, arrivalTemplate.NorthArrivalTileY);
+            farm.removeEverythingFromThisTile(arrivalTemplate.SouthArrivalTileX, arrivalTemplate.SouthArrivalTileY);
+            farm.removeEverythingFromThisTile(arrivalTemplate.EastArrivalTileX, arrivalTemplate.EastArrivalTileY);
+
+            // Rescate de seguridad: si un jugador quedó atrapado en el acantilado inaccesible (40, 1) de Praderas
+            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
+            {
+                foreach (var farmer in farm.farmers)
+                {
+                    if ((int)farmer.Tile.X == 40 && (int)farmer.Tile.Y == 1)
+                    {
+                        farmer.Position = new Vector2(arrivalTemplate.NorthArrivalTileX * 64, arrivalTemplate.NorthArrivalTileY * 64);
+                    }
+                }
+            }
 
             // 4. Configurar warps de entrada y salida
             int doorX = entryDoor.X != 0 ? entryDoor.X : (farmhouse.tileX.Value + farmhouse.humanDoor.X);
@@ -1279,26 +1422,168 @@ namespace Pelican4Ever.Modules
                 foreach (var annex in annexes)
                 {
                     var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height);
+                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height, assignment?.FarmType);
                     switch (annex.Side)
                     {
                         case AnnexSide.North:
-                            UpdateOrCreateWarp(farm, 39, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            UpdateOrCreateWarp(farm, 40, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            UpdateOrCreateWarp(farm, 41, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
+                            {
+                                UpdateOrCreateWarp(farm, 63, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 64, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            }
+                            else
+                            {
+                                UpdateOrCreateWarp(farm, 39, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 40, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 41, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            }
                             break;
                         case AnnexSide.East:
-                            UpdateOrCreateWarp(farm, 79, 15, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            UpdateOrCreateWarp(farm, 79, 16, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            UpdateOrCreateWarp(farm, 79, 17, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
+                            {
+                                UpdateOrCreateWarp(farm, 99, 21, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 99, 22, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 99, 23, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            }
+                            else
+                            {
+                                UpdateOrCreateWarp(farm, 79, 15, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 79, 16, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 79, 17, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            }
                             break;
                         case AnnexSide.South:
-                            UpdateOrCreateWarp(farm, 39, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            UpdateOrCreateWarp(farm, 40, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            UpdateOrCreateWarp(farm, 41, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
+                            {
+                                UpdateOrCreateWarp(farm, 52, 74, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 53, 74, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            }
+                            else
+                            {
+                                UpdateOrCreateWarp(farm, 39, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 40, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                                UpdateOrCreateWarp(farm, 41, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
+                            }
                             break;
                     }
                 }
+            }
+
+            // 7. Configurar la Cueva privada de la residencia (FarmCave)
+            string caveId = $"{farm.NameOrUniqueName}_Cave";
+            var farmTemplate = FarmTemplateCatalog.GetTemplate(assignment?.FarmType);
+
+            FarmCave? cave = Game1.getLocationFromName(caveId) as FarmCave;
+            if (cave == null && Context.IsMainPlayer)
+            {
+                cave = new FarmCave("Maps/FarmCave", caveId);
+                Game1.locations?.Add(cave);
+            }
+
+            if (cave != null)
+            {
+                if (assignment != null && assignment.OwnerId != 0)
+                {
+                    cave.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                }
+
+                UpdateOrCreateWarp(farm, farmTemplate.CaveEntranceX, farmTemplate.CaveEntranceY, caveId, 8, 11);
+                UpdateOrCreateWarp(cave, 8, 12, farm.NameOrUniqueName, farmTemplate.CaveExitX, farmTemplate.CaveExitY);
+
+                int caveChoice = Game1.player.caveChoice.Value != 0 ? Game1.player.caveChoice.Value : Game1.MasterPlayer.caveChoice.Value;
+                if (caveChoice == 2 && cave.objects.Count() == 0)
+                {
+                    cave.setUpMushroomHouse();
+                }
+            }
+
+            // 8. Configurar el Sótano privado de la residencia (Cellar) y warps de escaleras (GAP-10 / TASK-905)
+            EnsureSlotCellar(farm.NameOrUniqueName, cabin, assignment);
+
+            // 9. Configurar el Invernadero privado de la residencia (Greenhouse) (GAP-20)
+            EnsureSlotGreenhouse(farm, assignment);
+        }
+
+        /// <summary>
+        /// Asegura que la residencia tenga un sótano privado instanciado en Game1.locations
+        /// y que las escaleras de la cabaña estén conectadas a dicho sótano (GAP-10 / TASK-905).
+        /// </summary>
+        public static void EnsureSlotCellar(string farmSlotId, Cabin cabin, DoorAssignment? assignment = null)
+        {
+            string cellarName = ResidenceUpgradeLogic.GetSlotCellarName(farmSlotId);
+            Cellar? cellar = Game1.getLocationFromName(cellarName) as Cellar;
+            if (cellar == null && Context.IsMainPlayer && Game1.locations != null)
+            {
+                cellar = new Cellar("Maps\\Cellar", cellarName);
+                Game1.locations.Add(cellar);
+                context?.Monitor.Log($"[FarmSlotModule] Sótano privado aprovisionado para {farmSlotId}: {cellarName}", LogLevel.Trace);
+            }
+
+            if (cellar != null && assignment != null && assignment.OwnerId != 0)
+            {
+                cellar.PublishOwnership(assignment.OwnerId, assignment.Policy);
+            }
+
+            if (cabin.upgradeLevel >= 3)
+            {
+                cabin.AddCellarTiles();
+                cabin.updateCellarWarps();
+            }
+        }
+
+        /// <summary>
+        /// Asegura que la residencia tenga su edificio Greenhouse con interior instanciado exclusivo en Game1.locations
+        /// y warps de entrada/salida conectados a la parcela privada (GAP-20).
+        /// </summary>
+        public static void EnsureSlotGreenhouse(Farm farm, DoorAssignment? assignment = null)
+        {
+            Building? greenhouseBuilding = farm.getBuildingByType("Greenhouse")
+                ?? farm.buildings.FirstOrDefault(b => b.buildingType.Value.Equals("Greenhouse", StringComparison.OrdinalIgnoreCase));
+
+            Vector2 ghStartTile = farm.GetGreenhouseStartLocation();
+            if (greenhouseBuilding == null)
+            {
+                greenhouseBuilding = Building.CreateInstanceFromId("Greenhouse", ghStartTile);
+                greenhouseBuilding.load();
+                farm.buildings.Add(greenhouseBuilding);
+            }
+
+            string greenhouseName = ResidenceUpgradeLogic.GetSlotGreenhouseName(farm.NameOrUniqueName);
+            GameLocation? ghLoc = Game1.getLocationFromName(greenhouseName);
+
+            if (ghLoc == null && Context.IsMainPlayer && Game1.locations != null)
+            {
+                ghLoc = new GameLocation("Maps\\Greenhouse", greenhouseName);
+                ghLoc.isGreenhouse.Value = true;
+                ghLoc.IsFarm = true;
+                Game1.locations.Add(ghLoc);
+                context?.Monitor.Log($"[FarmSlotModule] Invernadero privado aprovisionado para {farm.NameOrUniqueName}: {greenhouseName}", LogLevel.Trace);
+            }
+
+            if (ghLoc != null)
+            {
+                greenhouseBuilding.indoors.Value = null;
+                greenhouseBuilding.nonInstancedIndoorsName.Value = greenhouseName;
+                greenhouseBuilding.UpdateIndoorParent();
+
+                if (assignment != null && assignment.OwnerId != 0)
+                {
+                    ghLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+
+                    // Sincronizar desbloqueo si el propietario ya tiene ccPantry o jojaPantry
+                    Farmer? owner = Game1.GetPlayer(assignment.OwnerId);
+                    if (owner != null && (owner.mailReceived.Contains("ccPantry") || owner.mailReceived.Contains("jojaPantry") || owner.hasCompletedCommunityCenter()))
+                    {
+                        farm.greenhouseUnlocked.Value = true;
+                    }
+                }
+
+                // Configurar warp de retorno hacia la puerta del invernadero en la granja del jugador
+                int doorX = greenhouseBuilding.tileX.Value + greenhouseBuilding.humanDoor.X;
+                int doorY = greenhouseBuilding.tileY.Value + greenhouseBuilding.humanDoor.Y;
+
+                greenhouseBuilding.updateInteriorWarps(ghLoc);
+                UpdateOrCreateWarp(ghLoc, 10, 24, farm.NameOrUniqueName, doorX, doorY + 1);
             }
         }
 
@@ -1392,6 +1677,18 @@ namespace Pelican4Ever.Modules
                 if (payload != null && Enum.TryParse(payload.Side, ignoreCase: true, out AnnexSide side))
                 {
                     HandleBuyAnnex(e.FromPlayerID, payload.ResidenceSlotId, side, payload.TemplateId);
+                }
+            }
+            else if (e.Type == ModMessages.UnlockGreenhouseRequest && Context.IsMainPlayer)
+            {
+                var payload = e.ReadAs<UnlockGreenhousePayload>();
+                if (payload != null && !string.IsNullOrEmpty(payload.FarmSlotId))
+                {
+                    if (Game1.getLocationFromName(payload.FarmSlotId) is Farm targetFarm)
+                    {
+                        targetFarm.greenhouseUnlocked.Value = true;
+                        context?.Monitor.Log($"[FarmSlotModule] Host confirmó desbloqueo de invernadero para {payload.FarmSlotId} solicitado por {e.FromPlayerID}.", LogLevel.Info);
+                    }
                 }
             }
             else if (e.Type == ModMessages.RequestDoorsSync && Context.IsMainPlayer)
@@ -1524,6 +1821,11 @@ namespace Pelican4Ever.Modules
             {
                 loc.PublishOwnership(playerId, AccessPolicy.Locked);
             }
+            GameLocation? caveLoc = Game1.getLocationFromName($"{slotId}_Cave");
+            if (caveLoc != null)
+            {
+                caveLoc.PublishOwnership(playerId, AccessPolicy.Locked);
+            }
 
             context.Monitor.Log($"[FarmSlotModule] Puerta {doorId} asignada con éxito a {playerId} (Granja: {slotId}, Tipo: {resolvedType}).", LogLevel.Info);
             RefreshSlotLocationData();
@@ -1559,6 +1861,16 @@ namespace Pelican4Ever.Modules
                     GameLocation? annexLoc = Game1.getLocationFromName(annex.AnnexId);
                     annexLoc?.PublishOwnership(playerId, newPolicy);
                 }
+
+                // Propagar también a la cueva, sótano e invernadero privados de la residencia
+                GameLocation? caveLoc = Game1.getLocationFromName($"{farmSlotId}_Cave");
+                caveLoc?.PublishOwnership(playerId, newPolicy);
+
+                GameLocation? cellarLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotCellarName(farmSlotId));
+                cellarLoc?.PublishOwnership(playerId, newPolicy);
+
+                GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(farmSlotId));
+                ghLoc?.PublishOwnership(playerId, newPolicy);
 
                 context.Monitor.Log($"[FarmSlotModule] Política de {farmSlotId} cambiada a {newPolicy} por propietario {playerId}.", LogLevel.Info);
 
@@ -1711,13 +2023,27 @@ namespace Pelican4Ever.Modules
                 if (residenceDoor != null)
                 {
                     var freeSides = ResidenceExits.FreeSides(residenceDoor.TownTileX, residenceDoor.TownTileY);
+                    string? farmType = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc)?.FarmType;
+                    bool isMeadowlands = FarmGrassLogic.IsMeadowlands(farmType);
                     AnnexSide? clickedSide = null;
-                    if (targetTile.Y <= 2 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
-                        clickedSide = AnnexSide.North;
-                    else if (targetTile.X >= 77 && (int)targetTile.Y >= 12 && (int)targetTile.Y <= 19)
-                        clickedSide = AnnexSide.East;
-                    else if (targetTile.Y >= 63 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
-                        clickedSide = AnnexSide.South;
+                    if (isMeadowlands)
+                    {
+                        if (targetTile.Y <= 2 && (int)targetTile.X >= 60 && (int)targetTile.X <= 67)
+                            clickedSide = AnnexSide.North;
+                        else if (targetTile.X >= 97 && (int)targetTile.Y >= 20 && (int)targetTile.Y <= 24)
+                            clickedSide = AnnexSide.East;
+                        else if (targetTile.Y >= 72 && (int)targetTile.X >= 50 && (int)targetTile.X <= 55)
+                            clickedSide = AnnexSide.South;
+                    }
+                    else
+                    {
+                        if (targetTile.Y <= 2 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
+                            clickedSide = AnnexSide.North;
+                        else if (targetTile.X >= 77 && (int)targetTile.Y >= 12 && (int)targetTile.Y <= 19)
+                            clickedSide = AnnexSide.East;
+                        else if (targetTile.Y >= 63 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
+                            clickedSide = AnnexSide.South;
+                    }
 
                     if (clickedSide.HasValue && freeSides.Contains(clickedSide.Value))
                     {
@@ -1730,7 +2056,7 @@ namespace Pelican4Ever.Modules
                         else
                         {
                             var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                            var pts = AnnexEntrance.For(clickedSide.Value, template.Width, template.Height);
+                            var pts = AnnexEntrance.For(clickedSide.Value, template.Width, template.Height, farmType);
                             Game1.warpFarmer(annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y, pts.FacingDirection);
                             return;
                         }
@@ -2032,7 +2358,7 @@ namespace Pelican4Ever.Modules
             int targetX, targetY, facingDir;
             if (door != null)
             {
-                GetResidenceArrivalCoordinates(door, out targetX, out targetY, out facingDir);
+                GetResidenceArrivalCoordinates(door, assignment?.FarmType, out targetX, out targetY, out facingDir);
             }
             else
             {
@@ -2070,12 +2396,6 @@ namespace Pelican4Ever.Modules
                 harmony.Patch(
                     original: AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.isAlwaysActiveLocation)),
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation))
-                );
-
-                // Si el peón elegido ya no existe en el host, devolver la lista al cliente en vez de lanzar y dejarlo en negro
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_CheckFarmhandRequest))
                 );
 
                 // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
@@ -2136,7 +2456,31 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
                 );
 
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos y protección de despertar aplicados.", LogLevel.Trace);
+                // Redirigir el menú de construcción de Robin y del Mago exclusivamente a la residencia y anexos del jugador
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowConstructOptions), new[] { typeof(string), typeof(int) }),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions))
+                );
+
+                // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FarmHouse_GetCellarName))
+                );
+
+                // Corrección gráfica: desfasar verticalmente la textura de Farmhouse con interior Cabin al subir de nivel
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Building), nameof(Building.getSourceRect)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Building_getSourceRect))
+                );
+
+                // GAP-20: Interceptar el acceso a invernaderos en ruinas para ofrecer la pasarela interactiva de restauración
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GreenhouseBuilding), nameof(GreenhouseBuilding.OnUseHumanDoor), new[] { typeof(Farmer) }),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GreenhouseBuilding_OnUseHumanDoor))
+                );
+
+                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos y construcción en residencia aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
@@ -2152,8 +2496,34 @@ namespace Pelican4Ever.Modules
             foreach (GameLocation savedLoc in fromLocations)
             {
                 string? locName = savedLoc?.NameOrUniqueName;
-                if (string.IsNullOrWhiteSpace(locName)
-                    || !locName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(locName))
+                    continue;
+
+                if (locName.EndsWith(ResidenceUpgradeLogic.CellarSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Game1.getLocationFromName(locName) == null)
+                    {
+                        var cellar = savedLoc as Cellar ?? new Cellar("Maps\\Cellar", locName);
+                        Game1.locations.Add(cellar);
+                        context?.Monitor.Log($"[FarmSlotModule] Sótano privado restaurado desde guardado: {locName}", LogLevel.Trace);
+                    }
+                    continue;
+                }
+
+                if (locName.EndsWith(ResidenceUpgradeLogic.GreenhouseSuffix, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Game1.getLocationFromName(locName) == null)
+                    {
+                        var ghLoc = savedLoc ?? new GameLocation("Maps\\Greenhouse", locName);
+                        ghLoc.isGreenhouse.Value = true;
+                        ghLoc.IsFarm = true;
+                        Game1.locations.Add(ghLoc);
+                        context?.Monitor.Log($"[FarmSlotModule] Invernadero privado restaurado desde guardado: {locName}", LogLevel.Trace);
+                    }
+                    continue;
+                }
+
+                if (!locName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -2177,6 +2547,260 @@ namespace Pelican4Ever.Modules
                 return false;
             }
             return true;
+        }
+
+        public static bool Prefix_ShowConstructOptions(GameLocation __instance, string builder, int page)
+        {
+            if (context == null)
+                return true;
+
+            Farmer who = Game1.player;
+
+            // Obtener el hueco de residencia asignado al jugador actual
+            string? residenceSlotId = context.WorldState.Doors.Values
+                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID)?.FarmSlotId;
+
+            if (string.IsNullOrEmpty(residenceSlotId))
+            {
+                if (context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var playerRec) && !string.IsNullOrEmpty(playerRec.FarmSlotId))
+                {
+                    residenceSlotId = playerRec.FarmSlotId;
+                }
+            }
+
+            var annexes = !string.IsNullOrEmpty(residenceSlotId) && context.WorldState.Annexes != null
+                ? context.WorldState.GetAnnexesForResidence(residenceSlotId)
+                : null;
+
+            var allowedLocations = ConstructionLocationFilter.GetAllowedConstructionLocations(
+                who.UniqueMultiplayerID,
+                Context.IsMainPlayer,
+                residenceSlotId,
+                annexes
+            );
+
+            if (allowedLocations.Count == 0)
+            {
+                Game1.drawObjectDialogue("Debes reclamar una residencia en Pelican Town antes de poder encargar obras de construcción.");
+                return false;
+            }
+
+            // Si solo tiene su granja principal (sin anexos), abrimos directamente el menú de construcción en su granja
+            if (allowedLocations.Count == 1)
+            {
+                string targetLocName = allowedLocations[0].Key;
+                GameLocation? targetLoc = Game1.getLocationFromName(targetLocName);
+                if (targetLoc != null)
+                {
+                    Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, targetLoc);
+                }
+                else
+                {
+                    Game1.drawObjectDialogue($"No se pudo acceder a la ubicación '{targetLocName}'. Inténtalo de nuevo.");
+                }
+                return false;
+            }
+
+            // Si tiene anexos, le permitimos elegir entre su granja principal y sus propios anexos (nunca el host ni granjas ajenas)
+            __instance.ShowPagedResponses(
+                Game1.content.LoadString("Strings\\Buildings:Construction_ChooseLocation"),
+                allowedLocations,
+                delegate(string chosenLocationName)
+                {
+                    GameLocation? loc = Game1.getLocationFromName(chosenLocationName);
+                    if (loc != null)
+                    {
+                        Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, loc);
+                    }
+                },
+                auto_select_single_choice: true
+            );
+
+            return false;
+        }
+
+        public static bool Prefix_FarmHouse_GetCellarName(FarmHouse __instance, ref string? __result)
+        {
+            if (__instance is Cabin cabin)
+            {
+                string? slotId = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(cabin.uniqueName.Value ?? cabin.NameOrUniqueName);
+                if (string.IsNullOrEmpty(slotId) && cabin.ParentBuilding?.GetParentLocation() is GameLocation parentLoc)
+                {
+                    if (parentLoc.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        slotId = parentLoc.NameOrUniqueName;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(slotId))
+                {
+                    __result = ResidenceUpgradeLogic.GetSlotCellarName(slotId);
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        public static void Postfix_Building_getSourceRect(Building __instance, ref Microsoft.Xna.Framework.Rectangle __result)
+        {
+            if (__instance == null)
+                return;
+
+            bool isCabin = __instance.GetIndoors() is Cabin;
+            int upgradeLevel = (__instance.GetIndoors() as FarmHouse)?.upgradeLevel ?? 0;
+
+            var (x, y) = ResidenceUpgradeLogic.AdjustFarmhouseBuildingSourceRect(
+                __instance.buildingType.Value,
+                isCabin,
+                upgradeLevel,
+                __result.X,
+                __result.Y,
+                __result.Width,
+                __result.Height
+            );
+
+            __result.X = x;
+            __result.Y = y;
+        }
+
+        public static bool Prefix_GreenhouseBuilding_OnUseHumanDoor(GreenhouseBuilding __instance, Farmer who, ref bool __result)
+        {
+            Farm? farm = __instance.GetParentLocation() as Farm ?? __instance.GetFarm();
+            if (farm == null) return true;
+
+            // Comprobar si ya está desbloqueado para la granja o el jugador
+            bool isUnlocked = farm.greenhouseUnlocked.Value
+                || who.mailReceived.Contains("ccPantry")
+                || who.mailReceived.Contains("jojaPantry")
+                || who.hasCompletedCommunityCenter()
+                || Game1.MasterPlayer.mailReceived.Contains("ccPantry");
+
+            if (isUnlocked)
+            {
+                if (!farm.greenhouseUnlocked.Value)
+                {
+                    farm.greenhouseUnlocked.Value = true;
+                }
+                __result = true;
+                return false; // Permitir el acceso por la puerta
+            }
+
+            // Si está en ruinas, interceptar para ofrecer la pasarela interactiva de restauración
+            if (who.IsLocalPlayer)
+            {
+                OfferGreenhouseRestorationDialogue(farm, __instance, who);
+            }
+
+            __result = false;
+            return false;
+        }
+
+        public static void OfferGreenhouseRestorationDialogue(Farm farm, GreenhouseBuilding building, Farmer who)
+        {
+            string farmSlotId = farm.NameOrUniqueName;
+            bool isOwner = false;
+            if (context?.WorldState != null)
+            {
+                var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId);
+                if (assignment != null && assignment.OwnerId == who.UniqueMultiplayerID)
+                {
+                    isOwner = true;
+                }
+            }
+            if (Context.IsMainPlayer && farmSlotId == "Farm")
+            {
+                isOwner = true;
+            }
+
+            if (!isOwner)
+            {
+                Game1.drawObjectDialogue("El invernadero de esta residencia está en ruinas. Solo su propietario puede restaurarlo.");
+                return;
+            }
+
+            var choices = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("materials", $"Restaurar con materiales ({ResidenceUpgradeLogic.GreenhouseRepairCostMaterials:N0}g, {ResidenceUpgradeLogic.GreenhouseRepairMaterialWood} Madera, {ResidenceUpgradeLogic.GreenhouseRepairMaterialStone} Piedra, {ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars} Lingotes de Oro)"),
+                new KeyValuePair<string, string>("joja", $"Contratar cuadrilla de obras ({ResidenceUpgradeLogic.GreenhouseRepairCostJoja:N0}g)"),
+                new KeyValuePair<string, string>("leave", "Dejarlo de momento (o completar la Despensa del Centro Cívico)")
+            };
+
+            farm.ShowPagedResponses(
+                "El invernadero de tu residencia está en ruinas. ¿Deseas repararlo?",
+                choices,
+                delegate (string choice)
+                {
+                    if (choice == "materials")
+                    {
+                        TryRepairGreenhouseWithMaterials(farm, who);
+                    }
+                    else if (choice == "joja")
+                    {
+                        TryRepairGreenhouseWithJoja(farm, who);
+                    }
+                }
+            );
+        }
+
+        public static void TryRepairGreenhouseWithMaterials(Farm farm, Farmer who)
+        {
+            int woodCount = who.Items.CountId("(O)388");
+            int stoneCount = who.Items.CountId("(O)390");
+            int goldBarCount = who.Items.CountId("(O)336");
+
+            if (who.Money < ResidenceUpgradeLogic.GreenhouseRepairCostMaterials
+                || woodCount < ResidenceUpgradeLogic.GreenhouseRepairMaterialWood
+                || stoneCount < ResidenceUpgradeLogic.GreenhouseRepairMaterialStone
+                || goldBarCount < ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars)
+            {
+                Game1.drawObjectDialogue($"No tienes suficientes recursos. Necesitas {ResidenceUpgradeLogic.GreenhouseRepairCostMaterials:N0}g, {ResidenceUpgradeLogic.GreenhouseRepairMaterialWood} Madera, {ResidenceUpgradeLogic.GreenhouseRepairMaterialStone} Piedra y {ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars} Lingotes de Oro.");
+                return;
+            }
+
+            who.Money -= ResidenceUpgradeLogic.GreenhouseRepairCostMaterials;
+            who.Items.ReduceId("(O)388", ResidenceUpgradeLogic.GreenhouseRepairMaterialWood);
+            who.Items.ReduceId("(O)390", ResidenceUpgradeLogic.GreenhouseRepairMaterialStone);
+            who.Items.ReduceId("(O)336", ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars);
+
+            FinalizeGreenhouseRepair(farm, who, "¡Has reunido los materiales y reparado el invernadero de tu residencia! Ya está listo para cultivar en cualquier estación.");
+        }
+
+        public static void TryRepairGreenhouseWithJoja(Farm farm, Farmer who)
+        {
+            if (who.Money < ResidenceUpgradeLogic.GreenhouseRepairCostJoja)
+            {
+                Game1.drawObjectDialogue(Game1.content.LoadString("Strings\\UI:NotEnoughMoney3"));
+                return;
+            }
+
+            who.Money -= ResidenceUpgradeLogic.GreenhouseRepairCostJoja;
+            who.mailReceived.Add("jojaPantry");
+
+            FinalizeGreenhouseRepair(farm, who, "¡La cuadrilla de obras ha restaurado por completo el invernadero de tu residencia! Ya está disponible para tus cultivos.");
+        }
+
+        public static void FinalizeGreenhouseRepair(Farm farm, Farmer who, string message)
+        {
+            who.mailReceived.Add("ccPantry");
+            farm.greenhouseUnlocked.Value = true;
+
+            if (Context.IsMainPlayer)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Invernadero reparado y desbloqueado en {farm.NameOrUniqueName} por {who.Name} ({who.UniqueMultiplayerID}).", LogLevel.Info);
+            }
+            else
+            {
+                context?.Helper.Multiplayer.SendMessage(
+                    new UnlockGreenhousePayload { FarmSlotId = farm.NameOrUniqueName },
+                    ModMessages.UnlockGreenhouseRequest,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                );
+            }
+
+            farm.playSound("axchop");
+            farm.playSound("money");
+            Game1.drawObjectDialogue(message);
         }
 
         public static bool Prefix_IsCollidingPosition(GameLocation __instance, Microsoft.Xna.Framework.Rectangle position, ref bool __result)
@@ -2213,7 +2837,15 @@ namespace Pelican4Ever.Modules
             // Control de acceso continuo a granjas privadas instanciadas (Opción B: Bloqueo si está Locked)
             if (targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
-                var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == targetLoc);
+                string baseSlot = targetLoc;
+                if (baseSlot.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase))
+                    baseSlot = baseSlot.Substring(0, baseSlot.Length - "_Cave".Length);
+                else if (baseSlot.EndsWith(ResidenceUpgradeLogic.CellarSuffix, StringComparison.OrdinalIgnoreCase))
+                    baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.CellarSuffix.Length);
+                else if (baseSlot.EndsWith(ResidenceUpgradeLogic.GreenhouseSuffix, StringComparison.OrdinalIgnoreCase))
+                    baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.GreenhouseSuffix.Length);
+
+                var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == baseSlot);
                 if (assignment != null)
                 {
                     long myId = Game1.player.UniqueMultiplayerID;
@@ -2230,12 +2862,21 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // Ajustar orientación adecuada al entrar a la residencia desde un warp continuo del host
-                var doorTarget = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == targetLoc);
-                if (doorTarget != null)
+                // Ajustar orientación adecuada únicamente al entrar a la residencia desde el portal exterior del host
+                if (string.Equals(targetLoc, baseSlot, StringComparison.OrdinalIgnoreCase))
                 {
-                    GetResidenceArrivalCoordinates(doorTarget, out _, out _, out int facingDir);
-                    facingDirectionAfterWarp = facingDir;
+                    var doorTarget = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == targetLoc);
+                    if (doorTarget != null)
+                    {
+                        string portalOrigin = string.IsNullOrWhiteSpace(doorTarget.LocationName) ? "Farm" : doorTarget.LocationName;
+                        string currentLocName = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
+                        if (string.Equals(currentLocName, portalOrigin, StringComparison.OrdinalIgnoreCase))
+                        {
+                            string? targetFarmType = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == targetLoc)?.FarmType;
+                            GetResidenceArrivalCoordinates(doorTarget, targetFarmType, out _, out _, out int facingDir);
+                            facingDirectionAfterWarp = facingDir;
+                        }
+                    }
                 }
             }
             else if (targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
@@ -2280,8 +2921,75 @@ namespace Pelican4Ever.Modules
                 return true;
             }
 
-            // Si el jugador está saliendo de una granja instanciada privada hacia el exterior
+            // Si el jugador está en una granja privada o en su cueva
             string curLoc = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
+
+            // Interceptar salida desde la cueva de una residencia privada
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && curLoc.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase))
+            {
+                string parentFarmId = curLoc.Substring(0, curLoc.Length - "_Cave".Length);
+                string? farmType = context?.WorldState.Doors.Values
+                    .FirstOrDefault(d => string.Equals(d.FarmSlotId, parentFarmId, StringComparison.OrdinalIgnoreCase))?.FarmType;
+                var template = FarmTemplateCatalog.GetTemplate(farmType);
+
+                locationRequest = Game1.getLocationRequest(parentFarmId);
+                tileX = template.CaveExitX;
+                tileY = template.CaveExitY;
+                facingDirectionAfterWarp = 2; // Sur
+                return true;
+            }
+
+            // Interceptar entrada a la cueva desde una residencia privada
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && !curLoc.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(targetLoc, "FarmCave", StringComparison.OrdinalIgnoreCase))
+            {
+                string caveId = $"{curLoc}_Cave";
+                locationRequest = Game1.getLocationRequest(caveId);
+                tileX = 8;
+                tileY = 11;
+                facingDirectionAfterWarp = 0; // Norte
+                return true;
+            }
+
+            // Interceptar salida desde el invernadero de una residencia privada si el warp aún apuntara a "Farm"
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && curLoc.EndsWith(ResidenceUpgradeLogic.GreenhouseSuffix, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(targetLoc, "Farm", StringComparison.OrdinalIgnoreCase))
+            {
+                string? parentFarmId = ResidenceUpgradeLogic.ExtractSlotIdFromGreenhouseName(curLoc);
+                if (!string.IsNullOrEmpty(parentFarmId))
+                {
+                    locationRequest = Game1.getLocationRequest(parentFarmId);
+                    if (Game1.getLocationFromName(parentFarmId) is Farm parentFarm)
+                    {
+                        Building? gh = parentFarm.getBuildingByType("Greenhouse");
+                        if (gh != null)
+                        {
+                            tileX = gh.tileX.Value + gh.humanDoor.X;
+                            tileY = gh.tileY.Value + gh.humanDoor.Y + 1;
+                        }
+                    }
+                    facingDirectionAfterWarp = 2; // Sur
+                    return true;
+                }
+            }
+
+            // Interceptar entrada al invernadero desde una residencia privada si el warp apuntara al "Greenhouse" global
+            if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && !curLoc.EndsWith(ResidenceUpgradeLogic.GreenhouseSuffix, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(targetLoc, "Greenhouse", StringComparison.OrdinalIgnoreCase))
+            {
+                string ghId = ResidenceUpgradeLogic.GetSlotGreenhouseName(curLoc);
+                locationRequest = Game1.getLocationRequest(ghId);
+                tileX = 10;
+                tileY = 23;
+                facingDirectionAfterWarp = 0; // Norte
+                return true;
+            }
+
+            // Si el jugador está saliendo de una granja instanciada privada hacia el exterior
             if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
@@ -2336,8 +3044,10 @@ namespace Pelican4Ever.Modules
                 var annex = context?.WorldState.FindAnnexById(curLoc);
                 if (annex != null)
                 {
+                    string? residenceFarmType = context?.WorldState.Doors.Values
+                        .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))?.FarmType;
                     var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height);
+                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height, residenceFarmType);
                     locationRequest = Game1.getLocationRequest(annex.ResidenceSlotId);
                     tileX = pts.ResidenceReturnTile.X;
                     tileY = pts.ResidenceReturnTile.Y;
@@ -2437,16 +3147,6 @@ namespace Pelican4Ever.Modules
 
             FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
             return new Point(template.MailboxTileX + 1, template.MailboxTileY + 2);
-        }
-
-        public static bool Prefix_CheckFarmhandRequest(GameServer __instance, string userId, string connectionId, NetFarmerRoot farmer, Action<OutgoingMessage> sendMessage)
-        {
-            if (farmer?.Value == null || Game1.netWorldState.Value.farmhandData.ContainsKey(farmer.Value.UniqueMultiplayerID))
-                return true;
-
-            context?.Monitor.Log($"[FarmSlotModule] El peón {farmer.Value.UniqueMultiplayerID} pedido por la conexión {connectionId} ya no existe; se reenvía la lista.", LogLevel.Warn);
-            __instance.sendAvailableFarmhands(userId, connectionId, sendMessage);
-            return false;
         }
 
         public static bool Prefix_ApplyWakeUpPosition(Farmer who)
@@ -2580,13 +3280,14 @@ namespace Pelican4Ever.Modules
                     var doorAssignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc);
                     bool isMine = doorAssignment != null && doorAssignment.OwnerId == myId;
 
+                    var resTemplate = FarmTemplateCatalog.GetTemplate(doorAssignment?.FarmType);
                     foreach (AnnexSide side in freeSides)
                     {
                         Point sideTile = side switch
                         {
-                            AnnexSide.North => new Point(40, 1),
-                            AnnexSide.East => new Point(78, 16),
-                            AnnexSide.South => new Point(40, 63),
+                            AnnexSide.North => new Point(resTemplate.NorthArrivalTileX, resTemplate.NorthArrivalTileY),
+                            AnnexSide.East => new Point(resTemplate.EastArrivalTileX, resTemplate.EastArrivalTileY),
+                            AnnexSide.South => new Point(resTemplate.SouthArrivalTileX, resTemplate.SouthArrivalTileY),
                             _ => Point.Zero
                         };
 
@@ -2697,7 +3398,11 @@ namespace Pelican4Ever.Modules
 
             if (context == null) return;
 
-            var doorAssignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == location.NameOrUniqueName);
+            string baseSlotId = location.NameOrUniqueName.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase)
+                ? location.NameOrUniqueName.Substring(0, location.NameOrUniqueName.Length - "_Cave".Length)
+                : location.NameOrUniqueName;
+
+            var doorAssignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == baseSlotId);
             long? ownerId = doorAssignment?.OwnerId
                          ?? context.WorldState.FindAnnexById(location.NameOrUniqueName)?.OwnerId
                          ?? location.GetFarmOwnerId();

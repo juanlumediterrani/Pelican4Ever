@@ -69,6 +69,21 @@ public class GameClockTests
     }
 
     [Theory]
+    [InlineData(12, 0, 0)]   // Mediodía: no estamos en NightHold
+    [InlineData(1, 49, 0)]   // Justo antes de NightHold
+    [InlineData(1, 50, 0)]   // Inicio exacto de NightHold
+    [InlineData(1, 59, 0)]   // Menos de 10 min en NightHold
+    [InlineData(2, 0, 1)]    // 10 minutos en NightHold -> 1 tick
+    [InlineData(2, 30, 4)]   // 40 minutos en NightHold -> 4 ticks
+    [InlineData(3, 0, 7)]    // 70 minutos en NightHold -> 7 ticks
+    [InlineData(5, 50, 24)]  // 240 minutos en NightHold -> 24 ticks
+    public void NightHoldTicksElapsed_CalculatesExpectedTicks(int hour, int minute, int expectedTicks)
+    {
+        int ticks = GameClock.NightHoldTicksElapsed(new TimeSpan(hour, minute, 0), DayStart, HoldStart);
+        Assert.Equal(expectedTicks, ticks);
+    }
+
+    [Theory]
     [InlineData(600, 360)]
     [InlineData(2430, 1470)]
     [InlineData(2550, 1550)]

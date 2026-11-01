@@ -125,6 +125,19 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexEntrance_Meadowlands_ReturnsToMeadowlandsCoordinates()
+        {
+            var northWarp = AnnexEntrance.For(AnnexSide.North, 40, 32, "Ranching");
+            Assert.Equal(new TilePoint(63, 1), northWarp.ResidenceReturnTile);
+
+            var southWarp = AnnexEntrance.For(AnnexSide.South, 40, 32, "Ranching");
+            Assert.Equal(new TilePoint(52, 73), southWarp.ResidenceReturnTile);
+
+            var eastWarp = AnnexEntrance.For(AnnexSide.East, 40, 32, "Meadowlands");
+            Assert.Equal(new TilePoint(98, 22), eastWarp.ResidenceReturnTile);
+        }
+
+        [Fact]
         public void AnnexTemplateCatalog_ContainsAll7FarmTypes()
         {
             Assert.Equal(7, AnnexTemplateCatalog.Templates.Count);

@@ -34,6 +34,66 @@ public class SleepPolicyTests
     }
 
     [Fact]
+    public void EarlyRiser_InGraceWindow_IsNotPenalized()
+    {
+        // Conectado a las 05:40 con rollover a las 06:00 (ventana de 60 min)
+        DateTime now = new DateTime(2026, 11, 2, 5, 40, 0);
+        TimeSpan dayStart = new TimeSpan(6, 0, 0);
+        var p = new PlayerRecord
+        {
+            LastActiveGameDay = Today,
+            CurrentSessionStartUtc = DateTimeOffset.UtcNow.AddMinutes(-20),
+            ActiveDayPriorToGrace = Today - 1 // Sin sesión previa en Today
+        };
+
+        bool isEarly = SleepPolicy.IsEarlyRiser(p, Today, now, dayStart, 60);
+        Assert.True(isEarly);
+
+        var outcome = SleepPolicy.Evaluate(p, Today, isOnline: true, isEarlyRiser: isEarly);
+        Assert.Equal(RolloverOutcome.Rested, outcome);
+    }
+
+    [Fact]
+    public void NightOwl_ConnectedHoursAgo_IsPenalized()
+    {
+        // Conectado a la 01:00 AM (hace más de 60 min)
+        DateTime now = new DateTime(2026, 11, 2, 5, 40, 0);
+        TimeSpan dayStart = new TimeSpan(6, 0, 0);
+        var p = new PlayerRecord
+        {
+            LastActiveGameDay = Today,
+            CurrentSessionStartUtc = DateTimeOffset.UtcNow.AddHours(-4), // 4 horas online
+            ActiveDayPriorToGrace = Today - 1
+        };
+
+        bool isEarly = SleepPolicy.IsEarlyRiser(p, Today, now, dayStart, 60);
+        Assert.False(isEarly);
+
+        var outcome = SleepPolicy.Evaluate(p, Today, isOnline: true, isEarlyRiser: isEarly);
+        Assert.Equal(RolloverOutcome.Penalized, outcome);
+    }
+
+    [Fact]
+    public void AbandonedSessionYesterday_ReconnectingInMorning_IsPenalized()
+    {
+        // Jugó ayer por la tarde y desconectó sin dormir; reconecta a las 05:40
+        DateTime now = new DateTime(2026, 11, 2, 5, 40, 0);
+        TimeSpan dayStart = new TimeSpan(6, 0, 0);
+        var p = new PlayerRecord
+        {
+            LastActiveGameDay = Today,
+            CurrentSessionStartUtc = DateTimeOffset.UtcNow.AddMinutes(-10),
+            ActiveDayPriorToGrace = Today // Ya había jugado en Today antes de las 05:00
+        };
+
+        bool isEarly = SleepPolicy.IsEarlyRiser(p, Today, now, dayStart, 60);
+        Assert.False(isEarly);
+
+        var outcome = SleepPolicy.Evaluate(p, Today, isOnline: true, isEarlyRiser: isEarly);
+        Assert.Equal(RolloverOutcome.Penalized, outcome);
+    }
+
+    [Fact]
     public void AbsentPlayer_IsNeverPenalizedTwice()
     {
         var p = new PlayerRecord { LastActiveGameDay = Today - 3 };

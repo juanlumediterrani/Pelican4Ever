@@ -82,7 +82,9 @@ Devuelve los jugadores conectados y registrados, su ubicación y coordenadas act
       "WellFedBuffsUsed": 1,
       "SpaEnergyUsed": 0,
       "SatietyGameDay": 12,
-      "PendingMarketGold": 0
+      "PendingMarketGold": 0,
+      "IsClaimed": true,
+      "OwnerTokenMasked": "a1b2...c5d6"
     }
   ]
 }

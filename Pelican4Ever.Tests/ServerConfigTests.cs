@@ -52,6 +52,24 @@ public class ServerConfigTests
     }
 
     [Fact]
+    public void NegativeSittingOrMineCooldown_IsRejected()
+    {
+        var config = new ServerConfig
+        {
+            SittingRegenSeconds = -1,
+            MineFloorCooldownMinutes = -5,
+            OfflineRegenFullBarHours = -2.0f,
+            TravelingCartClosingTime = 2800
+        };
+
+        var errors = config.Validate();
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.SittingRegenSeconds)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.MineFloorCooldownMinutes)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.OfflineRegenFullBarHours)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.TravelingCartClosingTime)));
+    }
+
+    [Fact]
     public void ModulesAreEnabledUnlessExplicitlyDisabled()
     {
         var config = new ServerConfig();

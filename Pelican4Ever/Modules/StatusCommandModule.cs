@@ -61,7 +61,8 @@ namespace Pelican4Ever.Modules
             foreach (PlayerRecord player in state.Players.Values)
             {
                 bool online = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == player.UniqueMultiplayerID);
-                log.Log($"  - {player.PlayerName} ({player.UniqueMultiplayerID}): {SleepPolicy.GetState(player, today, online)}, granja={player.FarmSlotId ?? "—"}", LogLevel.Info);
+                string claim = string.IsNullOrEmpty(player.OwnerToken) ? "sin reclamar" : PlayerAuthLogic.MaskToken(player.OwnerToken);
+                log.Log($"  - {player.PlayerName} ({player.UniqueMultiplayerID}): {SleepPolicy.GetState(player, today, online)}, granja={player.FarmSlotId ?? "—"}, token={claim}", LogLevel.Info);
             }
 
             log.Log($"Residencias registradas ({FarmSlotModule.RegisteredDoors.Count} disponibles):", LogLevel.Info);

@@ -76,6 +76,31 @@ namespace Pelican4Ever.Core.Time
             return diff <= 0 ? 0 : diff / 10;
         }
 
+        /// <summary>
+        /// Calcula cuántos ticks de 10 minutos han transcurrido dentro de la Madrugada (NightHold).
+        /// Devuelve 0 si no estamos en NightHold.
+        /// </summary>
+        public static int NightHoldTicksElapsed(TimeSpan realTimeOfDay, TimeSpan dayStart, TimeSpan nightHoldStart)
+        {
+            TimeSpan sinceStart = realTimeOfDay - dayStart;
+            if (sinceStart < TimeSpan.Zero)
+                sinceStart += TimeSpan.FromDays(1);
+
+            TimeSpan holdOffset = nightHoldStart - dayStart;
+            if (holdOffset <= TimeSpan.Zero)
+                holdOffset += TimeSpan.FromDays(1);
+
+            int maxMinutes = ToMinutes(MaxTimeOfDay) - ToMinutes(DayStartTimeOfDay);
+            int holdMinutes = Math.Min((int)holdOffset.TotalMinutes, maxMinutes);
+
+            int elapsedMinutes = (int)sinceStart.TotalMinutes;
+            if (elapsedMinutes < holdMinutes)
+                return 0;
+
+            int minutesIntoNightHold = elapsedMinutes - holdMinutes;
+            return minutesIntoNightHold / 10;
+        }
+
         /// <summary>Convierte una hora en formato motor (ej. 2430) a minutos desde 00:00 (ej. 1470).</summary>
         public static int ToMinutes(int timeOfDay) => timeOfDay / 100 * 60 + timeOfDay % 100;
 

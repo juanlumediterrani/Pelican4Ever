@@ -24,6 +24,9 @@ namespace Pelican4Ever.Modules
         public static TimeSpan ManualTimeOffset { get; set; } = TimeSpan.Zero;
         private static bool timeChatCommandsRegistered;
 
+        /// <summary>Ticks de 10 min procesados sobre máquinas durante la Madrugada en curso (GAP-17).</summary>
+        public static int NightHoldTicksSimulated { get; set; } = 0;
+
         /// <summary>Primera sincronización tras cargar la partida: el reloj salta de 0600 a la hora real.</summary>
         private static bool startupSyncPending;
 
@@ -326,6 +329,7 @@ namespace Pelican4Ever.Modules
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
+            NightHoldTicksSimulated = 0;
             if (Context.IsMainPlayer)
             {
                 Game1.realMilliSecondsPerGameTenMinutes = 600_000;
@@ -365,6 +369,7 @@ namespace Pelican4Ever.Modules
                 CatchUpVillagerSchedules(Game1.timeOfDay);
 
             // Si estamos en tramo nocturno congelado (NightHold), mantener la hora tope fija
+            // y procesar el avance de máquinas en tiempo real cada 10 min (GAP-17).
             if (reading.IsNightHold)
             {
                 if (Game1.timeOfDay != reading.TimeOfDay)
@@ -379,6 +384,30 @@ namespace Pelican4Ever.Modules
                         Game1.netWorldState.Value.UpdateFromGame1();
                     }
                 }
+
+                // Simulación en tiempo real de máquinas cada 10 minutos reales
+                int targetTicks = GameClock.NightHoldTicksElapsed(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+                if (startup)
+                {
+                    // Si el servidor arrancó ya en madrugada, sincronizar sin simular ticks pasados
+                    NightHoldTicksSimulated = targetTicks;
+                }
+                else if (targetTicks > NightHoldTicksSimulated)
+                {
+                    int ticksToRun = targetTicks - NightHoldTicksSimulated;
+                    for (int i = 0; i < ticksToRun; i++)
+                    {
+                        PassTimeForNightHold(10);
+                        NightHoldTicksSimulated++;
+                    }
+                    context.Monitor.Log($"[RealTimeClockModule] Madrugada: procesados {ticksToRun * 10} min en máquinas (total noche: {NightHoldTicksSimulated * 10} min).", LogLevel.Trace);
+                }
+                else if (targetTicks < NightHoldTicksSimulated)
+                {
+                    // Ajuste de reloj hacia atrás
+                    NightHoldTicksSimulated = targetTicks;
+                }
+
                 return;
             }
 
@@ -426,6 +455,12 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_shouldTimePass))
                 );
 
+                // Parche en Utility.CalculateMinutesUntilMorning para descontar los minutos ya simulados en NightHold (GAP-17)
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Utility), nameof(Utility.CalculateMinutesUntilMorning), new[] { typeof(int), typeof(int) }),
+                    postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_CalculateMinutesUntilMorning))
+                );
+
                 context?.Monitor.Log("[RealTimeClockModule] Harmony patches aplicados correctamente.", LogLevel.Trace);
             }
             catch (Exception ex)
@@ -468,6 +503,47 @@ namespace Pelican4Ever.Modules
             if (Game1.IsMultiplayer && !Game1.isFestival() && (Game1.CurrentEvent == null || !Game1.CurrentEvent.isWedding))
             {
                 __result = true;
+            }
+        }
+
+        private static void PassTimeForNightHold(int minutes)
+        {
+            foreach (GameLocation location in Game1.locations)
+            {
+                location.passTimeForObjects(minutes);
+
+                for (int i = 0; i < location.furniture.Count; i++)
+                {
+                    location.furniture[i].minutesElapsed(minutes);
+                }
+
+                foreach (var building in location.buildings)
+                {
+                    if (building.daysOfConstructionLeft.Value <= 0)
+                    {
+                        building.performTenMinuteAction(minutes);
+                        GameLocation indoors = building.GetIndoors();
+                        if (indoors != null)
+                        {
+                            indoors.passTimeForObjects(minutes);
+                            for (int j = 0; j < indoors.furniture.Count; j++)
+                            {
+                                indoors.furniture[j].minutesElapsed(minutes);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        public static void Postfix_CalculateMinutesUntilMorning(int daysElapsed, ref int __result)
+        {
+            // Descuenta los minutos que ya se simularon en tiempo real durante la madrugada
+            // para evitar que el Rollover los procese dos veces (GAP-17).
+            if (daysElapsed == 1 && NightHoldTicksSimulated > 0)
+            {
+                int alreadySimulated = NightHoldTicksSimulated * 10;
+                __result = Math.Max(0, __result - alreadySimulated);
             }
         }
     }

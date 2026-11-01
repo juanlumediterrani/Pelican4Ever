@@ -133,7 +133,7 @@ namespace Pelican4Ever.Core.World
             if (Doors.Values.Any(d => d.OwnerId == playerId && d.DoorId != doorId))
                 return DoorClaimRejection.AlreadyOwnsResidence;
 
-            if (!string.IsNullOrWhiteSpace(farmType) && !FarmTemplateCatalog.Templates.ContainsKey(farmType))
+            if (!string.IsNullOrWhiteSpace(farmType) && !FarmTemplateCatalog.Templates.ContainsKey(farmType) && !FarmGrassLogic.IsMeadowlands(farmType))
                 return DoorClaimRejection.UnknownFarmType;
 
             return DoorClaimRejection.None;
@@ -163,7 +163,9 @@ namespace Pelican4Ever.Core.World
                 }
 
                 assignment.DoorId = entry.Key;
-                if (string.IsNullOrWhiteSpace(assignment.FarmType) || !FarmTemplateCatalog.Templates.ContainsKey(assignment.FarmType))
+                if (FarmGrassLogic.IsMeadowlands(assignment.FarmType))
+                    assignment.FarmType = "Ranching";
+                else if (string.IsNullOrWhiteSpace(assignment.FarmType) || !FarmTemplateCatalog.Templates.ContainsKey(assignment.FarmType))
                     assignment.FarmType = "Standard";
             }
 

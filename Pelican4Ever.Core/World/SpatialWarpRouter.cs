@@ -10,37 +10,39 @@ namespace Pelican4Ever.Core.World
     public static class SpatialWarpRouter
     {
         /// <summary>
-        /// Calcula las coordenadas y orientación de entrada a la residencia privada según la ubicación del portal en la Plaza Central.
+        /// Calcula las coordenadas y orientación de entrada a la residencia privada según la ubicación del portal en la Plaza Central
+        /// y el tipo de granja de la residencia (TASK-602 / Praderas azules).
         /// - Portales del SUR del Host (TownTileY >= 60) -> Entra por el NORTE de la residencia (salida Backwoods), mirando al Sur (2).
         /// - Portales del NORTE del Host (TownTileY <= 2) -> Entra por el SUR de la residencia (salida Forest), mirando al Norte (0).
         /// - Portales del OESTE del Host (TownTileX <= 2) -> Entra por el ESTE de la residencia (salida BusStop), mirando al Oeste (3).
         /// </summary>
-        public static void GetResidenceArrivalCoordinates(int townTileX, int townTileY, out int targetX, out int targetY, out int facingDirection)
+        public static void GetResidenceArrivalCoordinates(int townTileX, int townTileY, string? farmType, out int targetX, out int targetY, out int facingDirection)
         {
+            FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
+
             if (townTileY >= 60)
             {
-                targetX = 40;
-                targetY = 1;
+                targetX = template.NorthArrivalTileX;
+                targetY = template.NorthArrivalTileY;
                 facingDirection = 2; // Sur
             }
             else if (townTileY <= 2)
             {
-                targetX = 40;
-                targetY = 63;
+                targetX = template.SouthArrivalTileX;
+                targetY = template.SouthArrivalTileY;
                 facingDirection = 0; // Norte
-            }
-            else if (townTileX <= 2)
-            {
-                targetX = 78;
-                targetY = 17;
-                facingDirection = 3; // Oeste
             }
             else
             {
-                targetX = 78;
-                targetY = 17;
+                targetX = template.EastArrivalTileX;
+                targetY = template.EastArrivalTileY;
                 facingDirection = 3; // Oeste
             }
+        }
+
+        public static void GetResidenceArrivalCoordinates(int townTileX, int townTileY, out int targetX, out int targetY, out int facingDirection)
+        {
+            GetResidenceArrivalCoordinates(townTileX, townTileY, null, out targetX, out targetY, out facingDirection);
         }
 
         /// <summary>

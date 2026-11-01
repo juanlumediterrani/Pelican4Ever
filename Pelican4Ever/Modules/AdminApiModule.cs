@@ -671,7 +671,9 @@ namespace Pelican4Ever.Modules
                     WellFedBuffsUsed = p.WellFedBuffsUsed,
                     SpaEnergyUsed = p.SpaEnergyUsed,
                     SatietyGameDay = p.SatietyGameDay,
-                    PendingMarketGold = p.PendingMarketGold
+                    PendingMarketGold = p.PendingMarketGold,
+                    IsClaimed = PlayerAuthLogic.IsClaimed(p),
+                    OwnerTokenMasked = PlayerAuthLogic.MaskToken(p.OwnerToken)
                 });
             }
 
