@@ -1,4 +1,5 @@
-# Pelican 4Ever · servidor persistente preproducción (no activar antes de F0/F1).
+# Pelican 4Ever · servidor persistente preproducción. Desarrollo corre SIN red; preproducción CON red
+# (UDP 24642 nativo, abierto solo a la LAN). Ver docs/deployment-lines.md.
 [Unit]
 Description=Pelican 4Ever · Stardew aislado de preproducción
 Requires=pelican4ever-preprod-xvfb.service
@@ -20,6 +21,9 @@ ExecStart=/bin/sh -c 'cd "$STARDEW_DIR" && exec ./StardewModdingAPI'
 Restart=always
 RestartSec=30
 TimeoutStopSec=120
+# SMAPI termina con 143 al recibir SIGTERM en una parada ordenada: no es un fallo
+SuccessExitStatus=143
 
 [Install]
-WantedBy=graphical-session.target
+# Pantalla propia (Xvfb) y linger del usuario: no depende de una sesión gráfica iniciada
+WantedBy=default.target
