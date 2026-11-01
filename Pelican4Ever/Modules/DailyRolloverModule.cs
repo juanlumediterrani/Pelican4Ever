@@ -287,7 +287,10 @@ namespace Pelican4Ever.Modules
 
             if (plan.IsAhead)
             {
-                context.Monitor.Log($"[DailyRolloverModule] AVISO: La partida guardada (día {savedDays}) va por delante de la fecha real esperada ({calendar.GetDate(now)}). Revisa CalendarEpoch o el reloj del sistema.", LogLevel.Warn);
+                string expectedDate = calendar.TryGetDate(now, out var date)
+                    ? date.ToString()
+                    : $"anterior a la época ({cfg.CalendarEpoch}; totalDays={calendar.GetTotalDays(now)})";
+                context.Monitor.Log($"[DailyRolloverModule] AVISO: La partida guardada (día {savedDays}) va por delante de la fecha real esperada ({expectedDate}). Revisa CalendarEpoch o el reloj del sistema.", LogLevel.Warn);
             }
             else if (plan.RolloversToRun > 0)
             {

@@ -67,6 +67,20 @@ namespace Pelican4Ever.Core.Time
         /// <summary>Fecha de juego para una hora local dada.</summary>
         public GameDate GetDate(DateTime localNow) => GameDate.FromTotalDays(GetTotalDays(localNow));
 
+        /// <summary>Devuelve false si la hora real aún precede a la época configurada.</summary>
+        public bool TryGetDate(DateTime localNow, out GameDate date)
+        {
+            int totalDays = GetTotalDays(localNow);
+            if (totalDays < 0)
+            {
+                date = default;
+                return false;
+            }
+
+            date = GameDate.FromTotalDays(totalDays);
+            return true;
+        }
+
         /// <summary>
         /// Decide cuántos Rollovers ejecutar para alinear la partida con el calendario real.
         /// </summary>
