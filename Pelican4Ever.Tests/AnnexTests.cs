@@ -472,5 +472,55 @@ namespace Pelican4Ever.Tests
             Assert.Equal(new TileArea(5, 13, 22, 8), miningAnnex.Behavior.MountainOreArea!.Value);
             Assert.Equal(14, miningAnnex.Behavior.InitialMountainOreDays);
         }
+
+        [Fact]
+        public void AnnexTemplates_All7Templates_HaveMeticulousDesignParameters()
+        {
+            var templates = AnnexTemplateCatalog.Templates;
+            Assert.Equal(7, templates.Count);
+
+            foreach (var kvp in templates)
+            {
+                var t = kvp.Value;
+                Assert.Equal(40, t.Width);
+                Assert.Equal(32, t.Height);
+                Assert.False(string.IsNullOrWhiteSpace(t.DisplayName));
+                Assert.False(string.IsNullOrWhiteSpace(t.MapAsset));
+                Assert.StartsWith("Maps/", t.SourceVanillaMap);
+                Assert.InRange(t.SourceCropX, 0, 80 - t.Width);
+                Assert.InRange(t.SourceCropY, 0, 80 - t.Height);
+
+                // Cada lado cardinal genera una ruta de asset válida
+                Assert.Equal($"{t.MapAsset}_North", t.GetMapAssetForSide(AnnexSide.North));
+                Assert.Equal($"{t.MapAsset}_East", t.GetMapAssetForSide(AnnexSide.East));
+                Assert.Equal($"{t.MapAsset}_South", t.GetMapAssetForSide(AnnexSide.South));
+            }
+
+            // Validación específica de la plantilla Fluvial (Fishing)
+            var fishing = templates["Fishing"];
+            Assert.Equal("Maps/Farm_Fishing", fishing.SourceVanillaMap);
+            Assert.Equal(16, fishing.SourceCropX);
+            Assert.Equal(18, fishing.SourceCropY);
+            Assert.True(fishing.Behavior.RiverFishSplashes);
+            Assert.Equal("Farm_Riverland", fishing.LocationDataKey);
+        }
+
+        [Fact]
+        public void AnnexEntrance_AllFreeSides_GenerateConsistentOpeningTiles()
+        {
+            foreach (var side in new[] { AnnexSide.North, AnnexSide.East, AnnexSide.South })
+            {
+                var pts = AnnexEntrance.For(side, 40, 32);
+                Assert.InRange(pts.EntryTile.X, 0, 39);
+                Assert.InRange(pts.EntryTile.Y, 0, 31);
+                Assert.InRange(pts.ReturnExitTile.X, 0, 39);
+                Assert.InRange(pts.ReturnExitTile.Y, 0, 31);
+
+                // El ReturnExitTile siempre está situado en el perímetro exterior (borde del mapa)
+                bool isBorder = pts.ReturnExitTile.X == 0 || pts.ReturnExitTile.X == 39
+                    || pts.ReturnExitTile.Y == 0 || pts.ReturnExitTile.Y == 31;
+                Assert.True(isBorder);
+            }
+        }
     }
 }

@@ -34,6 +34,14 @@ namespace Pelican4Ever.Framework
             if (!string.IsNullOrWhiteSpace(cachedToken))
                 return cachedToken;
 
+            // 0. Variable de entorno opcional para depuración o multi-instancia en el mismo equipo
+            string? envToken = Environment.GetEnvironmentVariable("P4E_CLIENT_TOKEN");
+            if (!string.IsNullOrWhiteSpace(envToken))
+            {
+                cachedToken = envToken.Trim();
+                return cachedToken;
+            }
+
             // 1. Intentar leer de SMAPI GlobalData
             string? token = helper.Data.ReadGlobalData<string>(GlobalDataKey);
 

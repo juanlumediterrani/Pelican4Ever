@@ -164,5 +164,20 @@ namespace Pelican4Ever.Tests
             Assert.True(dto.IsClaimed);
             Assert.Equal("a1b2...c5d6", dto.OwnerTokenMasked);
         }
+
+        [Theory]
+        [InlineData(null, TokenAlice, false)]
+        [InlineData("", TokenAlice, false)]
+        [InlineData("   ", TokenAlice, false)]
+        [InlineData(TokenAlice, TokenAlice, false)]
+        [InlineData($"  {TokenAlice}  ", TokenAlice, false)]
+        [InlineData(TokenBob, TokenAlice, true)]
+        [InlineData(TokenAlice, null, true)]
+        [InlineData(TokenAlice, "", true)]
+        public void BelongsToAnotherClient_EvaluatesCorrectly(string? slotOwnerToken, string? currentClientToken, bool expected)
+        {
+            bool actual = PlayerAuthLogic.BelongsToAnotherClient(slotOwnerToken, currentClientToken);
+            Assert.Equal(expected, actual);
+        }
     }
 }

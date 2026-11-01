@@ -65,10 +65,7 @@ namespace Pelican4Ever.Modules
                     && Game1.netWorldState.Value.farmhandData.TryGetValue(playerId, out Farmer? f)
                     && f != null)
                 {
-                    if (string.IsNullOrEmpty(f.userID.Value))
-                    {
-                        f.userID.Value = playerRecord.OwnerToken;
-                    }
+                    f.userID.Value = playerRecord.OwnerToken;
                 }
             }
         }
@@ -155,31 +152,50 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction))
                 );
 
-                // 2. Override de getUserID en LidgrenClient para conexiones por IP directa
+                // 2. Override de getUserID en Client y sus subclases para conexiones IP directa, Steam y GOG Galaxy
+                void PatchGetUserID(Type? clientType)
+                {
+                    if (clientType == null) return;
+                    var method = AccessTools.Method(clientType, "getUserID");
+                    if (method != null)
+                    {
+                        harmony.Patch(
+                            original: method,
+                            prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_GetUserID))
+                        );
+                    }
+                }
+
+                PatchGetUserID(typeof(Client));
+                PatchGetUserID(typeof(LidgrenClient));
+                PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.Steam.SteamNetClient"));
+                PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.GogGalaxy.GalaxyNetClient"));
+
+                // 3. Sincronización proactiva de tokens antes de enviar la lista de peones al cliente
                 harmony.Patch(
-                    original: AccessTools.Method(typeof(LidgrenClient), nameof(LidgrenClient.getUserID)),
-                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_LidgrenClient_GetUserID))
+                    original: AccessTools.Method(typeof(GameServer), nameof(GameServer.sendAvailableFarmhands)),
+                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendAvailableFarmhands))
                 );
 
-                // 3. Validación y reclamo autoritativo en el host (GameServer.checkFarmhandRequest)
+                // 4. Validación y reclamo autoritativo en el host (GameServer.checkFarmhandRequest)
                 harmony.Patch(
                     original: AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
                     prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_CheckFarmhandRequest))
                 );
 
-                // 4. Bloqueo visual de ranuras ajenas en FarmhandMenu
+                // 5. Bloqueo visual y control de pertenencia de ranuras en FarmhandMenu
                 harmony.Patch(
                     original: AccessTools.Constructor(typeof(FarmhandMenu.FarmhandSlot), new[] { typeof(FarmhandMenu), typeof(Farmer) }),
                     postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_Ctor))
                 );
 
-                // 5. Etiqueta visual "[De otro jugador]" en las ranuras bloqueadas
+                // 6. Etiqueta visual "[De otro jugador]" en las ranuras bloqueadas
                 harmony.Patch(
                     original: AccessTools.Method(typeof(FarmhandMenu.FarmhandSlot), "drawSlotName"),
                     postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_DrawSlotName))
                 );
 
-                // 6. Ordenación inteligente del menú de peones (personajes propios primero)
+                // 7. Ordenación inteligente del menú de peones (personajes propios primero)
                 harmony.Patch(
                     original: AccessTools.Constructor(typeof(FarmhandMenu), new[] { typeof(Client) }),
                     postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_Ctor))
@@ -204,7 +220,7 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        public static bool Prefix_LidgrenClient_GetUserID(ref string __result)
+        public static bool Prefix_Client_GetUserID(ref string __result)
         {
             string token = ClientIdentity.CurrentToken;
             if (!string.IsNullOrWhiteSpace(token))
@@ -213,6 +229,13 @@ namespace Pelican4Ever.Modules
                 return false;
             }
             return true;
+        }
+
+        public static bool Prefix_LidgrenClient_GetUserID(ref string __result) => Prefix_Client_GetUserID(ref __result);
+
+        public static void Prefix_SendAvailableFarmhands()
+        {
+            SyncServerTokensFromWorldState();
         }
 
         public static bool Prefix_CheckFarmhandRequest(
@@ -241,8 +264,8 @@ namespace Pelican4Ever.Modules
                 string incomingToken = farmer.Value.userID.Value ?? string.Empty;
                 var playerRecord = context.WorldState.GetOrCreatePlayer(farmhandId, serverFarmer.Name);
 
-                // Si el peón en el save no tenía userID pero el record del host sí tiene OwnerToken, sincronizar
-                if (string.IsNullOrEmpty(serverFarmer.userID.Value) && !string.IsNullOrEmpty(playerRecord.OwnerToken))
+                // Si el peón tiene OwnerToken en WorldState (la fuente de verdad), sincronizar serverFarmer.userID
+                if (!string.IsNullOrEmpty(playerRecord.OwnerToken))
                 {
                     serverFarmer.userID.Value = playerRecord.OwnerToken;
                 }
@@ -277,12 +300,13 @@ namespace Pelican4Ever.Modules
         public static void Postfix_FarmhandSlot_Ctor(FarmhandMenu.FarmhandSlot __instance, Farmer farmer)
         {
             string myToken = ClientIdentity.CurrentToken;
-            if (!string.IsNullOrWhiteSpace(myToken) && farmer != null && !string.IsNullOrWhiteSpace(farmer.userID.Value))
+            if (farmer != null)
             {
-                if (!string.Equals(farmer.userID.Value, myToken, StringComparison.Ordinal))
-                {
-                    AccessTools.Field(typeof(FarmhandMenu.FarmhandSlot), "_belongsToAnotherPlayer")?.SetValue(__instance, true);
-                }
+                string slotToken = farmer.userID.Value ?? string.Empty;
+                bool belongsToAnother = PlayerAuthLogic.BelongsToAnotherClient(slotToken, myToken);
+
+                // Sobrescribe el valor calculado por el juego nativo (que comparó contra GetUserID() de Steam/GOG)
+                AccessTools.Field(typeof(FarmhandMenu.FarmhandSlot), "_belongsToAnotherPlayer")?.SetValue(__instance, belongsToAnother);
             }
         }
 

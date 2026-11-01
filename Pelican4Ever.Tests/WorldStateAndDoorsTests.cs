@@ -232,6 +232,40 @@ public class WorldStateAndDoorsTests
         Assert.Null(state.Players[2L].FarmSlotId);
     }
 
+    [Fact]
+    public void DoorsCatalog_MailboxesAreCloseToWarp_AndNotAtCorridorEntrance()
+    {
+        string doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
+        if (!File.Exists(doorsPath))
+            doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
+        if (!File.Exists(doorsPath))
+            doorsPath = Path.Combine(Directory.GetCurrentDirectory(), "assets", "doors.json");
+
+        var doors = System.Text.Json.JsonSerializer.Deserialize<List<DoorCatalogEntry>>(File.ReadAllText(doorsPath))!;
+
+        foreach (var d in doors)
+        {
+            Assert.NotNull(d.MailboxTileX);
+            Assert.NotNull(d.MailboxTileY);
+
+            if (d.TownTileY <= 2)
+            {
+                // Portales norte: el warp está en Y=0..1, el buzón debe estar pegado al warp en Y=2 (no a la salida del desfiladero en Y=9/11)
+                Assert.Equal(2, d.MailboxTileY.Value);
+            }
+            else if (d.TownTileX <= 2)
+            {
+                // Portales oeste: el warp está en X=0..1, el buzón debe estar en X=2 junto al warp (no al final del claro en X=7)
+                Assert.Equal(2, d.MailboxTileX.Value);
+            }
+            else if (d.TownTileY >= 60)
+            {
+                // Portales sur: el warp está en Y=63..64, el buzón debe estar en Y=62
+                Assert.Equal(62, d.MailboxTileY.Value);
+            }
+        }
+    }
+
     private sealed class DoorCatalogEntry
     {
         public string DoorId { get; set; } = string.Empty;

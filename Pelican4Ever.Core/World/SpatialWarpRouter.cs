@@ -126,7 +126,7 @@ namespace Pelican4Ever.Core.World
 
             if (townTileX <= 2)
             {
-                int maxDepthX = doorId == "Farm_Portal_02" ? 6 : 4;
+                int maxDepthX = doorId == "Farm_Portal_02" ? 7 : 6;
                 for (int x = 0; x <= maxDepthX; x++)
                 {
                     tiles.Add((x, t1.Y));
@@ -143,7 +143,8 @@ namespace Pelican4Ever.Core.World
             }
             else if (townTileY <= 2)
             {
-                int maxDepthY = doorId is "Farm_Portal_08" or "Farm_Portal_14" ? 9 : 8;
+                // Todos los pasos norte se prolongan hasta y=10 para alcanzar el campo despejado
+                int maxDepthY = 10;
                 for (int y = 0; y <= maxDepthY; y++)
                 {
                     tiles.Add((t1.X, y));

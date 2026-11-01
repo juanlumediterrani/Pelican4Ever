@@ -145,9 +145,12 @@ namespace Pelican4Ever.Modules
             if (!farm.buildings.Any(b => b.buildingType.Value == "Coop"))
             {
                 Building building = new Building("Coop", new Vector2(54f, 9f));
+                building.parentLocationName.Value = farm.NameOrUniqueName;
+                farm.buildings.Add(building);
                 building.FinishConstruction(onGameStart: true);
                 building.LoadFromBuildingData(building.GetData(), forUpgrade: false, forConstruction: true);
                 building.load();
+                building.updateInteriorWarps();
 
                 long animalOwner = ownerId != 0 ? ownerId : (farm.GetFarmOwnerId() ?? Game1.player.UniqueMultiplayerID);
                 FarmAnimal farmAnimal = new FarmAnimal("White Chicken", Game1.Multiplayer.getNewID(), animalOwner);
@@ -174,8 +177,6 @@ namespace Pelican4Ever.Modules
                     animalHouse.adoptAnimal(farmAnimal);
                     animalHouse.adoptAnimal(farmAnimal2);
                 }
-
-                farm.buildings.Add(building);
             }
         }
 

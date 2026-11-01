@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
@@ -225,8 +226,15 @@ namespace Pelican4Ever.Modules
             if (villagerCatchUpPending)
                 return;
 
-            int moved = 0;
+            var villagers = new List<NPC>();
             Utility.ForEachVillager(npc =>
+            {
+                villagers.Add(npc);
+                return true;
+            });
+
+            int moved = 0;
+            foreach (NPC npc in villagers)
             {
                 try
                 {
@@ -237,8 +245,7 @@ namespace Pelican4Ever.Modules
                 {
                     context?.Monitor.Log($"[RealTimeClockModule] No se pudo poner al día el horario de {npc.Name}: {ex.Message}", LogLevel.Trace);
                 }
-                return true;
-            });
+            }
 
             if (moved > 0)
                 context?.Monitor.Log($"[RealTimeClockModule] {moved} aldeanos recolocados según su horario de las {Game1.getTimeOfDayString(timeOfDay)}.", LogLevel.Info);
