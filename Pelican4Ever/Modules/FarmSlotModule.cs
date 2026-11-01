@@ -2090,7 +2090,10 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_TotemWarpForReal))
                 );
                 harmony.Patch(
-                    original: AccessTools.Method(typeof(IslandWest), nameof(IslandWest.performAction)),
+                    // 1.6 tiene dos sobrecargas (string y string[]): sin tipos explícitos Harmony lanza
+                    // AmbiguousMatchException y aborta el resto de parches de este bloque.
+                    original: AccessTools.Method(typeof(IslandWest), nameof(IslandWest.performAction),
+                        new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }),
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IslandWestPerformAction))
                 );
 
