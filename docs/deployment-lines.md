@@ -1,13 +1,54 @@
-# Deployment lines
+# Líneas de despliegue: preproducción y desarrollo
 
-Two local Git lines separate release candidate from active development. `pelican/preproduccion` currently starts at 072764f; `pelican/desarrollo` also starts there. This is not a stable promotion: same mod source SHA, and no live service acceptance yet. Development changes must not deploy into the preproduction game.
+Dos líneas Git locales por proyecto, cada una en su worktree, y dos instancias del juego en la misma
+máquina. **Desarrollo corre sin red y preproducción con red.** No hay namespaces, veth ni proxies.
 
-The Pelican preproduction project is built only from this worktree with `local.props` pointing to `~/.local/share/pelican4ever/preprod/game`. Its tracked unit files are `deploy/systemd/pelican4ever-preprod.service` and `pelican4ever-preprod-xvfb.service`; installation is user-local and remains disabled until an isolated new save exists. Do not use the upstream single-instance unit or its `Conflicts=stardew-voyager-live.service`.
+| | Preproducción | Desarrollo |
+|---|---|---|
+| Rama Pelican | `pelican/preproduccion` (`~/src/Pelican-4Ever-preprod`) | `pelican/desarrollo` (`~/src/Pelican-4Ever-development`) |
+| Rama Voyager | `pelican/preproduccion` (`~/src/stardew-voyager-preprod`) | `pelican/desarrollo` (`~/src/stardew-voyager-development`) |
+| Juego | copia en `~/.local/share/pelican4ever/preprod/game` | instalación de Steam |
+| Mods | solo SMAPI (ConsoleCommands, SaveBackup), Pelican 4Ever y el puente | los de la campaña |
+| Saves | `preprod/xdg/config/StardewValley/Saves` | `~/.config/StardewValley/Saves` |
+| Partida | `Pelican4Ever_453180189` (dedicada, creada desde el juego) | las de campaña y depuración |
+| Red de juego | UDP 24642 nativo, abierto solo a la LAN (firewalld, `192.168.1.0/24`) | ninguna: no aloja cooperativo |
+| API Pelican | `127.0.0.1:18085` | — |
+| Puente Voyager | `127.0.0.1:25557` | `127.0.0.1:25555` |
+| Pantalla | Xvfb `:77` (`pelican4ever-preprod-xvfb.service`) | sesión de Juanlu |
+| Unidad | `pelican4ever-preprod.service` (usuario, `enabled`, linger) | la del arnés de campaña |
 
-API `127.0.0.1:18085` and Voyager bridge `127.0.0.1:25557` are isolated. ILSpy decompilation of local Stardew Valley 1.6.15 confirms `LidgrenServer.initialize()` hard-codes UDP 24642; no server override exists. `LidgrenClient` does parse `host:port` in the native IP-entry menu (`filterInput:false`), so a LAN proxy port is technically possible. A veth/netns lab proved two independent UDP processes can bind 24642 and reach distinct endpoints simultaneously. Proposed preprod endpoint is namespace `169.254.254.2:24642` plus host LAN proxy `<host-lan-ip>:24643` → namespace; development keeps host `:24642`. Still blocked: active `FedoraWorkstation` firewalld zone on `wlp2s0` has no allowed UDP port (query 24643/udp = no). The explicit no-firewall/router-change constraint forbids LAN access; do not launch or mark verifier green. No internet exposure. Admin token/config are local mode-0600 files and never committed.
+Stardew 1.6.15 fija el puerto UDP 24642 en `LidgrenServer.initialize()`. Por eso solo una instancia
+puede alojar partidas en red: preproducción. Desarrollo no aloja cooperativo. Si alguna vez necesita
+probar multijugador, se lanza junto con su arnés dentro de un entorno sin red
+(`systemd-run --user -p PrivateNetwork=yes …`) y nunca abre puertos.
 
-The root global.json pins .NET SDK 8.0.427 exactly. System SDK 8.0.132 ships Roslyn 4.8 and fails CS9057 against the Roslyn 4.9 SMAPI ModBuildConfig analyzer; SDK 8.0.427 compiles with analyzers enabled (0 warnings, 0 errors). Run builds with that SDK; do not suppress analyzers. Promotion requires clean clone tests, analyzer-compatible build, isolated bridge+Pelican builds, runtime verifier green, native new-save smoke, and failure/recovery proof. Record the exact four repo SHAs, SDK version, DLL hashes, unit files, and save-folder authorization in runtime.json before enablement. Until then report candidate, not stable.
+## Compilar
 
-## Promotion and rollback
+`global.json` fija el SDK **8.0.427** (`~/.dotnet`; el 8.0.132 del sistema falla con CS9057 ante el
+analizador de ModBuildConfig). Con `DOTNET_ROOT=$HOME/.dotnet PATH=$HOME/.dotnet:$PATH`:
 
-Promote only by fast-forwarding the reviewed, tested commit into pelican/preproduccion in each repo; never deploy from development. Preserve the previous preproduction commit IDs and artifact hashes in the manifest. If any acceptance gate fails after a future activation: stop and disable only pelican4ever-preprod.service, restore the last accepted Pelican/Bridge artifacts built from their recorded preproduction SHAs with SDK 8.0.427, verify hashes and game_dir, then re-run the read-only runtime verifier before any restart. Never switch the preprod game path to development, restore/replace the save XML, or roll back through the live save; use Pelican backups only after separately verifying a save restoration is necessary. This work has not enabled the unit or created a save, so the known prior preproduction code ref remains 072764f (Pelican) / 65686cf (Voyager).
+```bash
+dotnet build Pelican4Ever.sln -c Release -p:EnableModDeploy=false -p:EnableModZip=false
+dotnet test Pelican4Ever.Tests -c Release --no-build
+# solo desde el worktree de preproducción, con el servicio parado:
+dotnet build Pelican4Ever/Pelican4Ever.csproj -c Release -p:GamePath=$HOME/.local/share/pelican4ever/preprod/game -p:EnableModZip=false
+```
+
+Desarrollo compila siempre con `EnableModDeploy=false`: nunca despliega en la copia de preproducción
+ni en la instalación de Steam mientras haya campaña.
+
+## Promoción y rollback
+
+1. Corregir y probar en `pelican/desarrollo` (suite completa verde, 0 avisos).
+2. Llevar los commits a `pelican/preproduccion` con `git cherry-pick -x` (las ramas divergen en su
+   commit de SDK). Volver a pasar la suite allí.
+3. Parar `pelican4ever-preprod.service`, compilar y desplegar desde el worktree de preproducción,
+   anotar el hash del DLL en `runtime.json`, arrancar y comprobar el anfitrión (puente
+   `worldReady/isMultiplayer/isHost`, UDP 24642 y `GET /api/v1/host/clock`).
+4. Rollback: parar el servicio, reconstruir desde el SHA de preproducción anterior registrado en
+   `runtime.json` y arrancar. Nunca se apunta preproducción a la instalación ni a los Saves de
+   desarrollo, y la partida no se edita a mano: si hiciera falta, se restaura desde
+   `Pelican4Ever_Backups/`.
+
+El token de la API y `host.env` viven en `~/.config/pelican4ever/preprod/` (modo 0600) y nunca se
+versionan.
