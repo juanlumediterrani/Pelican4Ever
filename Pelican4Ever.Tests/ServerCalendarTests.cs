@@ -22,6 +22,12 @@ public class ServerCalendarTests
     }
 
     [Fact]
+    public void TryGetDate_BeforeEpochReportsUnavailableInsteadOfThrowing()
+    {
+        Assert.False(calendar.TryGetDate(Epoch.AddDays(-1).AddHours(6), out _));
+    }
+
+    [Fact]
     public void BeforeDayStart_StillBelongsToPreviousGameDay()
     {
         DateTime tuesday0559 = Epoch.AddDays(1).AddHours(5).AddMinutes(59);
