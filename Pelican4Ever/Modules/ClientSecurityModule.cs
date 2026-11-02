@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -144,69 +146,80 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                // 1. Inyección de token en el cliente al presentarse al servidor
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Client), nameof(Client.sendPlayerIntroduction)),
-                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction))
-                );
+            int failures = 0;
 
-                // 2. Override de getUserID en Client y sus subclases para conexiones IP directa, Steam y GOG Galaxy
-                void PatchGetUserID(Type? clientType)
+            // Cada parche se aplica de forma aislada: un fallo no debe impedir aplicar el resto
+            void TryPatch(string name, Action apply)
+            {
+                try
                 {
-                    if (clientType == null) return;
-                    var method = AccessTools.Method(clientType, "getUserID");
-                    if (method != null)
-                    {
-                        harmony.Patch(
-                            original: method,
-                            prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_GetUserID))
-                        );
-                    }
+                    apply();
                 }
-
-                PatchGetUserID(typeof(Client));
-                PatchGetUserID(typeof(LidgrenClient));
-                PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.Steam.SteamNetClient"));
-                PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.GogGalaxy.GalaxyNetClient"));
-
-                // 3. Sincronización proactiva de tokens antes de enviar la lista de peones al cliente
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameServer), nameof(GameServer.sendAvailableFarmhands)),
-                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendAvailableFarmhands))
-                );
-
-                // 4. Validación y reclamo autoritativo en el host (GameServer.checkFarmhandRequest)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
-                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_CheckFarmhandRequest))
-                );
-
-                // 5. Bloqueo visual y control de pertenencia de ranuras en FarmhandMenu
-                harmony.Patch(
-                    original: AccessTools.Constructor(typeof(FarmhandMenu.FarmhandSlot), new[] { typeof(FarmhandMenu), typeof(Farmer) }),
-                    postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_Ctor))
-                );
-
-                // 6. Etiqueta visual "[De otro jugador]" en las ranuras bloqueadas
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(FarmhandMenu.FarmhandSlot), "drawSlotName"),
-                    postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_DrawSlotName))
-                );
-
-                // 7. Ordenación inteligente del menú de peones (personajes propios primero)
-                harmony.Patch(
-                    original: AccessTools.Constructor(typeof(FarmhandMenu), new[] { typeof(Client) }),
-                    postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_Ctor))
-                );
-
-                context?.Monitor.Log("[ClientSecurityModule] Parches Harmony de seguridad y posesión aplicados correctamente.", LogLevel.Trace);
+                catch (Exception ex)
+                {
+                    failures++;
+                    context?.Monitor.Log($"[ClientSecurityModule] Error al aplicar el parche '{name}': {ex}", LogLevel.Error);
+                }
             }
-            catch (Exception ex)
+
+            // 1. Inyección de token en el cliente al presentarse al servidor
+            TryPatch("Client.sendPlayerIntroduction", () => harmony.Patch(
+                original: AccessTools.Method(typeof(Client), nameof(Client.sendPlayerIntroduction)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction))
+            ));
+
+            // 2. Override de getUserID en las implementaciones concretas de Client (IP directa, Steam y GOG Galaxy).
+            //    Client.getUserID es abstracto (sin cuerpo IL) y Harmony no puede parchearlo, así que se omite.
+            var patchedGetUserID = new HashSet<MethodBase>();
+            void PatchGetUserID(Type? clientType)
             {
-                context?.Monitor.Log($"[ClientSecurityModule] Error al aplicar parches Harmony de seguridad: {ex}", LogLevel.Error);
+                if (clientType == null) return;
+                var method = AccessTools.Method(clientType, "getUserID");
+                if (method == null || method.IsAbstract || !patchedGetUserID.Add(method)) return;
+
+                TryPatch($"{clientType.Name}.getUserID", () => harmony.Patch(
+                    original: method,
+                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_GetUserID))
+                ));
             }
+
+            PatchGetUserID(typeof(Client));
+            PatchGetUserID(typeof(LidgrenClient));
+            PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.Steam.SteamNetClient"));
+            PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.GogGalaxy.GalaxyNetClient"));
+
+            // 3. Sincronización proactiva de tokens antes de enviar la lista de peones al cliente
+            TryPatch("GameServer.sendAvailableFarmhands", () => harmony.Patch(
+                original: AccessTools.Method(typeof(GameServer), nameof(GameServer.sendAvailableFarmhands)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendAvailableFarmhands))
+            ));
+
+            // 4. Validación y reclamo autoritativo en el host (GameServer.checkFarmhandRequest)
+            TryPatch("GameServer.checkFarmhandRequest", () => harmony.Patch(
+                original: AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_CheckFarmhandRequest))
+            ));
+
+            // 5. Bloqueo visual y control de pertenencia de ranuras en FarmhandMenu
+            TryPatch("FarmhandSlot.ctor", () => harmony.Patch(
+                original: AccessTools.Constructor(typeof(FarmhandMenu.FarmhandSlot), new[] { typeof(FarmhandMenu), typeof(Farmer) }),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_Ctor))
+            ));
+
+            // 6. Etiqueta visual "[De otro jugador]" en las ranuras bloqueadas
+            TryPatch("FarmhandSlot.drawSlotName", () => harmony.Patch(
+                original: AccessTools.Method(typeof(FarmhandMenu.FarmhandSlot), "drawSlotName"),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_DrawSlotName))
+            ));
+
+            // 7. Ordenación inteligente del menú de peones (personajes propios primero)
+            TryPatch("FarmhandMenu.ctor", () => harmony.Patch(
+                original: AccessTools.Constructor(typeof(FarmhandMenu), new[] { typeof(Client) }),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_Ctor))
+            ));
+
+            if (failures == 0)
+                context?.Monitor.Log("[ClientSecurityModule] Parches Harmony de seguridad y posesión aplicados correctamente.", LogLevel.Trace);
         }
 
         // ─────────────────────────── Parches Harmony ───────────────────────────
