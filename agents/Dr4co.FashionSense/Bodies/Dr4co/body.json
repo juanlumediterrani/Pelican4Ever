@@ -1,0 +1,166 @@
+{
+  "Name": "Dr4co",
+  "Format": "7.5.0",
+  "HideEyes": true,
+  "FrontBody": {
+    "StartingPosition": {
+      "X": 0,
+      "Y": 0
+    },
+    "EyeBackgroundPosition": 0,
+    "EyePosition": 0,
+    "BodySize": {
+      "Width": 16,
+      "Length": 32
+    },
+    "Scale": 4.0,
+    "DisableGrayscale": true,
+    "HideHair": true,
+    "IdleAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 1000
+      }
+    ],
+    "MovementAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 140
+      },
+      {
+        "Frame": 1,
+        "Duration": 140
+      },
+      {
+        "Frame": 2,
+        "Duration": 140
+      },
+      {
+        "Frame": 3,
+        "Duration": 140
+      }
+    ]
+  },
+  "RightBody": {
+    "StartingPosition": {
+      "X": 0,
+      "Y": 128
+    },
+    "EyeBackgroundPosition": 0,
+    "EyePosition": 0,
+    "BodySize": {
+      "Width": 16,
+      "Length": 32
+    },
+    "Scale": 4.0,
+    "DisableGrayscale": true,
+    "HideHair": true,
+    "IdleAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 1000
+      }
+    ],
+    "MovementAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 140
+      },
+      {
+        "Frame": 1,
+        "Duration": 140
+      },
+      {
+        "Frame": 2,
+        "Duration": 140
+      },
+      {
+        "Frame": 3,
+        "Duration": 140
+      }
+    ]
+  },
+  "BackBody": {
+    "StartingPosition": {
+      "X": 0,
+      "Y": 256
+    },
+    "EyeBackgroundPosition": 0,
+    "EyePosition": 0,
+    "BodySize": {
+      "Width": 16,
+      "Length": 32
+    },
+    "Scale": 4.0,
+    "DisableGrayscale": true,
+    "HideHair": true,
+    "IdleAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 1000
+      }
+    ],
+    "MovementAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 140
+      },
+      {
+        "Frame": 1,
+        "Duration": 140
+      },
+      {
+        "Frame": 2,
+        "Duration": 140
+      },
+      {
+        "Frame": 3,
+        "Duration": 140
+      }
+    ]
+  },
+  "LeftBody": {
+    "StartingPosition": {
+      "X": 0,
+      "Y": 384
+    },
+    "EyeBackgroundPosition": 0,
+    "EyePosition": 0,
+    "BodySize": {
+      "Width": 16,
+      "Length": 32
+    },
+    "Scale": 4.0,
+    "DisableGrayscale": true,
+    "HideHair": true,
+    "IdleAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 1000
+      }
+    ],
+    "MovementAnimation": [
+      {
+        "Frame": 0,
+        "Duration": 140
+      },
+      {
+        "Frame": 1,
+        "Duration": 140
+      },
+      {
+        "Frame": 2,
+        "Duration": 140
+      },
+      {
+        "Frame": 3,
+        "Duration": 140
+      }
+    ]
+  },
+  "Tags": [
+    "Dragon",
+    "Dr4co",
+    "Fantasy"
+  ]
+}
