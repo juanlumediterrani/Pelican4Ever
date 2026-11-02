@@ -5,6 +5,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
@@ -1275,6 +1276,7 @@ namespace Pelican4Ever.Modules
         }
 
         private static int unclaimedCheckCooldown;
+        private static readonly PortalPromptGate portalPromptGate = new();
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
         {
@@ -1287,7 +1289,16 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            if (Game1.currentLocation is not Farm farm || farm.NameOrUniqueName != "Farm" || Game1.player == null || Game1.isFestival() || Game1.activeClickableMenu != null)
+            if (Game1.currentLocation is not Farm farm || farm.NameOrUniqueName != "Farm" || Game1.player == null || Game1.isFestival())
+            {
+                if (Game1.currentLocation is not Farm)
+                    portalPromptGate.Reset();
+                return;
+            }
+
+            // Con un menú abierto (p. ej. el propio diálogo de fundación) no se evalúa nada: la puerta lógica conserva
+            // el estado hasta que el jugador salga del tile.
+            if (Game1.activeClickableMenu != null)
                 return;
 
             Vector2 playerTile = Game1.player.Tile;
@@ -1295,7 +1306,10 @@ namespace Pelican4Ever.Modules
                 string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase)
                 && SpatialWarpRouter.IsPortalTriggerTile(d.TownTileX, d.TownTileY, (int)playerTile.X, (int)playerTile.Y));
 
-            if (door != null && !context.WorldState.Doors.ContainsKey(door.DoorId))
+            string? unclaimedDoorId = door != null && !context.WorldState.Doors.ContainsKey(door.DoorId) ? door.DoorId : null;
+            // Se evalúa SIEMPRE (también con null) para rearmar la puerta lógica al salir del tile.
+            bool shouldPrompt = portalPromptGate.ShouldPrompt(unclaimedDoorId);
+            if (door != null && shouldPrompt)
             {
                 unclaimedCheckCooldown = 40; // Evitar disparos repetidos
                 Game1.player.Halt();
