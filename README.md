@@ -45,6 +45,7 @@ El pack cosmético de Dr4co está en [`agents/Dr4co.FashionSense`](agents/Dr4co.
 * [Arquitectura Técnica (`architecture.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/architecture.md)
 * [Backlog de Iteraciones y Épicas (`backlog.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/backlog.md)
 * [Especificación de la API de Anfitrión (`docs/host-api.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/host-api.md)
+* [Guía del Modpack persistente (`docs/modpack.md`)](docs/modpack.md)
 * [Servidor persistente desatendido (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
 * [Decisiones de Arquitectura (`docs/adr/`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/adr)
 

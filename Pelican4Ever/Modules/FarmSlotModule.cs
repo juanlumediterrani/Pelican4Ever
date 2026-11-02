@@ -160,6 +160,10 @@ namespace Pelican4Ever.Modules
                                 slotData.MaxDailyForageSpawn = typeData.MaxDailyForageSpawn;
                                 slotData.MaxSpawnedForageAtOnce = typeData.MaxSpawnedForageAtOnce;
                                 slotData.ChanceForClay = typeData.ChanceForClay;
+                                if (typeData.CustomFields != null)
+                                {
+                                    slotData.CustomFields = new Dictionary<string, string>(typeData.CustomFields);
+                                }
                             }
                             else
                             {
@@ -255,6 +259,10 @@ namespace Pelican4Ever.Modules
                                 annexData.MaxDailyForageSpawn = typeData.MaxDailyForageSpawn;
                                 annexData.MaxSpawnedForageAtOnce = typeData.MaxSpawnedForageAtOnce;
                                 annexData.ChanceForClay = typeData.ChanceForClay;
+                                if (typeData.CustomFields != null)
+                                {
+                                    annexData.CustomFields = new Dictionary<string, string>(typeData.CustomFields);
+                                }
                             }
 
                             data[annex.AnnexId] = annexData;
