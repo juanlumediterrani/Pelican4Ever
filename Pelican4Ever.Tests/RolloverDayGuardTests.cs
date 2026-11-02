@@ -13,4 +13,16 @@ public class RolloverDayGuardTests
     [InlineData(0, 1, true)]   // process the next, not-yet-committed day
     public void EndOfDaySideEffectsAreIdempotent(int lastCommitted, int endedDay, bool expected) =>
         Assert.Equal(expected, RolloverDayGuard.ShouldProcessEndedDay(lastCommitted, endedDay));
+
+    [Theory]
+    // Regression: restart after rollover. The saved LastRolloverGameDay is stale (-1/0) while the
+    // save already contains the new day, so the committed-day check alone would replay the penalty.
+    [InlineData(true, 0, 1, false)]
+    [InlineData(true, -1, 0, false)]
+    [InlineData(true, 5, 9, false)]
+    // A real rollover (not caused by loading) still processes the ended day exactly once.
+    [InlineData(false, 0, 1, true)]
+    [InlineData(false, 1, 1, false)]
+    public void DayStartRaisedByLoadNeverAppliesConsequences(bool startedByLoad, int lastCommitted, int endedDay, bool expected) =>
+        Assert.Equal(expected, RolloverDayGuard.ShouldProcessDayStart(startedByLoad, lastCommitted, endedDay));
 }

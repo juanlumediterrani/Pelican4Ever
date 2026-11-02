@@ -26,6 +26,7 @@ namespace Pelican4Ever.Modules
         private readonly SafeRolloverWorkflow rollover = new();
         private IEnumerator<int>? preCloseSave;
         private IEnumerator<int>? postCloseSave;
+        private bool dayStartCausedByLoad;
         private DateTimeOffset peerCloseDeadlineUtc = DateTimeOffset.MinValue;
         private bool forcedPeerDisconnect;
         private const string RolloverCloseMessageType = "Pelican4Ever.RolloverClose";
@@ -61,6 +62,8 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer)
                 return;
 
+            // El DayStarted inmediato a SaveLoaded lo provoca la carga, no un rollover.
+            dayStartCausedByLoad = true;
             lastRolloverBoundaryDate = DateTime.MinValue;
             DateTime localNow = ServerTime.LocalNow(context.Config.TimeZoneId);
             var calendar = new ServerCalendar(context.Config.ParsedCalendarEpoch, context.Config.ParsedCalendarDayChangeTime);
@@ -83,12 +86,15 @@ namespace Pelican4Ever.Modules
 
             context.Monitor.Log($"[DailyRolloverModule] Día iniciado: {Game1.Date} (TotalDays: {newDay}). Procesando consecuencias del día {endedDay}...", LogLevel.Info);
 
-            // DayStarted también puede ocurrir al cargar el save. Solo procesa las consecuencias
-            // si el día cerrado todavía no está acreditado en el estado persistido.
+            // DayStarted también ocurre al cargar el save. El save de fin de día se escribe ANTES de que
+            // LastRolloverGameDay se actualice, así que tras reiniciar ese campo llega desactualizado: la
+            // carga nunca cuenta como rollover. Las consecuencias ya las aplicó el proceso que avanzó el día.
             var worldState = context.WorldState;
-            if (!RolloverDayGuard.ShouldProcessEndedDay(worldState.LastRolloverGameDay, endedDay))
+            bool startedByLoad = dayStartCausedByLoad;
+            dayStartCausedByLoad = false;
+            if (!RolloverDayGuard.ShouldProcessDayStart(startedByLoad, worldState.LastRolloverGameDay, endedDay))
             {
-                context.Monitor.Log($"[DailyRolloverModule] Día {endedDay} ya comprometido en el save; se omiten penalties y counters repetidos.", LogLevel.Trace);
+                context.Monitor.Log($"[DailyRolloverModule] Día {endedDay}: {(startedByLoad ? "inicio causado por carga de partida" : "ya comprometido en el save")}; se omiten penalties y counters repetidos.", LogLevel.Info);
                 warned10 = false;
                 rollover.ResetAfterDayStarted();
                 peerCloseDeadlineUtc = DateTimeOffset.MinValue;
