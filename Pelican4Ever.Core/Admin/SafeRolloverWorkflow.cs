@@ -5,6 +5,7 @@ public enum SafeRolloverStage
     Idle,
     SavingBeforeClose,
     WaitingForPeers,
+    SavingAfterClose,
     ReadyToAdvanceDay,
     AdvancingDay,
     Completed,
@@ -16,6 +17,7 @@ public enum SafeRolloverAction
     None,
     SaveAndBackup,
     RequestPeerClose,
+    SaveAndBackupAfterClose,
     AdvanceDay
 }
 
@@ -49,14 +51,28 @@ public sealed class SafeRolloverWorkflow
             return SafeRolloverAction.RequestPeerClose;
         }
 
-        Stage = SafeRolloverStage.ReadyToAdvanceDay;
-        return SafeRolloverAction.AdvanceDay;
+        Stage = SafeRolloverStage.SavingAfterClose;
+        return SafeRolloverAction.SaveAndBackupAfterClose;
     }
 
     public SafeRolloverAction PeersChanged(int connectedPeers)
     {
         if (Stage != SafeRolloverStage.WaitingForPeers || connectedPeers > 0)
             return SafeRolloverAction.None;
+
+        Stage = SafeRolloverStage.SavingAfterClose;
+        return SafeRolloverAction.SaveAndBackupAfterClose;
+    }
+
+    public SafeRolloverAction SaveAndBackupAfterCloseCompleted(bool succeeded)
+    {
+        if (Stage != SafeRolloverStage.SavingAfterClose)
+            return SafeRolloverAction.None;
+        if (!succeeded)
+        {
+            Stage = SafeRolloverStage.Failed;
+            return SafeRolloverAction.None;
+        }
 
         Stage = SafeRolloverStage.ReadyToAdvanceDay;
         return SafeRolloverAction.AdvanceDay;

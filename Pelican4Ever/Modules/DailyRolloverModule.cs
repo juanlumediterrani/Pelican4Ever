@@ -25,6 +25,7 @@ namespace Pelican4Ever.Modules
         private DateTime lastRolloverBoundaryDate = DateTime.MinValue;
         private readonly SafeRolloverWorkflow rollover = new();
         private IEnumerator<int>? preCloseSave;
+        private IEnumerator<int>? postCloseSave;
         private DateTimeOffset peerCloseDeadlineUtc = DateTimeOffset.MinValue;
         private bool forcedPeerDisconnect;
         private const string RolloverCloseMessageType = "Pelican4Ever.RolloverClose";
@@ -77,6 +78,8 @@ namespace Pelican4Ever.Modules
             int newDay = Game1.Date.TotalDays;
             int endedDay = newDay - 1;
             rollover.DayStarted();
+            postCloseSave?.Dispose();
+            postCloseSave = null;
 
             context.Monitor.Log($"[DailyRolloverModule] Día iniciado: {Game1.Date} (TotalDays: {newDay}). Procesando consecuencias del día {endedDay}...", LogLevel.Info);
 
@@ -228,7 +231,7 @@ namespace Pelican4Ever.Modules
 
         private void BeginRollover(string trigger)
         {
-            if (context == null || !Context.IsMainPlayer || preCloseSave != null)
+            if (context == null || !Context.IsMainPlayer || preCloseSave != null || postCloseSave != null)
                 return;
             if (rollover.Begin() != SafeRolloverAction.SaveAndBackup)
                 return;
@@ -261,6 +264,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             PumpPreCloseSave();
+            PumpPostCloseSave();
         }
 
         private void PumpPreCloseSave()
@@ -286,6 +290,8 @@ namespace Pelican4Ever.Modules
                 context.Monitor.Log($"[DailyRolloverModule] Guardado y backup verificados ({LastBackupFileName}). Peers conectados: {Game1.otherFarmers.Count}.", LogLevel.Info);
                 if (action == SafeRolloverAction.RequestPeerClose)
                     RequestPeerClose();
+                else if (action == SafeRolloverAction.SaveAndBackupAfterClose)
+                    StartPostCloseSave();
                 else if (action == SafeRolloverAction.AdvanceDay)
                     AdvanceNativeDay();
             }
@@ -295,6 +301,57 @@ namespace Pelican4Ever.Modules
                 preCloseSave = null;
                 rollover.Fail();
                 context.Monitor.Log($"[DailyRolloverModule] Guardado pre-cierre falló; no se desconectan peers ni se avanza el día: {ex}", LogLevel.Error);
+            }
+        }
+
+        private void StartPostCloseSave()
+        {
+            if (context == null || !Context.IsMainPlayer || Game1.otherFarmers.Count != 0 || postCloseSave != null)
+                return;
+
+            try
+            {
+                postCloseSave = SaveGame.Save();
+                context.Monitor.Log("[DailyRolloverModule] Peers cerrados; guardando su estado final antes de avanzar la fecha.", LogLevel.Info);
+            }
+            catch (Exception ex)
+            {
+                postCloseSave = null;
+                rollover.Fail();
+                context.Monitor.Log($"[DailyRolloverModule] No se pudo iniciar el guardado posterior al cierre; la fecha no avanza: {ex}", LogLevel.Error);
+            }
+        }
+
+        private void PumpPostCloseSave()
+        {
+            if (postCloseSave == null)
+                return;
+
+            try
+            {
+                if (postCloseSave.MoveNext())
+                    return;
+
+                postCloseSave.Dispose();
+                postCloseSave = null;
+                bool backupCreated = CreateSaveBackup();
+                SafeRolloverAction action = rollover.SaveAndBackupAfterCloseCompleted(backupCreated);
+                if (!backupCreated)
+                {
+                    context.Monitor.Log("[DailyRolloverModule] El guardado posterior al cierre terminó, pero su backup no se verificó; no se avanza la fecha.", LogLevel.Error);
+                    return;
+                }
+
+                context.Monitor.Log($"[DailyRolloverModule] Estado final de granja y jugadores guardado y respaldado ({LastBackupFileName}).", LogLevel.Info);
+                if (action == SafeRolloverAction.AdvanceDay)
+                    AdvanceNativeDay();
+            }
+            catch (Exception ex)
+            {
+                postCloseSave?.Dispose();
+                postCloseSave = null;
+                rollover.Fail();
+                context.Monitor.Log($"[DailyRolloverModule] Guardado posterior al cierre falló; la fecha no avanza: {ex}", LogLevel.Error);
             }
         }
 
@@ -329,11 +386,8 @@ namespace Pelican4Ever.Modules
 
             int peers = Game1.otherFarmers.Count;
             SafeRolloverAction action = rollover.PeersChanged(peers);
-            if (action == SafeRolloverAction.AdvanceDay)
-            {
-                AdvanceNativeDay();
-                return;
-            }
+            if (action == SafeRolloverAction.SaveAndBackupAfterClose)
+                StartPostCloseSave();
             if (peers == 0 || DateTimeOffset.UtcNow < peerCloseDeadlineUtc)
                 return;
 
