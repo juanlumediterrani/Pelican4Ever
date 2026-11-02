@@ -12,6 +12,7 @@ public class ServerConfigTests
 
         Assert.Empty(config.Validate());
         Assert.Equal(new TimeSpan(6, 0, 0), config.ParsedDayStart);
+        Assert.Equal(new TimeSpan(2, 0, 0), config.ParsedCalendarDayChangeTime);
         Assert.Equal(new TimeSpan(1, 50, 0), config.ParsedNightHoldStart);
         Assert.Equal(DayOfWeek.Monday, config.ParsedCalendarEpoch.DayOfWeek);
     }
@@ -25,6 +26,14 @@ public class ServerConfigTests
         var config = new ServerConfig { NightHoldStartTime = value };
 
         Assert.NotEmpty(config.Validate());
+    }
+
+    [Fact]
+    public void CalendarCutoffOtherThanTwo_IsRejected()
+    {
+        var config = new ServerConfig { CalendarDayChangeTime = "03:00" };
+
+        Assert.Contains(config.Validate(), e => e.Contains(nameof(ServerConfig.CalendarDayChangeTime)));
     }
 
     [Fact]

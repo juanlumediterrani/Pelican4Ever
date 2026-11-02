@@ -9,7 +9,8 @@ Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijuga
 1. **Reloj 1:1 y Ciclo Diario Persistente (24/7):**
    - El reloj del juego avanza al mismo ritmo que la hora real (`600.000 ms` por cada 10 minutos de juego).
    - **Madrugada continua (*NightHold*):** Entre las 01:50 y las 06:00 reales, el reloj se congela en `2550`, permitiendo jugar de madrugada sin desmayos forzados por horario.
-   - **Rollover Diario Nativo:** Cada día real a las `06:00 AM`, el servidor ejecuta el guardado e inicia el nuevo día con preavisos de 15, 5 y 1 minuto.
+   - **Fecha y ciclo desacoplados:** La fecha de calendario cambia a las `02:00 AM`; antes del cierre se guarda y verifica un backup SHA-256, se solicitan cierres a los peers y solo entonces se inicia el nuevo día nativo. Aviso a 10 minutos.
+   - **Amanecer y horarios:** El reloj, la luz y los horarios de Pelican siguen comenzando a las `06:00 AM`; el cambio de fecha no los adelanta.
 
 2. **Hasta 16 Residencias Privadas y Anexos Temáticos:**
    - **Catálogo de Puertas:** 16 residencias individuales mapeadas en fachadas urbanas y rurales de Pelican Town, con políticas de acceso configurables (`Locked`, `Friends`, `Public`) y protección anti-griefing.

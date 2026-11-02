@@ -13,9 +13,7 @@ cargando la partida desde «Cooperativo → Anfitrión» como siempre.
 | `AgentHost` (`config.json`) | Si el host se acuesta, registra el descanso sin salir al título. Imprescindible si el host es un agente. |
 | `deploy/systemd/pelican4ever-host.service` | Lanza SMAPI y lo relanza tras una caída o un reinicio controlado (30 s de espera, como mucho 5 veces en 15 min). No convive con `stardew-voyager-live.service`. |
 
-El tiempo no necesita supervisión: el reloj 1:1, la madrugada congelada y el cambio de día de las 06:00
-(con guardado y copia en `Pelican4Ever_Backups/`, se conservan 7) los hace el mod. Si el servidor estuvo
-caído, al volver recupera hasta `MaxCatchUpRollovers` días.
+El tiempo no necesita supervisión: el reloj 1:1, la madrugada congelada y los horarios de luz/Pelican empiezan a las 06:00. La fecha cambia a las 02:00: aviso a las 01:50, guardado nativo y backup host SHA-256 antes del cierre ordenado de peers; si el backup o la desconexión no se verifican, el día no avanza. Los backups quedan archivados en `Pelican4Ever_Backups/`.
 
 ## Instalación
 

@@ -1,7 +1,7 @@
-# ADR-0001: Rollover Diario Mediante el Pipeline Nativo (`NewDay` + `Save`) a las 06:00 AM
+# ADR-0001: Rollover nativo con fecha a las 02:00 y amanecer a las 06:00
 
 * **Estado:** Aceptado
-* **Fecha:** 2026-10-29
+* **Fecha:** 2026-11-02 (revisión)
 
 ## Contexto
 
@@ -11,11 +11,12 @@ Al decompilar `Stardew Valley.dll` (1.6.15), se verificó que la transición rea
 
 ## Decisión
 
-1. Ejecutar el Rollover diario a las **06:00 AM** invocando el **flujo nativo de fin de día (`Game1.NewDay`) y guardado (`SaveGame.Save`)**.
-2. Emitir avisos en el HUD a los jugadores conectados (`15`, `5` y `1` minuto antes) y asumir por diseño que quienes sigan dentro a las `06:00 AM` verán la pantalla nativa de transición y guardado durante unos segundos.
-3. Aplicar las reglas de sueño asíncrono (`SleepPolicy`) inmediatamente después del cambio de día y generar un backup rotativo del guardado en disco.
+1. La fecha de calendario y el rollover ocurren a las **02:00 AM**; `DayStartTime` se mantiene en **06:00 AM** para el reloj, la luz y los horarios de Pelican.
+2. A las 01:50 se avisa una vez. A las 02:00 se ejecuta `SaveGame.Save`, se copia el save a un backup host temporal y se verifican sus archivos por SHA-256. Si falla cualquiera de esos pasos, no se desconecta a nadie ni se avanza el día.
+3. Tras backup verificado, el host solicita a los clientes el cierre individual. Si persisten conectados tras 20 s, se envía el cierre nativo del peer; el host espera su desconexión confirmada hasta 10 s más. Si siguen conectados, aborta el cambio de día en vez de entrar en un ReadyCheck bloqueado.
+4. Solo con cero peers se invoca `Game1.NewDay(0f)`. Las consecuencias del día cerrado se procesan tras `DayStarted`; el reloj sigue en NightHold hasta las 06:00. El cierre de peers aún requiere ensayo de desarrollo antes de cualquier rollout.
 
 ## Consecuencias
 
-* **Positivas:** Compatibilidad total con Stardew Valley 1.6 y otros mods; cero riesgo de olvidar subsistemas internos del cambio de día; guardado XML íntegro todos los días.
-* **Negativas:** Existe una pausa visible de unos segundos a las `06:00 AM` para los jugadores que estén conectados en ese instante exacto.
+* **Positivas:** El backup del estado conectado se obtiene antes de cerrar clientes; no se invoca el cambio nativo mientras un ReadyCheck queda esperando peers; fecha y amanecer tienen contratos distintos.
+* **Negativas:** Si el cierre de peer no se confirma, la secuencia queda fallida y el día no avanza; se necesita observación/reparación y no se reintenta automáticamente.
