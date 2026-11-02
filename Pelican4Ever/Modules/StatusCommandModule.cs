@@ -27,7 +27,7 @@ namespace Pelican4Ever.Modules
             var config = context.Config;
             DateTime now = ServerTime.LocalNow(config.TimeZoneId);
             ClockReading clock = GameClock.Read(now.TimeOfDay, config.ParsedDayStart, config.ParsedNightHoldStart);
-            var calendar = new ServerCalendar(config.ParsedCalendarEpoch, config.ParsedDayStart);
+            var calendar = new ServerCalendar(config.ParsedCalendarEpoch, config.ParsedCalendarDayChangeTime);
 
             IMonitor log = context.Monitor;
             log.Log($"=== {context.Manifest.Name} {context.Manifest.Version} ===", LogLevel.Info);
