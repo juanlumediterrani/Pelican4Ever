@@ -32,10 +32,21 @@ namespace Pelican4Ever.Modules
 
         public ModuleSide Side => ModuleSide.Host;
 
+        private static bool patchesApplied;
+
         public void Register(ModContext ctx)
         {
             context = ctx;
-            ApplyHarmonyPatches(ctx.Harmony);
+            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+        }
+
+        private void OnSaveLoaded(object? sender, StardewModdingAPI.Events.SaveLoadedEventArgs e)
+        {
+            if (!Context.IsMainPlayer || patchesApplied)
+                return;
+
+            ApplyHarmonyPatches(context!.Harmony);
+            patchesApplied = true;
         }
 
         /// <summary>Comportamientos de la residencia o anexo, o null si la ubicación no es ninguno. Un hueco libre cuenta como estándar.</summary>
@@ -193,12 +204,8 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_SpawnMonsters))
                 );
                 harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.performTenMinuteUpdate)),
-                    postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_FarmTenMinuteUpdate))
-                );
-                harmony.Patch(
                     original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performTenMinuteUpdate)),
-                    postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_LocationTenMinuteUpdate))
+                    postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_TenMinuteUpdate))
                 );
                 harmony.Patch(
                     original: AccessTools.Method(typeof(Farm), nameof(Farm.DayUpdate)),
@@ -216,64 +223,77 @@ namespace Pelican4Ever.Modules
         /// <summary>Con los monstruos nocturnos activados para el equipo, no aparecen en residencias que no sean de combate.</summary>
         public static bool Prefix_SpawnMonsters(Farm __instance)
         {
+            if (!Game1.IsMasterGame || !Context.IsMainPlayer)
+                return true;
+
             return BehaviorOf(__instance) is not { NightMonsters: false };
         }
 
-        /// <summary>Monstruos nocturnos en residencias de combate aunque el equipo no los tenga activados (copia de Farm.performTenMinuteUpdate).</summary>
-        public static void Postfix_FarmTenMinuteUpdate(Farm __instance)
+        /// <summary>
+        /// Aplica comportamientos cada 10 minutos (monstruos nocturnos y burbujas de peces)
+        /// solo en ubicaciones de tipo Farm y solo en el servidor anfitrión.
+        /// </summary>
+        public static void Postfix_TenMinuteUpdate(GameLocation __instance, int timeOfDay)
         {
-            if (!Game1.IsMasterGame || Game1.spawnMonstersAtNight || BehaviorOf(__instance) is not { NightMonsters: true })
+            if (!Game1.IsMasterGame || !Context.IsMainPlayer || __instance is not Farm farm)
                 return;
 
-            if (Game1.farmEvent != null || Game1.timeOfDay < 1900 || !(Game1.random.NextDouble() < 0.25 - Game1.player.team.AverageDailyLuck() / 2.0))
+            FarmTypeBehavior? behavior = BehaviorOf(farm);
+            if (behavior == null)
                 return;
 
-            if (Game1.random.NextDouble() < 0.25)
+            // 1. Monstruos nocturnos en residencias de combate aunque el equipo no los tenga activados
+            if (!Game1.spawnMonstersAtNight && behavior.NightMonsters)
             {
-                if (__instance.Equals(Game1.currentLocation))
-                    __instance.spawnFlyingMonstersOffScreen();
+                if (Game1.farmEvent == null && Game1.timeOfDay >= 1900 && Game1.random.NextDouble() < 0.25 - Game1.player.team.AverageDailyLuck() / 2.0)
+                {
+                    if (Game1.random.NextDouble() < 0.25)
+                    {
+                        if (farm.Equals(Game1.currentLocation))
+                            farm.spawnFlyingMonstersOffScreen();
+                    }
+                    else
+                    {
+                        farm.spawnGroundMonsterOffScreen();
+                    }
+                }
             }
-            else
+
+            // 2. Burbujas de peces en residencias fluviales (si la partida global no es fluvial)
+            if (behavior.RiverFishSplashes && Game1.whichFarm != 1 && farm.IsOutdoors && farm.fishSplashPoint.Value.Equals(Point.Zero))
             {
-                __instance.spawnGroundMonsterOffScreen();
-            }
-        }
+                var back = farm.map?.RequireLayer("Back");
+                if (back != null)
+                {
+                    Random random = Utility.CreateDaySaveRandom(timeOfDay, back.LayerWidth, 1);
+                    if (random.NextBool())
+                    {
+                        for (int attempt = 0; attempt < 2; attempt++)
+                        {
+                            Point point = new(random.Next(0, back.LayerWidth), random.Next(0, back.LayerHeight));
+                            if (!farm.isOpenWater(point.X, point.Y) || farm.doesTileHaveProperty(point.X, point.Y, "NoFishing", "Back") != null)
+                                continue;
 
-        /// <summary>Burbujas de peces en residencias fluviales; vanilla solo las permite en una granja si la partida es fluvial.</summary>
-        public static void Postfix_LocationTenMinuteUpdate(GameLocation __instance, int timeOfDay)
-        {
-            if (!Game1.IsMasterGame || Game1.whichFarm == 1 || __instance is not Farm || !__instance.IsOutdoors
-                || !__instance.fishSplashPoint.Value.Equals(Point.Zero) || BehaviorOf(__instance) is not { RiverFishSplashes: true })
-                return;
+                            int distance = FishingRod.distanceToLand(point.X, point.Y, farm);
+                            if (distance <= 1 || distance >= 5)
+                                continue;
 
-            var back = __instance.map.RequireLayer("Back");
-            Random random = Utility.CreateDaySaveRandom(timeOfDay, back.LayerWidth, 1);
-            if (!random.NextBool())
-                return;
+                            if (Game1.player.currentLocation?.Equals(farm) == true)
+                                farm.playSound("waterSlosh");
 
-            for (int attempt = 0; attempt < 2; attempt++)
-            {
-                Point point = new(random.Next(0, back.LayerWidth), random.Next(0, back.LayerHeight));
-                if (!__instance.isOpenWater(point.X, point.Y) || __instance.doesTileHaveProperty(point.X, point.Y, "NoFishing", "Back") != null)
-                    continue;
-
-                int distance = FishingRod.distanceToLand(point.X, point.Y, __instance);
-                if (distance <= 1 || distance >= 5)
-                    continue;
-
-                if (Game1.player.currentLocation?.Equals(__instance) == true)
-                    __instance.playSound("waterSlosh");
-
-                FishSplashPointTime?.SetValue(__instance, Game1.timeOfDay);
-                __instance.fishSplashPoint.Value = point;
-                break;
+                            FishSplashPointTime?.SetValue(farm, Game1.timeOfDay);
+                            farm.fishSplashPoint.Value = point;
+                            break;
+                        }
+                    }
+                }
             }
         }
 
         /// <summary>Tocones forestales, hierba diaria y extras de Cuatro Esquinas, que Farm.DayUpdate solo hace si la partida es de ese tipo.</summary>
         public static void Postfix_FarmDayUpdate(Farm __instance)
         {
-            if (!Game1.IsMasterGame || BehaviorOf(__instance) is not { } behavior)
+            if (!Game1.IsMasterGame || !Context.IsMainPlayer || BehaviorOf(__instance) is not { } behavior)
                 return;
 
             // TASK-606: Siembra diaria de hierba en residencias
