@@ -39,12 +39,12 @@ Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`
   "Season": "spring",
   "DayOfMonth": 13,
   "IsNightHold": false,
-  "NextRolloverLocalTime": "2026-11-01T06:00:00",
-  "SecondsUntilNextRollover": 50400,
+  "NextRolloverLocalTime": "2026-11-01T02:00:00",
+  "SecondsUntilNextRollover": 36000,
   "LastRolloverGameDay": 11,
   "LastRolloverOutcomeSummary": "rested=3, penalized=0, untouched=1",
-  "LastBackupFileName": "PelicanValley_20261031_060000",
-  "LastBackupCreatedUtc": "2026-10-31T05:00:00.0000000Z",
+  "LastBackupFileName": "PelicanValley_20261031_020000_000",
+  "LastBackupCreatedUtc": "2026-10-31T01:00:00.0000000Z",
   "SaveFolderName": "PelicanValley_452974881",
   "IsMultiplayerServer": true
 }

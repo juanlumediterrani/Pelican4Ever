@@ -51,7 +51,7 @@ namespace Pelican4Ever.Modules
             var player = context.WorldState.GetOrCreatePlayer(e.Peer.PlayerID, playerName);
 
             DateTime localNow = Core.Time.ServerTime.LocalNow(context.Config.TimeZoneId);
-            TimeSpan dayStart = context.Config.ParsedDayStart;
+            TimeSpan dayStart = context.Config.ParsedCalendarDayChangeTime;
             TimeSpan graceStart = dayStart - TimeSpan.FromMinutes(context.Config.EarlyMorningGraceMinutes);
             bool inGraceWindow = localNow.TimeOfDay >= graceStart && localNow.TimeOfDay < dayStart;
 

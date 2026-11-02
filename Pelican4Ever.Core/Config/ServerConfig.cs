@@ -15,10 +15,13 @@ namespace Pelican4Ever.Core.Config
         // ─────────────────────────── Tiempo y calendario ───────────────────────────
 
         /// <summary>
-        /// Hora real a la que empieza el día de juego y se ejecuta el Rollover diario (HH:mm).
+        /// Hora real a la que el reloj de juego y los horarios de Pelican empiezan el día (HH:mm).
         /// Debe ser 06:00 para que el reloj del juego (que arranca a las 0600) quede alineado 1:1.
         /// </summary>
         public string DayStartTime { get; set; } = "06:00";
+
+        /// <summary>Hora local a la que cambia la fecha de calendario y se coordina el guardado diario.</summary>
+        public string CalendarDayChangeTime { get; set; } = "02:00";
 
         /// <summary>
         /// Hora real a partir de la cual el reloj del juego se congela en 2550 ("Madrugada")
@@ -27,7 +30,7 @@ namespace Pelican4Ever.Core.Config
         public string NightHoldStartTime { get; set; } = "01:50";
 
         /// <summary>Minutos de antelación con los que se avisa del Rollover a los jugadores conectados.</summary>
-        public int[] RolloverWarningMinutes { get; set; } = { 15, 5, 1 };
+        public int[] RolloverWarningMinutes { get; set; } = { 10 };
 
         /// <summary>
         /// Fecha real (yyyy-MM-dd, debe ser lunes) que corresponde al Día 1 de Primavera del Año 1.
@@ -56,7 +59,7 @@ namespace Pelican4Ever.Core.Config
         public float PenaltyEnergyFraction { get; set; } = 0.5f;
 
         /// <summary>
-        /// Minutos antes del Rollover (por defecto 60 min, ej. 05:00 a 06:00) en los que una conexión
+        /// Minutos antes del cambio de fecha (por defecto 60 min, ej. 01:00 a 02:00) en los que una conexión
         /// se considera madrugadora para el nuevo día y no se penaliza como trasnochada.
         /// </summary>
         public int EarlyMorningGraceMinutes { get; set; } = 60;
@@ -183,6 +186,7 @@ namespace Pelican4Ever.Core.Config
         // ─────────────────────────── Valores parseados ───────────────────────────
 
         public TimeSpan ParsedDayStart { get; private set; }
+        public TimeSpan ParsedCalendarDayChangeTime { get; private set; }
         public TimeSpan ParsedNightHoldStart { get; private set; }
         public DateTime ParsedCalendarEpoch { get; private set; }
         public TimeSpan[] ParsedMineResetTimes { get; private set; } = Array.Empty<TimeSpan>();
@@ -198,10 +202,13 @@ namespace Pelican4Ever.Core.Config
             var errors = new List<string>();
 
             ParsedDayStart = ParseTime(nameof(DayStartTime), DayStartTime, errors);
+            ParsedCalendarDayChangeTime = ParseTime(nameof(CalendarDayChangeTime), CalendarDayChangeTime, errors);
             ParsedNightHoldStart = ParseTime(nameof(NightHoldStartTime), NightHoldStartTime, errors);
 
             if (ParsedDayStart != new TimeSpan(6, 0, 0))
                 errors.Add($"{nameof(DayStartTime)} debe ser 06:00 (el motor arranca cada día a las 0600). Valor: '{DayStartTime}'.");
+            if (ParsedCalendarDayChangeTime != new TimeSpan(2, 0, 0))
+                errors.Add($"{nameof(CalendarDayChangeTime)} debe ser 02:00 para separar la fecha del inicio de luz/horarios (06:00). Valor: '{CalendarDayChangeTime}'.");
 
             if (ParsedNightHoldStart < TimeSpan.Zero || ParsedNightHoldStart > new TimeSpan(1, 50, 0))
                 errors.Add($"{nameof(NightHoldStartTime)} debe estar entre 00:00 y 01:50 (equivale a 2400–2550). Valor: '{NightHoldStartTime}'.");

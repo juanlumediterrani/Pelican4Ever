@@ -35,7 +35,7 @@ namespace Pelican4Ever.Core.Players
             if (graceMinutes <= 0)
                 return false;
 
-            // Ventana de gracia previa al Rollover (ej: 05:00 a 06:00)
+            // Ventana de gracia previa al cambio de fecha (ej: 01:00 a 02:00).
             TimeSpan graceStart = dayStartTime - TimeSpan.FromMinutes(graceMinutes);
             TimeSpan nowTime = localNow.TimeOfDay;
 

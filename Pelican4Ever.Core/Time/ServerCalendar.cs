@@ -43,23 +43,23 @@ namespace Pelican4Ever.Core.Time
     public sealed class ServerCalendar
     {
         private readonly DateTime epoch;
-        private readonly TimeSpan dayStart;
+        private readonly TimeSpan calendarDayChange;
 
         /// <param name="epoch">Fecha real (lunes) que corresponde al Día 1 de Primavera del Año 1.</param>
-        /// <param name="dayStart">Hora real a la que cambia el día de juego (06:00).</param>
-        public ServerCalendar(DateTime epoch, TimeSpan dayStart)
+        /// <param name="calendarDayChange">Hora real a la que avanza la fecha de calendario (02:00).</param>
+        public ServerCalendar(DateTime epoch, TimeSpan calendarDayChange)
         {
             if (epoch.DayOfWeek != DayOfWeek.Monday)
                 throw new ArgumentException("La época del calendario debe ser un lunes.", nameof(epoch));
 
             this.epoch = epoch.Date;
-            this.dayStart = dayStart;
+            this.calendarDayChange = calendarDayChange;
         }
 
         /// <summary>
-        /// Fecha real del "día de juego" en curso. Entre 00:00 y 06:00 seguimos en el día de juego anterior.
+        /// Fecha real del día de calendario en curso. Antes del corte seguimos en la fecha anterior.
         /// </summary>
-        public DateTime GetGameDayRealDate(DateTime localNow) => (localNow - dayStart).Date;
+        public DateTime GetGameDayRealDate(DateTime localNow) => (localNow - calendarDayChange).Date;
 
         /// <summary>Días de juego transcurridos desde la época para una hora local dada.</summary>
         public int GetTotalDays(DateTime localNow) => (GetGameDayRealDate(localNow) - epoch).Days;

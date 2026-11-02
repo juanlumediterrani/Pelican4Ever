@@ -6,35 +6,35 @@ namespace Pelican4Ever.Tests;
 public class ServerCalendarTests
 {
     private static readonly DateTime Epoch = new(2026, 11, 2); // lunes
-    private static readonly TimeSpan DayStart = new(6, 0, 0);
-    private readonly ServerCalendar calendar = new(Epoch, DayStart);
+    private static readonly TimeSpan CalendarDayChange = new(2, 0, 0);
+    private readonly ServerCalendar calendar = new(Epoch, CalendarDayChange);
 
     [Fact]
     public void Constructor_RejectsNonMondayEpoch()
     {
-        Assert.Throws<ArgumentException>(() => new ServerCalendar(new DateTime(2026, 11, 3), DayStart));
+        Assert.Throws<ArgumentException>(() => new ServerCalendar(new DateTime(2026, 11, 3), CalendarDayChange));
     }
 
     [Fact]
     public void EpochMorning_IsSpring1Year1()
     {
-        Assert.Equal(new GameDate(1, Season.Spring, 1), calendar.GetDate(Epoch.AddHours(6)));
+        Assert.Equal(new GameDate(1, Season.Spring, 1), calendar.GetDate(Epoch.AddHours(2)));
     }
 
     [Fact]
     public void TryGetDate_BeforeEpochReportsUnavailableInsteadOfThrowing()
     {
-        Assert.False(calendar.TryGetDate(Epoch.AddDays(-1).AddHours(6), out _));
+        Assert.False(calendar.TryGetDate(Epoch.AddDays(-1).AddHours(2), out _));
     }
 
     [Fact]
-    public void BeforeDayStart_StillBelongsToPreviousGameDay()
+    public void CalendarDateChangesAtTwoWhileClockStartRemainsIndependent()
     {
-        DateTime tuesday0559 = Epoch.AddDays(1).AddHours(5).AddMinutes(59);
-        DateTime tuesday0600 = Epoch.AddDays(1).AddHours(6);
+        DateTime tuesday0159 = Epoch.AddDays(1).AddHours(1).AddMinutes(59);
+        DateTime tuesday0200 = Epoch.AddDays(1).AddHours(2);
 
-        Assert.Equal(1, calendar.GetDate(tuesday0559).Day);
-        Assert.Equal(2, calendar.GetDate(tuesday0600).Day);
+        Assert.Equal(1, calendar.GetDate(tuesday0159).Day);
+        Assert.Equal(2, calendar.GetDate(tuesday0200).Day);
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class ServerCalendarTests
     {
         for (int totalDays = 0; totalDays < GameDate.DaysPerYear * 3; totalDays++)
         {
-            DateTime real = Epoch.AddDays(totalDays).AddHours(12);
+            DateTime real = Epoch.AddDays(totalDays).AddHours(2);
             GameDate date = calendar.GetDate(real);
             if (date.Day == 1)
                 Assert.Equal(DayOfWeek.Monday, real.DayOfWeek);
