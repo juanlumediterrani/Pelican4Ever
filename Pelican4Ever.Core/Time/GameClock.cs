@@ -101,6 +101,25 @@ namespace Pelican4Ever.Core.Time
             return minutesIntoNightHold / 10;
         }
 
+        /// <summary>
+        /// Devuelve la hora real en formato motor de Stardew Valley (0600..2950),
+        /// sin truncar en Madrugada (para visualización en HUD).
+        /// </summary>
+        public static int GetDisplayTimeOfDay(TimeSpan realTimeOfDay, TimeSpan dayStart)
+        {
+            if (realTimeOfDay < TimeSpan.Zero || realTimeOfDay >= TimeSpan.FromDays(1))
+                throw new ArgumentOutOfRangeException(nameof(realTimeOfDay));
+
+            TimeSpan sinceStart = realTimeOfDay - dayStart;
+            if (sinceStart < TimeSpan.Zero)
+                sinceStart += TimeSpan.FromDays(1);
+
+            int elapsedMinutes = (int)sinceStart.TotalMinutes;
+            int slotMinutes = elapsedMinutes - elapsedMinutes % 10;
+            int totalGameMinutes = ToMinutes(DayStartTimeOfDay) + slotMinutes;
+            return FromMinutes(totalGameMinutes);
+        }
+
         /// <summary>Convierte una hora en formato motor (ej. 2430) a minutos desde 00:00 (ej. 1470).</summary>
         public static int ToMinutes(int timeOfDay) => timeOfDay / 100 * 60 + timeOfDay % 100;
 

@@ -123,102 +123,136 @@ namespace Pelican4Ever.Modules
                     for (int i = 1; i <= count; i++)
                     {
                         string slotId = $"Pelican4Ever_Farm_{i:D2}";
-                        if (!data.ContainsKey(slotId))
+                        string farmType = "Standard";
+                        if (context != null && context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId) is { } assignment && !string.IsNullOrEmpty(assignment.FarmType))
                         {
-                            string farmType = "Standard";
-                            if (context != null && context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId) is { } assignment && !string.IsNullOrEmpty(assignment.FarmType))
-                            {
-                                farmType = assignment.FarmType;
-                            }
-                            var template = FarmTemplateCatalog.GetTemplate(farmType);
+                            farmType = assignment.FarmType;
+                        }
+                        var template = FarmTemplateCatalog.GetTemplate(farmType);
 
-                            var slotData = new LocationData
-                            {
-                                DisplayName = $"Granja {i} ({template.DisplayName})",
-                                CanPlantHere = true,
-                                CreateOnLoad = new CreateLocationData
-                                {
-                                    MapPath = template.MapPath,
-                                    Type = "StardewValley.Farm, Stardew Valley",
-                                    AlwaysActive = true // Gestionado dinámicamente mediante LocationCullingLogic
-                                }
-                            };
-
-                            // Peces, forraje y excavaciones del tipo elegido. El juego solo aplica "Farm_<tipo>" a la
-                            // granja "Farm"; sin copiarlo, una residencia solo pesca lo de "Default" (basura).
-                            if (data.TryGetValue(template.LocationDataKey, out LocationData? typeData)
-                                || data.TryGetValue("Farm_Standard", out typeData))
-                            {
-                                slotData.Fish = typeData.Fish;
-                                slotData.FishAreas = typeData.FishAreas;
-                                slotData.Forage = typeData.Forage;
-                                slotData.ArtifactSpots = typeData.ArtifactSpots;
-                                slotData.MinDailyWeeds = typeData.MinDailyWeeds;
-                                slotData.MaxDailyWeeds = typeData.MaxDailyWeeds;
-                                slotData.FirstDayWeedMultiplier = typeData.FirstDayWeedMultiplier;
-                                slotData.MinDailyForageSpawn = typeData.MinDailyForageSpawn;
-                                slotData.MaxDailyForageSpawn = typeData.MaxDailyForageSpawn;
-                                slotData.MaxSpawnedForageAtOnce = typeData.MaxSpawnedForageAtOnce;
-                                slotData.ChanceForClay = typeData.ChanceForClay;
-                                if (typeData.CustomFields != null)
-                                {
-                                    slotData.CustomFields = new Dictionary<string, string>(typeData.CustomFields);
-                                }
-                            }
-                            else
-                            {
-                                context?.Monitor.Log($"[FarmSlotModule] Data/Locations no tiene '{template.LocationDataKey}' ni 'Farm_Standard'; {slotId} usará solo los peces por defecto.", LogLevel.Warn);
-                            }
-
+                        if (!data.TryGetValue(slotId, out LocationData? slotData) || slotData == null)
+                        {
+                            slotData = new LocationData();
                             data[slotId] = slotData;
+                        }
+
+                        slotData.DisplayName ??= $"Granja {i} ({template.DisplayName})";
+                        slotData.CanPlantHere = true;
+                        if (slotData.CreateOnLoad == null)
+                        {
+                            slotData.CreateOnLoad = new CreateLocationData
+                            {
+                                MapPath = template.MapPath,
+                                Type = "StardewValley.Farm, Stardew Valley",
+                                AlwaysActive = true // Gestionado dinámicamente mediante LocationCullingLogic
+                            };
+                        }
+                        else
+                        {
+                            slotData.CreateOnLoad.MapPath = template.MapPath;
+                            slotData.CreateOnLoad.Type = "StardewValley.Farm, Stardew Valley";
+                            slotData.CreateOnLoad.AlwaysActive = true;
+                        }
+
+                        // Peces, forraje y excavaciones del tipo elegido. El juego solo aplica "Farm_<tipo>" a la
+                        // granja "Farm"; sin copiarlo, una residencia solo pesca lo de "Default" (basura).
+                        if (data.TryGetValue(template.LocationDataKey, out LocationData? typeData)
+                            || data.TryGetValue("Farm_Standard", out typeData))
+                        {
+                            slotData.Fish ??= typeData.Fish;
+                            slotData.FishAreas ??= typeData.FishAreas;
+                            slotData.Forage ??= typeData.Forage;
+                            slotData.ArtifactSpots ??= typeData.ArtifactSpots;
+                            slotData.MinDailyWeeds = typeData.MinDailyWeeds;
+                            slotData.MaxDailyWeeds = typeData.MaxDailyWeeds;
+                            slotData.FirstDayWeedMultiplier = typeData.FirstDayWeedMultiplier;
+                            slotData.MinDailyForageSpawn = typeData.MinDailyForageSpawn;
+                            slotData.MaxDailyForageSpawn = typeData.MaxDailyForageSpawn;
+                            slotData.MaxSpawnedForageAtOnce = typeData.MaxSpawnedForageAtOnce;
+                            slotData.ChanceForClay = typeData.ChanceForClay;
+                            if (typeData.CustomFields != null)
+                            {
+                                slotData.CustomFields ??= new Dictionary<string, string>();
+                                foreach (var kvp in typeData.CustomFields)
+                                {
+                                    slotData.CustomFields.TryAdd(kvp.Key, kvp.Value);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            context?.Monitor.Log($"[FarmSlotModule] Data/Locations no tiene '{template.LocationDataKey}' ni 'Farm_Standard'; {slotId} usará solo los peces por defecto.", LogLevel.Warn);
                         }
 
                         // TASK-Cave: Registrar la cueva privada instanciada para la residencia (Pelican4Ever_Farm_XX_Cave)
                         string caveId = $"{slotId}_Cave";
-                        if (!data.ContainsKey(caveId))
+                        if (!data.TryGetValue(caveId, out LocationData? caveData) || caveData == null)
                         {
-                            data[caveId] = new LocationData
+                            caveData = new LocationData();
+                            data[caveId] = caveData;
+                        }
+                        caveData.DisplayName ??= $"Cueva Parcela {i:D2}";
+                        if (caveData.CreateOnLoad == null)
+                        {
+                            caveData.CreateOnLoad = new CreateLocationData
                             {
-                                DisplayName = $"Cueva Parcela {i:D2}",
-                                CreateOnLoad = new CreateLocationData
-                                {
-                                    MapPath = "Maps/FarmCave",
-                                    Type = "StardewValley.Locations.FarmCave, Stardew Valley",
-                                    AlwaysActive = true
-                                }
+                                MapPath = "Maps/FarmCave",
+                                Type = "StardewValley.Locations.FarmCave, Stardew Valley",
+                                AlwaysActive = true
                             };
+                        }
+                        else
+                        {
+                            caveData.CreateOnLoad.MapPath = "Maps/FarmCave";
+                            caveData.CreateOnLoad.Type = "StardewValley.Locations.FarmCave, Stardew Valley";
+                            caveData.CreateOnLoad.AlwaysActive = true;
                         }
 
                         // TASK-Cellar: Registrar el sótano privado instanciado para la residencia (Pelican4Ever_Farm_XX_Cellar)
                         string cellarId = ResidenceUpgradeLogic.GetSlotCellarName(slotId);
-                        if (!data.ContainsKey(cellarId))
+                        if (!data.TryGetValue(cellarId, out LocationData? cellarData) || cellarData == null)
                         {
-                            data[cellarId] = new LocationData
+                            cellarData = new LocationData();
+                            data[cellarId] = cellarData;
+                        }
+                        cellarData.DisplayName ??= $"Bodega Parcela {i:D2}";
+                        if (cellarData.CreateOnLoad == null)
+                        {
+                            cellarData.CreateOnLoad = new CreateLocationData
                             {
-                                DisplayName = $"Bodega Parcela {i:D2}",
-                                CreateOnLoad = new CreateLocationData
-                                {
-                                    MapPath = "Maps/Cellar",
-                                    Type = "StardewValley.Locations.Cellar, Stardew Valley",
-                                    AlwaysActive = true
-                                }
+                                MapPath = "Maps/Cellar",
+                                Type = "StardewValley.Locations.Cellar, Stardew Valley",
+                                AlwaysActive = true
                             };
+                        }
+                        else
+                        {
+                            cellarData.CreateOnLoad.MapPath = "Maps/Cellar";
+                            cellarData.CreateOnLoad.Type = "StardewValley.Locations.Cellar, Stardew Valley";
+                            cellarData.CreateOnLoad.AlwaysActive = true;
                         }
 
                         // TASK-Greenhouse: Registrar el invernadero privado instanciado para la residencia (Pelican4Ever_Farm_XX_Greenhouse)
                         string greenhouseId = ResidenceUpgradeLogic.GetSlotGreenhouseName(slotId);
-                        if (!data.ContainsKey(greenhouseId))
+                        if (!data.TryGetValue(greenhouseId, out LocationData? ghData) || ghData == null)
                         {
-                            data[greenhouseId] = new LocationData
+                            ghData = new LocationData();
+                            data[greenhouseId] = ghData;
+                        }
+                        ghData.DisplayName ??= $"Invernadero Parcela {i:D2}";
+                        ghData.CanPlantHere = true;
+                        if (ghData.CreateOnLoad == null)
+                        {
+                            ghData.CreateOnLoad = new CreateLocationData
                             {
-                                DisplayName = $"Invernadero Parcela {i:D2}",
-                                CanPlantHere = true,
-                                CreateOnLoad = new CreateLocationData
-                                {
-                                    MapPath = "Maps/Greenhouse",
-                                    AlwaysActive = true
-                                }
+                                MapPath = "Maps/Greenhouse",
+                                AlwaysActive = true
                             };
+                        }
+                        else
+                        {
+                            ghData.CreateOnLoad.MapPath = "Maps/Greenhouse";
+                            ghData.CreateOnLoad.AlwaysActive = true;
                         }
                     }
 
@@ -227,23 +261,35 @@ namespace Pelican4Ever.Modules
                     {
                         foreach (AnnexAssignment annex in context.WorldState.Annexes.Values)
                         {
-                            if (string.IsNullOrWhiteSpace(annex.AnnexId) || data.ContainsKey(annex.AnnexId))
+                            if (string.IsNullOrWhiteSpace(annex.AnnexId))
                                 continue;
 
                             AnnexTemplate annexTemplate = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
                             string annexMapPath = annexTemplate.GetMapAssetForSide(annex.Side);
 
-                            var annexData = new LocationData
+                            if (!data.TryGetValue(annex.AnnexId, out LocationData? annexData) || annexData == null)
                             {
-                                DisplayName = $"Anexo {annex.Side} ({annexTemplate.DisplayName})",
-                                CanPlantHere = true,
-                                CreateOnLoad = new CreateLocationData
+                                annexData = new LocationData();
+                                data[annex.AnnexId] = annexData;
+                            }
+
+                            annexData.DisplayName ??= $"Anexo {annex.Side} ({annexTemplate.DisplayName})";
+                            annexData.CanPlantHere = true;
+                            if (annexData.CreateOnLoad == null)
+                            {
+                                annexData.CreateOnLoad = new CreateLocationData
                                 {
                                     MapPath = annexMapPath,
                                     Type = "StardewValley.Farm, Stardew Valley",
                                     AlwaysActive = true
-                                }
-                            };
+                                };
+                            }
+                            else
+                            {
+                                annexData.CreateOnLoad.MapPath = annexMapPath;
+                                annexData.CreateOnLoad.Type = "StardewValley.Farm, Stardew Valley";
+                                annexData.CreateOnLoad.AlwaysActive = true;
+                            }
 
                             if (data.TryGetValue(annexTemplate.LocationDataKey, out LocationData? typeData)
                                 || data.TryGetValue("Farm_Standard", out typeData))
@@ -834,7 +880,8 @@ namespace Pelican4Ever.Modules
                     .OrderBy(s => s.assignment == null);
                 foreach (var (slotId, assignment) in slots)
                 {
-                    if (Game1.getLocationFromName(slotId) is Farm farm)
+                    Farm? farm = EnsureFarmSlotExists(slotId);
+                    if (farm != null)
                     {
                         if (assignment != null)
                         {
@@ -1556,6 +1603,41 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
+        /// Asegura que la ubicación de residencia instanciada (Pelican4Ever_Farm_XX) exista en Game1.locations.
+        /// Si no está presente (por ej. partidas guardadas previas, creación dinámica o fallos de CreateOnLoad),
+        /// la crea de inmediato con su plantilla asignada, propiedades de mapa, cueva, bodega e invernadero.
+        /// </summary>
+        public static Farm? EnsureFarmSlotExists(string slotId)
+        {
+            if (string.IsNullOrWhiteSpace(slotId))
+                return null;
+
+            if (Game1.getLocationFromName(slotId) is Farm existingFarm)
+                return existingFarm;
+
+            if (!Context.IsMainPlayer || Game1.locations == null)
+                return null;
+
+            string farmType = "Standard";
+            DoorAssignment? assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId);
+            if (assignment != null && !string.IsNullOrEmpty(assignment.FarmType))
+            {
+                farmType = assignment.FarmType;
+            }
+
+            var template = FarmTemplateCatalog.GetTemplate(farmType);
+            var farm = new Farm(template.MapPath, slotId);
+            farm.isAlwaysActive.Value = true;
+            Game1.locations.Add(farm);
+            FarmTypeModule.ApplyMapProperties(farm, template.Id);
+
+            context?.Monitor.Log($"[FarmSlotModule] Ubicación de residencia {slotId} ({template.MapPath}) instanciada e inyectada dinámicamente en Game1.locations.", LogLevel.Info);
+
+            EnsureFarmSlotBuildings(farm, assignment);
+            return farm;
+        }
+
+        /// <summary>
         /// Asegura que la granja instanciada tenga eliminadas las cabañas automáticas no deseadas,
         /// su edificio Farmhouse principal con interior tipo Cabin dedicado, y warps de entrada/salida conectados.
         /// </summary>
@@ -2084,17 +2166,13 @@ namespace Pelican4Ever.Modules
             worldState.Doors[doorId] = assignment;
 
             // Replicar en GameLocation.modData y asegurar configuración de edificios
-            GameLocation? loc = Game1.getLocationFromName(slotId);
-            if (loc is Farm farmLoc)
+            Farm? farmLoc = EnsureFarmSlotExists(slotId);
+            if (farmLoc != null)
             {
                 farmLoc.PublishOwnership(playerId, AccessPolicy.Locked);
                 ApplyFarmTemplate(farmLoc, resolvedType, regenerate: true, playerId);
                 FarmTypeModule.ApplyMapProperties(farmLoc, resolvedType);
                 EnsureFarmSlotBuildings(farmLoc, assignment);
-            }
-            else if (loc != null)
-            {
-                loc.PublishOwnership(playerId, AccessPolicy.Locked);
             }
             GameLocation? caveLoc = Game1.getLocationFromName($"{slotId}_Cave");
             if (caveLoc != null)
@@ -2635,7 +2713,8 @@ namespace Pelican4Ever.Modules
             DoorAssignment? assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId);
             DoorModel? door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == farmSlotId);
 
-            if (Game1.getLocationFromName(farmSlotId) is Farm farm)
+            Farm? farm = EnsureFarmSlotExists(farmSlotId);
+            if (farm != null)
             {
                 EnsureFarmSlotBuildings(farm, assignment);
             }
@@ -2839,6 +2918,22 @@ namespace Pelican4Ever.Modules
                         ghLoc.IsFarm = true;
                         Game1.locations.Add(ghLoc);
                         context?.Monitor.Log($"[FarmSlotModule] Invernadero privado restaurado desde guardado: {locName}", LogLevel.Trace);
+                    }
+                    continue;
+                }
+
+                if (locName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                    && !locName.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Game1.getLocationFromName(locName) == null)
+                    {
+                        string mapPath = !string.IsNullOrWhiteSpace(savedLoc!.mapPath.Value)
+                            ? savedLoc.mapPath.Value
+                            : "Maps/Farm";
+                        var farm = savedLoc as Farm ?? new Farm(mapPath, locName);
+                        farm.isAlwaysActive.Value = true;
+                        Game1.locations.Add(farm);
+                        context?.Monitor.Log($"[FarmSlotModule] Pre-registrada residencia {locName} ({mapPath}) para restaurar cultivos y estructuras.", LogLevel.Trace);
                     }
                     continue;
                 }
@@ -3166,6 +3261,12 @@ namespace Pelican4Ever.Modules
                 else if (baseSlot.EndsWith(ResidenceUpgradeLogic.GreenhouseSuffix, StringComparison.OrdinalIgnoreCase))
                     baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.GreenhouseSuffix.Length);
 
+                if (Context.IsMainPlayer && locationRequest.Location == null)
+                {
+                    EnsureFarmSlotExists(baseSlot);
+                    locationRequest = Game1.getLocationRequest(targetLoc);
+                }
+
                 var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == baseSlot);
                 if (assignment != null)
                 {
@@ -3202,6 +3303,16 @@ namespace Pelican4Ever.Modules
             }
             else if (targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
             {
+                if (Context.IsMainPlayer && locationRequest.Location == null)
+                {
+                    AnnexAssignment? annexForLoc = context?.WorldState.FindAnnexById(targetLoc);
+                    if (annexForLoc != null)
+                    {
+                        EnsureAnnexLocation(annexForLoc, regenerate: false);
+                        locationRequest = Game1.getLocationRequest(targetLoc);
+                    }
+                }
+
                 // TASK-903: Control de acceso heredado de la residencia para ubicaciones de anexo
                 AnnexAssignment? annex = context?.WorldState.FindAnnexById(targetLoc);
                 DoorAssignment? parentDoor = annex != null

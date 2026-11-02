@@ -105,4 +105,21 @@ public class GameClockTests
 
         Assert.Equal(expectedTime, reading.TimeOfDay);
     }
+
+    [Theory]
+    [InlineData(6, 0, 600)]
+    [InlineData(12, 34, 1230)]
+    [InlineData(0, 0, 2400)]
+    [InlineData(1, 49, 2540)]
+    [InlineData(1, 50, 2550)]
+    [InlineData(2, 0, 2600)]
+    [InlineData(2, 30, 2630)]
+    [InlineData(3, 45, 2740)]
+    [InlineData(5, 50, 2950)]
+    [InlineData(5, 59, 2950)]
+    public void GetDisplayTimeOfDay_MapsRealTimeToDisplayTimeBeyondPassOut(int hour, int minute, int expectedDisplayTime)
+    {
+        int displayTime = GameClock.GetDisplayTimeOfDay(new TimeSpan(hour, minute, 0), DayStart);
+        Assert.Equal(expectedDisplayTime, displayTime);
+    }
 }
