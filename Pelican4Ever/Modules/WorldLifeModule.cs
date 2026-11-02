@@ -105,7 +105,14 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_IsThereABuildingUnderConstruction))
                 );
 
-                context?.Monitor.Log("[WorldLifeModule] Parches Harmony de mundo (tormentas, carro ambulante y carpintería) aplicados.", LogLevel.Trace);
+                // 5. Parche en NPC.checkSchedule para cancelar cualquier micro-deambular casual
+                // y permitir que el NPC inicie su horario programado sin bloqueos ni retrasos.
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(NPC), nameof(NPC.checkSchedule), new[] { typeof(int) }),
+                    prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_CheckSchedule))
+                );
+
+                context?.Monitor.Log("[WorldLifeModule] Parches Harmony de mundo (tormentas, carro ambulante, carpintería y rutas) aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
@@ -155,6 +162,18 @@ namespace Pelican4Ever.Modules
                 return false;
             }
             return true;
+        }
+
+        public static void Prefix_CheckSchedule(NPC __instance, int timeOfDay)
+        {
+            // Si el NPC tiene un controlador casual de micro-deambular (no una ruta oficial de horario),
+            // cancelarlo de inmediato para que checkSchedule no posponga su ruta al mostrador / destino
+            if (__instance.controller != null && !__instance.controller.NPCSchedule)
+            {
+                __instance.controller = null;
+                __instance.Halt();
+                __instance.speed = 2;
+            }
         }
 
         public static bool Prefix_PerformLightningUpdate(int time_of_day)
@@ -236,8 +255,42 @@ namespace Pelican4Ever.Modules
             // Iterar por todos los NPCs del mundo para aplicar Micro-Wandering
             Utility.ForEachCharacter(character =>
             {
-                if (character is NPC npc && !npc.IsMonster)
+                if (character is NPC npc && !npc.IsMonster && !npc.IsInvisible)
                 {
+                    string locName = npc.currentLocation?.NameOrUniqueName ?? "";
+                    bool isOutdoors = npc.currentLocation?.IsOutdoors ?? false;
+                    bool isDoingRouteAnim = npc.doingEndOfRouteAnimation.Value 
+                        || npc.goingToDoEndOfRouteAnimation.Value 
+                        || !string.IsNullOrEmpty(npc.endOfRouteBehaviorName.Value);
+                    bool isSleeping = npc.isSleeping.Value;
+                    bool isSitting = !string.IsNullOrEmpty(npc.endOfRouteBehaviorName.Value) && npc.endOfRouteBehaviorName.Value.Contains("sit");
+                    bool hasActivity = npc.currentScheduleDelay > 0 
+                        || npc.shouldPlayRobinHammerAnimation.Value 
+                        || npc.shouldPlaySpousePatioAnimation.Value 
+                        || npc.Sprite?.CurrentAnimation != null;
+                    bool isEmoting = npc.isEmoting;
+
+                    if (!NpcShopkeeperLogic.CanMicroWander(
+                        npc.Name,
+                        locName,
+                        Game1.timeOfDay,
+                        isOutdoors,
+                        isDoingRouteAnim,
+                        isSleeping,
+                        isSitting,
+                        hasActivity,
+                        isEmoting))
+                    {
+                        // Si es un tendero de servicio o el NPC no es apto para deambular,
+                        // retirar ancla y restaurar velocidad normal si estaba alterada
+                        NpcAnchors.Remove(npc.Name);
+                        if (npc.speed == 1 && (npc.controller == null || npc.controller.NPCSchedule))
+                        {
+                            npc.speed = 2;
+                        }
+                        return true;
+                    }
+
                     // Solo si no está en medio de un diálogo, evento o controlador activo de horario
                     if (npc.controller == null && !npc.isMoving() && npc.currentLocation != null)
                     {
@@ -266,9 +319,13 @@ namespace Pelican4Ever.Modules
                                 // Validar que la casilla sea transitable y no contenga un Warp
                                 if (loc.isTilePassable(targetVec) && !loc.isObjectAtTile(targetPoint.X, targetPoint.Y) && loc.isCollidingWithWarpOrDoor(new Rectangle(targetPoint.X * 64, targetPoint.Y * 64, 64, 64), npc) == null)
                                 {
-                                    // Asignar controlador de camino corto con velocidad reducida (paso de paseo)
+                                    // Asignar controlador de camino corto con paso de paseo
+                                    // y restaurar velocidad estándar (2) al completar el paseo
                                     npc.speed = 1;
-                                    npc.controller = new PathFindController(npc, loc, targetPoint, Rnd.Next(0, 4));
+                                    npc.controller = new PathFindController(npc, loc, targetPoint, Rnd.Next(0, 4), (c, l) =>
+                                    {
+                                        c.speed = 2;
+                                    });
                                 }
 
                                 // Programar el próximo paso entre 45 y 90 segundos
