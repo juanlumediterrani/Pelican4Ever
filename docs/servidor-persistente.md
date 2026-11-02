@@ -10,6 +10,7 @@ cargando la partida desde «Cooperativo → Anfitrión» como siempre.
 | --- | --- |
 | `AutoHostSaveName` (`config.json`) | Al llegar a la pantalla de título, el host carga como anfitrión de cooperativo esa partida, por el nombre exacto de su carpeta en `Saves/`. Si no existe, no carga otra: lo registra y se queda en el título. |
 | `RestartExitsProcess` (`config.json`) | El reinicio controlado (`p4e_safe_restart`, `POST /api/v1/host/restart`) cierra el juego al llegar al título, para que systemd lo relance con el mod actualizado. Sin esta opción, vuelve al título y la carga automática reabre la partida en el mismo proceso. Requiere `AutoHostSaveName`. |
+| `MaintenanceWindowMinutes` (`config.json`) | Modo mantenimiento: desde el cambio de fecha (02:00) y durante estos minutos (25 por defecto, 0 lo desactiva, máx. 180) el host rechaza a cualquier jugador que intente entrar (`MaintenanceLockModule`, aviso en el log y expulsión al siguiente tick). Cubre guardado, copia, avance de día y una actualización del runtime sin reconexiones. Se aplica sin tocar `config.json`: el valor por defecto rige si falta la clave. |
 | `AgentHost` (`config.json`) | Si el host se acuesta, registra el descanso sin salir al título. Imprescindible si el host es un agente. |
 | `deploy/systemd/pelican4ever-host.service` | Lanza SMAPI y lo relanza tras una caída o un reinicio controlado (30 s de espera, como mucho 5 veces en 15 min). No convive con `stardew-voyager-live.service`. |
 

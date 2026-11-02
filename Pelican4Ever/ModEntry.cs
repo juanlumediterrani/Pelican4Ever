@@ -34,6 +34,7 @@ namespace Pelican4Ever
             RegisterModules(
                 new PersistenceModule(),
                 new ClientVersionGuardModule(),
+                new MaintenanceLockModule(),
                 new ClientSecurityModule(),
                 new StatusCommandModule(),
                 new RealTimeClockModule(),
