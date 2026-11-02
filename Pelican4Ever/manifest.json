@@ -6,5 +6,5 @@
   "UniqueID": "Pelican4Ever.SVRTMP",
   "EntryDll": "Pelican4Ever.dll",
   "MinimumApiVersion": "4.1.0",
-  "UpdateKeys": []
+  "UpdateKeys": [ "GitHub:juanlumediterrani/Pelican-4Ever" ]
 }

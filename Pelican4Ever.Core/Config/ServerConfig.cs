@@ -55,6 +55,12 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Fracción de la energía máxima con la que se despierta tras una penalización (0–1).</summary>
         public float PenaltyEnergyFraction { get; set; } = 0.5f;
 
+        /// <summary>
+        /// Minutos antes del Rollover (por defecto 60 min, ej. 05:00 a 06:00) en los que una conexión
+        /// se considera madrugadora para el nuevo día y no se penaliza como trasnochada.
+        /// </summary>
+        public int EarlyMorningGraceMinutes { get; set; } = 60;
+
         // ─────────────────────────── Energía y comida ───────────────────────────
 
         /// <summary>
@@ -78,6 +84,12 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Energía máxima recuperable en el Spa por día real.</summary>
         public int SpaDailyCap { get; set; } = 60;
 
+        /// <summary>Segundos reales sentado en un banco, silla o taberna para recuperar 1 punto de energía (0 = desactivado).</summary>
+        public int SittingRegenSeconds { get; set; } = 15;
+
+        /// <summary>Horas reales de desconexión para recargar la barra de energía completa al 100% (por defecto 4.0h; 0 = desactivado).</summary>
+        public float OfflineRegenFullBarHours { get; set; } = 4.0f;
+
         // ─────────────────────────── Economía ───────────────────────────
 
         /// <summary>Multiplicador de precio de cosechas directas (provisional; pendiente de simulación).</summary>
@@ -90,6 +102,17 @@ namespace Pelican4Ever.Core.Config
 
         /// <summary>Horas reales (HH:mm) en las que se regeneran los pisos de minas, Caverna Calavera y Volcán.</summary>
         public string[] MineResetTimes { get; set; } = { "06:00", "18:00" };
+
+        /// <summary>Minutos reales consecutivos que un piso de la mina debe permanecer desocupado para regenerarse (GAP-14).</summary>
+        public int MineFloorCooldownMinutes { get; set; } = 45;
+
+        // ─────────────────────────── Comercio y Construcción ───────────────────────────
+
+        /// <summary>Hora (formato Stardew, ej. 2600 = 02:00 AM) a la que cierra el Carro Ambulante los viernes y domingos (GAP-04).</summary>
+        public int TravelingCartClosingTime { get; set; } = 2600;
+
+        /// <summary>Si es true, Robin permanece en su tienda y horario normal durante obras en lugar de trasladarse a la granja (GAP-10).</summary>
+        public bool KeepRobinInCarpentryShop { get; set; } = true;
 
         // ─────────────────────────── Festivales ───────────────────────────
 
@@ -202,12 +225,20 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(PenaltyGoldCap)} no puede ser negativo.");
             if (PenaltyEnergyFraction is < 0 or > 1)
                 errors.Add($"{nameof(PenaltyEnergyFraction)} debe estar entre 0 y 1.");
+            if (EarlyMorningGraceMinutes is < 0 or > 180)
+                errors.Add($"{nameof(EarlyMorningGraceMinutes)} debe estar entre 0 y 180 minutos.");
             if (DailySatietyFraction < 0)
                 errors.Add($"{nameof(DailySatietyFraction)} no puede ser negativo.");
             if (CropPriceMultiplier <= 0 || ArtisanPriceMultiplier <= 0)
                 errors.Add("Los multiplicadores de precio deben ser > 0.");
             if (SpaRegenSeconds <= 0)
                 errors.Add($"{nameof(SpaRegenSeconds)} debe ser > 0.");
+            if (SittingRegenSeconds < 0)
+                errors.Add($"{nameof(SittingRegenSeconds)} no puede ser negativo.");
+            if (OfflineRegenFullBarHours < 0)
+                errors.Add($"{nameof(OfflineRegenFullBarHours)} no puede ser negativo.");
+            if (MineFloorCooldownMinutes < 0)
+                errors.Add($"{nameof(MineFloorCooldownMinutes)} no puede ser negativo.");
             if (FarmSlotCount is < 1 or > 16)
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
             if (MaxAnnexesPerResidence is < 0 or > 3)
@@ -216,6 +247,8 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(AdminApiPort)} debe situarse entre 1024 y 65535.");
             if (FestivalWindowStart >= FestivalWindowEnd || FestivalWindowEnd > 2550)
                 errors.Add($"La ventana de festival ({FestivalWindowStart}-{FestivalWindowEnd}) debe ser creciente y terminar como muy tarde a las 2550.");
+            if (TravelingCartClosingTime is < 600 or > 2600)
+                errors.Add($"{nameof(TravelingCartClosingTime)} debe situarse entre 0600 y 2600.");
             if (!string.IsNullOrEmpty(AutoHostSaveName) && !AutoHostLogic.IsValidSaveName(AutoHostSaveName))
                 errors.Add($"{nameof(AutoHostSaveName)} debe ser el nombre exacto de una carpeta de Saves/, sin rutas. Valor: '{AutoHostSaveName}'.");
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))

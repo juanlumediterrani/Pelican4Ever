@@ -227,5 +227,23 @@ namespace Pelican4Ever.Tests
                 Assert.True(path.Distinct().Count() > triggers.Count, $"{id}: the rest of the path must not trigger");
             }
         }
+
+        [Theory]
+        [InlineData(18, 63, "Ranching", 63, 1, 2)]    // Sur del Host -> Entrada Norte Meadowlands (63, 1) en vez de acantilado (40, 1)
+        [InlineData(47, 63, "Ranching", 63, 1, 2)]
+        [InlineData(47, 63, "Meadowlands", 63, 1, 2)]
+        [InlineData(28, 1, "Ranching", 52, 73, 0)]    // Norte del Host -> Entrada Sur Meadowlands (52, 73) en vez de (40, 63)
+        [InlineData(1, 26, "Ranching", 98, 22, 3)]    // Oeste del Host -> Entrada Este Meadowlands (98, 22) en vez de (78, 17)
+        [InlineData(18, 63, "Standard", 40, 1, 2)]    // Standard conserva sus coordenadas habituales
+        [InlineData(28, 1, "Standard", 40, 63, 0)]
+        [InlineData(1, 26, "Standard", 78, 17, 3)]
+        public void GetResidenceArrivalCoordinates_FarmTypeAware_ResolvesCorrectEntrance(
+            int hostX, int hostY, string farmType, int expectedX, int expectedY, int expectedFacing)
+        {
+            SpatialWarpRouter.GetResidenceArrivalCoordinates(hostX, hostY, farmType, out int tx, out int ty, out int facing);
+            Assert.Equal(expectedX, tx);
+            Assert.Equal(expectedY, ty);
+            Assert.Equal(expectedFacing, facing);
+        }
     }
 }

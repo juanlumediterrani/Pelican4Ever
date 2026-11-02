@@ -67,6 +67,8 @@ namespace Pelican4Ever.Core.Admin
         public int SpaEnergyUsed { get; set; }
         public int SatietyGameDay { get; set; } = -1;
         public int PendingMarketGold { get; set; }
+        public bool IsClaimed { get; set; }
+        public string? OwnerTokenMasked { get; set; }
     }
 
     /// <summary>

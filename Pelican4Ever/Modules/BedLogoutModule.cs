@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Pelican4Ever.Core.Admin;
+using Pelican4Ever.Core.Players;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewValley;
@@ -27,10 +28,12 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
-            // En el Host escuchamos mensajes de clientes pidiendo desconexión tras descansar en la cama
+            // Escuchamos mensajes multijugador en ambos lados (Host para BedLogout, Cliente para OfflineStaminaRestored)
+            ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
+
+            // En el Host gestionamos conexiones y desconexiones
             if (Context.IsMainPlayer)
             {
-                ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
                 ctx.Helper.Events.Multiplayer.PeerConnected += OnPeerConnected;
                 ctx.Helper.Events.Multiplayer.PeerDisconnected += OnPeerDisconnected;
             }
@@ -46,10 +49,26 @@ namespace Pelican4Ever.Modules
             // Al conectar un jugador, marcamos su actividad en el día actual
             string playerName = Game1.GetPlayer(e.Peer.PlayerID)?.Name ?? string.Empty;
             var player = context.WorldState.GetOrCreatePlayer(e.Peer.PlayerID, playerName);
+
+            DateTime localNow = Core.Time.ServerTime.LocalNow(context.Config.TimeZoneId);
+            TimeSpan dayStart = context.Config.ParsedDayStart;
+            TimeSpan graceStart = dayStart - TimeSpan.FromMinutes(context.Config.EarlyMorningGraceMinutes);
+            bool inGraceWindow = localNow.TimeOfDay >= graceStart && localNow.TimeOfDay < dayStart;
+
+            if (!inGraceWindow)
+            {
+                player.ActiveDayPriorToGrace = Game1.Date.TotalDays;
+            }
+
+            // Aplicar recuperación gradual de estamina durante su tiempo desconectado (GAP-07 / Offline Regen)
+            ApplyOfflineStaminaRegen(player, e.Peer.PlayerID);
+
+            player.CurrentSessionStartUtc = DateTimeOffset.UtcNow;
             player.LastActiveGameDay = Game1.Date.TotalDays;
             player.LastSeenUtc = DateTimeOffset.UtcNow;
+            player.OfflineStaminaAnchorUtc = DateTimeOffset.MinValue;
             player.EnsureDailyCounters(Game1.Date.TotalDays);
-            context.Monitor.Log($"[BedLogoutModule] Jugador {e.Peer.PlayerID} conectado. Marcado activo para día {Game1.Date.TotalDays}.", LogLevel.Trace);
+            context.Monitor.Log($"[BedLogoutModule] Jugador {e.Peer.PlayerID} conectado. Marcado activo para día {Game1.Date.TotalDays} (MadrugadorEnGracia: {inGraceWindow}).", LogLevel.Trace);
 
             AdminApiModule.EventLog.Append(
                 HostEventTypes.PlayerConnected,
@@ -63,6 +82,51 @@ namespace Pelican4Ever.Modules
                 });
         }
 
+        private static void ApplyOfflineStaminaRegen(PlayerRecord player, long playerId)
+        {
+            if (context == null || context.Config.OfflineRegenFullBarHours <= 0)
+                return;
+
+            DateTimeOffset anchor = player.OfflineStaminaAnchorUtc;
+            if (anchor == DateTimeOffset.MinValue)
+            {
+                anchor = player.LastSeenUtc;
+            }
+
+            if (anchor == DateTimeOffset.MinValue)
+                return;
+
+            TimeSpan offlineDuration = DateTimeOffset.UtcNow - anchor;
+            if (offlineDuration <= TimeSpan.FromSeconds(30))
+                return;
+
+            Farmer? farmer = Game1.GetPlayer(playerId);
+            if (farmer == null)
+                return;
+
+            float oldStamina = farmer.Stamina;
+            float newStamina = OfflineStaminaRegenLogic.CalculateNewStamina(
+                currentStamina: oldStamina,
+                maxStamina: farmer.MaxStamina,
+                offlineDuration: offlineDuration,
+                fullBarHours: context.Config.OfflineRegenFullBarHours
+            );
+
+            float gained = newStamina - oldStamina;
+            if (gained > 0.5f)
+            {
+                farmer.Stamina = newStamina;
+                context.Monitor.Log($"[BedLogoutModule] Jugador {player.PlayerName} ({playerId}) descansó {offlineDuration.TotalMinutes:F1}m offline: +{gained:F0} energía ({newStamina:F0}/{farmer.MaxStamina}).", LogLevel.Info);
+
+                context.Helper.Multiplayer.SendMessage(
+                    message: (int)Math.Round(gained),
+                    messageType: "OfflineStaminaRestored",
+                    modIDs: new[] { context.Manifest.UniqueID },
+                    playerIDs: new[] { playerId }
+                );
+            }
+        }
+
         private void OnPeerDisconnected(object? sender, StardewModdingAPI.Events.PeerDisconnectedEventArgs e)
         {
             if (!Context.IsMainPlayer || context == null)
@@ -74,6 +138,8 @@ namespace Pelican4Ever.Modules
             if (context.WorldState.Players.TryGetValue(e.Peer.PlayerID, out var record))
             {
                 record.LastSeenUtc = DateTimeOffset.UtcNow;
+                record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                record.CurrentSessionStartUtc = DateTimeOffset.MinValue;
             }
 
             AdminApiModule.EventLog.Append(
@@ -90,16 +156,26 @@ namespace Pelican4Ever.Modules
 
         private void OnModMessageReceived(object? sender, StardewModdingAPI.Events.ModMessageReceivedEventArgs e)
         {
-            if (!Context.IsMainPlayer || context == null)
+            if (context == null || e.FromModID != context.Manifest.UniqueID)
                 return;
 
-            if (e.FromModID == context.Manifest.UniqueID && e.Type == BedLogoutMessageType)
+            // En el Host: registrar descanso en cama
+            if (Context.IsMainPlayer && e.Type == BedLogoutMessageType)
             {
                 long playerId = e.FromPlayerID;
                 var record = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
                 record.RestedOnGameDay = Game1.Date.TotalDays;
                 record.LastActiveGameDay = Game1.Date.TotalDays;
+                record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
                 context.Monitor.Log($"[BedLogoutModule] Descanso registrado para jugador {playerId} en día {Game1.Date.TotalDays}.", LogLevel.Info);
+                return;
+            }
+
+            // En el Cliente: notificación visual de recuperación de energía al volver
+            if (!Context.IsMainPlayer && e.Type == "OfflineStaminaRestored")
+            {
+                int gained = e.ReadAs<int>();
+                Game1.addHUDMessage(new HUDMessage($"Descanso offline: +{gained} energía recuperada.", HUDMessage.newQuest_type));
             }
         }
 
@@ -139,6 +215,8 @@ namespace Pelican4Ever.Modules
                 today,
                 isHostPlayer: true,
                 agentHostEnabled: stayOnline);
+
+            record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
 
             AdminApiModule.EventLog.Append(
                 HostEventTypes.HostRested,
