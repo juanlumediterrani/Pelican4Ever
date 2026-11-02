@@ -26,6 +26,27 @@ namespace Pelican4Ever.Tests
             Assert.Equal(expectedCabinY, template.CabinTileY);
         }
 
+        [Theory]
+        [InlineData("Standard", 40, 1, 40, 63, 78, 17)]
+        [InlineData("Fishing", 40, 1, 40, 63, 78, 17)]
+        [InlineData("Foraging", 40, 1, 40, 63, 78, 17)]
+        [InlineData("Mining", 40, 1, 40, 63, 78, 17)]
+        [InlineData("Combat", 40, 1, 40, 63, 78, 17)]
+        [InlineData("FourCorners", 40, 1, 40, 63, 78, 17)]
+        [InlineData("Ranching", 63, 1, 52, 73, 98, 22)]
+        [InlineData("Meadowlands", 63, 1, 52, 73, 98, 22)]
+        public void FarmTemplateCatalog_ReturnsCorrectArrivalCoords(
+            string templateId, int nx, int ny, int sx, int sy, int ex, int ey)
+        {
+            var template = FarmTemplateCatalog.GetTemplate(templateId);
+            Assert.Equal(nx, template.NorthArrivalTileX);
+            Assert.Equal(ny, template.NorthArrivalTileY);
+            Assert.Equal(sx, template.SouthArrivalTileX);
+            Assert.Equal(sy, template.SouthArrivalTileY);
+            Assert.Equal(ex, template.EastArrivalTileX);
+            Assert.Equal(ey, template.EastArrivalTileY);
+        }
+
         // Claves vanilla de Data/Locations (Game1.GetFarmTypeKey): sin ellas la residencia pesca solo basura
         [Theory]
         [InlineData("Standard", "Farm_Standard")]
@@ -71,6 +92,41 @@ namespace Pelican4Ever.Tests
             var online = new HashSet<long> { 100L, 200L };
             bool keep = LocationCullingLogic.ShouldKeepActive("Pelican4Ever_Farm_01", 0, 100L, online);
             Assert.True(keep);
+        }
+
+        [Theory]
+        [InlineData("Standard", 34, 5, 34, 6)]
+        [InlineData("Fishing", 34, 5, 34, 6)]
+        [InlineData("Foraging", 34, 5, 34, 6)]
+        [InlineData("Mining", 34, 5, 34, 6)]
+        [InlineData("Combat", 34, 5, 34, 6)]
+        [InlineData("FourCorners", 30, 35, 30, 36)]
+        [InlineData("Ranching", 88, 54, 88, 55)]
+        public void FarmTemplateCatalog_CaveCoordinates_ValidAndConfigured(string templateId, int expEntranceX, int expEntranceY, int expExitX, int expExitY)
+        {
+            var template = FarmTemplateCatalog.GetTemplate(templateId);
+            Assert.Equal(expEntranceX, template.CaveEntranceX);
+            Assert.Equal(expEntranceY, template.CaveEntranceY);
+            Assert.Equal(expExitX, template.CaveExitX);
+            Assert.Equal(expExitY, template.CaveExitY);
+        }
+
+        [Fact]
+        public void LocationCulling_CustomCave_ActiveIfFarmersInsideOrOwnerOnline()
+        {
+            string caveId = "Pelican4Ever_Farm_01_Cave";
+            Assert.True(LocationCullingLogic.IsPrivateFarmOrAnnex(caveId));
+
+            // Activa si hay alguien dentro
+            Assert.True(LocationCullingLogic.ShouldKeepActive(caveId, 1, 100L, new HashSet<long>()));
+
+            // Activa si el dueño está online
+            var online = new HashSet<long> { 100L, 200L };
+            Assert.True(LocationCullingLogic.ShouldKeepActive(caveId, 0, 100L, online));
+
+            // Culled si vacía y dueño offline
+            var offline = new HashSet<long> { 200L, 300L };
+            Assert.False(LocationCullingLogic.ShouldKeepActive(caveId, 0, 100L, offline));
         }
 
         [Fact]

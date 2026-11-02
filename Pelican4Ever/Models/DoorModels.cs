@@ -21,8 +21,14 @@ namespace Pelican4Ever.Models
         public const string ClaimDoorRequest = "ClaimDoorRequest";
         public const string ChangePolicyRequest = "ChangePolicyRequest";
         public const string BuyAnnexRequest = "BuyAnnexRequest";
+        public const string UnlockGreenhouseRequest = "UnlockGreenhouseRequest";
         public const string SyncDoorsState = "SyncDoorsState";
         public const string RequestDoorsSync = "RequestDoorsSync";
+    }
+
+    public class UnlockGreenhousePayload
+    {
+        public string FarmSlotId { get; set; } = string.Empty;
     }
 
     public class ClaimDoorPayload

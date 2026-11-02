@@ -69,11 +69,14 @@ namespace Pelican4Ever.Modules
             int penalizedCount = 0;
             int untouchedCount = 0;
 
+            DateTime localNow = Core.Time.ServerTime.LocalNow(cfg.TimeZoneId);
+
             foreach (var kvp in worldState.Players)
             {
                 var record = kvp.Value;
                 bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == record.UniqueMultiplayerID);
-                RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline);
+                bool isEarlyRiser = isOnline && SleepPolicy.IsEarlyRiser(record, endedDay, localNow, cfg.ParsedDayStart, cfg.EarlyMorningGraceMinutes);
+                RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline, isEarlyRiser);
                 SleepPolicy.Commit(record, outcome);
 
                 switch (outcome)
@@ -107,8 +110,9 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // Resetear contadores de comida y spa para el nuevo día
+                // Resetear contadores de comida y spa para el nuevo día y anclar el tiempo offline
                 record.EnsureDailyCounters(newDay);
+                record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
             }
 
             worldState.LastRolloverGameDay = endedDay;

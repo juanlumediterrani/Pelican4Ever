@@ -55,6 +55,19 @@ está parada y se niega si el servidor sirve otra partida que la autorizada (gu�
 3. El estado del servidor (`ServerWorldState`) migra su esquema al cargar; los clientes con otra versión
    del mod son expulsados hasta que actualicen (`RequireClientMod`).
 
+## Seguridad y posesión de personajes (Anti-usurpación)
+
+En conexiones por IP directa, Stardew Valley nativo no valida usuarios (`userID = ""`). Pelican 4Ever implementa un sistema automático de tokens por cliente/equipo:
+- Cada instalación de cliente genera un token único local guardado en `data/client_token.json` y `GlobalData` de SMAPI.
+- Al reclamar un peón (crear personaje nuevo o entrar con uno sin dueño), el Host lo asocia autoritativamente a su `PlayerRecord.OwnerToken`.
+- En la pantalla de selección de peón (`FarmhandMenu`):
+  - Los personajes propios aparecen ordenados al principio.
+  - Los peones pertenecientes a otros jugadores aparecen atenuados (al 50% de opacidad), con el texto `[De otro jugador]` y con el clic desactivado.
+- Si un cliente intenta conectar a un peón ajeno, el Host rechaza la solicitud de forma autoritativa en `GameServer.checkFarmhandRequest`.
+- **Comandos de consola del anfitrión:**
+  - `p4e_claim_list`: lista todos los peones, su residencia y si están reclamados (con token ofuscado).
+  - `p4e_claim_reset <nombre_o_id>`: restablece la posesión de un personaje para permitir que su dueño legítimo lo reclame desde un equipo nuevo.
+
 ## Límites
 
 - Sin Steam abierto no hay códigos de invitación; los jugadores entran por IP (puerto 24642).

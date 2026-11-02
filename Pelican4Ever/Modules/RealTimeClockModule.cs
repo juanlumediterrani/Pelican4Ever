@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -20,10 +22,14 @@ namespace Pelican4Ever.Modules
     /// </summary>
     public sealed class RealTimeClockModule : IModule
     {
+        private const string TimeOffsetMessageType = "RealTimeClock.Offset";
         private static ModContext? context;
         public static bool IsNightHold { get; private set; }
         public static TimeSpan ManualTimeOffset { get; set; } = TimeSpan.Zero;
         private static bool timeChatCommandsRegistered;
+
+        /// <summary>Ticks de 10 min procesados sobre máquinas durante la Madrugada en curso (GAP-17).</summary>
+        public static int NightHoldTicksSimulated { get; set; } = 0;
 
         /// <summary>Primera sincronización tras cargar la partida: el reloj salta de 0600 a la hora real.</summary>
         private static bool startupSyncPending;
@@ -53,7 +59,13 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => startupSyncPending = Context.IsMainPlayer;
-            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => startupSyncPending = villagerCatchUpPending = false;
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
+            {
+                startupSyncPending = villagerCatchUpPending = false;
+                ManualTimeOffset = TimeSpan.Zero;
+            };
+            ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
+            ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
 
             // Comandos para host para forzar o adelantar/retrasar horas (+X, -X, reset)
             ctx.Helper.ConsoleCommands.Add(
@@ -120,6 +132,7 @@ namespace Pelican4Ever.Modules
             {
                 ManualTimeOffset = TimeSpan.Zero;
                 ApplyCurrentClock();
+                BroadcastTimeOffset();
                 message = $"[Reloj] Restablecido a hora real. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}.";
                 return true;
             }
@@ -132,6 +145,7 @@ namespace Pelican4Ever.Modules
                     DateTime baseNow = ServerTime.LocalNow(context?.Config.TimeZoneId ?? "Europe/Madrid");
                     ManualTimeOffset = targetSpan - baseNow.TimeOfDay;
                     ApplyCurrentClock();
+                    BroadcastTimeOffset();
                     message = $"[Reloj] Hora fijada a {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
                     return true;
                 }
@@ -150,6 +164,7 @@ namespace Pelican4Ever.Modules
                     TimeSpan delta = TimeSpan.FromMinutes(isMinus ? -minutes : minutes);
                     ManualTimeOffset += delta;
                     ApplyCurrentClock();
+                    BroadcastTimeOffset();
                     message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{minutes} min. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
                     return true;
                 }
@@ -159,12 +174,46 @@ namespace Pelican4Ever.Modules
                 TimeSpan delta = TimeSpan.FromHours(isMinus ? -hours : hours);
                 ManualTimeOffset += delta;
                 ApplyCurrentClock();
+                BroadcastTimeOffset();
                 message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{hours}h. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
                 return true;
             }
 
             message = "[Reloj] Formato no válido. Ejemplos válidos: /time +2, /time -1, /time +30m, /time reset, /time set 14:00";
             return false;
+        }
+
+        private static void BroadcastTimeOffset()
+        {
+            if (context == null || !Context.IsMainPlayer) return;
+            context.Helper.Multiplayer.SendMessage(
+                ManualTimeOffset.Ticks,
+                TimeOffsetMessageType,
+                new[] { context.Manifest.UniqueID }
+            );
+        }
+
+        private void OnPeerContextReceived(object? sender, PeerContextReceivedEventArgs e)
+        {
+            if (context == null || !Context.IsMainPlayer || ManualTimeOffset == TimeSpan.Zero) return;
+            context.Helper.Multiplayer.SendMessage(
+                ManualTimeOffset.Ticks,
+                TimeOffsetMessageType,
+                new[] { context.Manifest.UniqueID },
+                new[] { e.Peer.PlayerID }
+            );
+        }
+
+        private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
+        {
+            if (context == null || e.FromModID != context.Manifest.UniqueID) return;
+
+            if (e.Type == TimeOffsetMessageType)
+            {
+                long ticks = e.ReadAs<long>();
+                ManualTimeOffset = TimeSpan.FromTicks(ticks);
+                context.Monitor.Log($"[RealTimeClockModule] Offset horario sincronizado desde anfitrión: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h.", LogLevel.Trace);
+            }
         }
 
         private static bool TryConvertRawTimeToSpan(int raw, out TimeSpan span)
@@ -223,8 +272,6 @@ namespace Pelican4Ever.Modules
             if (villagerCatchUpPending)
                 return;
 
-            // Instantánea antes de mover: CatchUpSchedule traslada aldeanos entre localizaciones y eso
-            // modifica las colecciones que ForEachVillager está recorriendo (InvalidOperationException).
             var villagers = new List<NPC>();
             Utility.ForEachVillager(npc =>
             {
@@ -335,6 +382,7 @@ namespace Pelican4Ever.Modules
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
+            NightHoldTicksSimulated = 0;
             if (Context.IsMainPlayer)
             {
                 Game1.realMilliSecondsPerGameTenMinutes = 600_000;
@@ -356,13 +404,16 @@ namespace Pelican4Ever.Modules
 
         private void OnOneSecondUpdateTicked(object? sender, OneSecondUpdateTickedEventArgs e)
         {
-            if (!Context.IsWorldReady || !Context.IsMainPlayer || context == null)
+            if (!Context.IsWorldReady || context == null)
                 return;
 
             var cfg = context.Config;
             DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
             ClockReading reading = GameClock.Read(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
             IsNightHold = reading.IsNightHold;
+
+            if (!Context.IsMainPlayer)
+                return;
 
             // Sincronizar gameTimeInterval para iluminación ambiental (ms dentro del slot actual de 10 min)
             Game1.gameTimeInterval = reading.MillisecondsIntoSlot;
@@ -374,6 +425,7 @@ namespace Pelican4Ever.Modules
                 CatchUpVillagerSchedules(Game1.timeOfDay);
 
             // Si estamos en tramo nocturno congelado (NightHold), mantener la hora tope fija
+            // y procesar el avance de máquinas en tiempo real cada 10 min (GAP-17).
             if (reading.IsNightHold)
             {
                 if (Game1.timeOfDay != reading.TimeOfDay)
@@ -388,6 +440,30 @@ namespace Pelican4Ever.Modules
                         Game1.netWorldState.Value.UpdateFromGame1();
                     }
                 }
+
+                // Simulación en tiempo real de máquinas cada 10 minutos reales
+                int targetTicks = GameClock.NightHoldTicksElapsed(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+                if (startup)
+                {
+                    // Si el servidor arrancó ya en madrugada, sincronizar sin simular ticks pasados
+                    NightHoldTicksSimulated = targetTicks;
+                }
+                else if (targetTicks > NightHoldTicksSimulated)
+                {
+                    int ticksToRun = targetTicks - NightHoldTicksSimulated;
+                    for (int i = 0; i < ticksToRun; i++)
+                    {
+                        PassTimeForNightHold(10);
+                        NightHoldTicksSimulated++;
+                    }
+                    context.Monitor.Log($"[RealTimeClockModule] Madrugada: procesados {ticksToRun * 10} min en máquinas (total noche: {NightHoldTicksSimulated * 10} min).", LogLevel.Trace);
+                }
+                else if (targetTicks < NightHoldTicksSimulated)
+                {
+                    // Ajuste de reloj hacia atrás
+                    NightHoldTicksSimulated = targetTicks;
+                }
+
                 return;
             }
 
@@ -435,6 +511,19 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_shouldTimePass))
                 );
 
+                // Parche en Utility.CalculateMinutesUntilMorning para descontar los minutos ya simulados en NightHold (GAP-17)
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Utility), nameof(Utility.CalculateMinutesUntilMorning), new[] { typeof(int), typeof(int) }),
+                    postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_CalculateMinutesUntilMorning))
+                );
+
+                // Parche en DayTimeMoneyBox.draw para mostrar la hora real más allá de 01:50 y evitar que se pinte en rojo o vibre
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(DayTimeMoneyBox), nameof(DayTimeMoneyBox.draw), new[] { typeof(SpriteBatch) }),
+                    prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_DayTimeMoneyBox_draw)),
+                    transpiler: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Transpiler_DayTimeMoneyBox_draw))
+                );
+
                 context?.Monitor.Log("[RealTimeClockModule] Harmony patches aplicados correctamente.", LogLevel.Trace);
             }
             catch (Exception ex)
@@ -478,6 +567,98 @@ namespace Pelican4Ever.Modules
             {
                 __result = true;
             }
+        }
+
+        private static void PassTimeForNightHold(int minutes)
+        {
+            foreach (GameLocation location in Game1.locations)
+            {
+                location.passTimeForObjects(minutes);
+
+                for (int i = 0; i < location.furniture.Count; i++)
+                {
+                    location.furniture[i].minutesElapsed(minutes);
+                }
+
+                foreach (var building in location.buildings)
+                {
+                    if (building.daysOfConstructionLeft.Value <= 0)
+                    {
+                        building.performTenMinuteAction(minutes);
+                        GameLocation indoors = building.GetIndoors();
+                        if (indoors != null)
+                        {
+                            indoors.passTimeForObjects(minutes);
+                            for (int j = 0; j < indoors.furniture.Count; j++)
+                            {
+                                indoors.furniture[j].minutesElapsed(minutes);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        public static void Postfix_CalculateMinutesUntilMorning(int daysElapsed, ref int __result)
+        {
+            // Descuenta los minutos que ya se simularon en tiempo real durante la madrugada
+            // para evitar que el Rollover los procese dos veces (GAP-17).
+            if (daysElapsed == 1 && NightHoldTicksSimulated > 0)
+            {
+                int alreadySimulated = NightHoldTicksSimulated * 10;
+                __result = Math.Max(0, __result - alreadySimulated);
+            }
+        }
+
+        /// <summary>
+        /// Obtiene la hora efectiva a mostrar en el reloj del HUD (DayTimeMoneyBox).
+        /// Entre 06:00 y 01:50 coincide con la hora nativa del juego; durante la Madrugada
+        /// (01:50 a 06:00), avanza según la hora real (02:00, 02:10, 03:30...) en vez de quedarse fija en 1:50.
+        /// </summary>
+        public static int GetEffectiveDisplayTimeOfDay()
+        {
+            if (!Context.IsWorldReady || context == null)
+                return Game1.timeOfDay;
+
+            if (Game1.timeOfDay < GameClock.MaxTimeOfDay && !IsNightHold)
+                return Game1.timeOfDay;
+
+            var cfg = context.Config;
+            DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
+            return GameClock.GetDisplayTimeOfDay(now.TimeOfDay, cfg.ParsedDayStart);
+        }
+
+        public static void Prefix_DayTimeMoneyBox_draw(DayTimeMoneyBox __instance)
+        {
+            // Evitar que el reloj tiemble como alarma de desmayo nocturno
+            __instance.timeShakeTimer = 0;
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler_DayTimeMoneyBox_draw(IEnumerable<CodeInstruction> instructions)
+        {
+            var methodGetEffectiveTime = AccessTools.Method(typeof(RealTimeClockModule), nameof(GetEffectiveDisplayTimeOfDay));
+            var fieldTimeOfDay = AccessTools.Field(typeof(Game1), nameof(Game1.timeOfDay));
+
+            var list = new List<CodeInstruction>(instructions);
+            for (int i = 0; i < list.Count; i++)
+            {
+                // 1. Reemplazar lecturas de Game1.timeOfDay por GetEffectiveDisplayTimeOfDay()
+                if (list[i].LoadsField(fieldTimeOfDay))
+                {
+                    list[i].opcode = OpCodes.Call;
+                    list[i].operand = methodGetEffectiveTime;
+                }
+                // 2. Anular el color rojo: cuando compara timeOfDay >= 2400 para saltar a Color.Red,
+                // cambiar 2400 por int.MaxValue para que la condición nunca se cumpla y use siempre textColor
+                else if (list[i].opcode == OpCodes.Ldc_I4 && list[i].operand is int val && val == 2400)
+                {
+                    if (i + 1 < list.Count && list[i + 1].opcode == OpCodes.Bge)
+                    {
+                        list[i].operand = int.MaxValue;
+                    }
+                }
+            }
+            return list;
         }
     }
 }

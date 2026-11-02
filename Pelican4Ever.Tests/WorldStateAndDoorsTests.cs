@@ -183,6 +183,32 @@ public class WorldStateAndDoorsTests
     }
 
     [Fact]
+    public void HostPlayer_WithNegativeMultiplayerID_CanClaimResidenceDoor()
+    {
+        const long hostId = -5338910287591685903L;
+        var state = new ServerWorldState();
+
+        // El host no tiene granja asignada inicialmente
+        Assert.Equal(DoorClaimRejection.None, state.CheckDoorClaim(hostId, "Farm_Portal_14", "Standard"));
+
+        // Se asigna la puerta
+        state.Doors["Farm_Portal_14"] = Door("Farm_Portal_14", "Pelican4Ever_Farm_14", hostId, "Standard");
+        state.GetOrCreatePlayer(hostId, "HostPlayer").FarmSlotId = "Pelican4Ever_Farm_14";
+
+        // Ahora no puede reclamar una segunda residencia
+        Assert.Equal(DoorClaimRejection.AlreadyOwnsResidence, state.CheckDoorClaim(hostId, "Farm_Portal_15", "Standard"));
+        // Ni otro jugador puede reclamar el portal 14
+        Assert.Equal(DoorClaimRejection.DoorTaken, state.CheckDoorClaim(12345L, "Farm_Portal_14", "Standard"));
+
+        // Comprobación de normalización en guardado
+        var catalog = new Dictionary<string, string> { ["Farm_Portal_14"] = "Pelican4Ever_Farm_14" };
+        var released = state.NormalizeDoorAssignments(catalog);
+        Assert.Empty(released);
+        Assert.Equal(hostId, state.Doors["Farm_Portal_14"].OwnerId);
+        Assert.Equal("Pelican4Ever_Farm_14", state.Players[hostId].FarmSlotId);
+    }
+
+    [Fact]
     public void NormalizeDoorAssignments_RepairsRealCorruptedSave()
     {
         // Estado leído de la partida Pelican4Ever_452974881 (2026-10-31): IDs de un catálogo antiguo,
@@ -230,6 +256,40 @@ public class WorldStateAndDoorsTests
         Assert.Empty(released);
         Assert.Equal("Standard", state.Doors["Farm_Portal_03"].FarmType);
         Assert.Null(state.Players[2L].FarmSlotId);
+    }
+
+    [Fact]
+    public void DoorsCatalog_MailboxesAreCloseToWarp_AndNotAtCorridorEntrance()
+    {
+        string doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
+        if (!File.Exists(doorsPath))
+            doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
+        if (!File.Exists(doorsPath))
+            doorsPath = Path.Combine(Directory.GetCurrentDirectory(), "assets", "doors.json");
+
+        var doors = System.Text.Json.JsonSerializer.Deserialize<List<DoorCatalogEntry>>(File.ReadAllText(doorsPath))!;
+
+        foreach (var d in doors)
+        {
+            Assert.NotNull(d.MailboxTileX);
+            Assert.NotNull(d.MailboxTileY);
+
+            if (d.TownTileY <= 2)
+            {
+                // Portales norte: el warp está en Y=0..1, el buzón debe estar pegado al warp en Y=2 (no a la salida del desfiladero en Y=9/11)
+                Assert.Equal(2, d.MailboxTileY.Value);
+            }
+            else if (d.TownTileX <= 2)
+            {
+                // Portales oeste: el warp está en X=0..1, el buzón debe estar en X=2 junto al warp (no al final del claro en X=7)
+                Assert.Equal(2, d.MailboxTileX.Value);
+            }
+            else if (d.TownTileY >= 60)
+            {
+                // Portales sur: el warp está en Y=63..64, el buzón debe estar en Y=62
+                Assert.Equal(62, d.MailboxTileY.Value);
+            }
+        }
     }
 
     private sealed class DoorCatalogEntry

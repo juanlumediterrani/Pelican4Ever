@@ -5,10 +5,12 @@ using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Buffs;
 using StardewValley.Locations;
 
 namespace Pelican4Ever.Modules
@@ -27,6 +29,11 @@ namespace Pelican4Ever.Modules
         // Seguimiento local de regeneración pasiva de "Bien comido"
         private static int wellFedRemainingSeconds = 0;
         private static int spaSecondAccumulator = 0;
+        private static int sittingSecondAccumulator = 0;
+
+        // Seguimiento en el Host de cooldown de desocupación de pisos de minas (GAP-14)
+        public static readonly System.Collections.Generic.Dictionary<int, DateTime> MineFloorLastOccupiedUtc = new();
+        public static readonly System.Collections.Generic.Dictionary<int, DateTime> VolcanoLevelLastOccupiedUtc = new();
 
         public string Name => "Economy";
 
@@ -93,10 +100,26 @@ namespace Pelican4Ever.Modules
                 spaSecondAccumulator = 0;
             }
 
-            // 3. En el Host: Comprobar turnos de 12 horas de minas (06:00 y 18:00)
+            // 3. Control de descanso sentado (GAP-07)
+            if (SittingRegenLogic.Tick(
+                Game1.player.IsSitting(),
+                Game1.player.isInBed.Value,
+                Game1.player.Stamina,
+                Game1.player.MaxStamina,
+                sittingSecondAccumulator,
+                context.Config.SittingRegenSeconds,
+                out float staminaGain,
+                out int newAccumulator))
+            {
+                Game1.player.Stamina = Math.Min(Game1.player.MaxStamina, Game1.player.Stamina + staminaGain);
+            }
+            sittingSecondAccumulator = newAccumulator;
+
+            // 4. En el Host: Comprobar turnos de 12 horas de minas y cooldown por piso desocupado (GAP-14)
             if (Context.IsMainPlayer)
             {
                 CheckMineResetTimes();
+                CheckMineFloorCooldowns();
             }
         }
 
@@ -122,6 +145,81 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        private static void CheckMineFloorCooldowns()
+        {
+            if (context == null || context.Config.MineFloorCooldownMinutes <= 0)
+                return;
+
+            DateTime nowUtc = DateTime.UtcNow;
+            string[] disconnectLevels = Game1.getAllFarmhands()
+                .Where(fh => fh.disconnectDay.Value == Game1.MasterPlayer.stats.DaysPlayed)
+                .Select(fh => fh.disconnectLocation.Value)
+                .Where(loc => loc != null)
+                .ToArray();
+
+            // 1. Minas regulares y Caverna Calavera
+            for (int i = MineShaft.activeMines.Count - 1; i >= 0; i--)
+            {
+                MineShaft mine = MineShaft.activeMines[i];
+                int level = mine.mineLevel;
+                int farmersCount = mine.farmers.Count;
+
+                if (farmersCount > 0)
+                {
+                    MineFloorLastOccupiedUtc[level] = nowUtc;
+                    continue;
+                }
+
+                if (!MineFloorLastOccupiedUtc.TryGetValue(level, out DateTime lastOccupied))
+                {
+                    MineFloorLastOccupiedUtc[level] = nowUtc;
+                    continue;
+                }
+
+                bool isPendingWarp = Game1.locationRequest?.Location is MineShaft reqMine && mine.NameOrUniqueName == reqMine.NameOrUniqueName;
+                bool hasDisconnect = disconnectLevels.Contains(mine.NameOrUniqueName);
+
+                if (MineCooldownLogic.ShouldUnloadFloor(level, farmersCount, lastOccupied, nowUtc, context.Config.MineFloorCooldownMinutes, isPendingWarp, hasDisconnect))
+                {
+                    context.Monitor.Log($"[EconomyModule] Piso {level} desocupado durante {context.Config.MineFloorCooldownMinutes}m. Descargando para regeneración.", LogLevel.Trace);
+                    mine.OnRemoved();
+                    MineShaft.activeMines.RemoveAt(i);
+                    MineFloorLastOccupiedUtc.Remove(level);
+                }
+            }
+
+            // 2. Mazmorra del Volcán
+            for (int i = VolcanoDungeon.activeLevels.Count - 1; i >= 0; i--)
+            {
+                VolcanoDungeon dungeon = VolcanoDungeon.activeLevels[i];
+                int level = dungeon.level.Value;
+                int farmersCount = dungeon.farmers.Count;
+
+                if (farmersCount > 0)
+                {
+                    VolcanoLevelLastOccupiedUtc[level] = nowUtc;
+                    continue;
+                }
+
+                if (!VolcanoLevelLastOccupiedUtc.TryGetValue(level, out DateTime lastOccupied))
+                {
+                    VolcanoLevelLastOccupiedUtc[level] = nowUtc;
+                    continue;
+                }
+
+                bool isPendingWarp = Game1.locationRequest?.Location is VolcanoDungeon reqVd && dungeon.NameOrUniqueName == reqVd.NameOrUniqueName;
+                bool hasDisconnect = disconnectLevels.Contains(dungeon.NameOrUniqueName);
+
+                if (MineCooldownLogic.ShouldUnloadFloor(level, farmersCount, lastOccupied, nowUtc, context.Config.MineFloorCooldownMinutes, isPendingWarp, hasDisconnect))
+                {
+                    context.Monitor.Log($"[EconomyModule] Volcán nivel {level} desocupado durante {context.Config.MineFloorCooldownMinutes}m. Descargando para regeneración.", LogLevel.Trace);
+                    dungeon.OnRemoved();
+                    VolcanoDungeon.activeLevels.RemoveAt(i);
+                    VolcanoLevelLastOccupiedUtc.Remove(level);
+                }
+            }
+        }
+
         public static void TriggerMineResetManual()
         {
             if (context == null) return;
@@ -140,6 +238,7 @@ namespace Pelican4Ever.Modules
                     if (mine.farmers.Any())
                         return false;
 
+                    MineFloorLastOccupiedUtc.Remove(mine.mineLevel);
                     mine.OnRemoved();
                     return true;
                 });
@@ -150,6 +249,7 @@ namespace Pelican4Ever.Modules
                     if (level.farmers.Any())
                         return false;
 
+                    VolcanoLevelLastOccupiedUtc.Remove(level.level.Value);
                     level.OnRemoved();
                     return true;
                 });
@@ -197,6 +297,18 @@ namespace Pelican4Ever.Modules
                 harmony.Patch(
                     original: AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.sellToStorePrice), new[] { typeof(long) }),
                     postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_SellToStorePrice))
+                );
+
+                // Parche en Farmer.DailyLuck para asignar suerte diaria individual por jugador (GAP-19)
+                harmony.Patch(
+                    original: AccessTools.PropertyGetter(typeof(Farmer), nameof(Farmer.DailyLuck)),
+                    prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DailyLuck))
+                );
+
+                // Parche en BuffManager.Apply para escalar la duración de buffs de comida y bebida al tiempo 1:1 (GAP-11)
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Apply)),
+                    prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerApply))
                 );
 
                 context?.Monitor.Log("[EconomyModule] Parches Harmony de economía y minas aplicados.", LogLevel.Trace);
@@ -264,6 +376,13 @@ namespace Pelican4Ever.Modules
 
         public static void Prefix_FarmerUpdate(Farmer __instance)
         {
+            // Bloquea el exploit vanilla de multijugador donde quedarse acostado en la cama sin desconectar
+            // regenera estamina y salud infinitas sorteando el presupuesto de Saciedad y el Spa (GAP-08).
+            if (__instance == Game1.player && __instance.isInBed.Value)
+            {
+                __instance.regenTimer = Math.Max(__instance.regenTimer, 500);
+            }
+
             // La piscina nativa tiene un temporizador swimTimer que cada 100ms da +1 Stamina si swimTimer < 0.
             // Para evitar que la piscina recupere energía ilimitada al doble, fijamos swimTimer = 100 si no queremos que sume nativamente.
             if (__instance == Game1.player && __instance.swimming.Value && __instance.timerSinceLastMovement > 700)
@@ -306,6 +425,43 @@ namespace Pelican4Ever.Modules
             {
                 __result = (int)Math.Max(1, Math.Round(__result * artisanMult));
             }
+        }
+
+        public const float BuffTimeScaleFactor = 600_000f / 7_000f; // ~85.714f (1 min real = 1 min juego)
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<Buff, object> ScaledBuffs = new();
+
+        public static bool Prefix_DailyLuck(Farmer __instance, ref double __result)
+        {
+            __result = IndividualLuckLogic.Calculate(
+                Game1.uniqueIDForThisGame,
+                Game1.Date.TotalDays,
+                __instance.UniqueMultiplayerID,
+                __instance.hasSpecialCharm
+            );
+            return false;
+        }
+
+        public static void Prefix_BuffManagerApply(Buff buff)
+        {
+            if (buff == null || buff.millisecondsDuration <= 0 || buff.millisecondsDuration == -2)
+                return;
+
+            if (ScaledBuffs.TryGetValue(buff, out _))
+                return;
+
+            if (IsCombatDebuff(buff))
+                return;
+
+            buff.millisecondsDuration = (int)Math.Round(buff.millisecondsDuration * BuffTimeScaleFactor);
+            ScaledBuffs.Add(buff, true);
+        }
+
+        private static bool IsCombatDebuff(Buff buff)
+        {
+            return buff.id is "12" or "13" or "14" or "17" or "19" or "20" or "21" or "25" or "26"
+                || buff.id.ToLowerInvariant().Contains("debuff")
+                || buff.id.ToLowerInvariant().Contains("slimed")
+                || buff.id.ToLowerInvariant().Contains("frozen");
         }
     }
 }

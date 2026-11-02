@@ -1,0 +1,111 @@
+{
+  "Format": "2.4.0",
+  "Changes": [
+    {
+      "LogName": "Habilitar compatibilidad de fauna y criaturas de NITV en las 16 residencias privadas de Pelican 4Ever",
+      "Action": "EditData",
+      "Target": "Data/Locations",
+      "When": {
+        "HasMod": "Nature.NatureInTheValley"
+      },
+      "Entries": {
+        "Pelican4Ever_Farm_01": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_02": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_03": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_04": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_05": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_06": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_07": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_08": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_09": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_10": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_11": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_12": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_13": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_14": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_15": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        },
+        "Pelican4Ever_Farm_16": {
+          "CustomFields": {
+            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
+            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+          }
+        }
+      }
+    }
+  ]
+}

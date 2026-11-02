@@ -51,9 +51,16 @@ namespace Pelican4Ever.Core.World
         /// <summary>Comportamientos del tipo de granja; los desconocidos se tratan como estándar.</summary>
         public static FarmTypeBehavior For(string? templateId)
         {
-            return !string.IsNullOrWhiteSpace(templateId) && ByTemplate.TryGetValue(templateId, out FarmTypeBehavior? behavior)
-                ? behavior
-                : FarmTypeBehavior.None;
+            if (string.IsNullOrWhiteSpace(templateId))
+                return FarmTypeBehavior.None;
+
+            if (ByTemplate.TryGetValue(templateId, out FarmTypeBehavior? behavior))
+                return behavior;
+
+            if (FarmGrassLogic.IsMeadowlands(templateId))
+                return FarmTypeBehavior.None;
+
+            return FarmTypeBehavior.None;
         }
     }
 }
