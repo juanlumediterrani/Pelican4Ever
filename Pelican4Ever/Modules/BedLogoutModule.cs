@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewValley;
@@ -167,6 +168,14 @@ namespace Pelican4Ever.Modules
                 record.RestedOnGameDay = Game1.Date.TotalDays;
                 record.LastActiveGameDay = Game1.Date.TotalDays;
                 record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                try
+                {
+                    context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+                }
+                catch (Exception ex)
+                {
+                    context.Monitor.Log($"[BedLogoutModule] Error al guardar ServerWorldState tras descanso del jugador {playerId}: {ex}", LogLevel.Warn);
+                }
                 context.Monitor.Log($"[BedLogoutModule] Descanso registrado para jugador {playerId} en día {Game1.Date.TotalDays}.", LogLevel.Info);
                 return;
             }
@@ -184,11 +193,11 @@ namespace Pelican4Ever.Modules
             try
             {
                 harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.answerDialogueAction)),
-                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_AnswerDialogueAction))
+                    original: AccessTools.Method(typeof(GameLocation), "startSleep"),
+                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_StartSleep))
                 );
 
-                context?.Monitor.Log("[BedLogoutModule] Harmony patch en GameLocation.answerDialogueAction aplicado.", LogLevel.Trace);
+                context?.Monitor.Log("[BedLogoutModule] Harmony patch en GameLocation.startSleep aplicado.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
@@ -236,50 +245,45 @@ namespace Pelican4Ever.Modules
             return result;
         }
 
-        public static bool Prefix_AnswerDialogueAction(string questionAndAnswer, ref bool __result)
+        public static bool Prefix_StartSleep(GameLocation __instance)
         {
-            if (questionAndAnswer == "Sleep_Yes")
+            // Si estamos en un servidor con Pelican 4Ever activo
+            if (Game1.IsMultiplayer && context != null)
             {
-                // Si estamos en un servidor con Pelican 4Ever activo
-                if (Game1.IsMultiplayer && context != null)
+                // Si es el propio Host quien duerme en la cama (TASK-804)
+                if (Context.IsMainPlayer)
                 {
-                    // Si es el propio Host quien duerme en la cama (TASK-804)
-                    if (Context.IsMainPlayer)
+                    HostRestResult hostRest = RestHostPlayer(triggeredFromApi: false);
+                    Game1.addHUDMessage(new HUDMessage(hostRest.Message, HUDMessage.newQuest_type));
+
+                    if (hostRest.ShouldDisconnectSession)
                     {
-                        HostRestResult hostRest = RestHostPlayer(triggeredFromApi: false);
-                        Game1.addHUDMessage(new HUDMessage(hostRest.Message, HUDMessage.newQuest_type));
-
-                        if (hostRest.ShouldDisconnectSession)
+                        DelayedAction.functionAfterDelay(() =>
                         {
-                            DelayedAction.functionAfterDelay(() =>
-                            {
-                                Game1.ExitToTitle();
-                            }, 1500);
-                        }
-
-                        __result = true;
-                        return false; // Cancela el startSleep() nativo
+                            Game1.ExitToTitle();
+                        }, 1500);
                     }
 
-                    // Cliente granjero: enviar mensaje al Host para registrar el descanso y salir al título
-                    context.Helper.Multiplayer.SendMessage(
-                        message: Game1.Date.TotalDays,
-                        messageType: BedLogoutMessageType,
-                        modIDs: new[] { context.Manifest.UniqueID },
-                        playerIDs: new[] { Game1.MasterPlayer.UniqueMultiplayerID }
-                    );
-
-                    Game1.addHUDMessage(new HUDMessage("Descanso registrado. Desconectando de forma segura...", HUDMessage.newQuest_type));
-
-                    // Salir al menú principal limpiamente tras 1.5s
-                    DelayedAction.functionAfterDelay(() =>
-                    {
-                        Game1.ExitToTitle();
-                    }, 1500);
-
-                    __result = true;
-                    return false; // Cancela el startSleep() nativo que pausaría/cerraría la sesión para todos
+                    return false; // Cancela el startSleep() nativo
                 }
+
+                // Cliente granjero: enviar mensaje al Host para registrar el descanso y salir al título
+                context.Helper.Multiplayer.SendMessage(
+                    message: Game1.Date.TotalDays,
+                    messageType: BedLogoutMessageType,
+                    modIDs: new[] { context.Manifest.UniqueID },
+                    playerIDs: new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                );
+
+                Game1.addHUDMessage(new HUDMessage("Descanso registrado. Desconectando de forma segura...", HUDMessage.newQuest_type));
+
+                // Salir al menú principal limpiamente tras 1.5s
+                DelayedAction.functionAfterDelay(() =>
+                {
+                    Game1.ExitToTitle();
+                }, 1500);
+
+                return false; // Cancela el startSleep() nativo que pausaría/cerraría la sesión para todos
             }
 
             return true;
