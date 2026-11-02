@@ -80,8 +80,19 @@ namespace Pelican4Ever.Modules
 
             context.Monitor.Log($"[DailyRolloverModule] Día iniciado: {Game1.Date} (TotalDays: {newDay}). Procesando consecuencias del día {endedDay}...", LogLevel.Info);
 
-            // Evaluar estado de descanso y penalizaciones para todos los jugadores registrados
+            // DayStarted también puede ocurrir al cargar el save. Solo procesa las consecuencias
+            // si el día cerrado todavía no está acreditado en el estado persistido.
             var worldState = context.WorldState;
+            if (!RolloverDayGuard.ShouldProcessEndedDay(worldState.LastRolloverGameDay, endedDay))
+            {
+                context.Monitor.Log($"[DailyRolloverModule] Día {endedDay} ya comprometido en el save; se omiten penalties y counters repetidos.", LogLevel.Trace);
+                warned10 = false;
+                rollover.ResetAfterDayStarted();
+                peerCloseDeadlineUtc = DateTimeOffset.MinValue;
+                forcedPeerDisconnect = false;
+                return;
+            }
+
             var cfg = context.Config;
             int restedCount = 0;
             int penalizedCount = 0;
