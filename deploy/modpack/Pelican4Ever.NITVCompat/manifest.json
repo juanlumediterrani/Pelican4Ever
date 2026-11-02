@@ -5,9 +5,10 @@
   "Description": "Habilita la aparición de fauna silvestre e insectos de Nature In The Valley y SH's Wild Animals en las 16 residencias privadas de Pelican 4Ever.",
   "UniqueID": "Pelican4Ever.NITVCompat",
   "MinimumApiVersion": "4.1.0",
+  "UpdateKeys": [ "GitHub:juanlumediterrani/Pelican-4Ever" ],
   "ContentPackFor": {
     "UniqueID": "Pathoschild.ContentPatcher",
-    "MinimumVersion": "1.30.0"
+    "MinimumVersion": "2.0.0"
   },
   "Dependencies": [
     {
