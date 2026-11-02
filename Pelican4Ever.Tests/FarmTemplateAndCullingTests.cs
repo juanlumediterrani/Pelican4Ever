@@ -136,5 +136,37 @@ namespace Pelican4Ever.Tests
             bool keep = LocationCullingLogic.ShouldKeepActive("Pelican4Ever_Farm_01", 0, 100L, online);
             Assert.False(keep);
         }
+
+        [Theory]
+        [InlineData("Standard", true, false, false)]
+        [InlineData("Foraging", true, true, false)]
+        [InlineData("Fishing", true, false, true)]
+        [InlineData("Beach", true, false, true)]
+        [InlineData("FourCorners", true, true, false)]
+        [InlineData("Mining", true, false, false)]
+        [InlineData("Combat", true, false, false)]
+        [InlineData("Ranching", true, false, false)]
+        public void FarmTemplateCatalog_ApplyNitvCustomFields_SetsCorrectBiomeTags(
+            string templateId,
+            bool expectOutside,
+            bool expectForest,
+            bool expectBeach)
+        {
+            var fields = new Dictionary<string, string>();
+            FarmTemplateCatalog.ApplyNitvCustomFields(fields, templateId);
+
+            Assert.Equal(expectOutside, fields.ContainsKey("Nature.NIV.Outside"));
+            Assert.Equal(expectForest, fields.ContainsKey("Nature.NIV.Forest"));
+            Assert.Equal(expectBeach, fields.ContainsKey("Nature.NIV.Beach"));
+            Assert.Equal("true", fields["Nature.NIV.Outside"]);
+            if (expectForest)
+            {
+                Assert.Equal("true", fields["Nature.NIV.Forest"]);
+            }
+            if (expectBeach)
+            {
+                Assert.Equal("true", fields["Nature.NIV.Beach"]);
+            }
+        }
     }
 }

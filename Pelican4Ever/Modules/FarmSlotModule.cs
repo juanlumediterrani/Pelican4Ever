@@ -61,7 +61,11 @@ namespace Pelican4Ever.Modules
 
             // Comandos de consola y chat
             ctx.Helper.ConsoleCommands.Add("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
-            ctx.Helper.Events.GameLoop.GameLaunched += (s, e) => RegisterChatCommands();
+            ctx.Helper.Events.GameLoop.GameLaunched += (s, e) =>
+            {
+                RegisterChatCommands();
+                ApplyNitvPatches(ctx.Harmony);
+            };
 
             // Mensajes y sincronización multijugador (en host y peones)
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
@@ -117,6 +121,8 @@ namespace Pelican4Ever.Modules
                                 Type = "StardewValley.Farm, Stardew Valley"
                             };
                         }
+                        hostFarmData.CustomFields ??= new Dictionary<string, string>();
+                        FarmTemplateCatalog.ApplyNitvCustomFields(hostFarmData.CustomFields, "Standard");
                     }
 
                     int count = context?.Config.FarmSlotCount ?? 16;
@@ -179,10 +185,14 @@ namespace Pelican4Ever.Modules
                                     slotData.CustomFields.TryAdd(kvp.Key, kvp.Value);
                                 }
                             }
+                            slotData.CustomFields ??= new Dictionary<string, string>();
+                            FarmTemplateCatalog.ApplyNitvCustomFields(slotData.CustomFields, template.Id);
                         }
                         else
                         {
                             context?.Monitor.Log($"[FarmSlotModule] Data/Locations no tiene '{template.LocationDataKey}' ni 'Farm_Standard'; {slotId} usará solo los peces por defecto.", LogLevel.Warn);
+                            slotData.CustomFields ??= new Dictionary<string, string>();
+                            FarmTemplateCatalog.ApplyNitvCustomFields(slotData.CustomFields, template.Id);
                         }
 
                         // TASK-Cave: Registrar la cueva privada instanciada para la residencia (Pelican4Ever_Farm_XX_Cave)
@@ -193,6 +203,8 @@ namespace Pelican4Ever.Modules
                             data[caveId] = caveData;
                         }
                         caveData.DisplayName ??= $"Cueva Parcela {i:D2}";
+                        caveData.CustomFields ??= new Dictionary<string, string>();
+                        caveData.CustomFields["Nature.NIV.Underground"] = "true";
                         if (caveData.CreateOnLoad == null)
                         {
                             caveData.CreateOnLoad = new CreateLocationData
@@ -310,6 +322,13 @@ namespace Pelican4Ever.Modules
                                 {
                                     annexData.CustomFields = new Dictionary<string, string>(typeData.CustomFields);
                                 }
+                                annexData.CustomFields ??= new Dictionary<string, string>();
+                                FarmTemplateCatalog.ApplyNitvCustomFields(annexData.CustomFields, annexTemplate.Id);
+                            }
+                            else
+                            {
+                                annexData.CustomFields ??= new Dictionary<string, string>();
+                                FarmTemplateCatalog.ApplyNitvCustomFields(annexData.CustomFields, annexTemplate.Id);
                             }
 
                             data[annex.AnnexId] = annexData;
@@ -4149,6 +4168,85 @@ namespace Pelican4Ever.Modules
                 }
                 kvp.Value.TileLocation = target;
                 cabin.objects.Add(target, kvp.Value);
+            }
+        }
+
+        private static void ApplyNitvPatches(Harmony harmony)
+        {
+            try
+            {
+                Type? nitvEntryType = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    if (string.Equals(asm.GetName().Name, "NatureInTheValley", StringComparison.OrdinalIgnoreCase))
+                    {
+                        nitvEntryType = asm.GetType("NatureInTheValley.NatureInTheValleyEntry");
+                        break;
+                    }
+                }
+
+                if (nitvEntryType == null)
+                    return;
+
+                var onWarpMethod = AccessTools.Method(nitvEntryType, "OnWarp", new[] { typeof(object), typeof(WarpedEventArgs) });
+                if (onWarpMethod != null)
+                {
+                    harmony.Patch(
+                        original: onWarpMethod,
+                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NiTV_OnWarp))
+                    );
+                    context?.Monitor.Log("[FarmSlotModule] Parche de concurrencia multijugador aplicado a Nature In The Valley (OnWarp).", LogLevel.Info);
+                }
+
+                var validLocationMethod = AccessTools.Method(nitvEntryType, "validLocation", new[] { typeof(GameLocation), typeof(string) });
+                if (validLocationMethod != null)
+                {
+                    harmony.Patch(
+                        original: validLocationMethod,
+                        postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_NiTV_ValidLocation))
+                    );
+                    context?.Monitor.Log("[FarmSlotModule] Parche de compatibilidad de hábitats aplicado a Nature In The Valley (validLocation).", LogLevel.Info);
+                }
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Advertencia al parchear Nature In The Valley: {ex}", LogLevel.Warn);
+            }
+        }
+
+        public static bool Prefix_NiTV_OnWarp(WarpedEventArgs eventArgs)
+        {
+            // Solo procesar OnWarp si el evento pertenece al jugador local.
+            // En multijugador SMAPI dispara Warped para todos los clientes;
+            // si no filtramos, el cambio de mapa de cualquier otro granjero
+            // borra la fauna y corrompe los spawns locales.
+            if (eventArgs != null && !eventArgs.IsLocalPlayer)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        public static void Postfix_NiTV_ValidLocation(GameLocation location, string code, ref bool __result)
+        {
+            if (__result) return;
+            if (location == null || string.IsNullOrEmpty(code)) return;
+
+            var customFields = location.GetData()?.CustomFields;
+            if (customFields == null) return;
+
+            // Criaturas de SH's Wild Animals o paquetes de fauna con nombres literales de bioma
+            if ((string.Equals(code, "Forest", StringComparison.OrdinalIgnoreCase) || string.Equals(code, "Woods", StringComparison.OrdinalIgnoreCase))
+                && customFields.ContainsKey("Nature.NIV.Forest"))
+            {
+                __result = true;
+                return;
+            }
+
+            if (string.Equals(code, "Beach", StringComparison.OrdinalIgnoreCase) && customFields.ContainsKey("Nature.NIV.Beach"))
+            {
+                __result = true;
+                return;
             }
         }
     }

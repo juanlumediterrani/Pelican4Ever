@@ -83,5 +83,27 @@ namespace Pelican4Ever.Core.World
 
             return Templates["Standard"];
         }
+
+        /// <summary>
+        /// Aplica los CustomFields oficiales requeridos por Nature In The Valley (NiTV)
+        /// según la plantilla temática de granja o anexo.
+        /// </summary>
+        public static void ApplyNitvCustomFields(IDictionary<string, string> customFields, string? templateId)
+        {
+            if (customFields == null) return;
+
+            customFields["Nature.NIV.Outside"] = "true";
+
+            if (string.Equals(templateId, "Foraging", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(templateId, "FourCorners", StringComparison.OrdinalIgnoreCase))
+            {
+                customFields["Nature.NIV.Forest"] = "true";
+            }
+            else if (string.Equals(templateId, "Fishing", StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(templateId, "Beach", StringComparison.OrdinalIgnoreCase))
+            {
+                customFields["Nature.NIV.Beach"] = "true";
+            }
+        }
     }
 }

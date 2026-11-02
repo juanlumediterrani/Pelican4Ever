@@ -2,107 +2,140 @@
   "Format": "2.4.0",
   "Changes": [
     {
-      "LogName": "Habilitar compatibilidad de fauna y criaturas de NITV en las 16 residencias privadas de Pelican 4Ever",
+      "LogName": "Habilitar compatibilidad de fauna y criaturas de NITV en las plantillas y residencias de Pelican 4Ever",
       "Action": "EditData",
       "Target": "Data/Locations",
       "When": {
         "HasMod": "Nature.NatureInTheValley"
       },
       "Entries": {
+        "Farm_Standard": {
+          "CustomFields": {
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_Forest": {
+          "CustomFields": {
+            "Nature.NIV.Forest": "true",
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_Riverland": {
+          "CustomFields": {
+            "Nature.NIV.Beach": "true",
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_Beach": {
+          "CustomFields": {
+            "Nature.NIV.Beach": "true",
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_FourCorners": {
+          "CustomFields": {
+            "Nature.NIV.Forest": "true",
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_Hilltop": {
+          "CustomFields": {
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_Wilderness": {
+          "CustomFields": {
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "Farm_MeadowlandsFarm": {
+          "CustomFields": {
+            "Nature.NIV.Outside": "true"
+          }
+        },
+        "FarmCave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
         "Pelican4Ever_Farm_01": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_02": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_03": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_04": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_05": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_06": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_07": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_08": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_09": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_10": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_11": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_12": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_13": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_14": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_15": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         },
         "Pelican4Ever_Farm_16": {
           "CustomFields": {
-            "w8AwA8w.NatureInTheValley/LocationType": "Farm",
-            "w8AwA8w.NatureInTheValley/AllowSpawns": "true"
+            "Nature.NIV.Outside": "true"
           }
         }
       }

@@ -41,19 +41,22 @@ El PR `#1` (`codex/dr4co-agent-sprite`) añade el pack cosmético en la carpeta 
 
 ## ⚙️ Mitigación de Colisiones y Ajustes de Configuración
 
-### 1. Parche de Concurrencia Multijugador (NITV Multiplayer Support)
-* **Motivo:** NITV vainilla mantiene una lista global de criaturas y calcula los spawns usando la posición del jugador anfitrión. En un servidor con 16 personas en mapas distintos, esto provoca que solo aparezcan criaturas donde esté el Host o un único jugador.
-* **Instalación:** Copiar la carpeta de `NITV Multiplayer Support` en el directorio `Mods/` tanto del Host como de los clientes.
+### 1. Parche de Concurrencia Multijugador y Aislamiento de Spawns
+* **Motivo:** En NITV vainilla, el evento `Player.Warped` de SMAPI se activa cuando cualquier jugador de la partida cambia de mapa. Al no verificar si el jugador es local, el cambio de mapa de un granjero provocaba que los clientes remotos recalculasen sus árboles y vaciasen su fauna activa (`ClearUnclaimedCreatures`).
+* **Solución nativa en Pelican 4Ever:** [`FarmSlotModule.cs`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/Pelican4Ever/Modules/FarmSlotModule.cs) incluye parches Harmony automáticos que interceptan `OnWarp` para aislar el ciclo exclusivamente al granjero local (`eventArgs.IsLocalPlayer`) y enrutar las etiquetas de bioma (`validLocation`) hacia `Forest` y `Beach`. No se requiere instalar librerías externas adicionales.
 
 ### 2. Aumento del Límite de Apariciones (*Spawn Cap*)
 En el archivo `config.json` generado por Nature In The Valley (`Mods/NatureInTheValley/config.json`):
 * Aumentar `MaxSpawnsPerLocation` (o multiplicador de densidad) a un factor de **2.5x o 3x**.
 * Esto asegura que cuando haya 16 granjeros activos recorriendo el Valle simultáneamente, todos encuentren fauna sin agotar la cuota global de la partida.
 
-### 3. Spawns en las 16 Residencias Privadas (`Pelican4Ever_Farm_01..16`)
-* Las criaturas de granja buscan por defecto la ubicación `"Farm"` (que en P4E es la Plaza Central del Host).
-* El pack incluido [`deploy/modpack/Pelican4Ever.NITVCompat`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/deploy/modpack/Pelican4Ever.NITVCompat) inyecta metadatos en `Data/Locations` para que las parcelas `Pelican4Ever_Farm_01` a `Pelican4Ever_Farm_16` hereden la etiqueta de granja activa para NITV.
-* Además, el módulo C# [`FarmSlotModule.cs`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/Pelican4Ever/Modules/FarmSlotModule.cs) propaga automáticamente los `CustomFields` de las plantillas de granja hacia todas las residencias y sus anexos adquiridos.
+### 3. Spawns en las 16 Residencias Privadas y Minimapas Anexos (40×32)
+* Las criaturas de NITV y SH's Wild Animals se clasifican mediante etiquetas oficiales de entorno en `Data/Locations`:
+  * `"Nature.NIV.Outside"`: Habilitado en las 16 parcelas privadas, todos los anexos perimetrales y la Plaza Central del Host.
+  * `"Nature.NIV.Forest"`: Inyectado dinámicamente en parcelas y anexos de Recolección (*Foraging*) y Cuatro Esquinas (*FourCorners*). Permite la aparición de fauna de bosque sin depender de superar 60 árboles.
+  * `"Nature.NIV.Beach"`: Inyectado dinámicamente en parcelas y anexos Fluviales (*Fishing*) y Costeros (*Beach*). Permite la aparición de fauna acuática y de litoral.
+  * `"Nature.NIV.Underground"`: Inyectado en las cuevas privadas de cada residencia (`Pelican4Ever_Farm_XX_Cave`) para habilitar criaturas subterráneas.
+* El pack Content Patcher [`deploy/modpack/Pelican4Ever.NITVCompat`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/deploy/modpack/Pelican4Ever.NITVCompat) y el módulo C# [`FarmSlotModule.cs`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/Pelican4Ever/Modules/FarmSlotModule.cs) mantienen sincronizadas estas propiedades en `Data/Locations`.
 
 ### 4. Dinámica con el Reloj en Tiempo Real 1:1 y Madrugada (*NightHold*)
 * Durante la **Madrugada continua (*NightHold*)**, entre las 01:50 y las 06:00 de la vida real, el reloj del juego permanece fijo en `2550`.
