@@ -36,7 +36,18 @@ namespace Pelican4Ever.Core.Players
             float fullBarHours)
         {
             float gain = CalculateStaminaGain(maxStamina, offlineDuration, fullBarHours);
-            return Math.Min((float)maxStamina, currentStamina + gain);
+            return ApplyGain(currentStamina, maxStamina, gain);
+        }
+
+        /// <summary>
+        /// Aplica una ganancia de estamina a la estamina actual sin superar MaxStamina.
+        /// </summary>
+        public static float ApplyGain(float currentStamina, int maxStamina, float gained)
+        {
+            if (gained <= 0f)
+                return currentStamina;
+
+            return Math.Min((float)maxStamina, currentStamina + gained);
         }
     }
 }

@@ -1,6 +1,8 @@
+using System;
 using Pelican4Ever.Core.World;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
+using StardewValley;
 
 namespace Pelican4Ever.Modules
 {
@@ -38,6 +40,15 @@ namespace Pelican4Ever.Modules
         {
             if (!Context.IsMainPlayer)
                 return;
+
+            if (Game1.player != null && context.WorldState.Players.TryGetValue(Game1.player.UniqueMultiplayerID, out var hostRecord))
+            {
+                hostRecord.LastSeenUtc = DateTimeOffset.UtcNow;
+                if (hostRecord.OfflineStaminaAnchorUtc == DateTimeOffset.MinValue)
+                {
+                    hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                }
+            }
 
             context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
             context.Monitor.Log("ServerWorldState guardado en la partida maestra.", LogLevel.Trace);

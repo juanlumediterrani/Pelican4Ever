@@ -111,5 +111,30 @@ namespace Pelican4Ever.Tests
             float gain = OfflineStaminaRegenLogic.CalculateStaminaGain(500, TimeSpan.FromHours(1), 2.0f);
             Assert.Equal(250.0f, gain, precision: 2);
         }
+
+        [Fact]
+        public void ApplyGain_PositiveGain_IncreasesStaminaUpToMax()
+        {
+            float result = OfflineStaminaRegenLogic.ApplyGain(currentStamina: 100f, maxStamina: 270, gained: 51f);
+            Assert.Equal(151f, result);
+
+            float clamped = OfflineStaminaRegenLogic.ApplyGain(currentStamina: 250f, maxStamina: 270, gained: 51f);
+            Assert.Equal(270f, clamped);
+        }
+
+        [Fact]
+        public void ApplyGain_ZeroOrNegativeGain_ReturnsCurrentStamina()
+        {
+            Assert.Equal(100f, OfflineStaminaRegenLogic.ApplyGain(100f, 270, 0f));
+            Assert.Equal(100f, OfflineStaminaRegenLogic.ApplyGain(100f, 270, -10f));
+        }
+
+        [Fact]
+        public void ApplyGain_WithNegativeStamina_RecoversCorrectly()
+        {
+            // Jugador con -15 de estamina recupera 51 -> 36
+            float result = OfflineStaminaRegenLogic.ApplyGain(currentStamina: -15f, maxStamina: 270, gained: 51f);
+            Assert.Equal(36f, result);
+        }
     }
 }

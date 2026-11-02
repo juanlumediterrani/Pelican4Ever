@@ -2110,6 +2110,15 @@ namespace Pelican4Ever.Modules
                         context.WorldState.Players[kvp.Key] = kvp.Value;
                     }
 
+                    if (!Context.IsMainPlayer && Game1.player != null)
+                    {
+                        var myDoor = context.WorldState.Doors.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+                        if (myDoor != null && !string.IsNullOrEmpty(myDoor.FarmSlotId))
+                        {
+                            Game1.player.homeLocation.Value = $"{myDoor.FarmSlotId}_Home";
+                        }
+                    }
+
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas, {context.WorldState.Annexes.Count} anexos).", LogLevel.Info);
                     RefreshSlotLocationData();
 
@@ -2549,6 +2558,7 @@ namespace Pelican4Ever.Modules
                                     };
                                     var playerRecord = worldState.GetOrCreatePlayer(myId, Game1.player.Name);
                                     playerRecord.FarmSlotId = door.DefaultSlotId;
+                                    Game1.player.homeLocation.Value = $"{door.DefaultSlotId}_Home";
                                 }
 
                                 Game1.addHUDMessage(new HUDMessage($"¡Residencia reclamada! Plantilla: {resolvedType}.", HUDMessage.newQuest_type));
@@ -2920,13 +2930,41 @@ namespace Pelican4Ever.Modules
 
             foreach (Building b in parentLocation.buildings)
             {
-                if (b != null && b.HasIndoorsName(name))
+                if (b == null) continue;
+
+                if (b.indoors.Value != null && string.Equals(b.indoors.Value.NameOrUniqueName, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    __result = b.indoors.Value;
+                    return false;
+                }
+
+                if (b.HasIndoorsName(name))
                 {
                     if (b.indoors.Value != null)
                     {
                         __result = b.indoors.Value;
                         return false;
                     }
+                }
+
+                // Si el destino es un interior de residencia de este slot (ej. Pelican4Ever_Farm_01_Home)
+                // y este es el edificio Farmhouse, asegurar su Cabin si indoors aún no está hidratado
+                if (name.EndsWith("_Home", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(parentLocation.NameOrUniqueName, name.Substring(0, name.Length - 5), StringComparison.OrdinalIgnoreCase)
+                    && (b.buildingType.Value.Contains("Farmhouse", StringComparison.OrdinalIgnoreCase) || b.GetIndoors() is Cabin))
+                {
+                    if (b.indoors.Value is Cabin existingCabin)
+                    {
+                        __result = existingCabin;
+                        return false;
+                    }
+                    var cabin = new Cabin("Maps\\FarmHouse");
+                    cabin.uniqueName.Value = name;
+                    cabin.IsFarm = true;
+                    b.indoors.Value = cabin;
+                    CleanAndArrangeResidenceInterior(cabin);
+                    __result = cabin;
+                    return false;
                 }
             }
 
@@ -3628,52 +3666,180 @@ namespace Pelican4Ever.Modules
             return new Point(template.MailboxTileX + 1, template.MailboxTileY + 2);
         }
 
+        /// <summary>
+        /// Resuelve y asegura la instancia de la cabaña (Cabin) asociada a un hueco de residencia o nombre de ubicación.
+        /// Funciona de forma segura tanto en el Host como en el Cliente sin duplicar ubicaciones en Game1.locations.
+        /// </summary>
+        public static Cabin? ResolveResidenceCabin(string locationOrSlotName, DoorAssignment? assignment = null)
+        {
+            if (string.IsNullOrWhiteSpace(locationOrSlotName))
+                return null;
+
+            string slotId = locationOrSlotName;
+            if (slotId.EndsWith("_Home", StringComparison.OrdinalIgnoreCase))
+            {
+                slotId = slotId.Substring(0, slotId.Length - 5);
+            }
+            else if (assignment != null && !string.IsNullOrEmpty(assignment.FarmSlotId))
+            {
+                slotId = assignment.FarmSlotId;
+            }
+
+            Farm? farm = Game1.getLocationFromName(slotId) as Farm;
+            if (farm == null && Context.IsMainPlayer)
+            {
+                farm = EnsureFarmSlotExists(slotId);
+            }
+
+            if (farm == null)
+                return null;
+
+            Building? farmhouse = farm.getBuildingByType("Farmhouse")
+                               ?? farm.buildings.FirstOrDefault(b => b.buildingType.Value.Contains("Farmhouse", StringComparison.OrdinalIgnoreCase));
+
+            Point entryDoor = farm.GetMainFarmHouseEntry();
+            Vector2 starterTile = farm.GetStarterFarmhouseLocation();
+
+            if (farmhouse == null)
+            {
+                farmhouse = new Building("Farmhouse", starterTile);
+                farmhouse.load();
+                farm.buildings.Add(farmhouse);
+            }
+
+            string cabinName = $"{slotId}_Home";
+            Cabin? cabin = farmhouse.GetIndoors() as Cabin;
+
+            if (cabin == null)
+            {
+                cabin = new Cabin("Maps\\FarmHouse");
+                cabin.uniqueName.Value = cabinName;
+                cabin.IsFarm = true;
+                farmhouse.indoors.Value = cabin;
+                farmhouse.nonInstancedIndoorsName.Value = null;
+            }
+
+            if (Game1.locations != null && Game1.locations.Contains(cabin))
+            {
+                Game1.locations.Remove(cabin);
+            }
+
+            CleanAndArrangeResidenceInterior(cabin);
+
+            int doorX = entryDoor.X != 0 ? entryDoor.X : (farmhouse.tileX.Value + farmhouse.humanDoor.X);
+            int doorY = entryDoor.Y != 0 ? entryDoor.Y : (farmhouse.tileY.Value + farmhouse.humanDoor.Y);
+
+            if (cabin.warps.Count == 0)
+            {
+                cabin.warps.Add(new Warp(3, 11, farm.NameOrUniqueName, doorX, doorY + 1, false));
+            }
+            else
+            {
+                cabin.warps[0].TargetName = farm.NameOrUniqueName;
+                cabin.warps[0].TargetX = doorX;
+                cabin.warps[0].TargetY = doorY + 1;
+            }
+            farmhouse.updateInteriorWarps();
+
+            return cabin;
+        }
+
         public static bool Prefix_ApplyWakeUpPosition(Farmer who)
         {
             try
             {
-                string? lastSleep = who.lastSleepLocation.Value;
-                GameLocation? lastSleepLoc = (!string.IsNullOrEmpty(lastSleep) && Game1.isLocationAccessible(lastSleep))
-                    ? Game1.getLocationFromName(lastSleep)
-                    : null;
+                // 1. Identificar si el jugador posee una residencia asignada
+                DoorAssignment? assignment = context?.WorldState?.Doors?.Values
+                    .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
 
-                GameLocation? disconnectLoc = Game1.getLocationFromName(who.disconnectLocation.Value);
+                string? assignedSlotId = assignment?.FarmSlotId;
+                if (string.IsNullOrEmpty(assignedSlotId))
+                {
+                    if (!string.IsNullOrEmpty(who.homeLocation.Value) && who.homeLocation.Value.StartsWith("Pelican4Ever_Farm_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        assignedSlotId = who.homeLocation.Value.EndsWith("_Home", StringComparison.OrdinalIgnoreCase)
+                            ? who.homeLocation.Value.Substring(0, who.homeLocation.Value.Length - 5)
+                            : who.homeLocation.Value;
+                    }
+                    else if (!string.IsNullOrEmpty(who.lastSleepLocation.Value) && who.lastSleepLocation.Value.StartsWith("Pelican4Ever_Farm_", StringComparison.OrdinalIgnoreCase))
+                    {
+                        assignedSlotId = who.lastSleepLocation.Value.EndsWith("_Home", StringComparison.OrdinalIgnoreCase)
+                            ? who.lastSleepLocation.Value.Substring(0, who.lastSleepLocation.Value.Length - 5)
+                            : who.lastSleepLocation.Value;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(assignedSlotId))
+                {
+                    who.homeLocation.Value = $"{assignedSlotId}_Home";
+                }
+
+                // 2. Intentar despertar en la ubicación de última desconexión si es el mismo día
+                string? discName = who.disconnectLocation.Value;
+                GameLocation? disconnectLoc = !string.IsNullOrEmpty(discName)
+                    ? (Game1.getLocationFromName(discName) ?? (discName.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) ? ResolveResidenceCabin(discName, assignment) : null))
+                    : null;
 
                 if (disconnectLoc != null && who.disconnectDay.Value == Game1.MasterPlayer.stats.DaysPlayed && !Game1.newDaySync.hasInstance())
                 {
                     who.currentLocation = disconnectLoc;
                     who.Position = who.disconnectPosition.Value;
                 }
-                else if (lastSleepLoc != null && lastSleepLoc.CanWakeUpHere(who))
-                {
-                    who.Position = Utility.PointToVector2(who.lastSleepPoint.Value) * 64f;
-                    who.currentLocation = lastSleepLoc;
-                    BedFurniture.ShiftPositionForBed(who);
-                }
                 else
                 {
-                    FarmHouse? farmHouse = null;
-                    if (!string.IsNullOrEmpty(who.homeLocation.Value))
-                    {
-                        farmHouse = Game1.getLocationFromName(who.homeLocation.Value) as FarmHouse;
-                    }
+                    // 3. Intentar despertar en la cama donde durmió
+                    string? lastSleep = who.lastSleepLocation.Value;
+                    GameLocation? lastSleepLoc = !string.IsNullOrEmpty(lastSleep)
+                        ? (Game1.getLocationFromName(lastSleep) ?? (lastSleep.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) ? ResolveResidenceCabin(lastSleep, assignment) : null))
+                        : null;
 
-                    if (farmHouse != null)
+                    if (lastSleepLoc != null && (lastSleepLoc.CanWakeUpHere(who) || lastSleepLoc is FarmHouse))
                     {
-                        who.currentLocation = farmHouse;
-                        who.Position = Utility.PointToVector2(farmHouse.GetPlayerBedSpot()) * 64f;
+                        who.currentLocation = lastSleepLoc;
+                        Point bedSpot = who.lastSleepPoint.Value;
+                        if (bedSpot == Point.Zero && lastSleepLoc is FarmHouse fh)
+                        {
+                            bedSpot = fh.GetPlayerBedSpot();
+                        }
+                        who.Position = Utility.PointToVector2(bedSpot) * 64f;
                         BedFurniture.ShiftPositionForBed(who);
                     }
                     else
                     {
-                        // Fallback de seguridad: ubicación accesible por defecto para evitar congelamiento de clientes
-                        GameLocation fallback = Game1.getLocationFromName("Farm")
-                                             ?? Game1.getLocationFromName("Town")
-                                             ?? Game1.locations.FirstOrDefault()
-                                             ?? new GameLocation("Maps\\Town", "Town");
+                        // 4. Intentar despertar en su FarmHouse / Cabin de residencia
+                        Cabin? homeCabin = !string.IsNullOrEmpty(assignedSlotId)
+                            ? ResolveResidenceCabin($"{assignedSlotId}_Home", assignment)
+                            : (!string.IsNullOrEmpty(who.homeLocation.Value) ? Game1.getLocationFromName(who.homeLocation.Value) as Cabin : null);
 
-                        who.currentLocation = fallback;
-                        who.Position = new Vector2(64f * 64f, 15f * 64f);
+                        FarmHouse? farmHouse = homeCabin
+                            ?? (!string.IsNullOrEmpty(who.homeLocation.Value) ? Game1.getLocationFromName(who.homeLocation.Value) as FarmHouse : null);
+
+                        if (farmHouse != null)
+                        {
+                            who.currentLocation = farmHouse;
+                            who.Position = Utility.PointToVector2(farmHouse.GetPlayerBedSpot()) * 64f;
+                            BedFurniture.ShiftPositionForBed(who);
+                        }
+                        else if (!string.IsNullOrEmpty(assignedSlotId) && Game1.getLocationFromName(assignedSlotId) is Farm assignedFarm)
+                        {
+                            // 5. Fallback a su propia granja privada (buzón / porche), ¡nunca al anfitrión!
+                            Point mailbox = GetResidenceTotemPoint(assignedSlotId, assignment?.FarmType);
+                            who.currentLocation = assignedFarm;
+                            who.Position = new Vector2(mailbox.X * 64f, mailbox.Y * 64f);
+                        }
+                        else
+                        {
+                            // 6. Fallback final solo si no tiene residencia ni slot conocido
+                            GameLocation fallback = Game1.getLocationFromName("Town")
+                                                 ?? Game1.getLocationFromName("Farm")
+                                                 ?? Game1.locations.FirstOrDefault()
+                                                 ?? new GameLocation("Maps\\Town", "Town");
+
+                            who.currentLocation = fallback;
+                            who.Position = fallback.NameOrUniqueName == "Town"
+                                ? new Vector2(42f * 64f, 56f * 64f)
+                                : new Vector2(64f * 64f, 15f * 64f);
+                        }
                     }
                 }
 

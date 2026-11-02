@@ -166,3 +166,27 @@ public class SatietyBudgetTests
         Assert.Equal((4, 0, 0, 0), (p.SatietyGameDay, p.SatietyUsed, p.WellFedBuffsUsed, p.SpaEnergyUsed));
     }
 }
+
+public class BedLogoutPayloadTests
+{
+    [Fact]
+    public void BedLogoutPayload_PropertiesHoldAssignedValues()
+    {
+        var payload = new BedLogoutPayload
+        {
+            GameDay = 15,
+            LocationName = "Pelican4Ever_Farm_03_Home",
+            BedTileX = 9,
+            BedTileY = 9,
+            PositionX = 9f * 64f,
+            PositionY = 9f * 64f
+        };
+
+        Assert.Equal(15, payload.GameDay);
+        Assert.Equal("Pelican4Ever_Farm_03_Home", payload.LocationName);
+        Assert.Equal(9, payload.BedTileX);
+        Assert.Equal(9, payload.BedTileY);
+        Assert.Equal(576f, payload.PositionX);
+        Assert.Equal(576f, payload.PositionY);
+    }
+}
