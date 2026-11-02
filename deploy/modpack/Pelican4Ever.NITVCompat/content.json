@@ -6,7 +6,7 @@
       "Action": "EditData",
       "Target": "Data/Locations",
       "When": {
-        "HasMod": "w8AwA8w.NatureInTheValley"
+        "HasMod": "Nature.NatureInTheValley"
       },
       "Entries": {
         "Pelican4Ever_Farm_01": {

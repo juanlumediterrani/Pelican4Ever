@@ -522,5 +522,22 @@ namespace Pelican4Ever.Tests
                 Assert.True(isBorder);
             }
         }
+
+        [Fact]
+        public void AnnexTemplates_FourCornersAndForaging_HaveValidThematicConfiguration()
+        {
+            var fc = AnnexTemplateCatalog.GetTemplate("FourCorners");
+            Assert.Equal("FourCorners", fc.Id);
+            Assert.True(fc.Behavior.FourCornersExtras);
+            Assert.Equal(40, fc.Width);
+            Assert.Equal(32, fc.Height);
+
+            var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
+            Assert.Equal("Foraging", foraging.Id);
+            Assert.True(foraging.Behavior.ForestForage);
+            Assert.True(foraging.Behavior.ForestStumps);
+            Assert.Equal(40, foraging.Width);
+            Assert.Equal(32, foraging.Height);
+        }
     }
 }

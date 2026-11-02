@@ -270,7 +270,7 @@ namespace Pelican4Ever.Framework
 
             // 8. Garantizar zonas de bonificación válidas y diseño meticuloso de cada minimapa (TASK-902)
             EnsureAnnexBonusZones(template, width, height, backLayer, bldLayer, frontLayer, pathsLayer, mainSheet, corridorTiles);
-            SmoothThematicAnnexBordersAndEntrances(template, side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles);
+            SmoothThematicAnnexBordersAndEntrances(template, side, width, height, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet, openingBorderTiles);
 
             return target;
         }
@@ -451,6 +451,7 @@ namespace Pelican4Ever.Framework
             Layer backLayer,
             Layer bldLayer,
             Layer frontLayer,
+            Layer alwaysFrontLayer,
             TileSheet? mainSheet,
             HashSet<(int X, int Y)> openingBorderTiles)
         {
@@ -634,6 +635,43 @@ namespace Pelican4Ever.Framework
                         }
                     }
                 }
+
+                // 1. Restaurar el dosel del cerezo en flor en AlwaysFront en el puente central (x=19..20, y=25):
+                // Los tiles 45 y 46 completan la copa circular sobre el risco, evitando que el risco en Front
+                // recorte indebidamente las flores rosadas y permitiendo pasar bajo el follaje orgánicamente.
+                SetTileIfValid(alwaysFrontLayer, mainSheet, 19, 25, 45);
+                SetTileIfValid(alwaysFrontLayer, mainSheet, 20, 25, 46);
+
+                // 2. Arreglo de superposición de capas en el desfiladero/rampa noroeste (x=10..13, y=4..5):
+                // Mover los bordes de risco (416, 441 a la derecha; 419, 444 a la izquierda) de Front a Buildings con Passable="F".
+                // Esto previene que cualquier risco en Front recorte indebidamente la copa de árboles colindantes.
+                if (frontLayer != null)
+                {
+                    if (frontLayer.Tiles[13, 4]?.TileIndex == 416)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, 13, 4, 416);
+                        SetPassableIfValid(bldLayer, 13, 4, false);
+                        frontLayer.Tiles[13, 4] = null;
+                    }
+                    if (frontLayer.Tiles[13, 5]?.TileIndex == 441)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, 13, 5, 441);
+                        SetPassableIfValid(bldLayer, 13, 5, false);
+                        frontLayer.Tiles[13, 5] = null;
+                    }
+                    if (frontLayer.Tiles[10, 4]?.TileIndex == 419)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, 10, 4, 419);
+                        SetPassableIfValid(bldLayer, 10, 4, false);
+                        frontLayer.Tiles[10, 4] = null;
+                    }
+                    if (frontLayer.Tiles[10, 5]?.TileIndex == 444)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, 10, 5, 444);
+                        SetPassableIfValid(bldLayer, 10, 5, false);
+                        frontLayer.Tiles[10, 5] = null;
+                    }
+                }
             }
             else if (string.Equals(id, "Foraging", StringComparison.OrdinalIgnoreCase))
             {
@@ -646,6 +684,48 @@ namespace Pelican4Ever.Framework
                         {
                             if (16 < frontLayer.LayerHeight) frontLayer.Tiles[x, 16] = null;
                             if (17 < frontLayer.LayerHeight) frontLayer.Tiles[x, 17] = null;
+                        }
+                    }
+                }
+
+                // Componer los bordes del camino entre los árboles en la entrada oeste (side == East):
+                // En lugar de un corte lineal y abrupto a través del muro vegetal, se esculpen los contornos
+                // del dosel arbóreo en AlwaysFront con franjas colgantes naturales (968) en el dintel superior (y=15),
+                // copas redondeadas (1043) en el límite inferior (y=18) y acabado suave hacia el interior.
+                // Asimismo, en Back se sustituyen los cortes de tierra amarilla artificial en el borde (227, 228)
+                // por hierba de bosque frondosa (175) para que el sendero se integre armónicamente.
+                if (side == AnnexSide.East)
+                {
+                    // Dintel superior del túnel arbóreo en y=15 (AlwaysFront): hojas colgantes naturales
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 0, 15, 968);
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 1, 15, 968);
+                    if (alwaysFrontLayer != null && (alwaysFrontLayer.Tiles[2, 15]?.TileIndex == 946 || alwaysFrontLayer.Tiles[2, 15] == null))
+                    {
+                        SetTileIfValid(alwaysFrontLayer, mainSheet, 2, 15, 968);
+                    }
+
+                    // Base inferior del túnel arbóreo en y=18 (AlwaysFront): copas redondeadas naturales
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 0, 18, 1043);
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 1, 18, 1043);
+                    if (alwaysFrontLayer != null && (alwaysFrontLayer.Tiles[2, 18]?.TileIndex == 946 || alwaysFrontLayer.Tiles[2, 18] == null))
+                    {
+                        SetTileIfValid(alwaysFrontLayer, mainSheet, 2, 18, 1043);
+                    }
+
+                    // Suelo orgánico en Back: reemplazar tierra amarilla en x=0..1 por hierba de bosque auténtica (175)
+                    for (int x = 0; x <= 1; x++)
+                    {
+                        for (int y = 16; y <= 17; y++)
+                        {
+                            int? curBack = backLayer.Tiles[x, y]?.TileIndex;
+                            if (curBack == 227 || curBack == 228 || curBack == 587)
+                            {
+                                SetTileIfValid(backLayer, mainSheet, x, y, 175);
+                                if (backLayer.Tiles[x, y] != null)
+                                {
+                                    backLayer.Tiles[x, y].Properties["Type"] = "Grass";
+                                }
+                            }
                         }
                     }
                 }
