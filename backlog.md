@@ -466,8 +466,8 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
 - [x] **TASK-905: Adquirir un anexo**
   * **Análisis Técnico:**
     - Diálogo interactivo `ShowBuyAnnexDialog` al intentar cruzar una salida libre sin anexo o al interactuar con ella mediante botón de acción [E] o clic del cursor.
-    - Menú dinámico que lista las 7 plantillas temáticas con sus precios en oro, validando fondos antes de confirmar la compra.
-    - Lógica de validación pura en `Pelican4Ever.Core.World.AnnexPurchaseLogic` (testeada unitariamente): valida propiedad de la residencia, lado libre, ausencia de anexo previo, existencia de plantilla, saldo suficiente en monedero individual (`useSeparateWallets`) y límite configurable de anexos por residencia (`MaxAnnexesPerResidence` en `config.json`, por defecto 2).
+    - Menú dinámico que lista las 7 plantillas temáticas con precios progresivos según el número de anexos previos de la residencia (tarifa reducida al 40% para el primer mapa: 10.000g–14.000g, y precio normal completo al 100% para el segundo minimapa: 25.000g–35.000g, configurable mediante `FirstAnnexPriceMultiplier` y `SecondAnnexPriceMultiplier`).
+    - Lógica de validación pura en `Pelican4Ever.Core.World.AnnexPurchaseLogic` (testeada unitariamente): valida propiedad de la residencia, lado libre, ausencia de anexo previo, existencia de plantilla, cálculo escalonado de precios según anexos previos, saldo suficiente en monedero individual (`useSeparateWallets`) y límite configurable de anexos por residencia (`MaxAnnexesPerResidence` en `config.json`, por defecto 2).
     - Descuento del precio con `DailyRolloverModule.SetFarmerMoney`, provisión inmediata de la ubicación física con `EnsureAnnexLocation` y sincronización multijugador (`ModMessages.BuyAnnexRequest` y `BroadcastDoorsSync`) sin requerir reiniciar el servidor.
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**

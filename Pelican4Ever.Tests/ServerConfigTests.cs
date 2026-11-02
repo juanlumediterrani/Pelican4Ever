@@ -59,7 +59,9 @@ public class ServerConfigTests
             SittingRegenSeconds = -1,
             MineFloorCooldownMinutes = -5,
             OfflineRegenFullBarHours = -2.0f,
-            TravelingCartClosingTime = 2800
+            TravelingCartClosingTime = 2800,
+            FirstAnnexPriceMultiplier = -0.1f,
+            SecondAnnexPriceMultiplier = -0.5f
         };
 
         var errors = config.Validate();
@@ -67,6 +69,8 @@ public class ServerConfigTests
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.MineFloorCooldownMinutes)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.OfflineRegenFullBarHours)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.TravelingCartClosingTime)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.FirstAnnexPriceMultiplier)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.SecondAnnexPriceMultiplier)));
     }
 
     [Fact]

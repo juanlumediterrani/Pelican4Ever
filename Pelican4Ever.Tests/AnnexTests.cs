@@ -373,6 +373,52 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexTemplateCatalog_NormalPrices_AreRestored()
+        {
+            Assert.Equal(25000, AnnexTemplateCatalog.GetTemplate("Standard").BasePriceGold);
+            Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("Fishing").BasePriceGold);
+            Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("Foraging").BasePriceGold);
+            Assert.Equal(35000, AnnexTemplateCatalog.GetTemplate("Mining").BasePriceGold);
+            Assert.Equal(35000, AnnexTemplateCatalog.GetTemplate("Combat").BasePriceGold);
+            Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("FourCorners").BasePriceGold);
+            Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("Ranching").BasePriceGold);
+        }
+
+        [Theory]
+        [InlineData("Standard", 10000, 25000)]
+        [InlineData("Fishing", 12000, 30000)]
+        [InlineData("Foraging", 12000, 30000)]
+        [InlineData("Mining", 14000, 35000)]
+        [InlineData("Combat", 14000, 35000)]
+        [InlineData("FourCorners", 12000, 30000)]
+        [InlineData("Ranching", 12000, 30000)]
+        public void CalculatePrice_FirstAnnexHasDiscount_SecondAnnexFullPrice(
+            string templateId,
+            int expectedFirstPrice,
+            int expectedSecondPrice)
+        {
+            // El primer minimapa (0 anexos previos) cuesta bastante menos (40% del precio base)
+            int firstPrice = AnnexPurchaseLogic.CalculatePrice(templateId, existingAnnexCount: 0);
+            Assert.Equal(expectedFirstPrice, firstPrice);
+
+            // El segundo minimapa (1 anexo previo) cuesta el precio normal completo (100% del precio base)
+            int secondPrice = AnnexPurchaseLogic.CalculatePrice(templateId, existingAnnexCount: 1);
+            Assert.Equal(expectedSecondPrice, secondPrice);
+            Assert.True(firstPrice < secondPrice);
+        }
+
+        [Fact]
+        public void CalculatePrice_CustomMultipliers_CalculatesAccurately()
+        {
+            var template = AnnexTemplateCatalog.GetTemplate("Standard"); // Base 25,000g
+            int price50 = AnnexPurchaseLogic.CalculatePrice(template, existingAnnexCount: 0, firstMultiplier: 0.50f);
+            Assert.Equal(12500, price50);
+
+            int price150 = AnnexPurchaseLogic.CalculatePrice(template, existingAnnexCount: 1, secondMultiplier: 1.50f);
+            Assert.Equal(37500, price150);
+        }
+
+        [Fact]
         public void AnnexPurchaseLogic_Task905_ValidatesOwnerFundsAndFreeSides()
         {
             var worldState = new ServerWorldState();
@@ -400,10 +446,11 @@ namespace Pelican4Ever.Tests
             Assert.False(resSideNotFree.Success);
             Assert.Equal(AnnexPurchaseRejection.SideNotFree, resSideNotFree.Rejection);
 
-            // 3. Rechazo por fondos insuficientes
-            int fishingPrice = AnnexTemplateCatalog.GetTemplate("Fishing").BasePriceGold; // 30,000g
+            // 3. Rechazo por fondos insuficientes para el primer anexo (Fishing base 30k * 0.40 = 12k)
+            int firstFishingPrice = AnnexPurchaseLogic.CalculatePrice("Fishing", 0);
+            Assert.Equal(12000, firstFishingPrice);
             var resNoFunds = AnnexPurchaseLogic.ValidateAndPurchase(
-                ownerId, slotId, AnnexSide.North, "Fishing", fishingPrice - 1, residenceDoor, freeSides, worldState);
+                ownerId, slotId, AnnexSide.North, "Fishing", firstFishingPrice - 1, residenceDoor, freeSides, worldState);
             Assert.False(resNoFunds.Success);
             Assert.Equal(AnnexPurchaseRejection.InsufficientFunds, resNoFunds.Rejection);
 
@@ -413,7 +460,7 @@ namespace Pelican4Ever.Tests
             Assert.False(resUnknownTpl.Success);
             Assert.Equal(AnnexPurchaseRejection.UnknownTemplate, resUnknownTpl.Rejection);
 
-            // 5. Compra exitosa
+            // 5. Compra exitosa del PRIMER anexo (12.000g)
             int initialMoney = 50000;
             var resSuccess = AnnexPurchaseLogic.ValidateAndPurchase(
                 ownerId, slotId, AnnexSide.North, "Fishing", initialMoney, residenceDoor, freeSides, worldState);
@@ -423,7 +470,8 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Pelican4Ever_Annex_01_North", resSuccess.Assignment!.AnnexId);
             Assert.Equal("Fishing", resSuccess.Assignment.TemplateId);
             Assert.Equal(ownerId, resSuccess.Assignment.OwnerId);
-            Assert.Equal(initialMoney - fishingPrice, resSuccess.RemainingPlayerMoney);
+            Assert.Equal(firstFishingPrice, resSuccess.PricePaid);
+            Assert.Equal(initialMoney - firstFishingPrice, resSuccess.RemainingPlayerMoney);
 
             // Añadir la asignación al estado
             worldState.Annexes[resSuccess.Assignment.AnnexId] = resSuccess.Assignment;
@@ -434,17 +482,22 @@ namespace Pelican4Ever.Tests
             Assert.False(resAlreadyExists.Success);
             Assert.Equal(AnnexPurchaseRejection.AnnexAlreadyExists, resAlreadyExists.Rejection);
 
-            // 7. Compra del segundo lado libre (Este)
+            // 7. Compra del SEGUNDO lado libre (Este) -> Tarifa normal completa (Mining base 35k * 1.0 = 35k)
+            int secondMiningPrice = AnnexPurchaseLogic.CalculatePrice("Mining", 1);
+            Assert.Equal(35000, secondMiningPrice);
             var resSecond = AnnexPurchaseLogic.ValidateAndPurchase(
                 ownerId, slotId, AnnexSide.East, "Mining", 100000, residenceDoor, freeSides, worldState, maxAnnexesPerResidence: 2);
             Assert.True(resSecond.Success);
+            Assert.Equal(secondMiningPrice, resSecond.PricePaid);
+            Assert.Equal(100000 - secondMiningPrice, resSecond.RemainingPlayerMoney);
             worldState.Annexes[resSecond.Assignment!.AnnexId] = resSecond.Assignment;
 
             // 8. Rechazo por alcanzar el máximo de anexos
+            var freeSidesWithSouth = new[] { AnnexSide.North, AnnexSide.East, AnnexSide.South };
             var resMaxReached = AnnexPurchaseLogic.ValidateAndPurchase(
-                ownerId, slotId, AnnexSide.East, "Mining", 100000, residenceDoor, freeSides, worldState, maxAnnexesPerResidence: 2);
+                ownerId, slotId, AnnexSide.South, "Mining", 100000, residenceDoor, freeSidesWithSouth, worldState, maxAnnexesPerResidence: 2);
             Assert.False(resMaxReached.Success);
-            Assert.Equal(AnnexPurchaseRejection.AnnexAlreadyExists, resMaxReached.Rejection);
+            Assert.Equal(AnnexPurchaseRejection.MaxAnnexesReached, resMaxReached.Rejection);
         }
 
         [Fact]

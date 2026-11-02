@@ -136,6 +136,12 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Límite máximo de anexos adquiribles por cada residencia (por defecto 2, uno por cada salida libre).</summary>
         public int MaxAnnexesPerResidence { get; set; } = 2;
 
+        /// <summary>Multiplicador de precio para el primer anexo temático de una residencia (por defecto 0.40 = 40% del precio base).</summary>
+        public float FirstAnnexPriceMultiplier { get; set; } = 0.40f;
+
+        /// <summary>Multiplicador de precio para el segundo anexo temático de una residencia (por defecto 1.00 = 100% del precio base normal).</summary>
+        public float SecondAnnexPriceMultiplier { get; set; } = 1.00f;
+
         // ─────────────────────────── Panel de Administración y API REST ───────────────────────────
 
         /// <summary>Valor por defecto inseguro del token; el servidor HTTP rechazará arrancar si no se cambia (TASK-803).</summary>
@@ -243,6 +249,10 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
             if (MaxAnnexesPerResidence is < 0 or > 3)
                 errors.Add($"{nameof(MaxAnnexesPerResidence)} debe estar entre 0 y 3.");
+            if (FirstAnnexPriceMultiplier < 0)
+                errors.Add($"{nameof(FirstAnnexPriceMultiplier)} no puede ser negativo.");
+            if (SecondAnnexPriceMultiplier < 0)
+                errors.Add($"{nameof(SecondAnnexPriceMultiplier)} no puede ser negativo.");
             if (AdminApiPort is < 1024 or > 65535)
                 errors.Add($"{nameof(AdminApiPort)} debe situarse entre 1024 y 65535.");
             if (FestivalWindowStart >= FestivalWindowEnd || FestivalWindowEnd > 2550)

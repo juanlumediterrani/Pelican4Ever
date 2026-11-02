@@ -43,7 +43,7 @@ namespace Pelican4Ever.Core.World
                 "Standard",
                 "Maps/Pelican4Ever_Annex_Standard",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 25000)
+                25000,
                 "Farm_Standard",
                 "Maps/Farm",
                 10, 20,
@@ -55,7 +55,7 @@ namespace Pelican4Ever.Core.World
                 "Riverland",
                 "Maps/Pelican4Ever_Annex_Fishing",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 30000)
+                30000,
                 "Farm_Riverland",
                 "Maps/Farm_Fishing",
                 16, 18,
@@ -68,7 +68,7 @@ namespace Pelican4Ever.Core.World
                 "Forest",
                 "Maps/Pelican4Ever_Annex_Foraging",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 30000)
+                30000,
                 "Farm_Forest",
                 "Maps/Farm_Foraging",
                 0, 18,
@@ -80,7 +80,7 @@ namespace Pelican4Ever.Core.World
                 "Hilltop",
                 "Maps/Pelican4Ever_Annex_Mining",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 35000)
+                35000,
                 "Farm_Hilltop",
                 "Maps/Farm_Mining",
                 0, 24,
@@ -92,7 +92,7 @@ namespace Pelican4Ever.Core.World
                 "Wilderness",
                 "Maps/Pelican4Ever_Annex_Combat",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 35000)
+                35000,
                 "Farm_Wilderness",
                 "Maps/Farm_Combat",
                 10, 18,
@@ -104,7 +104,7 @@ namespace Pelican4Ever.Core.World
                 "FourCorners",
                 "Maps/Pelican4Ever_Annex_FourCorners",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 30000)
+                30000,
                 "Farm_FourCorners",
                 "Maps/Farm_FourCorners",
                 20, 20,
@@ -116,7 +116,7 @@ namespace Pelican4Ever.Core.World
                 "MeadowlandsFarm",
                 "Maps/Pelican4Ever_Annex_Ranching",
                 40, 32,
-                0, // PARCHE TEMPORAL TEST: 0g (antes 30000)
+                30000,
                 "Farm_MeadowlandsFarm",
                 "Maps/Farm_Ranching",
                 12, 18,

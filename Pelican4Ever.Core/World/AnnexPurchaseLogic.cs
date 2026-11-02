@@ -40,7 +40,8 @@ namespace Pelican4Ever.Core.World
         bool Success,
         AnnexPurchaseRejection Rejection,
         AnnexAssignment? Assignment,
-        int RemainingPlayerMoney
+        int RemainingPlayerMoney,
+        int PricePaid = 0
     );
 
     /// <summary>
@@ -48,6 +49,40 @@ namespace Pelican4Ever.Core.World
     /// </summary>
     public static class AnnexPurchaseLogic
     {
+        /// <summary>Multiplicador de precio por defecto para el primer anexo adquirido por una residencia (40% del precio base).</summary>
+        public const float DefaultFirstAnnexMultiplier = 0.40f;
+
+        /// <summary>Multiplicador de precio por defecto para el segundo anexo adquirido por una residencia (100% del precio base).</summary>
+        public const float DefaultSecondAnnexMultiplier = 1.00f;
+
+        /// <summary>
+        /// Calcula el precio en oro de un anexo según la plantilla y el número de anexos previos que ya posee la residencia.
+        /// El primer mapa cuesta bastante menos que el segundo (tarifa reducida para el primer anexo).
+        /// </summary>
+        public static int CalculatePrice(
+            AnnexTemplate template,
+            int existingAnnexCount,
+            float firstMultiplier = DefaultFirstAnnexMultiplier,
+            float secondMultiplier = DefaultSecondAnnexMultiplier)
+        {
+            if (template == null) return 0;
+            float multiplier = existingAnnexCount <= 0 ? firstMultiplier : secondMultiplier;
+            return Math.Max(0, (int)Math.Round(template.BasePriceGold * multiplier));
+        }
+
+        /// <summary>
+        /// Calcula el precio en oro de un anexo según el ID de plantilla y el número de anexos previos que ya posee la residencia.
+        /// </summary>
+        public static int CalculatePrice(
+            string templateId,
+            int existingAnnexCount,
+            float firstMultiplier = DefaultFirstAnnexMultiplier,
+            float secondMultiplier = DefaultSecondAnnexMultiplier)
+        {
+            AnnexTemplate template = AnnexTemplateCatalog.GetTemplate(templateId);
+            return CalculatePrice(template, existingAnnexCount, firstMultiplier, secondMultiplier);
+        }
+
         /// <summary>
         /// Valida la adquisición de un anexo temático y genera la asignación si procede.
         /// </summary>
@@ -60,7 +95,9 @@ namespace Pelican4Ever.Core.World
             DoorAssignment? residenceDoor,
             IReadOnlyCollection<AnnexSide> freeSides,
             ServerWorldState worldState,
-            int maxAnnexesPerResidence = 2)
+            int maxAnnexesPerResidence = 2,
+            float firstAnnexMultiplier = DefaultFirstAnnexMultiplier,
+            float secondAnnexMultiplier = DefaultSecondAnnexMultiplier)
         {
             if (residenceDoor == null)
             {
@@ -82,7 +119,8 @@ namespace Pelican4Ever.Core.World
                 return new AnnexPurchaseResult(false, AnnexPurchaseRejection.AnnexAlreadyExists, null, playerMoney);
             }
 
-            if (worldState.GetAnnexesForResidence(residenceSlotId).Count >= maxAnnexesPerResidence)
+            int existingAnnexesCount = worldState.GetAnnexesForResidence(residenceSlotId).Count;
+            if (existingAnnexesCount >= maxAnnexesPerResidence)
             {
                 return new AnnexPurchaseResult(false, AnnexPurchaseRejection.MaxAnnexesReached, null, playerMoney);
             }
@@ -93,9 +131,10 @@ namespace Pelican4Ever.Core.World
             }
 
             AnnexTemplate template = AnnexTemplateCatalog.GetTemplate(templateId);
-            if (playerMoney < template.BasePriceGold)
+            int price = CalculatePrice(template, existingAnnexesCount, firstAnnexMultiplier, secondAnnexMultiplier);
+            if (playerMoney < price)
             {
-                return new AnnexPurchaseResult(false, AnnexPurchaseRejection.InsufficientFunds, null, playerMoney);
+                return new AnnexPurchaseResult(false, AnnexPurchaseRejection.InsufficientFunds, null, playerMoney, price);
             }
 
             string annexId = ServerWorldState.BuildAnnexId(residenceSlotId, side);
@@ -113,7 +152,8 @@ namespace Pelican4Ever.Core.World
                 Success: true,
                 Rejection: AnnexPurchaseRejection.None,
                 Assignment: assignment,
-                RemainingPlayerMoney: playerMoney - template.BasePriceGold
+                RemainingPlayerMoney: playerMoney - price,
+                PricePaid: price
             );
         }
     }

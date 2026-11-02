@@ -30,6 +30,8 @@
   "RequireClientMod": true,
   "FarmSlotCount": 16,
   "MaxAnnexesPerResidence": 2,
+  "FirstAnnexPriceMultiplier": 0.4,
+  "SecondAnnexPriceMultiplier": 1.0,
   "AdminApiPort": 8085,
   "AdminApiToken": "CAMBIA-ESTE-TOKEN",
   "AdminApiBindAllInterfaces": false,

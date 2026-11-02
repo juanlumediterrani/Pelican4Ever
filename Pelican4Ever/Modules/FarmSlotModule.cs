@@ -2271,7 +2271,9 @@ namespace Pelican4Ever.Modules
                 residenceDoor,
                 freeSides,
                 worldState,
-                maxAnnexes
+                maxAnnexes,
+                context.Config.FirstAnnexPriceMultiplier,
+                context.Config.SecondAnnexPriceMultiplier
             );
 
             if (!result.Success || result.Assignment == null)
@@ -2311,7 +2313,7 @@ namespace Pelican4Ever.Modules
             }
 
             AnnexTemplate template = AnnexTemplateCatalog.GetTemplate(templateId);
-            context.Monitor.Log($"[FarmSlotModule] Anexo {result.Assignment.AnnexId} ({template.DisplayName}) adquirido por {playerId}.", LogLevel.Info);
+            context.Monitor.Log($"[FarmSlotModule] Anexo {result.Assignment.AnnexId} ({template.DisplayName}) adquirido por {playerId} por {result.PricePaid:N0}g.", LogLevel.Info);
 
             if (playerId == Game1.player.UniqueMultiplayerID)
             {
@@ -2624,8 +2626,9 @@ namespace Pelican4Ever.Modules
         /// </summary>
         public static void ShowBuyAnnexDialog(string residenceSlotId, AnnexSide side)
         {
-            if (context == null || Game1.currentLocation == null) return;
-            var worldState = context.WorldState;
+            var ctx = context;
+            if (ctx == null || Game1.currentLocation == null) return;
+            var worldState = ctx.WorldState;
 
             long myId = Game1.player.UniqueMultiplayerID;
             var doorAssignment = worldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == residenceSlotId);
@@ -2640,11 +2643,16 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
+            int existingAnnexesCount = worldState.GetAnnexesForResidence(residenceSlotId).Count;
+            float firstMultiplier = ctx.Config.FirstAnnexPriceMultiplier;
+            float secondMultiplier = ctx.Config.SecondAnnexPriceMultiplier;
+
             var choices = new List<Response>();
             foreach (var kvp in AnnexTemplateCatalog.Templates)
             {
                 AnnexTemplate t = kvp.Value;
-                choices.Add(new Response(t.Id, $"{t.DisplayName} ({t.BasePriceGold:N0}g)"));
+                int price = AnnexPurchaseLogic.CalculatePrice(t, existingAnnexesCount, firstMultiplier, secondMultiplier);
+                choices.Add(new Response(t.Id, $"{t.DisplayName} ({price:N0}g)"));
             }
             choices.Add(new Response("Cancel", "Cancelar"));
 
@@ -2656,27 +2664,32 @@ namespace Pelican4Ever.Modules
                 _ => side.ToString()
             };
 
+            string tierDesc = existingAnnexesCount == 0 ? "Primer anexo (Tarifa reducida)" : "Segundo anexo";
+
             QuestionDialog.Ask(
-                $"Salida {sideName}: Espacio disponible para ampliación de granja.\n¿Deseas adquirir un anexo privado?",
+                $"Salida {sideName}: Espacio disponible para ampliación de granja [{tierDesc}].\n¿Deseas adquirir un anexo privado?",
                 choices.ToArray(),
                 (who, whichAnswer) =>
                 {
                     if (whichAnswer != "Cancel" && AnnexTemplateCatalog.Templates.TryGetValue(whichAnswer, out AnnexTemplate? selectedTemplate))
                     {
-                        if (Game1.player.Money < selectedTemplate.BasePriceGold)
+                        int currentExisting = worldState.GetAnnexesForResidence(residenceSlotId).Count;
+                        int price = AnnexPurchaseLogic.CalculatePrice(selectedTemplate, currentExisting, firstMultiplier, secondMultiplier);
+
+                        if (Game1.player.Money < price)
                         {
-                            Game1.drawObjectDialogue($"No tienes suficiente oro para adquirir {selectedTemplate.DisplayName}.\nPrecio: {selectedTemplate.BasePriceGold:N0}g (tienes {Game1.player.Money:N0}g).");
+                            Game1.drawObjectDialogue($"No tienes suficiente oro para adquirir {selectedTemplate.DisplayName}.\nPrecio: {price:N0}g (tienes {Game1.player.Money:N0}g).");
                             return;
                         }
 
                         Response[] confirmChoices = new[]
                         {
-                            new Response("Yes", $"Sí, adquirir ({selectedTemplate.BasePriceGold:N0}g)"),
+                            new Response("Yes", $"Sí, adquirir ({price:N0}g)"),
                             new Response("No", "No por ahora")
                         };
 
                         QuestionDialog.Ask(
-                            $"¿Confirmas la compra de '{selectedTemplate.DisplayName}' para la salida {sideName} por {selectedTemplate.BasePriceGold:N0}g?",
+                            $"¿Confirmas la compra de '{selectedTemplate.DisplayName}' para la salida {sideName} por {price:N0}g?",
                             confirmChoices,
                             (w, a) =>
                             {
@@ -2688,7 +2701,7 @@ namespace Pelican4Ever.Modules
                                     }
                                     else
                                     {
-                                        context.Helper.Multiplayer.SendMessage(
+                                        ctx.Helper.Multiplayer.SendMessage(
                                             new BuyAnnexPayload
                                             {
                                                 ResidenceSlotId = residenceSlotId,
@@ -2696,7 +2709,7 @@ namespace Pelican4Ever.Modules
                                                 TemplateId = selectedTemplate.Id
                                             },
                                             ModMessages.BuyAnnexRequest,
-                                            new[] { context.Manifest.UniqueID },
+                                            new[] { ctx.Manifest.UniqueID },
                                             new[] { Game1.MasterPlayer.UniqueMultiplayerID }
                                         );
                                     }
