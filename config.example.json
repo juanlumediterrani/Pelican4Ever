@@ -1,10 +1,9 @@
 {
   "DayStartTime": "06:00",
+  "CalendarDayChangeTime": "02:00",
   "NightHoldStartTime": "01:50",
   "RolloverWarningMinutes": [
-    15,
-    5,
-    1
+    10
   ],
   "CalendarEpoch": "2026-10-26",
   "MaxCatchUpRollovers": 3,

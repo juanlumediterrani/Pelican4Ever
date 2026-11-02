@@ -597,7 +597,7 @@ namespace Pelican4Ever.Modules
         {
             var cfg = context!.Config;
             DateTime localNow = ServerTime.LocalNow(cfg.TimeZoneId);
-            TimeSpan rolloverTime = cfg.ParsedDayStart;
+            TimeSpan rolloverTime = cfg.ParsedCalendarDayChangeTime;
             TimeSpan untilRollover = rolloverTime - localNow.TimeOfDay;
             if (untilRollover <= TimeSpan.Zero)
                 untilRollover += TimeSpan.FromDays(1);

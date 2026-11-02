@@ -386,6 +386,16 @@ namespace Pelican4Ever.Modules
             if (Context.IsMainPlayer)
             {
                 Game1.realMilliSecondsPerGameTenMinutes = 600_000;
+
+                // El cambio de fecha ocurre a las 02:00, dentro de la madrugada congelada. Game1.NewDay ya procesó
+                // las máquinas hasta la mañana (CalculateMinutesUntilMorning), así que los ticks de madrugada que
+                // corresponden a la hora real actual se dan por simulados: sin esto, 02:00-06:00 se procesaría dos veces.
+                if (context != null)
+                {
+                    var cfg = context.Config;
+                    DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
+                    NightHoldTicksSimulated = GameClock.NightHoldTicksElapsed(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+                }
             }
         }
 

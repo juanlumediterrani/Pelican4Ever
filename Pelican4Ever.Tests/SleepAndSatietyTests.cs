@@ -36,9 +36,9 @@ public class SleepPolicyTests
     [Fact]
     public void EarlyRiser_InGraceWindow_IsNotPenalized()
     {
-        // Conectado a las 05:40 con rollover a las 06:00 (ventana de 60 min)
-        DateTime now = new DateTime(2026, 11, 2, 5, 40, 0);
-        TimeSpan dayStart = new TimeSpan(6, 0, 0);
+        // Conectado a las 01:40 con cambio de fecha a las 02:00 (ventana de gracia de 60 min)
+        DateTime now = new DateTime(2026, 11, 2, 1, 40, 0);
+        TimeSpan dayStart = new TimeSpan(2, 0, 0);
         var p = new PlayerRecord
         {
             LastActiveGameDay = Today,

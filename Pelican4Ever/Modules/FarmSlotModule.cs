@@ -5,6 +5,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
@@ -1275,6 +1276,7 @@ namespace Pelican4Ever.Modules
         }
 
         private static int unclaimedCheckCooldown;
+        private static readonly PortalPromptGate portalPromptGate = new();
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
         {
@@ -1287,7 +1289,16 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            if (Game1.currentLocation is not Farm farm || farm.NameOrUniqueName != "Farm" || Game1.player == null || Game1.isFestival() || Game1.activeClickableMenu != null)
+            if (Game1.currentLocation is not Farm farm || farm.NameOrUniqueName != "Farm" || Game1.player == null || Game1.isFestival())
+            {
+                if (Game1.currentLocation is not Farm)
+                    portalPromptGate.Reset();
+                return;
+            }
+
+            // Con un menú abierto (p. ej. el propio diálogo de fundación) no se evalúa nada: la puerta lógica conserva
+            // el estado hasta que el jugador salga del tile.
+            if (Game1.activeClickableMenu != null)
                 return;
 
             Vector2 playerTile = Game1.player.Tile;
@@ -1295,7 +1306,10 @@ namespace Pelican4Ever.Modules
                 string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase)
                 && SpatialWarpRouter.IsPortalTriggerTile(d.TownTileX, d.TownTileY, (int)playerTile.X, (int)playerTile.Y));
 
-            if (door != null && !context.WorldState.Doors.ContainsKey(door.DoorId))
+            string? unclaimedDoorId = door != null && !context.WorldState.Doors.ContainsKey(door.DoorId) ? door.DoorId : null;
+            // Se evalúa SIEMPRE (también con null) para rearmar la puerta lógica al salir del tile.
+            bool shouldPrompt = portalPromptGate.ShouldPrompt(unclaimedDoorId);
+            if (door != null && shouldPrompt)
             {
                 unclaimedCheckCooldown = 40; // Evitar disparos repetidos
                 Game1.player.Halt();
@@ -2467,60 +2481,61 @@ namespace Pelican4Ever.Modules
                     choices,
                     (who, whichAnswer) =>
                     {
-                        if (whichAnswer != "Cancel")
-                        {
-                            string resolvedType = string.IsNullOrWhiteSpace(whichAnswer) ? "Standard" : whichAnswer;
+                        if (whichAnswer == "Cancel")
+                            return;
 
-                            if (Context.IsMainPlayer)
+                        string resolvedType = string.IsNullOrWhiteSpace(whichAnswer) ? "Standard" : whichAnswer;
+                        Response[] confirmChoices = new[]
+                        {
+                            new Response("Yes", "Sí, fundar y entrar ahora"),
+                            new Response("No", "No, cancelar sin construir")
+                        };
+
+                        QuestionDialog.Ask(
+                            $"Vas a fundar la residencia ({resolvedType}) y entrar.\n¿Confirmas? Si eliges No, no se asignará ni construirá.",
+                            confirmChoices,
+                            (w, confirmation) =>
                             {
-                                if (!HandleClaimDoor(myId, door.DoorId, whichAnswer))
+                                if (!ResidenceClaimConfirmation.ShouldCreate(confirmation))
                                 {
-                                    Game1.drawObjectDialogue("No se pudo fundar esta residencia.");
+                                    Game1.addHUDMessage(new HUDMessage("Fundación cancelada; la residencia sigue libre.", HUDMessage.newQuest_type));
                                     return;
                                 }
-                            }
-                            else
-                            {
-                                context.Helper.Multiplayer.SendMessage(
-                                    new ClaimDoorPayload { DoorId = door.DoorId, FarmType = whichAnswer },
-                                    ModMessages.ClaimDoorRequest,
-                                    new[] { context.Manifest.UniqueID },
-                                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
-                                );
 
-                                // Copia optimista: si el host rechaza, su resincronización la deshace
-                                worldState.Doors[door.DoorId] = new DoorAssignment
+                                if (Context.IsMainPlayer)
                                 {
-                                    DoorId = door.DoorId,
-                                    FarmSlotId = door.DefaultSlotId,
-                                    FarmType = resolvedType,
-                                    OwnerId = myId,
-                                    Policy = AccessPolicy.Locked
-                                };
-                                var playerRecord = worldState.GetOrCreatePlayer(myId, Game1.player.Name);
-                                playerRecord.FarmSlotId = door.DefaultSlotId;
-                            }
-
-                            Game1.addHUDMessage(new HUDMessage($"¡Residencia reclamada! Plantilla: {resolvedType}.", HUDMessage.newQuest_type));
-
-                            Response[] travelChoices = new[]
-                            {
-                                new Response("Yes", "Sí, entrar ahora a mi granja"),
-                                new Response("No", "No, quedarme en el pueblo")
-                            };
-
-                            QuestionDialog.Ask(
-                                $"¡Enhorabuena! Has fundado tu residencia ({resolvedType}).\n¿Deseas entrar a tu granja ahora?",
-                                travelChoices,
-                                (w, a) =>
-                                {
-                                    if (a == "Yes")
+                                    if (!HandleClaimDoor(myId, door.DoorId, resolvedType))
                                     {
-                                        WarpToFarm(door.DefaultSlotId);
+                                        Game1.drawObjectDialogue("No se pudo fundar esta residencia.");
+                                        return;
                                     }
                                 }
-                            );
-                        }
+                                else
+                                {
+                                    context.Helper.Multiplayer.SendMessage(
+                                        new ClaimDoorPayload { DoorId = door.DoorId, FarmType = resolvedType },
+                                        ModMessages.ClaimDoorRequest,
+                                        new[] { context.Manifest.UniqueID },
+                                        new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                                    );
+
+                                    // Copia optimista: si el host rechaza, su resincronización la deshace.
+                                    worldState.Doors[door.DoorId] = new DoorAssignment
+                                    {
+                                        DoorId = door.DoorId,
+                                        FarmSlotId = door.DefaultSlotId,
+                                        FarmType = resolvedType,
+                                        OwnerId = myId,
+                                        Policy = AccessPolicy.Locked
+                                    };
+                                    var playerRecord = worldState.GetOrCreatePlayer(myId, Game1.player.Name);
+                                    playerRecord.FarmSlotId = door.DefaultSlotId;
+                                }
+
+                                Game1.addHUDMessage(new HUDMessage($"¡Residencia reclamada! Plantilla: {resolvedType}.", HUDMessage.newQuest_type));
+                                WarpToFarm(door.DefaultSlotId);
+                            }
+                        );
                     }
                 );
             }
