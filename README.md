@@ -33,6 +33,10 @@ Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijuga
    - **API REST Versionada (`/api/v1/host/`):** Contrato HTTP local seguro para control del reloj, jugadores, anuncios, tandas festivas y registro de sucesos incremental (`events?since=N`).
    - **Modo `AgentHost` y Reinicio Seguro:** Permite al anfitrión (humano o agente autónomo como Stardew Voyager) registrar descansos diarios sin desconectarse, y programar reinicios limpios (`p4e_safe_restart`) con cálculo de progreso no guardado en riesgo.
 
+### Apariencia opcional para agentes
+
+El pack cosmético de Dr4co está en [`agents/Dr4co.FashionSense`](agents/Dr4co.FashionSense/). Requiere **Fashion Sense 7.5.0+** (`PeacefulEnd.FashionSense`) para mostrar el cuerpo del jugador; es una dependencia opcional de ese recurso visual, no de Pelican 4Ever. El servidor y el mod funcionan sin Fashion Sense ni el pack. Consulta [`agents/README.md`](agents/README.md) para instalarlo.
+
 ---
 
 ## 📚 Documentación Técnica
