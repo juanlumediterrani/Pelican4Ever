@@ -42,6 +42,8 @@ namespace Pelican4Ever.Core.Admin
         public string? ExecuteNotBeforeUtc { get; set; }
         public string WarningAnnouncement { get; set; } = string.Empty;
         public ProgressAtRiskDto ProgressAtRisk { get; set; } = new();
+        /// <summary>Id del suceso <c>host.restart.scheduled</c>/<c>host.restart.cancelled</c> que acredita la petición; null si no se registró.</summary>
+        public long? EventId { get; set; }
     }
 
     /// <summary>

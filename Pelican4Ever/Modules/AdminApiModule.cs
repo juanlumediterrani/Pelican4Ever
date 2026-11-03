@@ -464,15 +464,20 @@ namespace Pelican4Ever.Modules
 
                 case "POST /api/v1/host/rest":
                 {
-                    MainThreadExecutionResult<HostRestResult> result = ExecuteWithThreadInfoOnGameThread(
-                        () => BedLogoutModule.RestHostPlayer(triggeredFromApi: true));
+                    // El id se lee en el hilo del juego justo tras registrar el descanso: leído después,
+                    // otra acción encolada podría haber añadido un suceso y el cliente verificaría el equivocado.
+                    MainThreadExecutionResult<(HostRestResult Outcome, long? EventId)> result = ExecuteWithThreadInfoOnGameThread(() =>
+                    {
+                        HostRestResult rest = BedLogoutModule.RestHostPlayer(triggeredFromApi: true);
+                        return (rest, rest.RestRecorded ? EventLog.LastEventId : (long?)null);
+                    });
 
                     WriteJson(res, new HostActionResultDto
                     {
-                        Ok = result.Value.RestRecorded,
-                        Message = result.Value.Message,
+                        Ok = result.Value.Outcome.RestRecorded,
+                        Message = result.Value.Outcome.Message,
                         ExecutedOnThreadId = result.ExecutedOnThreadId,
-                        EventId = EventLog.LastEventId
+                        EventId = result.Value.EventId
                     });
                     break;
                 }
@@ -523,11 +528,11 @@ namespace Pelican4Ever.Modules
             {
                 SafeRestartStatusDto cancelled = RestartCoordinator.Cancel();
                 BroadcastToAllPlayers(cancelled.WarningAnnouncement, "both");
-                EventLog.Append(
+                cancelled.EventId = EventLog.Append(
                     HostEventTypes.RestartCancelled,
                     today,
                     time,
-                    cancelled.WarningAnnouncement);
+                    cancelled.WarningAnnouncement).Id;
                 return cancelled;
             }
 
@@ -559,7 +564,7 @@ namespace Pelican4Ever.Modules
 
             BroadcastToAllPlayers(scheduled.WarningAnnouncement, "both");
 
-            EventLog.Append(
+            scheduled.EventId = EventLog.Append(
                 HostEventTypes.RestartScheduled,
                 today,
                 time,
@@ -572,7 +577,7 @@ namespace Pelican4Ever.Modules
                     ["warningMinutes"] = scheduled.WarningMinutes,
                     ["waitingForNextSave"] = scheduled.WaitingForNextSave,
                     ["unrestedActivePlayers"] = scheduled.ProgressAtRisk.UnrestedActivePlayersCount
-                });
+                }).Id;
 
             return scheduled;
         }

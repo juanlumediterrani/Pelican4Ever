@@ -217,7 +217,8 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
     "UnrestedActivePlayersCount": 1,
     "WouldLoseUnsavedDayProgress": true,
     "Summary": "Progreso no guardado del día 12 (8h 30m desde las 06:00, 2 jugador(es) conectado(s), 1 sin descansar hoy). Stardew Valley solo guarda al cambiar de día (Rollover)."
-  }
+  },
+  "EventId": 57
 }
 ```
 
