@@ -45,6 +45,14 @@ namespace Pelican4Ever.Framework
             "FarmFishLocationOverride"
         };
 
+        public static TileSheet? GetOutdoorsTileSheet(Map? map)
+        {
+            if (map == null) return null;
+            return map.GetTileSheet("untitled tile sheet")
+                ?? map.GetTileSheet("outdoors")
+                ?? map.TileSheets.FirstOrDefault(ts => ts.ImageSource.Contains("outdoors", StringComparison.OrdinalIgnoreCase));
+        }
+
         /// <summary>
         /// Crea una copia profunda e independiente de un mapa xTile, asegurando que ninguna modificación
         /// posterior afecte al asset original almacenado en la caché de SMAPI o del juego.
@@ -91,6 +99,231 @@ namespace Pelican4Ever.Framework
                     }
                 }
                 target.AddLayer(newLayer);
+            }
+
+            return target;
+        }
+
+        /// <summary>
+        /// Genera el mapa determinista para un mapa puente (35×30) recortando el viewport visible (10, 0, 35, 30)
+        /// de Maps/BusStop, limpiando el autobús averiado y arbustos centrales, sellando el perímetro y tallando
+        /// los pasos activos este y oeste con sus warps declarativos (TASK-1202).
+        /// </summary>
+        public static Map CreateBridgeMap(Map busStopSource, PlazaLocation bridgeLoc)
+        {
+            if (busStopSource == null)
+                throw new ArgumentNullException(nameof(busStopSource));
+            if (bridgeLoc == null)
+                throw new ArgumentNullException(nameof(bridgeLoc));
+
+            int width = bridgeLoc.Width;   // 35
+            int height = bridgeLoc.Height; // 30
+            int srcX = 10;
+            int srcY = 0;
+
+            Map target = new Map(bridgeLoc.Name)
+            {
+                Description = $"Plaza Bridge ({bridgeLoc.Name})"
+            };
+
+            // 1. Conservar Outdoors = "T" y eliminar propiedades que no aplican a la plaza
+            foreach (var prop in busStopSource.Properties)
+            {
+                if (!string.Equals(prop.Key, "Warp", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(prop.Key, "Doors", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(prop.Key, "NPCWarp", StringComparison.OrdinalIgnoreCase)
+                    && !string.Equals(prop.Key, "ViewportClamp", StringComparison.OrdinalIgnoreCase)
+                    && !prop.Key.EndsWith("_Objects", StringComparison.OrdinalIgnoreCase))
+                {
+                    target.Properties[prop.Key] = prop.Value;
+                }
+            }
+
+            target.Properties["Outdoors"] = "T";
+
+            // 2. Copiar TileSheets
+            CopyTileSheets(busStopSource, target);
+            TileSheet? outdoorsSheet = GetOutdoorsTileSheet(target) ?? target.TileSheets.FirstOrDefault();
+
+            // 3. Recortar 35×30 desde (10, 0) y limpiar Action/TouchAction de todos los tiles
+            Size tileSize = busStopSource.Layers.Count > 0 ? busStopSource.Layers[0].TileSize : new Size(64, 64);
+            foreach (var layer in busStopSource.Layers)
+            {
+                var newLayer = new Layer(layer.Id, target, new Size(width, height), layer.TileSize)
+                {
+                    Description = layer.Description,
+                    Visible = layer.Visible
+                };
+
+                foreach (var prop in layer.Properties)
+                {
+                    newLayer.Properties[prop.Key] = prop.Value;
+                }
+
+                for (int x = 0; x < width; x++)
+                {
+                    int sx = srcX + x;
+                    if (sx < 0 || sx >= layer.LayerWidth)
+                        continue;
+
+                    for (int y = 0; y < height; y++)
+                    {
+                        int sy = srcY + y;
+                        if (sy < 0 || sy >= layer.LayerHeight)
+                            continue;
+
+                        var t = layer.Tiles[sx, sy];
+                        if (t != null)
+                        {
+                            Tile cloned = CloneTile(t, newLayer, target);
+                            cloned.Properties.Remove("Action");
+                            cloned.Properties.Remove("TouchAction");
+                            newLayer.Tiles[x, y] = cloned;
+                        }
+                    }
+                }
+
+                target.AddLayer(newLayer);
+            }
+
+            Layer backLayer = EnsureLayer(target, "Back", width, height, tileSize);
+            Layer bldLayer = EnsureLayer(target, "Buildings", width, height, tileSize);
+            Layer frontLayer = EnsureLayer(target, "Front", width, height, tileSize);
+            Layer alwaysFrontLayer = EnsureLayer(target, "AlwaysFront", width, height, tileSize);
+            EnsureLayer(target, "Paths", width, height, tileSize);
+
+            // 4. Despejar el autobús averiado central (x = 10..19, y = 6..10) en Buildings, Front y AlwaysFront
+            for (int x = 10; x <= 19; x++)
+            {
+                for (int y = 6; y <= 10; y++)
+                {
+                    bldLayer.Tiles[x, y] = null;
+                    frontLayer.Tiles[x, y] = null;
+                    alwaysFrontLayer.Tiles[x, y] = null;
+                }
+            }
+
+            // 5. Despejar arbustos y árboles sueltos del patio central (x = 4..29, y = 6..20)
+            // preservando la transitabilidad amplia entre norte, sur, este y oeste.
+            for (int x = 4; x <= 29; x++)
+            {
+                for (int y = 6; y <= 20; y++)
+                {
+                    bldLayer.Tiles[x, y] = null;
+                    frontLayer.Tiles[x, y] = null;
+                    alwaysFrontLayer.Tiles[x, y] = null;
+
+                    if (backLayer.Tiles[x, y] == null && outdoorsSheet != null)
+                    {
+                        var ground = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 1028);
+                        ground.Properties["Type"] = "Dirt";
+                        backLayer.Tiles[x, y] = ground;
+                    }
+                }
+            }
+
+            // 6. Sellar los bordes perimetrales salvo las aperturas de portales y pasos activos
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    bool isBorder = x == 0 || x == width - 1 || y == 0 || y == height - 1;
+                    if (!isBorder)
+                        continue;
+
+                    bool isOpening =
+                        // Portales Norte (x = 8..9 y x = 25..26 en y = 0)
+                        ((x == 8 || x == 9 || x == 25 || x == 26) && y == 0)
+                        // Portales Sur (x = 8..9 y x = 25..26 en y = height - 1)
+                        || ((x == 8 || x == 9 || x == 25 || x == 26) && y == height - 1)
+                        // Paso Oeste activo (x = 0, y = 13..15)
+                        || (x == 0 && bridgeLoc.West != null && y >= bridgeLoc.West.FirstRow && y < bridgeLoc.West.FirstRow + bridgeLoc.West.RowCount)
+                        // Paso Este activo (x = width - 1, y = 13..15)
+                        || (x == width - 1 && bridgeLoc.East != null && y >= bridgeLoc.East.FirstRow && y < bridgeLoc.East.FirstRow + bridgeLoc.East.RowCount);
+
+                    if (isOpening)
+                        continue;
+
+                    if (bldLayer.Tiles[x, y] != null)
+                        bldLayer.Tiles[x, y].Properties["Passable"] = "F";
+
+                    if (backLayer.Tiles[x, y] != null)
+                        backLayer.Tiles[x, y].Properties["Passable"] = "F";
+                }
+            }
+
+            // Remate con vallas de madera en la antigua carretera (y = 22..25) en x = 0 y x = width - 1
+            if (outdoorsSheet != null)
+            {
+                for (int y = 22; y <= 25; y++)
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, 0, y, 385);
+                    SetPassableIfValid(bldLayer, 0, y, false);
+
+                    SetTileIfValid(bldLayer, outdoorsSheet, width - 1, y, 383);
+                    SetPassableIfValid(bldLayer, width - 1, y, false);
+                }
+            }
+
+            // 7. Tallar los pasos activos Oeste y Este
+            if (bridgeLoc.West is { } west)
+            {
+                for (int x = 0; x <= 5; x++)
+                {
+                    for (int y = west.FirstRow; y < west.FirstRow + west.RowCount; y++)
+                    {
+                        bldLayer.Tiles[x, y] = null;
+                        frontLayer.Tiles[x, y] = null;
+                        alwaysFrontLayer.Tiles[x, y] = null;
+
+                        if (backLayer.Tiles[x, y] != null)
+                        {
+                            ClearBlockingAndWaterProperties(backLayer.Tiles[x, y]);
+                            backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
+                        }
+                    }
+                }
+            }
+
+            if (bridgeLoc.East is { } east)
+            {
+                for (int x = width - 6; x < width; x++)
+                {
+                    for (int y = east.FirstRow; y < east.FirstRow + east.RowCount; y++)
+                    {
+                        bldLayer.Tiles[x, y] = null;
+                        frontLayer.Tiles[x, y] = null;
+                        alwaysFrontLayer.Tiles[x, y] = null;
+
+                        if (backLayer.Tiles[x, y] != null)
+                        {
+                            ClearBlockingAndWaterProperties(backLayer.Tiles[x, y]);
+                            backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
+                        }
+                    }
+                }
+            }
+
+            // 8. Escribir map.Properties["Warp"] con los pasos declarativos
+            var warps = new List<string>();
+            if (bridgeLoc.West is { } westPassage)
+            {
+                for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
+                {
+                    warps.Add($"0 {y} {westPassage.TargetLocation} {westPassage.ArrivalX} {westPassage.ArrivalY}");
+                }
+            }
+            if (bridgeLoc.East is { } eastPassage)
+            {
+                for (int y = eastPassage.FirstRow; y < eastPassage.FirstRow + eastPassage.RowCount; y++)
+                {
+                    warps.Add($"{width - 1} {y} {eastPassage.TargetLocation} {eastPassage.ArrivalX} {eastPassage.ArrivalY}");
+                }
+            }
+
+            if (warps.Count > 0)
+            {
+                target.Properties["Warp"] = string.Join(" ", warps);
             }
 
             return target;

@@ -41,14 +41,14 @@ namespace Pelican4Ever.Modules
             if (Game1.currentLocation == null)
                 return;
 
-            string currentLoc = Game1.currentLocation.Name;
+            string currentLoc = Game1.currentLocation.NameOrUniqueName;
             Vector2 targetTile = e.Cursor.GrabTile;
             int targetX = (int)targetTile.X;
             int targetY = (int)targetTile.Y;
 
             foreach (DoorModel door in FarmSlotModule.RegisteredDoors)
             {
-                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? HostPlazaLayout.HostFarm : door.LocationName;
                 if (!string.Equals(currentLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
                     continue;
 
@@ -162,14 +162,14 @@ namespace Pelican4Ever.Modules
             if (Game1.currentLocation == null)
                 return;
 
-            string currentLoc = Game1.currentLocation.Name;
+            string currentLoc = Game1.currentLocation.NameOrUniqueName;
             long myId = Game1.player.UniqueMultiplayerID;
             if (Game1.mailbox.Count == 0)
                 return;
 
             foreach (DoorModel door in FarmSlotModule.RegisteredDoors)
             {
-                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Town" : door.LocationName;
+                string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? HostPlazaLayout.HostFarm : door.LocationName;
                 if (!string.Equals(currentLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
                     continue;
 

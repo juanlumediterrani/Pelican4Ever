@@ -60,6 +60,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Player.Warped += OnPlayerWarped;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnPendingResidenceWakeTicked;
 
@@ -158,7 +159,33 @@ namespace Pelican4Ever.Modules
                         FarmTemplateCatalog.ApplyNitvCustomFields(hostFarmData.CustomFields, "Standard");
                     }
 
-                    int count = context?.Config.FarmSlotCount ?? 16;
+                    // TASK-1201: Registrar declarativamente los puentes activos en Data/Locations
+                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int bridges = HostPlazaLayout.BridgeCount(slotCount);
+                    for (int n = 1; n <= bridges; n++)
+                    {
+                        string name = HostPlazaLayout.BridgeName(n);
+                        if (!data.TryGetValue(name, out var bridgeData) || bridgeData == null)
+                        {
+                            bridgeData = new LocationData();
+                            data[name] = bridgeData;
+                        }
+                        bridgeData.DisplayName = $"Puente {n}";
+                        bridgeData.CanPlantHere = false;
+                        bridgeData.CreateOnLoad ??= new CreateLocationData();
+                        bridgeData.CreateOnLoad.MapPath = $"Maps/{name}";
+                        bridgeData.CreateOnLoad.Type = "StardewValley.GameLocation, Stardew Valley";
+                        bridgeData.CreateOnLoad.AlwaysActive = true;
+                        bridgeData.CustomFields ??= new Dictionary<string, string>();
+                        FarmTemplateCatalog.ApplyNitvCustomFields(bridgeData.CustomFields, "Standard");
+                    }
+                    for (int n = bridges + 1; n <= HostPlazaLayout.MaxBridges; n++)
+                    {
+                        string name = HostPlazaLayout.BridgeName(n);
+                        data.Remove(name);
+                    }
+
+                    int count = slotCount;
 
                     for (int i = 1; i <= count; i++)
                     {
@@ -435,7 +462,108 @@ namespace Pelican4Ever.Modules
                         }
                     }
 
+                    // TASK-1203: Tallar el paso oeste en Maps/Pelican4Ever_HostFarm si hay puentes activos
+                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    var farmPlaza = HostPlazaLayout.Find(HostPlazaLayout.HostFarm, slotCount);
+                    if (farmPlaza?.West is { } westPassage)
+                    {
+                        // 1. Tallar corredor oeste (x = 0..7, y = 26..27)
+                        for (int x = 0; x <= 7; x++)
+                        {
+                            for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
+                            {
+                                if (bldLayer != null) bldLayer.Tiles[x, y] = null;
+                                if (frontLayer != null) frontLayer.Tiles[x, y] = null;
+                                if (alwaysFrontLayer != null) alwaysFrontLayer.Tiles[x, y] = null;
+                                if (backLayer != null)
+                                {
+                                    var steppingSheet = hostMap.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId);
+                                    if (steppingSheet != null)
+                                    {
+                                        backLayer.Tiles[x, y] = new xTile.Tiles.StaticTile(backLayer, steppingSheet, xTile.Tiles.BlendMode.Alpha, 0);
+                                    }
+                                    backLayer.Tiles[x, y]?.Properties.Remove("Passable");
+                                    if (backLayer.Tiles[x, y] != null) backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
+                                }
+                            }
+                        }
+
+                        // 2. Limpiar el cerezo estático cortado en (1..6, 23..29)
+                        if (alwaysFrontLayer != null)
+                        {
+                            for (int x = 1; x <= 6; x++)
+                            {
+                                for (int y = 23; y <= 27; y++)
+                                {
+                                    if (x < alwaysFrontLayer.LayerWidth && y < alwaysFrontLayer.LayerHeight)
+                                        alwaysFrontLayer.Tiles[x, y] = null;
+                                }
+                            }
+                        }
+                        for (int x = 2; x <= 5; x++)
+                        {
+                            for (int y = 23; y <= 29; y++)
+                            {
+                                if (frontLayer != null && x < frontLayer.LayerWidth && y < frontLayer.LayerHeight)
+                                    frontLayer.Tiles[x, y] = null;
+                                if (y >= 26 && bldLayer != null && x < bldLayer.LayerWidth && y < bldLayer.LayerHeight)
+                                    bldLayer.Tiles[x, y] = null;
+                            }
+                        }
+
+                        // 3. Añadir warp hacia Pelican4Ever_Bridge_1 conservando warps vanilla
+                        string existingWarps = hostMap.Properties.TryGetValue("Warp", out var wVal) ? wVal.ToString() : string.Empty;
+                        string westWarps = $"0 26 {HostPlazaLayout.BridgeName(1)} 33 14 0 27 {HostPlazaLayout.BridgeName(1)} 33 14";
+                        hostMap.Properties["Warp"] = string.IsNullOrWhiteSpace(existingWarps) ? westWarps : $"{existingWarps} {westWarps}";
+                    }
+
                     return hostMap;
+                }, AssetLoadPriority.Medium);
+            }
+            else if (e.NameWithoutLocale.StartsWith("Maps/Pelican4Ever_Bridge_"))
+            {
+                // TASK-1202: Genera el mapa Maps/Pelican4Ever_Bridge_N determinista a partir de Maps/BusStop
+                string bridgeName = Path.GetFileName(e.NameWithoutLocale.BaseName);
+                e.LoadFrom(() =>
+                {
+                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    var bridgeLoc = HostPlazaLayout.Find(bridgeName, slotCount)
+                        ?? HostPlazaLayout.Chain(16).FirstOrDefault(l => string.Equals(l.Name, bridgeName, StringComparison.OrdinalIgnoreCase));
+                    if (bridgeLoc == null)
+                        return new xTile.Map(bridgeName);
+
+                    var busStopMap = context?.Helper.GameContent.Load<xTile.Map>("Maps/BusStop");
+                    if (busStopMap == null)
+                        return new xTile.Map(bridgeName);
+
+                    var bridgeMap = MapCloneHelper.CreateBridgeMap(busStopMap, bridgeLoc);
+
+                    var townMap = context?.Helper.GameContent.Load<xTile.Map>("Maps/Town");
+                    if (townMap != null)
+                        AddMailboxAssets(bridgeMap, townMap);
+                    AddPathAssets(bridgeMap);
+
+                    var bldLayer = bridgeMap.GetLayer("Buildings");
+                    var frontLayer = bridgeMap.GetLayer("Front");
+                    var alwaysFrontLayer = bridgeMap.GetLayer("AlwaysFront");
+                    var backLayer = bridgeMap.GetLayer("Back");
+
+                    var sampleTile = backLayer?.Tiles[15, 15] ?? backLayer?.Tiles[8, 6];
+
+                    foreach (var door in RegisteredDoors)
+                    {
+                        if (string.Equals(door.LocationName, bridgeLoc.Name, StringComparison.OrdinalIgnoreCase))
+                        {
+                            ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
+                        }
+                    }
+
+                    if (bridgeLoc.West is { } westPassage)
+                        ApplyPlazaPassagePavement(bridgeMap, westPassage);
+                    if (bridgeLoc.East is { } eastPassage)
+                        ApplyPlazaPassagePavement(bridgeMap, eastPassage);
+
+                    return bridgeMap;
                 }, AssetLoadPriority.Medium);
             }
             else if (e.NameWithoutLocale.IsEquivalentTo(SteppingStonesAssetKey) || e.NameWithoutLocale.IsEquivalentTo(TerrainTileClassifier.SteppingStonesTileSheetId))
@@ -472,14 +600,41 @@ namespace Pelican4Ever.Modules
             return (tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y);
         }
 
+        public static bool IsInPlazaPassage(PlazaLocation loc, int tileX, int tileY)
+        {
+            if (loc.West is { } west)
+            {
+                int maxWestX = string.Equals(loc.Name, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase) ? 7 : 5;
+                if (tileX >= 0 && tileX <= maxWestX && tileY >= west.FirstRow && tileY < west.FirstRow + west.RowCount)
+                    return true;
+            }
+
+            if (loc.East is { } east)
+            {
+                if (tileX >= loc.Width - 6 && tileX < loc.Width && tileY >= east.FirstRow && tileY < east.FirstRow + east.RowCount)
+                    return true;
+            }
+
+            return false;
+        }
+
         public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
             var loc = HostPlazaLayout.Find(door.LocationName, 16);
+            return IsInOpeningOrBorder(door, loc, tileX, tileY);
+        }
+
+        public static bool IsInOpeningOrBorder(DoorModel door, PlazaLocation? loc, int tileX, int tileY)
+        {
+            loc ??= HostPlazaLayout.Find(door.LocationName, 16);
             if (loc == null)
             {
                 var (t1, t2) = GetOpeningTiles(door);
                 return (tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y);
             }
+
+            if (IsInPlazaPassage(loc, tileX, tileY))
+                return true;
 
             var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
             foreach (var p in path)
@@ -489,6 +644,29 @@ namespace Pelican4Ever.Modules
             }
 
             return false;
+        }
+
+        private static void ApplyPlazaPassagePavement(xTile.Map map, PlazaPassage passage)
+        {
+            var backLayer = map.GetLayer("Back");
+            var steppingSheet = map.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId);
+            if (backLayer == null || steppingSheet == null) return;
+
+            int startX = passage.Edge == PortalEdge.West ? 0 : map.Layers[0].LayerWidth - 6;
+            int endX = passage.Edge == PortalEdge.West ? 5 : map.Layers[0].LayerWidth - 1;
+
+            for (int x = startX; x <= endX; x++)
+            {
+                for (int y = passage.FirstRow; y < passage.FirstRow + passage.RowCount; y++)
+                {
+                    if (x >= 0 && x < backLayer.LayerWidth && y >= 0 && y < backLayer.LayerHeight)
+                    {
+                        backLayer.Tiles[x, y] = new xTile.Tiles.StaticTile(backLayer, steppingSheet, xTile.Tiles.BlendMode.Alpha, 0);
+                        backLayer.Tiles[x, y].Properties.Remove("Passable");
+                        backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
+                    }
+                }
+            }
         }
 
         private static void SetTileIfValid(xTile.Layers.Layer? layer, xTile.Tiles.TileSheet sheet, int x, int y, int tileIndex)
@@ -517,8 +695,7 @@ namespace Pelican4Ever.Modules
             var sheetStepping = bld?.Map?.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId)
                              ?? front?.Map?.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId)
                              ?? back?.Map?.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId);
-            var sheetOutdoors = bld?.Map?.GetTileSheet("untitled tile sheet")
-                             ?? front?.Map?.GetTileSheet("untitled tile sheet")
+            var sheetOutdoors = MapCloneHelper.GetOutdoorsTileSheet(bld?.Map ?? front?.Map ?? back?.Map)
                              ?? sampleTile?.TileSheet;
 
             foreach (var pt in passTiles)
@@ -581,165 +758,51 @@ namespace Pelican4Ever.Modules
                     front.Tiles[door.TownTileX + 1, 61] = null;
             }
 
-            // 5. Suavizado y remates orgánicos de acantilados y vallas según recursos oficiales del juego
-            if (door.Edge == PortalEdge.North && bld != null && sheetOutdoors != null)
+            // 5. Suavizado y remates orgánicos de acantilados y vallas en la Granja Host (TASK-1302)
+            if (string.Equals(door.LocationName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase) && sheetOutdoors != null)
             {
-                int lx = door.TownTileX - 1;
-                int rx = door.TownTileX + 2;
+                if (door.Edge == PortalEdge.North && bld != null)
+                {
+                    int lx = door.TownTileX - 1;
+                    int rx = door.TownTileX + 2;
 
-                if (door.DoorId is "Farm_Portal_05" or "Farm_Portal_06" or "Farm_Portal_13")
-                {
-                    // Desfiladeros rocosos canónicos (modelo del desfiladero de Backwoods en Farm.xnb):
-                    // Pared izquierda (lx):
-                    SetTileIfValid(bld, sheetOutdoors, lx, 3, 444); // Esquina redondeada de césped
-                    SetTileIfValid(bld, sheetOutdoors, lx, 4, 469); // Cara superior del risco
-                    SetTileIfValid(bld, sheetOutdoors, lx, 5, 494); // Cara intermedia alta
-                    SetTileIfValid(bld, sheetOutdoors, lx, 6, 519); // Cara intermedia baja
-                    SetTileIfValid(bld, sheetOutdoors, lx, 7, 544); // Base del acantilado
-                    if (back != null)
-                        SetTileIfValid(back, sheetOutdoors, lx, 8, 618); // Sombra de esquina inferior izquierda
+                    if (door.TownTileX == 18 && door.TownTileY == 1) // Parcela 01
+                    {
+                        // Desfiladeros rocosos canónicos (modelo del desfiladero de Backwoods en Farm.xnb):
+                        // Pared izquierda (lx=17):
+                        SetTileIfValid(bld, sheetOutdoors, lx, 3, 444); // Esquina redondeada de césped
+                        SetTileIfValid(bld, sheetOutdoors, lx, 4, 469); // Cara superior del risco
+                        SetTileIfValid(bld, sheetOutdoors, lx, 5, 494); // Cara intermedia alta
+                        SetTileIfValid(bld, sheetOutdoors, lx, 6, 519); // Cara intermedia baja
+                        SetTileIfValid(bld, sheetOutdoors, lx, 7, 544); // Base del acantilado
+                        if (back != null)
+                            SetTileIfValid(back, sheetOutdoors, lx, 8, 618); // Sombra de esquina inferior izquierda
 
-                    // Pared derecha (rx):
-                    SetTileIfValid(bld, sheetOutdoors, rx, 3, 441); // Esquina redondeada de césped
-                    SetTileIfValid(bld, sheetOutdoors, rx, 4, 466); // Cara superior del risco
-                    SetTileIfValid(bld, sheetOutdoors, rx, 5, 491); // Cara intermedia alta
-                    SetTileIfValid(bld, sheetOutdoors, rx, 6, 516); // Cara intermedia baja
-                    SetTileIfValid(bld, sheetOutdoors, rx, 7, 541); // Base del acantilado
-                    if (back != null)
-                        SetTileIfValid(back, sheetOutdoors, rx, 8, 645); // Sombra de esquina inferior derecha
+                        // Pared derecha (rx=20):
+                        SetTileIfValid(bld, sheetOutdoors, rx, 3, 441); // Esquina redondeada de césped
+                        SetTileIfValid(bld, sheetOutdoors, rx, 4, 466); // Cara superior del risco
+                        SetTileIfValid(bld, sheetOutdoors, rx, 5, 491); // Cara intermedia alta
+                        SetTileIfValid(bld, sheetOutdoors, rx, 6, 516); // Cara intermedia baja
+                        SetTileIfValid(bld, sheetOutdoors, rx, 7, 541); // Base del acantilado
+                        if (back != null)
+                            SetTileIfValid(back, sheetOutdoors, rx, 8, 645); // Sombra de esquina inferior derecha
 
-                    // Limpiar Front a lo largo de las paredes de roca para evitar solapamientos
-                    for (int y = 3; y <= 8; y++)
-                    {
-                        if (front != null && lx >= 0 && lx < front.LayerWidth && y < front.LayerHeight)
-                            front.Tiles[lx, y] = null;
-                        if (front != null && rx >= 0 && rx < front.LayerWidth && y < front.LayerHeight)
-                            front.Tiles[rx, y] = null;
-                    }
-                }
-                else if (door.DoorId == "Farm_Portal_08")
-                {
-                    // Remate de la valla de madera en y=9
-                    SetTileIfValid(bld, sheetOutdoors, 61, 9, 385); // Poste final derecho
-                    SetTileIfValid(front, sheetOutdoors, 61, 8, 360);
-                    SetTileIfValid(bld, sheetOutdoors, 64, 9, 383); // Poste inicial izquierdo
-                    SetTileIfValid(front, sheetOutdoors, 64, 8, 358);
-                }
-                else if (door.DoorId == "Farm_Portal_14")
-                {
-                    // Remate de la valla de madera en y=7 e y=9
-                    SetTileIfValid(bld, sheetOutdoors, 71, 7, 385);
-                    SetTileIfValid(front, sheetOutdoors, 71, 6, 360);
-                    SetTileIfValid(bld, sheetOutdoors, 74, 9, 383);
-                    SetTileIfValid(front, sheetOutdoors, 74, 8, 358);
-                }
-                else if (door.DoorId == "Farm_Portal_07")
-                {
-                    // Remate de la valla en y=6
-                    SetTileIfValid(bld, sheetOutdoors, 51, 6, 385);
-                    SetTileIfValid(front, sheetOutdoors, 51, 5, 360);
-                    SetTileIfValid(bld, sheetOutdoors, 54, 6, 383);
-                    SetTileIfValid(front, sheetOutdoors, 54, 5, 358);
-
-                    // Limpiar en Back los tiles del viejo bebedero de la 1.5 en (54..55, 8..10) para no dejar madera cortada
-                    if (back != null)
-                    {
-                        for (int py = 8; py <= 10; py++)
-                            SetTileIfValid(back, sheetOutdoors, 54, py, 587);
-                        SetTileIfValid(back, sheetOutdoors, 55, 10, 587);
-                    }
-                }
-            }
-            else if (door.TownTileX <= 2 && bld != null && sheetOutdoors != null)
-            {
-                // 6. Suavizado de cortes en acantilados del oeste y eliminación de árboles estáticos cortados
-                if (door.DoorId == "Farm_Portal_01")
-                {
-                    // Arriba (y=15): esquina redondeada suave
-                    SetTileIfValid(bld, sheetOutdoors, 0, 15, 442);
-                    SetTileIfValid(bld, sheetOutdoors, 1, 15, 444);
-                    // Abajo (y=18): inicio superior redondeado del risco inferior
-                    SetTileIfValid(bld, sheetOutdoors, 0, 18, 467);
-                    SetTileIfValid(bld, sheetOutdoors, 1, 18, 469);
-                }
-                else if (door.DoorId == "Farm_Portal_02")
-                {
-                    // El cerezo estático inferior en (3..4, 27..29) y su dosel en AlwaysFront (x=1..6, y=23..26)
-                    // quedaban cortados por el corredor oeste. Se eliminan sus restos limpiamente, preservando
-                    // íntegro el cerezo superior en (0..3, 19..25):
-                    if (alwaysFront != null)
-                    {
-                        for (int x = 1; x <= 6; x++)
+                        // Limpiar Front a lo largo de las paredes de roca para evitar solapamientos
+                        for (int y = 3; y <= 8; y++)
                         {
-                            for (int y = 23; y <= 27; y++)
-                            {
-                                if (x < alwaysFront.LayerWidth && y < alwaysFront.LayerHeight)
-                                    alwaysFront.Tiles[x, y] = null;
-                            }
+                            if (front != null && lx >= 0 && lx < front.LayerWidth && y < front.LayerHeight)
+                                front.Tiles[lx, y] = null;
+                            if (front != null && rx >= 0 && rx < front.LayerWidth && y < front.LayerHeight)
+                                front.Tiles[rx, y] = null;
                         }
                     }
-                    for (int x = 2; x <= 5; x++)
+                    else if (door.TownTileX == 62 && door.TownTileY == 1) // Parcela 02
                     {
-                        for (int y = 23; y <= 29; y++)
-                        {
-                            if (front != null && x < front.LayerWidth && y < front.LayerHeight)
-                                front.Tiles[x, y] = null;
-                            if (y >= 26 && x < bld.LayerWidth && y < bld.LayerHeight)
-                                bld.Tiles[x, y] = null;
-                        }
-                    }
-                }
-                else if (door.DoorId == "Farm_Portal_03")
-                {
-                    // Limpiar el abeto estático en (0..1, 38..41) para evitar que quede cortado horizontalmente en y=38
-                    if (front != null)
-                    {
-                        for (int x = 0; x <= 1; x++)
-                        {
-                            for (int y = 38; y <= 41; y++)
-                            {
-                                if (x < front.LayerWidth && y < front.LayerHeight)
-                                    front.Tiles[x, y] = null;
-                            }
-                        }
-                    }
-                    for (int x = 0; x <= 1; x++)
-                    {
-                        for (int y = 39; y <= 42; y++)
-                        {
-                            if (x < bld.LayerWidth && y < bld.LayerHeight)
-                                bld.Tiles[x, y] = null;
-                        }
-                    }
-
-                    // Arriba (y=35): base superior del risco
-                    SetTileIfValid(bld, sheetOutdoors, 0, 35, 542);
-                    SetTileIfValid(bld, sheetOutdoors, 1, 35, 544);
-                    // Abajo (y=38): inicio superior redondeado
-                    SetTileIfValid(bld, sheetOutdoors, 0, 38, 467);
-                    SetTileIfValid(bld, sheetOutdoors, 1, 38, 469);
-                }
-                else if (door.DoorId == "Farm_Portal_04")
-                {
-                    // Limpiar el árbol estático inferior en (0..2, 48..51) para evitar que quede cortado en y=48
-                    if (front != null)
-                    {
-                        for (int x = 0; x <= 2; x++)
-                        {
-                            for (int y = 48; y <= 51; y++)
-                            {
-                                if (x < front.LayerWidth && y < front.LayerHeight)
-                                    front.Tiles[x, y] = null;
-                            }
-                        }
-                    }
-                    for (int x = 0; x <= 1; x++)
-                    {
-                        for (int y = 48; y <= 50; y++)
-                        {
-                            if (x < bld.LayerWidth && y < bld.LayerHeight)
-                                bld.Tiles[x, y] = null;
-                        }
+                        // Remate de la valla de madera en y=9
+                        SetTileIfValid(bld, sheetOutdoors, 61, 9, 385); // Poste final derecho
+                        SetTileIfValid(front, sheetOutdoors, 61, 8, 360);
+                        SetTileIfValid(bld, sheetOutdoors, 64, 9, 383); // Poste inicial izquierdo
+                        SetTileIfValid(front, sheetOutdoors, 64, 8, 358);
                     }
                 }
             }
@@ -810,8 +873,7 @@ namespace Pelican4Ever.Modules
         {
             xTile.Map? map = bld?.Map;
             xTile.Tiles.TileSheet? sheetTown = map?.GetTileSheet(MailboxTileSheetId);
-            xTile.Tiles.TileSheet? sheetOutdoors = map?.GetTileSheet("untitled tile sheet")
-                ?? map?.TileSheets.FirstOrDefault(ts => ts.ImageSource.Contains("outdoors", StringComparison.OrdinalIgnoreCase));
+            xTile.Tiles.TileSheet? sheetOutdoors = MapCloneHelper.GetOutdoorsTileSheet(map);
             xTile.Layers.Layer? top = map?.GetLayer(MailboxTopLayerId);
             xTile.Layers.Layer? alwaysFront = map?.GetLayer("AlwaysFront");
             if (bld == null || sheetTown == null || top == null)
@@ -930,6 +992,11 @@ namespace Pelican4Ever.Modules
                 // Asegurar edificios limpios y Farmhouse operativa en cada granja instanciada.
                 // Primero las reclamadas: así el hogar del dueño queda fijado antes de soltar cabañas libres.
                 int slotCount = context.Config.FarmSlotCount;
+                foreach (Farmer farmer in Game1.getAllFarmers())
+                {
+                    SanitizePlayerOrphanedBridgeLocation(farmer, slotCount);
+                }
+
                 var slots = Enumerable.Range(1, slotCount)
                     .Select(i => $"Pelican4Ever_Farm_{i:D2}")
                     .Select(slotId => (slotId, assignment: context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == slotId)))
@@ -1004,7 +1071,42 @@ namespace Pelican4Ever.Modules
         {
             if (!Context.IsMainPlayer || context == null) return;
 
+            int slotCount = context.Config.FarmSlotCount;
+            Farmer? farmer = Game1.GetPlayer(e.Peer.PlayerID);
+            SanitizePlayerOrphanedBridgeLocation(farmer, slotCount);
+
             SendDoorsSyncToPlayer(e.Peer.PlayerID);
+        }
+
+        private void OnDayStarted(object? sender, DayStartedEventArgs e)
+        {
+            if (!Context.IsMainPlayer || context == null) return;
+
+            EnsureAllPlazaPortals();
+        }
+
+        public static void SanitizePlayerOrphanedBridgeLocation(Farmer? who, int slotCount)
+        {
+            if (who == null) return;
+            var chain = HostPlazaLayout.Chain(slotCount);
+            bool CheckBridge(string? locName)
+            {
+                if (string.IsNullOrEmpty(locName) || !locName.StartsWith(HostPlazaLayout.BridgePrefix, StringComparison.OrdinalIgnoreCase))
+                    return false;
+                return !chain.Any(l => string.Equals(l.Name, locName, StringComparison.OrdinalIgnoreCase));
+            }
+
+            if (CheckBridge(who.disconnectLocation.Value))
+            {
+                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía disconnectLocation en puente '{who.disconnectLocation.Value}' no activo. Redirigiendo a 'Farm'.", LogLevel.Warn);
+                who.disconnectLocation.Value = HostPlazaLayout.HostFarm;
+                who.disconnectPosition.Value = new Vector2(64f * 64f, 15f * 64f);
+            }
+            if (CheckBridge(who.lastSleepLocation.Value))
+            {
+                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía lastSleepLocation en puente '{who.lastSleepLocation.Value}' no activo. Redirigiendo a 'Farm'.", LogLevel.Warn);
+                who.lastSleepLocation.Value = HostPlazaLayout.HostFarm;
+            }
         }
 
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
@@ -1022,17 +1124,24 @@ namespace Pelican4Ever.Modules
         {
             if (context == null) return;
 
+            int slotCount = context.Config.FarmSlotCount;
+            int bridges = HostPlazaLayout.BridgeCount(slotCount);
             string doorSig = string.Join(";", context.WorldState.Doors.Values
                 .Select(d => $"{d.FarmSlotId}={d.FarmType}")
                 .OrderBy(entry => entry, StringComparer.Ordinal));
             string annexSig = string.Join(";", (context.WorldState.Annexes?.Values ?? Enumerable.Empty<AnnexAssignment>())
                 .Select(a => $"{a.AnnexId}={a.TemplateId}:{a.Side}")
                 .OrderBy(entry => entry, StringComparer.Ordinal));
-            string signature = $"{doorSig}|{annexSig}";
+            string signature = $"{slotCount}:{bridges}|{doorSig}|{annexSig}";
             if (signature == slotDataSignature) return;
 
             slotDataSignature = signature;
             context.Helper.GameContent.InvalidateCache("Data/Locations");
+            context.Helper.GameContent.InvalidateCache("Maps/Pelican4Ever_HostFarm");
+            for (int i = 1; i <= HostPlazaLayout.MaxBridges; i++)
+            {
+                context.Helper.GameContent.InvalidateCache($"Maps/{HostPlazaLayout.BridgeName(i)}");
+            }
         }
 
         /// <summary>
@@ -1230,27 +1339,31 @@ namespace Pelican4Ever.Modules
             if (!e.IsLocalPlayer || context == null)
                 return;
 
-            if (e.NewLocation is Farm hostFarm && hostFarm.NameOrUniqueName == "Farm")
+            if (e.NewLocation != null && HostPlazaLayout.IsPlazaLocation(e.NewLocation.NameOrUniqueName))
             {
-                if (!string.Equals(hostFarm.mapPath.Value, "Maps\\Pelican4Ever_HostFarm", StringComparison.OrdinalIgnoreCase)
-                    && !string.Equals(hostFarm.mapPath.Value, "Maps/Pelican4Ever_HostFarm", StringComparison.OrdinalIgnoreCase))
+                if (e.NewLocation is Farm hostFarm && string.Equals(hostFarm.NameOrUniqueName, "Farm", StringComparison.OrdinalIgnoreCase))
                 {
-                    hostFarm.mapPath.Value = "Maps\\Pelican4Ever_HostFarm";
-                    hostFarm.reloadMap();
-                }
-
-                RemoveHostCabins(hostFarm);
-                EnsureHostFarmPortals(hostFarm);
-
-                if (!welcomeNotified)
-                {
-                    bool hasResidence = context.WorldState.Doors.Values.Any(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
-                    if (!hasResidence)
+                    if (!string.Equals(hostFarm.mapPath.Value, "Maps\\Pelican4Ever_HostFarm", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(hostFarm.mapPath.Value, "Maps/Pelican4Ever_HostFarm", StringComparison.OrdinalIgnoreCase))
                     {
-                        welcomeNotified = true;
-                        Game1.addHUDMessage(new HUDMessage("¡Bienvenido a la Plaza Central! Camina hacia un portal con cartel verde o escribe /residencias para fundar tu granja.", HUDMessage.newQuest_type));
+                        hostFarm.mapPath.Value = "Maps\\Pelican4Ever_HostFarm";
+                        hostFarm.reloadMap();
+                    }
+
+                    RemoveHostCabins(hostFarm);
+
+                    if (!welcomeNotified)
+                    {
+                        bool hasResidence = context.WorldState.Doors.Values.Any(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+                        if (!hasResidence)
+                        {
+                            welcomeNotified = true;
+                            Game1.addHUDMessage(new HUDMessage("¡Bienvenido a la Plaza Central! Camina hacia un portal libre en la plaza o cruza el paso del oeste hacia los puentes (o escribe /residencias) para fundar tu granja.", HUDMessage.newQuest_type));
+                        }
                     }
                 }
+
+                EnsureLocationPortals(e.NewLocation);
             }
 
             if (e.NewLocation is Farm farm && farm.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
@@ -1366,9 +1479,10 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            if (Game1.currentLocation is not Farm farm || farm.NameOrUniqueName != "Farm" || Game1.player == null || Game1.isFestival())
+            var curLoc = Game1.currentLocation;
+            if (curLoc == null || !HostPlazaLayout.IsPlazaLocation(curLoc.NameOrUniqueName) || Game1.player == null || Game1.isFestival())
             {
-                if (Game1.currentLocation is not Farm)
+                if (curLoc == null || !HostPlazaLayout.IsPlazaLocation(curLoc.NameOrUniqueName))
                     portalPromptGate.Reset();
                 return;
             }
@@ -1381,9 +1495,9 @@ namespace Pelican4Ever.Modules
             Vector2 playerTile = Game1.player.Tile;
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
             {
-                if (!string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(d.LocationName, curLoc.NameOrUniqueName, StringComparison.OrdinalIgnoreCase))
                     return false;
-                var loc = HostPlazaLayout.Find(d.LocationName, 16);
+                var loc = HostPlazaLayout.Find(d.LocationName, context.Config.FarmSlotCount);
                 return loc != null && SpatialWarpRouter.IsPortalTriggerTile(d.Edge, d.TownTileX, d.TownTileY, loc, (int)playerTile.X, (int)playerTile.Y);
             });
 
@@ -1400,107 +1514,59 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Aprovisiona dinámicamente las localizaciones de mapas puente (Pelican4Ever_Bridge_1..3) si no existen aún,
-        /// y enlaza los warps encadenados Oeste (avanzar) / Este (retroceder).
-        /// </summary>
-        public static void EnsureBridgeLocations()
-        {
-            if (context == null) return;
-
-            foreach (string bName in HostPlazaLayout.AllBridgeNames)
-            {
-                GameLocation? loc = Game1.getLocationFromName(bName);
-                if (loc == null)
-                {
-                    xTile.Map? baseMap = null;
-                    try
-                    {
-                        baseMap = context.Helper.GameContent.Load<xTile.Map>("Maps/BusStop");
-                    }
-                    catch { }
-
-                    if (baseMap != null)
-                    {
-                        xTile.Map clonedMap = MapCloneHelper.CloneMap(baseMap);
-                        loc = new GameLocation("Maps/BusStop", bName) { isOutdoors = { Value = true } };
-                        loc.map = clonedMap;
-                        Game1.locations.Add(loc);
-                    }
-                }
-            }
-
-            // Configurar warps encadenados Oeste (avanzar) / Este (retroceder)
-            Farm? hostFarm = Game1.getFarm();
-            if (hostFarm != null)
-            {
-                UpdateOrCreateWarp(hostFarm, 0, 26, HostPlazaLayout.BridgeName(1), 33, 14);
-                UpdateOrCreateWarp(hostFarm, 0, 27, HostPlazaLayout.BridgeName(1), 33, 14);
-            }
-
-            GameLocation? bridge1 = Game1.getLocationFromName(HostPlazaLayout.BridgeName(1));
-            if (bridge1 != null)
-            {
-                UpdateOrCreateWarp(bridge1, 34, 13, HostPlazaLayout.HostFarm, 2, 26);
-                UpdateOrCreateWarp(bridge1, 34, 14, HostPlazaLayout.HostFarm, 2, 26);
-                UpdateOrCreateWarp(bridge1, 34, 15, HostPlazaLayout.HostFarm, 2, 26);
-
-                UpdateOrCreateWarp(bridge1, 0, 13, HostPlazaLayout.BridgeName(2), 33, 14);
-                UpdateOrCreateWarp(bridge1, 0, 14, HostPlazaLayout.BridgeName(2), 33, 14);
-                UpdateOrCreateWarp(bridge1, 0, 15, HostPlazaLayout.BridgeName(2), 33, 14);
-            }
-
-            GameLocation? bridge2 = Game1.getLocationFromName(HostPlazaLayout.BridgeName(2));
-            if (bridge2 != null)
-            {
-                UpdateOrCreateWarp(bridge2, 34, 13, HostPlazaLayout.BridgeName(1), 1, 14);
-                UpdateOrCreateWarp(bridge2, 34, 14, HostPlazaLayout.BridgeName(1), 1, 14);
-                UpdateOrCreateWarp(bridge2, 34, 15, HostPlazaLayout.BridgeName(1), 1, 14);
-
-                UpdateOrCreateWarp(bridge2, 0, 13, HostPlazaLayout.BridgeName(3), 33, 14);
-                UpdateOrCreateWarp(bridge2, 0, 14, HostPlazaLayout.BridgeName(3), 33, 14);
-                UpdateOrCreateWarp(bridge2, 0, 15, HostPlazaLayout.BridgeName(3), 33, 14);
-            }
-
-            GameLocation? bridge3 = Game1.getLocationFromName(HostPlazaLayout.BridgeName(3));
-            if (bridge3 != null)
-            {
-                UpdateOrCreateWarp(bridge3, 34, 13, HostPlazaLayout.BridgeName(2), 1, 14);
-                UpdateOrCreateWarp(bridge3, 34, 14, HostPlazaLayout.BridgeName(2), 1, 14);
-                UpdateOrCreateWarp(bridge3, 34, 15, HostPlazaLayout.BridgeName(2), 1, 14);
-            }
-        }
-
-        /// <summary>
-        /// Aprovisiona los portales físicos de 2 tiles y los senderos en el perímetro de la granja del anfitrión y de los mapas puente.
+        /// Aprovisiona los portales físicos de 2 tiles y los senderos en el perímetro de toda la plaza central.
         /// </summary>
         public static void EnsureHostFarmPortals(Farm farm)
         {
             if (farm == null || context == null || farm.NameOrUniqueName != "Farm") return;
 
-            EnsureBridgeLocations();
+            EnsureAllPlazaPortals();
+        }
 
-            EnsureLocationPortals(farm);
-
-            foreach (string bName in HostPlazaLayout.AllBridgeNames)
+        public static void EnsureAllPlazaPortals()
+        {
+            if (context == null) return;
+            int slotCount = context.Config.FarmSlotCount;
+            var chain = HostPlazaLayout.Chain(slotCount);
+            foreach (var locDef in chain)
             {
-                GameLocation? bLoc = Game1.getLocationFromName(bName);
-                if (bLoc != null)
+                GameLocation? loc = Game1.getLocationFromName(locDef.Name);
+                if (loc != null)
                 {
-                    EnsureLocationPortals(bLoc);
+                    EnsureLocationPortals(loc);
                 }
+            }
+        }
+
+        private static void CleanUpHostFarmLegacy(Farm farmLoc)
+        {
+            foreach (Point legacy in LegacySignTiles)
+                RemoveLegacySign(farmLoc, legacy.ToVector2());
+
+            var petBowl = farmLoc.buildings.FirstOrDefault(b =>
+                (b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl")
+                && b.tileX.Value >= 52 && b.tileX.Value <= 55 && b.tileY.Value <= 10);
+            if (petBowl != null)
+            {
+                petBowl.tileX.Value = 56;
+                petBowl.tileY.Value = 8;
             }
         }
 
         public static void EnsureLocationPortals(GameLocation location)
         {
-            if (location == null || context == null) return;
+            var ctx = context;
+            if (location == null || ctx == null) return;
+
+            string locName = location.NameOrUniqueName;
+            if (!HostPlazaLayout.IsPlazaLocation(locName)) return;
 
             var hostMap = location.Map;
             if (hostMap != null)
             {
                 if (hostMap.GetTileSheet(MailboxTileSheetId) == null)
                 {
-                    var townMap = context?.Helper.GameContent.Load<xTile.Map>("Maps/Town");
+                    var townMap = ctx.Helper.GameContent.Load<xTile.Map>("Maps/Town");
                     if (townMap != null)
                         AddMailboxAssets(hostMap, townMap);
                 }
@@ -1512,38 +1578,98 @@ namespace Pelican4Ever.Modules
             var alwaysFrontLayer = hostMap?.GetLayer("AlwaysFront");
             var backLayer = hostMap?.GetLayer("Back");
 
-            xTile.Tiles.Tile? sampleTile = null;
-            if (backLayer != null)
+            xTile.Tiles.Tile? sampleTile = backLayer?.Tiles[20, 20] ?? backLayer?.Tiles[5, 5];
+
+            // 1. Limpieza de elementos heredados exclusiva de la Granja Host
+            if (location is Farm farmLoc && string.Equals(locName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase))
             {
-                sampleTile = backLayer.Tiles[20, 20] ?? backLayer.Tiles[5, 5];
+                CleanUpHostFarmLegacy(farmLoc);
             }
 
-            if (location is Farm farmLoc)
-            {
-                foreach (Point legacy in LegacySignTiles)
-                    RemoveLegacySign(farmLoc, legacy.ToVector2());
+            int slotCount = ctx.Config.FarmSlotCount;
+            var plazaLoc = HostPlazaLayout.Find(locName, slotCount);
 
-                var petBowl = farmLoc.buildings.FirstOrDefault(b =>
-                    (b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl")
-                    && b.tileX.Value >= 52 && b.tileX.Value <= 55 && b.tileY.Value <= 10);
-                if (petBowl != null)
+            // 2. Pasos Oeste y Este (limpieza de escombros y warps continuos)
+            if (plazaLoc?.West is { } westPassage)
+            {
+                int maxWestX = string.Equals(locName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase) ? 7 : 5;
+                for (int x = 0; x <= maxWestX; x++)
                 {
-                    petBowl.tileX.Value = 56;
-                    petBowl.tileY.Value = 8;
+                    for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
+                    {
+                        location.removeEverythingFromThisTile(x, y);
+                        location.removeTileProperty(x, y, "Back", "Passable");
+                        if (location is Farm f)
+                        {
+                            for (int i = f.resourceClumps.Count - 1; i >= 0; i--)
+                            {
+                                if (IsClumpOverTile(f.resourceClumps[i], x, y))
+                                    f.resourceClumps.RemoveAt(i);
+                            }
+                        }
+                    }
                 }
+
+                for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
+                {
+                    UpdateOrCreateWarp(location, 0, y, westPassage.TargetLocation, westPassage.ArrivalX, westPassage.ArrivalY);
+                }
+
+                // Despejar casilla de llegada en la ubicación destino si está cargada
+                GameLocation? targetLoc = Game1.getLocationFromName(westPassage.TargetLocation);
+                targetLoc?.removeEverythingFromThisTile(westPassage.ArrivalX, westPassage.ArrivalY);
+                targetLoc?.removeTileProperty(westPassage.ArrivalX, westPassage.ArrivalY, "Back", "Passable");
+            }
+            else if (string.Equals(locName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase))
+            {
+                // Si la Granja Host ya no tiene paso oeste (slotCount <= 4), retirar warps de (0, 26..27)
+                RemoveWarpAt(location, 0, 26);
+                RemoveWarpAt(location, 0, 27);
             }
 
+            if (plazaLoc?.East is { } eastPassage)
+            {
+                int mapWidth = hostMap?.Layers.Count > 0 ? hostMap.Layers[0].LayerWidth : plazaLoc.Width;
+                for (int x = mapWidth - 6; x < mapWidth; x++)
+                {
+                    for (int y = eastPassage.FirstRow; y < eastPassage.FirstRow + eastPassage.RowCount; y++)
+                    {
+                        location.removeEverythingFromThisTile(x, y);
+                        location.removeTileProperty(x, y, "Back", "Passable");
+                        if (location is Farm f)
+                        {
+                            for (int i = f.resourceClumps.Count - 1; i >= 0; i--)
+                            {
+                                if (IsClumpOverTile(f.resourceClumps[i], x, y))
+                                    f.resourceClumps.RemoveAt(i);
+                            }
+                        }
+                    }
+                }
+
+                for (int y = eastPassage.FirstRow; y < eastPassage.FirstRow + eastPassage.RowCount; y++)
+                {
+                    UpdateOrCreateWarp(location, mapWidth - 1, y, eastPassage.TargetLocation, eastPassage.ArrivalX, eastPassage.ArrivalY);
+                }
+
+                // Despejar casilla de llegada en la ubicación destino si está cargada
+                GameLocation? targetLoc = Game1.getLocationFromName(eastPassage.TargetLocation);
+                targetLoc?.removeEverythingFromThisTile(eastPassage.ArrivalX, eastPassage.ArrivalY);
+                targetLoc?.removeTileProperty(eastPassage.ArrivalX, eastPassage.ArrivalY, "Back", "Passable");
+            }
+
+            // 3. Portales residenciales en esta ubicación
             foreach (DoorModel door in RegisteredDoors)
             {
-                if (!string.Equals(door.LocationName, location.NameOrUniqueName, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(door.LocationName, locName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                // 1. Limpiar copas de árboles, ramas, troncos y suelo en el mapa del runtime
+                // A. Limpiar copas de árboles, ramas, troncos y suelo en el mapa del runtime
                 var passTiles = ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
 
                 var (t1, t2) = GetOpeningTiles(door);
 
-                // 2. Limpiar objetos, escombros, tocones, piedras y propiedades Passable a lo largo de todo el paso
+                // B. Limpiar objetos, escombros, tocones, piedras y propiedades Passable a lo largo de todo el paso
                 foreach (var pt in passTiles)
                 {
                     location.removeEverythingFromThisTile(pt.X, pt.Y);
@@ -1562,13 +1688,47 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // 3. El buzón es de tiles del mapa (PlaceMailboxTiles): despejar su casilla y retirar el cartel antiguo
+                // C. Margen despejado de 3×4 casillas al final interior del camino (TASK-1302)
+                if (plazaLoc != null)
+                {
+                    int innerY = door.Edge == PortalEdge.North
+                        ? door.TownTileY + plazaLoc.NorthPathDepth
+                        : door.TownTileY - plazaLoc.SouthPathStartOffset;
+
+                    int startY = door.Edge == PortalEdge.North ? innerY : innerY - 2;
+                    int endY = door.Edge == PortalEdge.North ? innerY + 2 : innerY;
+
+                    for (int ix = door.TownTileX - 1; ix <= door.TownTileX + 2; ix++)
+                    {
+                        for (int iy = startY; iy <= endY; iy++)
+                        {
+                            if (ix >= 0 && ix < (hostMap?.Layers[0].LayerWidth ?? plazaLoc.Width)
+                                && iy >= 0 && iy < (hostMap?.Layers[0].LayerHeight ?? plazaLoc.Height))
+                            {
+                                location.removeEverythingFromThisTile(ix, iy);
+                                location.removeTileProperty(ix, iy, "Back", "Passable");
+                                if (location is Farm farmRef)
+                                {
+                                    for (int i = farmRef.resourceClumps.Count - 1; i >= 0; i--)
+                                    {
+                                        if (IsClumpOverTile(farmRef.resourceClumps[i], ix, iy))
+                                            farmRef.resourceClumps.RemoveAt(i);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // D. El buzón es de tiles del mapa (PlaceMailboxTiles): despejar su casilla
                 var (mailboxX, mailboxY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
                 location.removeEverythingFromThisTile(mailboxX, mailboxY);
                 location.removeEverythingFromThisTile(mailboxX, mailboxY - 1);
 
-                // 4. Sincronizar Warps continuos en ambos tiles de la apertura (solo si la parcela está reclamada)
-                bool isClaimed = context!.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
+                // E. Sincronizar Warps continuos en los 4 tiles de disparo (apertura y borde exterior)
+                bool isClaimed = ctx.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
+                int mapH = hostMap?.Layers.Count > 0 ? hostMap.Layers[0].LayerHeight : (plazaLoc?.Height ?? 65);
+                int outerBorderY = door.Edge == PortalEdge.North ? 0 : mapH - 1;
 
                 if (isClaimed && assignment != null)
                 {
@@ -1576,11 +1736,15 @@ namespace Pelican4Ever.Modules
 
                     UpdateOrCreateWarp(location, t1.X, t1.Y, assignment.FarmSlotId, targetX, targetY);
                     UpdateOrCreateWarp(location, t2.X, t2.Y, assignment.FarmSlotId, targetX, targetY);
+                    UpdateOrCreateWarp(location, door.TownTileX, outerBorderY, assignment.FarmSlotId, targetX, targetY);
+                    UpdateOrCreateWarp(location, door.TownTileX + 1, outerBorderY, assignment.FarmSlotId, targetX, targetY);
                 }
                 else
                 {
                     RemoveWarpAt(location, t1.X, t1.Y);
                     RemoveWarpAt(location, t2.X, t2.Y);
+                    RemoveWarpAt(location, door.TownTileX, outerBorderY);
+                    RemoveWarpAt(location, door.TownTileX + 1, outerBorderY);
                 }
             }
         }
@@ -2069,39 +2233,82 @@ namespace Pelican4Ever.Modules
 
         private static void HandleDoorsChatCommand(string[] command, ChatBox chat)
         {
+            if (context == null) return;
+            int slotCount = context.Config.FarmSlotCount;
+
+            var specs = RegisteredDoors.Select(d => new DoorSpec(
+                d.DoorId,
+                d.LocationName,
+                d.TownTileX,
+                d.TownTileY,
+                d.Edge,
+                d.DefaultSlotId,
+                d.MailboxTileX,
+                d.MailboxTileY
+            ));
+
+            var entries = PlazaCatalogFormatter.BuildCatalogEntries(specs, slotCount, doorId =>
+            {
+                bool isClaimed = context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? assignment);
+                string? owner = null;
+                string? farmType = assignment?.FarmType;
+                if (isClaimed && assignment != null)
+                {
+                    if (context.WorldState.Players.TryGetValue(assignment.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
+                        owner = rec.PlayerName;
+                    else
+                        owner = "Vecino";
+                }
+                var dModel = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
+                return (isClaimed, owner, farmType, dModel?.Description);
+            });
+
             chat.addInfoMessage("=== PARCELAS RESIDENCIALES EN LA PLAZA CENTRAL ===");
             int freeCount = 0;
-            foreach (var door in RegisteredDoors)
+            foreach (var entry in entries)
             {
-                DoorAssignment? assignment = null;
-                bool isClaimed = context != null && context.WorldState.Doors.TryGetValue(door.DoorId, out assignment);
-                string loc = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
-                if (!isClaimed || assignment == null)
-                {
-                    freeCount++;
-                    chat.addInfoMessage($"[Libre] {door.DoorId}: {loc} ({door.TownTileX},{door.TownTileY}) - {door.Description}");
-                }
-                else
-                {
-                    string owner = "Vecino";
-                    if (context != null && context.WorldState.Players.TryGetValue(assignment.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
-                        owner = rec.PlayerName;
-                    chat.addInfoMessage($"[Ocupada] {door.DoorId} ({owner}): {loc} ({door.TownTileX},{door.TownTileY})");
-                }
+                if (!entry.IsClaimed) freeCount++;
+                chat.addInfoMessage(PlazaCatalogFormatter.FormatChatLine(entry));
             }
-            chat.addInfoMessage($"Total: {freeCount} parcelas libres. Camina hacia el portal o pulsa [E] para fundar tu granja.");
+            chat.addInfoMessage($"Total: {freeCount} de {entries.Count} parcelas libres. Camina hacia el portal o escribe /residencias para fundar tu granja.");
         }
 
         private void OnConsoleDoors(string command, string[] args)
         {
             if (context == null) return;
-            context.Monitor.Log($"=== RESIDENCIAS EN PELICAN TOWN ({RegisteredDoors.Count} en catálogo) ===", LogLevel.Info);
-            foreach (var door in RegisteredDoors)
+            int slotCount = context.Config.FarmSlotCount;
+
+            var specs = RegisteredDoors.Select(d => new DoorSpec(
+                d.DoorId,
+                d.LocationName,
+                d.TownTileX,
+                d.TownTileY,
+                d.Edge,
+                d.DefaultSlotId,
+                d.MailboxTileX,
+                d.MailboxTileY
+            ));
+
+            var entries = PlazaCatalogFormatter.BuildCatalogEntries(specs, slotCount, doorId =>
             {
-                DoorAssignment? assignment = null;
-                bool isClaimed = context.WorldState.Doors.TryGetValue(door.DoorId, out assignment);
-                string status = (isClaimed && assignment != null) ? $"Ocupada por {assignment.OwnerId} ({assignment.FarmType})" : "LIBRE";
-                context.Monitor.Log($"  {door.DoorId} [{status}] en {door.LocationName ?? "Town"} ({door.TownTileX},{door.TownTileY}) - {door.Description}", LogLevel.Info);
+                bool isClaimed = context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? assignment);
+                string? owner = null;
+                string? farmType = assignment?.FarmType;
+                if (isClaimed && assignment != null)
+                {
+                    if (context.WorldState.Players.TryGetValue(assignment.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
+                        owner = rec.PlayerName;
+                    else
+                        owner = assignment.OwnerId.ToString();
+                }
+                var dModel = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
+                return (isClaimed, owner, farmType, dModel?.Description);
+            });
+
+            context.Monitor.Log($"=== RESIDENCIAS EN LA PLAZA CENTRAL ({entries.Count} activas para FarmSlotCount={slotCount}) ===", LogLevel.Info);
+            foreach (var entry in entries)
+            {
+                context.Monitor.Log(PlazaCatalogFormatter.FormatConsoleLine(entry), LogLevel.Info);
             }
         }
 
@@ -2187,9 +2394,9 @@ namespace Pelican4Ever.Modules
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas, {context.WorldState.Annexes.Count} anexos).", LogLevel.Info);
                     RefreshSlotLocationData();
 
-                    if (Game1.currentLocation is Farm curFarm && curFarm.NameOrUniqueName == "Farm")
+                    if (Game1.currentLocation != null && HostPlazaLayout.IsPlazaLocation(Game1.currentLocation.NameOrUniqueName))
                     {
-                        EnsureHostFarmPortals(curFarm);
+                        EnsureLocationPortals(Game1.currentLocation);
                     }
                 }
             }
@@ -2300,8 +2507,13 @@ namespace Pelican4Ever.Modules
             context.Monitor.Log($"[FarmSlotModule] Puerta {doorId} asignada con éxito a {playerId} (Granja: {slotId}, Tipo: {resolvedType}).", LogLevel.Info);
             RefreshSlotLocationData();
 
-            // Actualizar warps físicos continuos en la granja del anfitrión
-            EnsureHostFarmPortals(Game1.getFarm());
+            // Actualizar warps físicos continuos en la plaza
+            GameLocation? doorLoc = Game1.getLocationFromName(door.LocationName);
+            if (doorLoc != null)
+            {
+                EnsureLocationPortals(doorLoc);
+            }
+            EnsureAllPlazaPortals();
 
             // Sincronizar inmediatamente a todos los peones
             BroadcastDoorsSync();
@@ -3105,6 +3317,34 @@ namespace Pelican4Ever.Modules
                     continue;
                 }
 
+                if (locName.StartsWith(HostPlazaLayout.BridgePrefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    var chain = HostPlazaLayout.Chain(slotCount);
+                    bool inChain = chain.Any(l => string.Equals(l.Name, locName, StringComparison.OrdinalIgnoreCase));
+                    if (!inChain)
+                    {
+                        var existing = Game1.getLocationFromName(locName);
+                        if (existing != null)
+                        {
+                            Game1.locations.Remove(existing);
+                        }
+                        context?.Monitor.Log($"[FarmSlotModule] Puente guardado {locName} descartado (no está en la cadena activa para slotCount={slotCount}).", LogLevel.Trace);
+                        continue;
+                    }
+
+                    if (Game1.getLocationFromName(locName) == null)
+                    {
+                        var bridgeLoc = new GameLocation($"Maps/{locName}", locName)
+                        {
+                            isOutdoors = { Value = true }
+                        };
+                        Game1.locations.Add(bridgeLoc);
+                        context?.Monitor.Log($"[FarmSlotModule] Pre-registrado puente {locName} para restaurar estado guardado.", LogLevel.Trace);
+                    }
+                    continue;
+                }
+
                 if (!locName.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
@@ -3388,7 +3628,7 @@ namespace Pelican4Ever.Modules
 
         public static bool Prefix_IsCollidingPosition(GameLocation __instance, Microsoft.Xna.Framework.Rectangle position, ref bool __result)
         {
-            if (__instance is Farm farm && farm.NameOrUniqueName == "Farm")
+            if (__instance != null && HostPlazaLayout.IsPlazaLocation(__instance.NameOrUniqueName))
             {
                 int leftTile = position.Left / 64;
                 int rightTile = position.Right / 64;
@@ -3396,12 +3636,31 @@ namespace Pelican4Ever.Modules
                 int bottomTile = position.Bottom / 64;
                 int topTile = position.Top / 64;
 
+                string locName = __instance.NameOrUniqueName;
+                int slotCount = context?.Config.FarmSlotCount ?? 16;
+                var plazaLoc = HostPlazaLayout.Find(locName, slotCount);
+
+                if (plazaLoc != null)
+                {
+                    if (IsInPlazaPassage(plazaLoc, centerTile, bottomTile)
+                        || IsInPlazaPassage(plazaLoc, leftTile, bottomTile)
+                        || IsInPlazaPassage(plazaLoc, rightTile, bottomTile)
+                        || IsInPlazaPassage(plazaLoc, centerTile, topTile))
+                    {
+                        __result = false;
+                        return false;
+                    }
+                }
+
                 foreach (var door in RegisteredDoors)
                 {
-                    if (IsInOpeningOrBorder(door, centerTile, bottomTile)
-                        || IsInOpeningOrBorder(door, leftTile, bottomTile)
-                        || IsInOpeningOrBorder(door, rightTile, bottomTile)
-                        || IsInOpeningOrBorder(door, centerTile, topTile))
+                    if (!string.Equals(door.LocationName, locName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (IsInOpeningOrBorder(door, plazaLoc, centerTile, bottomTile)
+                        || IsInOpeningOrBorder(door, plazaLoc, leftTile, bottomTile)
+                        || IsInOpeningOrBorder(door, plazaLoc, rightTile, bottomTile)
+                        || IsInOpeningOrBorder(door, plazaLoc, centerTile, topTile))
                     {
                         __result = false;
                         return false;
@@ -3508,9 +3767,7 @@ namespace Pelican4Ever.Modules
                 var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
                 if (assignment != null && RegisteredDoors.FirstOrDefault(d => d.DoorId == assignment.DoorId) is { } door)
                 {
-                    string dest = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
-                    locationRequest = Game1.getLocationRequest(dest);
-                    RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
+                    ResolvePlazaReturn(door, ref locationRequest, ref tileX, ref tileY, ref facingDirectionAfterWarp);
                 }
                 else
                 {
@@ -3599,9 +3856,7 @@ namespace Pelican4Ever.Modules
                 {
                     if (SpatialWarpRouter.ShouldReturnToPlaza(door.Edge, targetLoc))
                     {
-                        string dest = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
-                        locationRequest = Game1.getLocationRequest(dest);
-                        RepositionToPortalExit(door, ref tileX, ref tileY, ref facingDirectionAfterWarp);
+                        ResolvePlazaReturn(door, ref locationRequest, ref tileX, ref tileY, ref facingDirectionAfterWarp);
                         return true;
                     }
 
@@ -3660,8 +3915,25 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
-        private static void RepositionToPortalExit(DoorModel door, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
+        private static void ResolvePlazaReturn(DoorModel door, ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
+            int slotCount = context?.Config.FarmSlotCount ?? 16;
+            string dest = string.IsNullOrWhiteSpace(door.LocationName) ? HostPlazaLayout.HostFarm : door.LocationName;
+            var chain = HostPlazaLayout.Chain(slotCount);
+            bool inChain = chain.Any(l => string.Equals(l.Name, dest, StringComparison.OrdinalIgnoreCase));
+            var targetLoc = Game1.getLocationFromName(dest);
+
+            if (!inChain || targetLoc == null)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Destino de retorno a plaza '{dest}' para puerta {door.DoorId} no está activo o no existe (slotCount={slotCount}). Redirigiendo a Granja Host central.", LogLevel.Warn);
+                locationRequest = Game1.getLocationRequest(HostPlazaLayout.HostFarm);
+                tileX = 64;
+                tileY = 16;
+                facingDirectionAfterWarp = 2;
+                return;
+            }
+
+            locationRequest = Game1.getLocationRequest(dest);
             SpatialWarpRouter.GetPlazaReturnCoordinates(door.Edge, door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
         }
 
@@ -3833,6 +4105,8 @@ namespace Pelican4Ever.Modules
         {
             try
             {
+                SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? 16);
+
                 // 1. Identificar si el jugador posee una residencia asignada
                 DoorAssignment? assignment = context?.WorldState?.Doors?.Values
                     .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
