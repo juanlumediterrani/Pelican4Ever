@@ -182,14 +182,39 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void GetPathTileInfo_WithStoneWalkwayStyle_ReturnsOutdoorsSheetAndStoneFlagstones()
+        public void GetPathTileInfo_WithMountainGorgeStyle_ReturnsOutdoorsSheetAndRockIndices()
         {
-            var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
+            var farm = HostPlazaLayout.Find("Farm", 16)!;
             var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
-                PortalEdge.South, bridge, 25, 28, 25, 27, 175, null, null, 15, EntranceStyle.StoneWalkway);
+                PortalEdge.North, farm, 18, 1, 18, 5, 175, null, null, 15, EntranceStyle.MountainGorge);
 
             Assert.False(isStepping);
-            Assert.True(tile is 1964 or 1965 or 1966);
+            Assert.True(tile is 1964 or 838);
+        }
+
+        [Fact]
+        public void GetPathTileInfo_WithCobblestoneStyle_ReturnsOutdoorsSheetAndCobblestoneIndices()
+        {
+            var farm = HostPlazaLayout.Find("Farm", 16)!;
+            var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
+                PortalEdge.South, farm, 18, 63, 18, 61, 175, null, null, 15, EntranceStyle.Cobblestone);
+
+            Assert.False(isStepping);
+            Assert.True(tile is 401 or 736 or 768);
+        }
+
+        [Fact]
+        public void ResolveEntranceStyle_ForAllPlazaDoorsInCatalog_NeverReturnsDefaultOrSteppingStones()
+        {
+            var doors = DoorCatalogFixture.LoadDoors();
+            Assert.NotEmpty(doors);
+
+            foreach (var door in doors)
+            {
+                var style = TerrainTileClassifier.ResolveEntranceStyle(door.LocationName, door.DoorId, door.Edge, door.TownTileX, door.TownTileY);
+                Assert.NotEqual(EntranceStyle.Default, style);
+                Assert.NotEqual(EntranceStyle.SteppingStones, style);
+            }
         }
     }
 }

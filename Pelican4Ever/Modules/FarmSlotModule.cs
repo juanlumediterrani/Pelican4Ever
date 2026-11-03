@@ -467,51 +467,10 @@ namespace Pelican4Ever.Modules
                     var farmPlaza = HostPlazaLayout.Find(HostPlazaLayout.HostFarm, slotCount);
                     if (farmPlaza?.West is { } westPassage)
                     {
-                        // 1. Tallar corredor oeste (x = 0..7, y = 26..27)
-                        for (int x = 0; x <= 7; x++)
-                        {
-                            for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
-                            {
-                                if (bldLayer != null) bldLayer.Tiles[x, y] = null;
-                                if (frontLayer != null) frontLayer.Tiles[x, y] = null;
-                                if (alwaysFrontLayer != null) alwaysFrontLayer.Tiles[x, y] = null;
-                                if (backLayer != null)
-                                {
-                                    var steppingSheet = hostMap.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId);
-                                    if (steppingSheet != null)
-                                    {
-                                        backLayer.Tiles[x, y] = new xTile.Tiles.StaticTile(backLayer, steppingSheet, xTile.Tiles.BlendMode.Alpha, 0);
-                                    }
-                                    backLayer.Tiles[x, y]?.Properties.Remove("Passable");
-                                    if (backLayer.Tiles[x, y] != null) backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
-                                }
-                            }
-                        }
+                        var sheetOutdoors = MapCloneHelper.GetOutdoorsTileSheet(hostMap) ?? sampleTile?.TileSheet;
+                        ApplyFarmWestPassageArtisanFinishes(hostMap, westPassage, sheetOutdoors);
 
-                        // 2. Limpiar el cerezo estático cortado en (1..6, 23..29)
-                        if (alwaysFrontLayer != null)
-                        {
-                            for (int x = 1; x <= 6; x++)
-                            {
-                                for (int y = 23; y <= 27; y++)
-                                {
-                                    if (x < alwaysFrontLayer.LayerWidth && y < alwaysFrontLayer.LayerHeight)
-                                        alwaysFrontLayer.Tiles[x, y] = null;
-                                }
-                            }
-                        }
-                        for (int x = 2; x <= 5; x++)
-                        {
-                            for (int y = 23; y <= 29; y++)
-                            {
-                                if (frontLayer != null && x < frontLayer.LayerWidth && y < frontLayer.LayerHeight)
-                                    frontLayer.Tiles[x, y] = null;
-                                if (y >= 26 && bldLayer != null && x < bldLayer.LayerWidth && y < bldLayer.LayerHeight)
-                                    bldLayer.Tiles[x, y] = null;
-                            }
-                        }
-
-                        // 3. Añadir warp hacia Pelican4Ever_Bridge_1 conservando warps vanilla
+                        // Añadir warp hacia Pelican4Ever_Bridge_1 conservando warps vanilla
                         string existingWarps = hostMap.Properties.TryGetValue("Warp", out var wVal) ? wVal.ToString() : string.Empty;
                         var westWarpsList = new List<string>();
                         for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
@@ -777,7 +736,7 @@ namespace Pelican4Ever.Modules
             {
                 if (door.Edge == PortalEdge.North)
                 {
-                    if (door.TownTileX == 18) // Farm_Portal_01
+                    if (door.TownTileX == 18) // Farm_Portal_01 (NW: desfiladero rocoso, x=18..19, y=0..10)
                     {
                         int lx = 17, rx = 20;
                         SetTileIfValid(bld, sheetOutdoors, lx, 3, 444);
@@ -794,84 +753,113 @@ namespace Pelican4Ever.Modules
                         SetTileIfValid(bld, sheetOutdoors, rx, 7, 541);
                         if (back != null) SetTileIfValid(back, sheetOutdoors, rx, 8, 645);
 
-                        for (int y = 1; y <= 8; y++)
+                        // Limpiar copas, ramas y hojas que asomen sobre el desfiladero
+                        for (int x = 16; x <= 21; x++)
                         {
-                            ClearTile(front, lx, y);
-                            ClearTile(front, rx, y);
-                            ClearTile(alwaysFront, lx, y);
-                            ClearTile(alwaysFront, rx, y);
+                            for (int y = 0; y <= 10; y++)
+                            {
+                                ClearTile(front, x, y);
+                                ClearTile(alwaysFront, x, y);
+                                ClearTile(alwaysFront2, x, y);
+                                ClearTile(alwaysFront3, x, y);
+                            }
                         }
+
+                        // Detalle decorativo: piedra rocosa en la ladera derecha
+                        SetTileIfValid(bld, sheetOutdoors, rx, 2, 307);
                     }
-                    else if (door.TownTileX == 62) // Farm_Portal_02
+                    else if (door.TownTileX == 62) // Farm_Portal_02 (NE: bosque campestre, x=62..63, y=0..10)
                     {
+                        // Valla de madera en y = 9 con postes canónicos
                         SetTileIfValid(bld, sheetOutdoors, 61, 9, 385);
                         SetTileIfValid(front, sheetOutdoors, 61, 8, 360);
                         SetTileIfValid(bld, sheetOutdoors, 64, 9, 383);
                         SetTileIfValid(front, sheetOutdoors, 64, 8, 358);
 
-                        for (int y = 1; y <= 9; y++)
+                        // Eliminar completamente el árbol cortado y copas en x = 60..65, y = 0..9
+                        for (int x = 60; x <= 65; x++)
                         {
-                            for (int x = 61; x <= 64; x++)
+                            for (int y = 0; y <= 9; y++)
                             {
                                 ClearTile(front, x, y);
                                 ClearTile(alwaysFront, x, y);
+                                ClearTile(alwaysFront2, x, y);
+                                ClearTile(alwaysFront3, x, y);
                             }
                         }
-                        // Detalle decorativo: flor silvestre en la derecha
-                        SetTileIfValid(bld, sheetOutdoors, 64, 8, 256);
+
+                        // Seto verde delimitador a ambos lados del paso
+                        for (int y = 3; y <= 7; y++)
+                        {
+                            SetTileIfValid(bld, sheetOutdoors, 61, y, 406);
+                            SetTileIfValid(bld, sheetOutdoors, 64, y, 406);
+                        }
+
+                        // Detalle decorativo: barril rústico junto a la entrada norte
+                        SetTileIfValid(bld, sheetOutdoors, 64, 2, 809);
                     }
                 }
                 else if (door.Edge == PortalEdge.South)
                 {
-                    if (door.TownTileX == 18) // Farm_Portal_03
+                    if (door.TownTileX == 18) // Farm_Portal_03 (SW: pastizal sur, x=18..19, y=60..64)
                     {
-                        // Remate de valla de madera
+                        // Remate de valla de madera en y = 63
                         SetTileIfValid(bld, sheetOutdoors, 17, 63, 385);
                         SetTileIfValid(front, sheetOutdoors, 17, 62, 360);
                         SetTileIfValid(bld, sheetOutdoors, 20, 63, 383);
                         SetTileIfValid(front, sheetOutdoors, 20, 62, 358);
 
-                        // Limpiar corte en front y reborde de hierba
-                        for (int x = 17; x <= 20; x++)
+                        // Limpiar corte en Front y reborde de hierba
+                        for (int x = 16; x <= 21; x++)
                         {
+                            ClearTile(front, x, 60);
                             ClearTile(front, x, 61);
                             ClearTile(front, x, 62);
                         }
 
-                        // Limpiar árbol cortado en AlwaysFront
-                        for (int x = 16; x <= 21; x++)
+                        // Limpiar completamente el árbol cortado en AlwaysFront
+                        for (int x = 15; x <= 22; x++)
                         {
-                            for (int y = 59; y <= 64; y++)
+                            for (int y = 58; y <= 64; y++)
                             {
                                 ClearTile(alwaysFront, x, y);
                                 ClearTile(alwaysFront2, x, y);
+                                ClearTile(alwaysFront3, x, y);
                             }
                         }
+
+                        // Detalle decorativo: farola rústica de poste junto al camino
+                        SetTileIfValid(bld, sheetOutdoors, 20, 61, 378);
                     }
-                    else if (door.TownTileX == 62) // Farm_Portal_04
+                    else if (door.TownTileX == 62) // Farm_Portal_04 (SE: huerto sudeste, x=62..63, y=60..64)
                     {
-                        // Remate de valla de madera
+                        // Remate de valla de madera en y = 63
                         SetTileIfValid(bld, sheetOutdoors, 61, 63, 385);
                         SetTileIfValid(front, sheetOutdoors, 61, 62, 360);
                         SetTileIfValid(bld, sheetOutdoors, 64, 63, 383);
                         SetTileIfValid(front, sheetOutdoors, 64, 62, 358);
 
-                        // Limpiar corte en front y reborde de hierba
-                        for (int x = 61; x <= 64; x++)
+                        // Limpiar corte en Front y reborde de hierba
+                        for (int x = 60; x <= 65; x++)
                         {
+                            ClearTile(front, x, 60);
                             ClearTile(front, x, 61);
                             ClearTile(front, x, 62);
                         }
 
-                        // Limpiar enorme cerezo cortado por la mitad en AlwaysFront
-                        for (int x = 60; x <= 65; x++)
+                        // Limpiar completamente el cerezo de 6x5 en AlwaysFront
+                        for (int x = 59; x <= 66; x++)
                         {
-                            for (int y = 59; y <= 64; y++)
+                            for (int y = 58; y <= 65; y++)
                             {
                                 ClearTile(alwaysFront, x, y);
                                 ClearTile(alwaysFront2, x, y);
+                                ClearTile(alwaysFront3, x, y);
                             }
                         }
+
+                        // Detalle decorativo: flor silvestre en la pradera
+                        SetTileIfValid(bld, sheetOutdoors, 64, 61, 256);
                     }
                 }
             }
@@ -993,6 +981,80 @@ namespace Pelican4Ever.Modules
             {
                 layer.Tiles[x, y] = null;
             }
+        }
+
+        /// <summary>
+        /// Aplica acabados artesanales y canónicos vanilla al paso oeste de la Granja Host (Maps/Farm).
+        /// Elimina copas y ramas cortadas en AlwaysFront y Front (árboles 1 y 2), coloca entarimado
+        /// de tablones rústicos de madera auténtica en Back y remata con vallas y acantilado.
+        /// </summary>
+        public static void ApplyFarmWestPassageArtisanFinishes(
+            xTile.Map? hostMap,
+            PlazaPassage westPassage,
+            xTile.Tiles.TileSheet? sheetOutdoors)
+        {
+            if (hostMap == null) return;
+            sheetOutdoors ??= MapCloneHelper.GetOutdoorsTileSheet(hostMap);
+            if (sheetOutdoors == null) return;
+
+            var bld = hostMap.GetLayer("Buildings");
+            var bld2 = hostMap.GetLayer("Buildings2");
+            var front = hostMap.GetLayer("Front");
+            var alwaysFront = hostMap.GetLayer("AlwaysFront");
+            var alwaysFront2 = hostMap.GetLayer("AlwaysFront2");
+            var alwaysFront3 = hostMap.GetLayer("AlwaysFront3");
+            var back = hostMap.GetLayer("Back");
+
+            // 1. Limpieza integral de follaje, copas cortadas y ramas en x = 0..7, y = 22..30
+            // Elimina Tree 1 (x=1..6, y=24..26) y Tree 2 (x=0..2, y=26..29) de raíz
+            for (int x = 0; x <= 7; x++)
+            {
+                for (int y = 22; y <= 30; y++)
+                {
+                    ClearTile(alwaysFront, x, y);
+                    ClearTile(alwaysFront2, x, y);
+                    ClearTile(alwaysFront3, x, y);
+                    ClearTile(front, x, y);
+                }
+            }
+
+            // 2. Tallar corredor transitable en x = 0..7, y = 26..27 con entarimado rústico de madera
+            for (int x = 0; x <= 7; x++)
+            {
+                for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
+                {
+                    ClearTile(bld, x, y);
+                    ClearTile(bld2, x, y);
+
+                    if (back != null && x >= 0 && x < back.LayerWidth && y >= 0 && y < back.LayerHeight)
+                    {
+                        // Tablones rústicos de madera auténtica vanilla (1244 / 1269)
+                        int plankTileIndex = ((x + y) % 2 == 0) ? 1244 : 1269;
+                        back.Tiles[x, y] = new xTile.Tiles.StaticTile(back, sheetOutdoors, xTile.Tiles.BlendMode.Alpha, plankTileIndex);
+                        back.Tiles[x, y].Properties.Remove("Passable");
+                        back.Tiles[x, y].Properties["Type"] = "Wood";
+                    }
+                }
+            }
+
+            // 3. Remates de valla y acantilado en los bordes del corredor (y = 25 y y = 28)
+            // Lado Norte (y = 25): poste izquierdo, barandilla de madera y esquina de acantilado
+            SetTileIfValid(bld, sheetOutdoors, 0, 25, 385);
+            SetTileIfValid(front, sheetOutdoors, 0, 24, 360);
+            for (int x = 1; x <= 5; x++)
+            {
+                SetTileIfValid(bld, sheetOutdoors, x, 25, 384);
+                SetTileIfValid(front, sheetOutdoors, x, 24, 359);
+            }
+            SetTileIfValid(bld, sheetOutdoors, 6, 25, 544); // Acantilado canónico superior
+
+            // Lado Sur (y = 28): poste izquierdo, barandilla y poste derecho de remate
+            SetTileIfValid(bld, sheetOutdoors, 0, 28, 385);
+            for (int x = 1; x <= 5; x++)
+            {
+                SetTileIfValid(bld, sheetOutdoors, x, 28, 384);
+            }
+            SetTileIfValid(bld, sheetOutdoors, 6, 28, 383);
         }
 
         /// <summary>Asset de tilesheet para Steppingstone Path en Maps/z_Pelican4Ever_SteppingStones.</summary>
@@ -1785,6 +1847,12 @@ namespace Pelican4Ever.Modules
             // 2. Pasos Oeste y Este (limpieza de escombros y warps continuos)
             if (plazaLoc?.West is { } westPassage)
             {
+                if (string.Equals(locName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase))
+                {
+                    var sheetOutdoors = MapCloneHelper.GetOutdoorsTileSheet(hostMap) ?? sampleTile?.TileSheet;
+                    ApplyFarmWestPassageArtisanFinishes(hostMap, westPassage, sheetOutdoors);
+                }
+
                 int maxWestX = string.Equals(locName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase) ? 7 : 5;
                 for (int x = 0; x <= maxWestX; x++)
                 {
