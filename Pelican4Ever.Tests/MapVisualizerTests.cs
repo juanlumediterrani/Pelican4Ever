@@ -11,7 +11,8 @@ namespace Pelican4Ever.Tests
 {
     public class MapVisualizerTests
     {
-        private const string ArtifactScratchDir = "/home/mtx/.var/app/com.google.AndroidStudio/cache/Google/AndroidStudio2026.2.2/projects/stardew valley morpg.72ba5366/.artifacts/347a3299-81dc-42b1-a148-ca3e60fea144/scratch";
+        // Directorio temporal del sistema: una ruta fija de una máquina rompe el test en CI y en otros equipos.
+        private static readonly string ArtifactScratchDir = Path.Combine(Path.GetTempPath(), "Pelican4Ever-map-inspection");
 
         [Fact]
         public void VerifyAndRenderAllMapLayoutsGraphically()
