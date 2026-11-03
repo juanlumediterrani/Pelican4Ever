@@ -84,32 +84,26 @@ public class WorldStateAndDoorsTests
     [Fact]
     public void DoorsCatalog_LoadsAll16PerimeterPortalsOnHostFarm()
     {
-        string doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
-        Assert.True(File.Exists(doorsPath), $"No se encontró doors.json en {doorsPath}");
-
-        string json = File.ReadAllText(doorsPath);
-        var doors = System.Text.Json.JsonSerializer.Deserialize<List<DoorCatalogEntry>>(json);
-
-        Assert.NotNull(doors);
+        var doors = DoorCatalogFixture.LoadDoors();
         Assert.Equal(16, doors.Count);
 
         var seenDoorIds = new HashSet<string>();
         var seenSlotIds = new HashSet<string>();
-        var seenCoords = new HashSet<(int, int)>();
 
         foreach (var door in doors)
         {
             Assert.True(seenDoorIds.Add(door.DoorId), $"DoorId duplicado: {door.DoorId}");
             Assert.True(seenSlotIds.Add(door.DefaultSlotId), $"DefaultSlotId duplicado: {door.DefaultSlotId}");
 
-            Assert.True(door.LocationName is "Farm" or "Pelican4Ever_Bridge_1" or "Pelican4Ever_Bridge_2" or "Pelican4Ever_Bridge_3");
+            Assert.True(HostPlazaLayout.IsPlazaLocation(door.LocationName));
             Assert.NotNull(door.MailboxTileX);
             Assert.NotNull(door.MailboxTileY);
 
             // El buzón (poste y caja, una fila encima) queda junto al camino de la parcela, sin pisarlo
-            int mbX = door.MailboxTileX.Value;
-            int mbY = door.MailboxTileY.Value;
-            var path = SpatialWarpRouter.GetPortalPathTiles(door.DoorId, door.TownTileX, door.TownTileY);
+            int mbX = door.MailboxTileX!.Value;
+            int mbY = door.MailboxTileY!.Value;
+            var loc = HostPlazaLayout.Find(door.LocationName, 16)!;
+            var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
 
             Assert.DoesNotContain((mbX, mbY), path);
             Assert.DoesNotContain((mbX, mbY - 1), path);
@@ -120,15 +114,15 @@ public class WorldStateAndDoorsTests
     }
 
     [Theory]
-    [InlineData(1, 16, true, 1, 16, 1, 17)]   // West
-    [InlineData(78, 26, true, 78, 26, 78, 27)] // East
-    [InlineData(18, 1, false, 18, 1, 19, 1)]  // North
-    [InlineData(18, 63, false, 18, 63, 19, 63)] // South
+    [InlineData(PortalEdge.West, 1, 16, true, 1, 16, 1, 17)]   // West
+    [InlineData(PortalEdge.East, 78, 26, true, 78, 26, 78, 27)] // East
+    [InlineData(PortalEdge.North, 18, 1, false, 18, 1, 19, 1)]  // North
+    [InlineData(PortalEdge.South, 18, 63, false, 18, 63, 19, 63)] // South
     public void PortalOpening_OrientationDeterminesTwoTileSpan(
-        int townX, int townY, bool isVertical,
+        PortalEdge edge, int townX, int townY, bool isVertical,
         int expectedT1X, int expectedT1Y, int expectedT2X, int expectedT2Y)
     {
-        bool isBorderVertical = townX <= 2 || townX >= 75;
+        bool isBorderVertical = edge is PortalEdge.West or PortalEdge.East;
         Assert.Equal(isVertical, isBorderVertical);
 
         (int t1X, int t1Y) = (townX, townY);
@@ -251,46 +245,28 @@ public class WorldStateAndDoorsTests
     [Fact]
     public void DoorsCatalog_MailboxesAreCloseToWarp_AndNotAtCorridorEntrance()
     {
-        string doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
-        if (!File.Exists(doorsPath))
-            doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
-        if (!File.Exists(doorsPath))
-            doorsPath = Path.Combine(Directory.GetCurrentDirectory(), "assets", "doors.json");
-
-        var doors = System.Text.Json.JsonSerializer.Deserialize<List<DoorCatalogEntry>>(File.ReadAllText(doorsPath))!;
+        var doors = DoorCatalogFixture.LoadDoors();
 
         foreach (var d in doors)
         {
             Assert.NotNull(d.MailboxTileX);
             Assert.NotNull(d.MailboxTileY);
 
-            if (d.TownTileY <= 2)
+            if (d.Edge == PortalEdge.North)
             {
                 // Portales norte: el warp está en Y=0..1, el buzón debe estar pegado al warp en Y=2
-                Assert.Equal(2, d.MailboxTileY.Value);
+                Assert.Equal(2, d.MailboxTileY!.Value);
             }
-            else if (d.TownTileX <= 2)
+            else if (d.Edge == PortalEdge.West)
             {
                 // Portales oeste: el warp está en X=0..1, el buzón debe estar en X=2 junto al warp
-                Assert.Equal(2, d.MailboxTileX.Value);
+                Assert.Equal(2, d.MailboxTileX!.Value);
             }
-            else if (d.TownTileY >= 25)
+            else if (d.Edge == PortalEdge.South)
             {
                 // Portales sur: el buzón debe estar en Y=TownTileY - 1
-                Assert.Equal(d.TownTileY - 1, d.MailboxTileY.Value);
+                Assert.Equal(d.TownTileY - 1, d.MailboxTileY!.Value);
             }
         }
-    }
-
-    private sealed class DoorCatalogEntry
-    {
-        public string DoorId { get; set; } = string.Empty;
-        public string LocationName { get; set; } = string.Empty;
-        public int TownTileX { get; set; }
-        public int TownTileY { get; set; }
-        public int? MailboxTileX { get; set; }
-        public int? MailboxTileY { get; set; }
-        public string DefaultSlotId { get; set; } = string.Empty;
-        public string Description { get; set; } = string.Empty;
     }
 }

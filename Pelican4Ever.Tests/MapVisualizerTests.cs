@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Text.Json;
 using Pelican4Ever.Core.World;
 using Xunit;
 
@@ -11,22 +10,19 @@ namespace Pelican4Ever.Tests
 {
     public class MapVisualizerTests
     {
-        // Directorio temporal del sistema: una ruta fija de una máquina rompe el test en CI y en otros equipos.
-        private static readonly string ArtifactScratchDir = Path.Combine(Path.GetTempPath(), "Pelican4Ever-map-inspection");
+        // Directorio temporal del sistema
+        private static readonly string ArtifactScratchDir = Path.Combine(Path.GetTempPath(), "pelican4ever-maps");
 
         [Fact]
         public void VerifyAndRenderAllMapLayoutsGraphically()
         {
             Directory.CreateDirectory(ArtifactScratchDir);
 
-            string doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
-            if (!File.Exists(doorsPath))
-                doorsPath = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
-            if (!File.Exists(doorsPath))
-                doorsPath = Path.Combine(Directory.GetCurrentDirectory(), "assets", "doors.json");
+            var doors = DoorCatalogFixture.LoadDoors();
+            Assert.Equal(16, doors.Count);
 
-            Assert.True(File.Exists(doorsPath), $"doors.json no existe en {doorsPath}");
-            var doors = JsonSerializer.Deserialize<List<DoorCatalogTestEntry>>(File.ReadAllText(doorsPath))!;
+            // Validar geometría completa de la plaza
+            ValidatePlazaGeometry(doors, 16);
 
             var mapDiagrams = new StringBuilder();
             mapDiagrams.AppendLine("# Inspección Gráfica de Mapas y Conexiones Espaciales");
@@ -40,10 +36,9 @@ namespace Pelican4Ever.Tests
             mapDiagrams.AppendLine();
 
             // 2. Mapas Puente 1..3
-            string[] bridgeNames = { "Pelican4Ever_Bridge_1", "Pelican4Ever_Bridge_2", "Pelican4Ever_Bridge_3" };
-            for (int i = 0; i < bridgeNames.Length; i++)
+            for (int i = 0; i < HostPlazaLayout.AllBridgeNames.Count; i++)
             {
-                string bName = bridgeNames[i];
+                string bName = HostPlazaLayout.AllBridgeNames[i];
                 var bridgeDoors = doors.Where(d => d.LocationName == bName).ToList();
 
                 mapDiagrams.AppendLine($"## {i + 2}. Mapa {bName} [35×30 tiles]");
@@ -75,7 +70,120 @@ namespace Pelican4Ever.Tests
             Assert.True(File.Exists(outputPath));
         }
 
-        private static string RenderHostFarmAscii(List<DoorCatalogTestEntry> farmDoors)
+        [Fact]
+        public void ValidatePlazaGeometry_WhenPortal07MovedToY40_FailsValidation()
+        {
+            var modifiedDoors = DoorCatalogFixture.LoadDoors()
+                .Select(d =>
+                {
+                    if (d.DoorId == "Farm_Portal_07")
+                    {
+                        return new DoorCatalogEntry
+                        {
+                            DoorId = d.DoorId,
+                            LocationName = d.LocationName,
+                            TownTileX = d.TownTileX,
+                            TownTileY = 40,
+                            MailboxTileX = d.MailboxTileX,
+                            MailboxTileY = d.MailboxTileY,
+                            Edge = d.Edge,
+                            DefaultSlotId = d.DefaultSlotId,
+                            Description = d.Description
+                        };
+                    }
+                    return d;
+                })
+                .ToList();
+
+            Assert.ThrowsAny<Exception>(() => ValidatePlazaGeometry(modifiedDoors, 16));
+        }
+
+        internal static void ValidatePlazaGeometry(IReadOnlyList<DoorCatalogEntry> doors, int farmSlotCount = 16)
+        {
+            var specs = doors.Select(d => d.ToDoorSpec()).ToList();
+            var errors = DoorCatalogValidator.Validate(specs, farmSlotCount);
+            if (errors.Count > 0)
+            {
+                throw new InvalidOperationException("Errores de validación de puertas: " + string.Join("; ", errors));
+            }
+
+            var chain = HostPlazaLayout.Chain(farmSlotCount);
+            foreach (var loc in chain)
+            {
+                var locDoors = doors.Where(d => string.Equals(d.LocationName, loc.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+
+                var doorPaths = new List<(string DoorId, List<(int X, int Y)> Path)>();
+
+                foreach (var door in locDoors)
+                {
+                    // 1. Apertura dentro de límites
+                    var (t1X, t1Y, t2X, t2Y) = door.Edge is PortalEdge.West or PortalEdge.East
+                        ? (door.TownTileX, door.TownTileY, door.TownTileX, door.TownTileY + 1)
+                        : (door.TownTileX, door.TownTileY, door.TownTileX + 1, door.TownTileY);
+
+                    Assert.InRange(t1X, 0, loc.Width - 1);
+                    Assert.InRange(t1Y, 0, loc.Height - 1);
+                    Assert.InRange(t2X, 0, loc.Width - 1);
+                    Assert.InRange(t2Y, 0, loc.Height - 1);
+
+                    // 2. Camino dentro de límites
+                    var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
+                    Assert.NotEmpty(path);
+                    foreach (var (px, py) in path)
+                    {
+                        Assert.InRange(px, 0, loc.Width - 1);
+                        Assert.InRange(py, 0, loc.Height - 1);
+                    }
+                    doorPaths.Add((door.DoorId, path));
+
+                    // 3. Buzón dentro de límites
+                    Assert.NotNull(door.MailboxTileX);
+                    Assert.NotNull(door.MailboxTileY);
+                    int mx = door.MailboxTileX!.Value;
+                    int my = door.MailboxTileY!.Value;
+                    Assert.InRange(mx, 0, loc.Width - 1);
+                    Assert.InRange(my, 0, loc.Height - 1);
+                    Assert.InRange(my - 1, 0, loc.Height - 1);
+
+                    // 4. Ningún camino ni buzón pisa las filas de los pasos este/oeste
+                    if (loc.West != null)
+                    {
+                        int wStart = loc.West.FirstRow;
+                        int wEnd = loc.West.FirstRow + loc.West.RowCount - 1;
+                        foreach (var (px, py) in path)
+                        {
+                            Assert.False(py >= wStart && py <= wEnd, $"El camino de {door.DoorId} pisa las filas del paso Oeste ({wStart}..{wEnd}): Y={py}");
+                        }
+                        Assert.False(my >= wStart && my <= wEnd, $"El buzón de {door.DoorId} pisa las filas del paso Oeste ({wStart}..{wEnd}): Y={my}");
+                        Assert.False(my - 1 >= wStart && my - 1 <= wEnd, $"La caja del buzón de {door.DoorId} pisa las filas del paso Oeste ({wStart}..{wEnd}): Y={my - 1}");
+                    }
+
+                    if (loc.East != null)
+                    {
+                        int eStart = loc.East.FirstRow;
+                        int eEnd = loc.East.FirstRow + loc.East.RowCount - 1;
+                        foreach (var (px, py) in path)
+                        {
+                            Assert.False(py >= eStart && py <= eEnd, $"El camino de {door.DoorId} pisa las filas del paso Este ({eStart}..{eEnd}): Y={py}");
+                        }
+                        Assert.False(my >= eStart && my <= eEnd, $"El buzón de {door.DoorId} pisa las filas del paso Este ({eStart}..{eEnd}): Y={my}");
+                        Assert.False(my - 1 >= eStart && my - 1 <= eEnd, $"La caja del buzón de {door.DoorId} pisa las filas del paso Este ({eStart}..{eEnd}): Y={my - 1}");
+                    }
+                }
+
+                // 5. Los caminos de dos portales en la misma ubicación no se solapan
+                for (int i = 0; i < doorPaths.Count; i++)
+                {
+                    for (int j = i + 1; j < doorPaths.Count; j++)
+                    {
+                        var overlap = doorPaths[i].Path.Intersect(doorPaths[j].Path).ToList();
+                        Assert.Empty(overlap);
+                    }
+                }
+            }
+        }
+
+        private static string RenderHostFarmAscii(List<DoorCatalogEntry> farmDoors)
         {
             const int width = 80;
             const int height = 65;
@@ -105,7 +213,7 @@ namespace Pelican4Ever.Tests
 
                 if (door.MailboxTileX >= 0 && door.MailboxTileX < width && door.MailboxTileY >= 0 && door.MailboxTileY < height)
                 {
-                    grid[door.MailboxTileY, door.MailboxTileX] = 'M';
+                    grid[door.MailboxTileY.Value, door.MailboxTileX.Value] = 'M';
                 }
             }
 
@@ -133,7 +241,7 @@ namespace Pelican4Ever.Tests
             return sb.ToString();
         }
 
-        private static string RenderBridgeAscii(string name, List<DoorCatalogTestEntry> bDoors)
+        private static string RenderBridgeAscii(string name, List<DoorCatalogEntry> bDoors)
         {
             const int width = 35;
             const int height = 30;
@@ -164,7 +272,7 @@ namespace Pelican4Ever.Tests
 
                 if (door.MailboxTileX >= 0 && door.MailboxTileX < width && door.MailboxTileY >= 0 && door.MailboxTileY < height)
                 {
-                    grid[door.MailboxTileY, door.MailboxTileX] = 'M';
+                    grid[door.MailboxTileY.Value, door.MailboxTileX.Value] = 'M';
                 }
             }
 
@@ -190,18 +298,6 @@ namespace Pelican4Ever.Tests
                 }
             }
             return sb.ToString();
-        }
-
-        private class DoorCatalogTestEntry
-        {
-            public string DoorId { get; set; } = string.Empty;
-            public string LocationName { get; set; } = string.Empty;
-            public int TownTileX { get; set; }
-            public int TownTileY { get; set; }
-            public int MailboxTileX { get; set; }
-            public int MailboxTileY { get; set; }
-            public string DefaultSlotId { get; set; } = string.Empty;
-            public string Description { get; set; } = string.Empty;
         }
     }
 }
