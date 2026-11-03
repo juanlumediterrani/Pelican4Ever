@@ -1,14 +1,19 @@
 # Cascada de ramas: main → pelican/desarrollo → refactor/residence-entrances.
 #
-# Cada push a main o a pelican/desarrollo fusiona la rama superior en la inferior y sube el
-# resultado. Las dos fusiones van en el mismo job porque un push hecho con GITHUB_TOKEN no
-# dispara otro workflow. Nunca reescribe historia ni fuerza un push: si una fusión choca, sube
-# una rama cascada/<origen>-a-<destino> desde el origen y abre un PR hacia el destino para
+# Arranca cuando el CI de un push a main o a pelican/desarrollo termina en verde: una rama rota no
+# se propaga. Fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo
+# entonces la sube. Las dos fusiones van en el mismo job porque un push hecho con GITHUB_TOKEN no
+# dispara otro workflow (ni el CI): por eso los tests de la fusión se pasan aquí.
+#
+# Nunca reescribe historia ni fuerza un push. Si una fusión choca o sus tests fallan, no toca el
+# destino: sube una rama cascada/<origen>-a-<destino> y abre un PR hacia el destino para
 # resolverlo a mano (resolverlo en ese PR no toca la rama de origen).
 name: Cascada de ramas
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main, pelican/desarrollo]
   workflow_dispatch:
 
@@ -22,11 +27,18 @@ concurrency:
 
 jobs:
   cascada:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
 
       - name: Fusionar en cascada
         env:
@@ -35,6 +47,21 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # pedir_revision <origen> <destino> <motivo> <commit> <detalle>: sube <commit> a
+          # cascada/<origen>-a-<destino> y abre un PR hacia el destino si no hay uno abierto.
+          pedir_revision() {
+            local from="$1" to="$2" motivo="$3" commit="$4" detalle="$5"
+            local branch="cascada/${from//\//-}-a-${to//\//-}"
+            # Sin --force: si la rama ya lleva una resolución a medias, el push se rechaza y se conserva.
+            git push origin "$commit:refs/heads/$branch" || echo "$branch ya tiene cambios propios; no se toca."
+            if [ -z "$(gh pr list --head "$branch" --base "$to" --state open --json number --jq '.[].number')" ]; then
+              gh pr create --head "$branch" --base "$to" \
+                --title "Cascada: fusionar $from en $to ($motivo)" \
+                --body "$detalle Fusiona este PR cuando esté resuelto; la siguiente ejecución seguirá la cascada."
+            fi
+            echo "::error::Cascada $from → $to detenida ($motivo): PR abierto desde $branch."
+          }
 
           # cascada <origen> <destino>: 0 si el destino ya contiene el origen o se subió la fusión.
           cascada() {
@@ -45,22 +72,19 @@ jobs:
               return 0
             fi
             git checkout --quiet -B "$to" "origin/$to"
-            if git merge --no-edit -m "Merge $from en $to (cascada automática)" "origin/$from"; then
-              git push origin "$to"
-              echo "$from fusionada en $to."
-              return 0
+            if ! git merge --no-edit -m "Merge $from en $to (cascada automática)" "origin/$from"; then
+              git merge --abort
+              pedir_revision "$from" "$to" "conflictos" "origin/$from" \
+                "La cascada automática no pudo fusionar \`$from\` en \`$to\` por conflictos. Resuélvelos en este PR."
+              return 1
             fi
-            git merge --abort
-            local branch="cascada/${from//\//-}-a-${to//\//-}"
-            # Sin --force: si la rama ya lleva una resolución a medias, el push se rechaza y se conserva.
-            git push origin "origin/$from:refs/heads/$branch" || echo "$branch ya tiene cambios propios; no se toca."
-            if [ -z "$(gh pr list --head "$branch" --base "$to" --state open --json number --jq '.[].number')" ]; then
-              gh pr create --head "$branch" --base "$to" \
-                --title "Cascada: fusionar $from en $to (conflictos)" \
-                --body "La cascada automática no pudo fusionar \`$from\` en \`$to\` por conflictos. Resuélvelos en este PR y fusiónalo; la siguiente ejecución seguirá la cascada."
+            if ! dotnet test Pelican4Ever.Tests -c Release; then
+              pedir_revision "$from" "$to" "tests en rojo" "HEAD" \
+                "La fusión de \`$from\` en \`$to\` no pasa los tests. Este PR ya lleva la fusión: corrígela aquí."
+              return 1
             fi
-            echo "::error::Conflicto al fusionar $from en $to: PR abierto desde $branch."
-            return 1
+            git push origin "$to"
+            echo "$from fusionada en $to."
           }
 
           cascada main pelican/desarrollo
