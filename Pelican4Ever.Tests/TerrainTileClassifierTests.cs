@@ -81,7 +81,7 @@ namespace Pelican4Ever.Tests
         public void GetPathTileInfo_OnGrass_ReturnsSteppingStonesOnGrass()
         {
             // En terreno con hierba (175), devuelve Stepping Stones sobre hierba (rango 16..31)
-            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo("Farm_Portal_08", 1, 62, 5, 175, null, 15);
+            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo("Farm_Portal_08", 28, 25, 28, 175, null, 15);
             Assert.True(isSheet);
             Assert.InRange(tile, 16, 31);
         }
@@ -105,49 +105,33 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
-        // Portales 08 y 14: pradera oriental 100% césped
-        [InlineData("Farm_Portal_08", 62, 1, 62, 0, true)]
-        [InlineData("Farm_Portal_08", 62, 1, 62, 5, true)]
-        [InlineData("Farm_Portal_08", 62, 1, 62, 10, true)]
-        [InlineData("Farm_Portal_14", 72, 1, 72, 8, true)]
-        // Portales Norte con desfiladero (05, 06, 07, 13): y<=3 hierba, y>=4 tierra
-        [InlineData("Farm_Portal_05", 18, 1, 18, 2, true)]
-        [InlineData("Farm_Portal_05", 18, 1, 18, 3, true)]
-        [InlineData("Farm_Portal_05", 18, 1, 18, 4, false)]
-        [InlineData("Farm_Portal_05", 18, 1, 18, 10, false)]
-        // Portal 02 (Claro del Sauce): x<=5 hierba, x>=6 tierra
-        [InlineData("Farm_Portal_02", 1, 26, 3, 26, true)]
-        [InlineData("Farm_Portal_02", 1, 26, 5, 26, true)]
-        [InlineData("Farm_Portal_02", 1, 26, 6, 26, false)]
-        // Portales 01, 03, 04 (Oeste): x<=1 hierba, x>=2 tierra
-        [InlineData("Farm_Portal_01", 1, 16, 1, 16, true)]
-        [InlineData("Farm_Portal_01", 1, 16, 2, 16, false)]
-        // Portales Sur: y>=62 hierba de ribera, y<=61 tierra
-        [InlineData("Farm_Portal_09", 18, 63, 18, 63, true)]
-        [InlineData("Farm_Portal_09", 18, 63, 18, 60, false)]
+        // Portales Norte (01..02 en Host, 05..06, 09..10, 13..14 en Puentes): y<=3 hierba, y>=4 tierra
+        [InlineData("Farm_Portal_01", 18, 1, 18, 2, true)]
+        [InlineData("Farm_Portal_01", 18, 1, 18, 3, true)]
+        [InlineData("Farm_Portal_01", 18, 1, 18, 4, false)]
+        [InlineData("Farm_Portal_05", 8, 1, 8, 2, true)]
+        [InlineData("Farm_Portal_05", 8, 1, 8, 4, false)]
+        // Portales Sur (03..04 en Host, 07..08, 11..12, 15..16 en Puentes): y>=ty-2 hierba, y<ty-2 tierra
+        [InlineData("Farm_Portal_03", 18, 63, 18, 63, true)]
+        [InlineData("Farm_Portal_03", 18, 63, 18, 60, false)]
+        [InlineData("Farm_Portal_07", 8, 28, 8, 28, true)]
+        [InlineData("Farm_Portal_07", 8, 28, 8, 24, false)]
         public void IsGrassEnvironment_ClassifiesTerrainCorrectly(string doorId, int tx, int ty, int px, int py, bool expectedGrass)
         {
             Assert.Equal(expectedGrass, TerrainTileClassifier.IsGrassEnvironment(doorId, tx, ty, px, py));
         }
 
         [Theory]
-        // Portales Norte en y=2: buzón plantado sobre césped (true)
-        [InlineData("Farm_Portal_05", 18, 1, 17, 2, true)]
-        [InlineData("Farm_Portal_06", 28, 1, 27, 2, true)]
-        [InlineData("Farm_Portal_07", 52, 1, 51, 2, true)]
-        [InlineData("Farm_Portal_08", 62, 1, 61, 2, true)]
-        [InlineData("Farm_Portal_13", 8, 1, 7, 2, true)]
-        [InlineData("Farm_Portal_14", 72, 1, 71, 2, true)]
-        // Portal 02 (Sauce) en (2, 25): buzón sobre césped (true)
-        [InlineData("Farm_Portal_02", 1, 26, 2, 25, true)]
-        // Portales Sur en y=62: buzón sobre césped de ribera (true)
-        [InlineData("Farm_Portal_09", 18, 63, 17, 62, true)]
-        [InlineData("Farm_Portal_10", 28, 63, 27, 62, true)]
-        [InlineData("Farm_Portal_15", 8, 63, 11, 62, true)]
-        // Portales 01, 03, 04 en x=2: sobre tierra de labor (false)
-        [InlineData("Farm_Portal_01", 1, 16, 2, 15, false)]
-        [InlineData("Farm_Portal_03", 1, 36, 2, 35, false)]
-        [InlineData("Farm_Portal_04", 1, 46, 2, 45, false)]
+        // Portales Norte en y=1: buzón plantado sobre césped (true)
+        [InlineData("Farm_Portal_01", 18, 1, 17, 2, true)]
+        [InlineData("Farm_Portal_02", 62, 1, 61, 2, true)]
+        [InlineData("Farm_Portal_05", 8, 1, 7, 2, true)]
+        [InlineData("Farm_Portal_06", 25, 1, 24, 2, true)]
+        // Portales Sur en y=63 ó y=28: buzón sobre césped (true)
+        [InlineData("Farm_Portal_03", 18, 63, 17, 62, true)]
+        [InlineData("Farm_Portal_04", 62, 63, 61, 62, true)]
+        [InlineData("Farm_Portal_07", 8, 28, 7, 27, true)]
+        [InlineData("Farm_Portal_08", 25, 28, 24, 27, true)]
         public void IsMailboxOnGrass_DeterminesMailboxBaseTileCorrectly(string doorId, int tx, int ty, int mx, int my, bool expectedGrass)
         {
             Assert.Equal(expectedGrass, TerrainTileClassifier.IsMailboxOnGrass(doorId, tx, ty, mx, my));

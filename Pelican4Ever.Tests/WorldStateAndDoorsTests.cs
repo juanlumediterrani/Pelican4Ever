@@ -101,20 +101,10 @@ public class WorldStateAndDoorsTests
         {
             Assert.True(seenDoorIds.Add(door.DoorId), $"DoorId duplicado: {door.DoorId}");
             Assert.True(seenSlotIds.Add(door.DefaultSlotId), $"DefaultSlotId duplicado: {door.DefaultSlotId}");
-            Assert.True(seenCoords.Add((door.TownTileX, door.TownTileY)), $"Coordenadas duplicadas: ({door.TownTileX},{door.TownTileY})");
 
-            Assert.Equal("Farm", door.LocationName);
+            Assert.True(door.LocationName is "Farm" or "Pelican4Ever_Bridge_1" or "Pelican4Ever_Bridge_2" or "Pelican4Ever_Bridge_3");
             Assert.NotNull(door.MailboxTileX);
             Assert.NotNull(door.MailboxTileY);
-
-            // Verificar que esté en uno de los 4 extremos del mapa estándar (80x65)
-            bool isWest = door.TownTileX <= 2;
-            bool isEast = door.TownTileX >= 75;
-            bool isNorth = door.TownTileY <= 2;
-            bool isSouth = door.TownTileY >= 60;
-
-            Assert.True(isWest || isEast || isNorth || isSouth,
-                $"El portal {door.DoorId} no está en un extremo del mapa: ({door.TownTileX}, {door.TownTileY})");
 
             // El buzón (poste y caja, una fila encima) queda junto al camino de la parcela, sin pisarlo
             int mbX = door.MailboxTileX.Value;
@@ -276,18 +266,18 @@ public class WorldStateAndDoorsTests
 
             if (d.TownTileY <= 2)
             {
-                // Portales norte: el warp está en Y=0..1, el buzón debe estar pegado al warp en Y=2 (no a la salida del desfiladero en Y=9/11)
+                // Portales norte: el warp está en Y=0..1, el buzón debe estar pegado al warp en Y=2
                 Assert.Equal(2, d.MailboxTileY.Value);
             }
             else if (d.TownTileX <= 2)
             {
-                // Portales oeste: el warp está en X=0..1, el buzón debe estar en X=2 junto al warp (no al final del claro en X=7)
+                // Portales oeste: el warp está en X=0..1, el buzón debe estar en X=2 junto al warp
                 Assert.Equal(2, d.MailboxTileX.Value);
             }
-            else if (d.TownTileY >= 60)
+            else if (d.TownTileY >= 25)
             {
-                // Portales sur: el warp está en Y=63..64, el buzón debe estar en Y=62
-                Assert.Equal(62, d.MailboxTileY.Value);
+                // Portales sur: el buzón debe estar en Y=TownTileY - 1
+                Assert.Equal(d.TownTileY - 1, d.MailboxTileY.Value);
             }
         }
     }

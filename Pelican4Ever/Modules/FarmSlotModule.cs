@@ -1364,15 +1364,105 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Aprovisiona los portales físicos de 2 tiles y los senderos en el perímetro de la granja del anfitrión (Plaza Central).
-        /// Cada parcela cuenta con un portal transitable en el borde del mapa con warps continuos hacia su granja privada,
-        /// acera adoquinada de conexión y buzón de tiles del mapa (<see cref="PlaceMailboxTiles"/>).
+        /// Aprovisiona dinámicamente las localizaciones de mapas puente (Pelican4Ever_Bridge_1..3) si no existen aún,
+        /// y enlaza los warps encadenados Oeste (avanzar) / Este (retroceder).
+        /// </summary>
+        public static void EnsureBridgeLocations()
+        {
+            if (context == null) return;
+
+            string[] bridgeNames = { "Pelican4Ever_Bridge_1", "Pelican4Ever_Bridge_2", "Pelican4Ever_Bridge_3" };
+            for (int i = 0; i < bridgeNames.Length; i++)
+            {
+                string bName = bridgeNames[i];
+                GameLocation? loc = Game1.getLocationFromName(bName);
+                if (loc == null)
+                {
+                    xTile.Map? baseMap = null;
+                    try
+                    {
+                        baseMap = context.Helper.GameContent.Load<xTile.Map>("Maps/BusStop");
+                    }
+                    catch { }
+
+                    if (baseMap != null)
+                    {
+                        xTile.Map clonedMap = MapCloneHelper.CloneMap(baseMap);
+                        loc = new GameLocation("Maps/BusStop", bName) { isOutdoors = { Value = true } };
+                        loc.map = clonedMap;
+                        Game1.locations.Add(loc);
+                    }
+                }
+            }
+
+            // Configurar warps encadenados Oeste (avanzar) / Este (retroceder)
+            Farm? hostFarm = Game1.getFarm();
+            if (hostFarm != null)
+            {
+                UpdateOrCreateWarp(hostFarm, 0, 26, "Pelican4Ever_Bridge_1", 33, 14);
+                UpdateOrCreateWarp(hostFarm, 0, 27, "Pelican4Ever_Bridge_1", 33, 14);
+            }
+
+            GameLocation? bridge1 = Game1.getLocationFromName("Pelican4Ever_Bridge_1");
+            if (bridge1 != null)
+            {
+                UpdateOrCreateWarp(bridge1, 34, 13, "Farm", 2, 26);
+                UpdateOrCreateWarp(bridge1, 34, 14, "Farm", 2, 26);
+                UpdateOrCreateWarp(bridge1, 34, 15, "Farm", 2, 26);
+
+                UpdateOrCreateWarp(bridge1, 0, 13, "Pelican4Ever_Bridge_2", 33, 14);
+                UpdateOrCreateWarp(bridge1, 0, 14, "Pelican4Ever_Bridge_2", 33, 14);
+                UpdateOrCreateWarp(bridge1, 0, 15, "Pelican4Ever_Bridge_2", 33, 14);
+            }
+
+            GameLocation? bridge2 = Game1.getLocationFromName("Pelican4Ever_Bridge_2");
+            if (bridge2 != null)
+            {
+                UpdateOrCreateWarp(bridge2, 34, 13, "Pelican4Ever_Bridge_1", 1, 14);
+                UpdateOrCreateWarp(bridge2, 34, 14, "Pelican4Ever_Bridge_1", 1, 14);
+                UpdateOrCreateWarp(bridge2, 34, 15, "Pelican4Ever_Bridge_1", 1, 14);
+
+                UpdateOrCreateWarp(bridge2, 0, 13, "Pelican4Ever_Bridge_3", 33, 14);
+                UpdateOrCreateWarp(bridge2, 0, 14, "Pelican4Ever_Bridge_3", 33, 14);
+                UpdateOrCreateWarp(bridge2, 0, 15, "Pelican4Ever_Bridge_3", 33, 14);
+            }
+
+            GameLocation? bridge3 = Game1.getLocationFromName("Pelican4Ever_Bridge_3");
+            if (bridge3 != null)
+            {
+                UpdateOrCreateWarp(bridge3, 34, 13, "Pelican4Ever_Bridge_2", 1, 14);
+                UpdateOrCreateWarp(bridge3, 34, 14, "Pelican4Ever_Bridge_2", 1, 14);
+                UpdateOrCreateWarp(bridge3, 34, 15, "Pelican4Ever_Bridge_2", 1, 14);
+            }
+        }
+
+        /// <summary>
+        /// Aprovisiona los portales físicos de 2 tiles y los senderos en el perímetro de la granja del anfitrión y de los mapas puente.
         /// </summary>
         public static void EnsureHostFarmPortals(Farm farm)
         {
             if (farm == null || context == null || farm.NameOrUniqueName != "Farm") return;
 
-            var hostMap = farm.Map;
+            EnsureBridgeLocations();
+
+            EnsureLocationPortals(farm);
+
+            string[] bridgeNames = { "Pelican4Ever_Bridge_1", "Pelican4Ever_Bridge_2", "Pelican4Ever_Bridge_3" };
+            foreach (string bName in bridgeNames)
+            {
+                GameLocation? bLoc = Game1.getLocationFromName(bName);
+                if (bLoc != null)
+                {
+                    EnsureLocationPortals(bLoc);
+                }
+            }
+        }
+
+        public static void EnsureLocationPortals(GameLocation location)
+        {
+            if (location == null || context == null) return;
+
+            var hostMap = location.Map;
             if (hostMap != null)
             {
                 if (hostMap.GetTileSheet(MailboxTileSheetId) == null)
@@ -1392,25 +1482,27 @@ namespace Pelican4Ever.Modules
             xTile.Tiles.Tile? sampleTile = null;
             if (backLayer != null)
             {
-                sampleTile = backLayer.Tiles[40, 30] ?? backLayer.Tiles[64, 15] ?? backLayer.Tiles[20, 20];
+                sampleTile = backLayer.Tiles[20, 20] ?? backLayer.Tiles[5, 5];
             }
 
-            foreach (Point legacy in LegacySignTiles)
-                RemoveLegacySign(farm, legacy.ToVector2());
-
-            // Mover el bebedero de mascotas (Pet Bowl) de la 1.6 si quedó solapado con el camino del portal 07
-            var petBowl = farm.buildings.FirstOrDefault(b =>
-                (b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl")
-                && b.tileX.Value >= 52 && b.tileX.Value <= 55 && b.tileY.Value <= 10);
-            if (petBowl != null)
+            if (location is Farm farmLoc)
             {
-                petBowl.tileX.Value = 56;
-                petBowl.tileY.Value = 8;
+                foreach (Point legacy in LegacySignTiles)
+                    RemoveLegacySign(farmLoc, legacy.ToVector2());
+
+                var petBowl = farmLoc.buildings.FirstOrDefault(b =>
+                    (b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl")
+                    && b.tileX.Value >= 52 && b.tileX.Value <= 55 && b.tileY.Value <= 10);
+                if (petBowl != null)
+                {
+                    petBowl.tileX.Value = 56;
+                    petBowl.tileY.Value = 8;
+                }
             }
 
             foreach (DoorModel door in RegisteredDoors)
             {
-                if (!string.Equals(door.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(door.LocationName, location.NameOrUniqueName, StringComparison.OrdinalIgnoreCase))
                     continue;
 
                 // 1. Limpiar copas de árboles, ramas, troncos y suelo en el mapa del runtime
@@ -1421,61 +1513,17 @@ namespace Pelican4Ever.Modules
                 // 2. Limpiar objetos, escombros, tocones, piedras y propiedades Passable a lo largo de todo el paso
                 foreach (var pt in passTiles)
                 {
-                    farm.removeEverythingFromThisTile(pt.X, pt.Y);
-                    farm.removeTileProperty(pt.X, pt.Y, "Back", "Passable");
+                    location.removeEverythingFromThisTile(pt.X, pt.Y);
+                    location.removeTileProperty(pt.X, pt.Y, "Back", "Passable");
 
-                    for (int i = farm.resourceClumps.Count - 1; i >= 0; i--)
+                    if (location is Farm farmRef)
                     {
-                        var clump = farm.resourceClumps[i];
-                        if (IsClumpOverTile(clump, pt.X, pt.Y))
+                        for (int i = farmRef.resourceClumps.Count - 1; i >= 0; i--)
                         {
-                            farm.resourceClumps.RemoveAt(i);
-                        }
-                    }
-                }
-
-                // 2b. Despejar un margen de seguridad frente a la embocadura del camino para evitar árboles o escombros bloqueando la salida
-                int marginXStart = door.TownTileX, marginXEnd = door.TownTileX + 1;
-                int marginYStart = door.TownTileY, marginYEnd = door.TownTileY;
-
-                if (door.TownTileY <= 2)
-                {
-                    // Salidas norte: el camino termina en y=10, despejar y=11..13
-                    marginXStart = door.TownTileX - 1;
-                    marginXEnd = door.TownTileX + 2;
-                    marginYStart = 11;
-                    marginYEnd = 13;
-                }
-                else if (door.TownTileY >= 60)
-                {
-                    // Salidas sur: despejar y=57..59
-                    marginXStart = door.TownTileX - 1;
-                    marginXEnd = door.TownTileX + 2;
-                    marginYStart = 57;
-                    marginYEnd = 59;
-                }
-                else if (door.TownTileX <= 2)
-                {
-                    // Salidas oeste: el camino termina en x=6 (o 7), despejar x=7..9
-                    int startX = door.DoorId == "Farm_Portal_02" ? 8 : 7;
-                    marginXStart = startX;
-                    marginXEnd = startX + 2;
-                    marginYStart = door.TownTileY - 1;
-                    marginYEnd = door.TownTileY + 2;
-                }
-
-                for (int mx = marginXStart; mx <= marginXEnd; mx++)
-                {
-                    for (int my = marginYStart; my <= marginYEnd; my++)
-                    {
-                        if (hostMap != null && mx >= 0 && mx < hostMap.Layers[0].LayerWidth && my >= 0 && my < hostMap.Layers[0].LayerHeight)
-                        {
-                            farm.removeEverythingFromThisTile(mx, my);
-                            for (int i = farm.resourceClumps.Count - 1; i >= 0; i--)
+                            var clump = farmRef.resourceClumps[i];
+                            if (IsClumpOverTile(clump, pt.X, pt.Y))
                             {
-                                var clump = farm.resourceClumps[i];
-                                if (IsClumpOverTile(clump, mx, my))
-                                    farm.resourceClumps.RemoveAt(i);
+                                farmRef.resourceClumps.RemoveAt(i);
                             }
                         }
                     }
@@ -1483,8 +1531,8 @@ namespace Pelican4Ever.Modules
 
                 // 3. El buzón es de tiles del mapa (PlaceMailboxTiles): despejar su casilla y retirar el cartel antiguo
                 var (mailboxX, mailboxY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
-                farm.removeEverythingFromThisTile(mailboxX, mailboxY);
-                farm.removeEverythingFromThisTile(mailboxX, mailboxY - 1);
+                location.removeEverythingFromThisTile(mailboxX, mailboxY);
+                location.removeEverythingFromThisTile(mailboxX, mailboxY - 1);
 
                 // 4. Sincronizar Warps continuos en ambos tiles de la apertura (solo si la parcela está reclamada)
                 bool isClaimed = context!.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);
@@ -1493,55 +1541,13 @@ namespace Pelican4Ever.Modules
                 {
                     GetResidenceArrivalCoordinates(door, assignment.FarmType, out int targetX, out int targetY, out _);
 
-                    UpdateOrCreateWarp(farm, t1.X, t1.Y, assignment.FarmSlotId, targetX, targetY);
-                    UpdateOrCreateWarp(farm, t2.X, t2.Y, assignment.FarmSlotId, targetX, targetY);
-
-                    // Warps en borde exterior absoluto para disparo garantizado
-                    if (door.TownTileX <= 2)
-                    {
-                        UpdateOrCreateWarp(farm, 0, t1.Y, assignment.FarmSlotId, targetX, targetY);
-                        UpdateOrCreateWarp(farm, 0, t2.Y, assignment.FarmSlotId, targetX, targetY);
-                    }
-                    else if (door.TownTileX >= 75)
-                    {
-                        UpdateOrCreateWarp(farm, 79, t1.Y, assignment.FarmSlotId, targetX, targetY);
-                        UpdateOrCreateWarp(farm, 79, t2.Y, assignment.FarmSlotId, targetX, targetY);
-                    }
-                    else if (door.TownTileY <= 2)
-                    {
-                        UpdateOrCreateWarp(farm, t1.X, 0, assignment.FarmSlotId, targetX, targetY);
-                        UpdateOrCreateWarp(farm, t2.X, 0, assignment.FarmSlotId, targetX, targetY);
-                    }
-                    else
-                    {
-                        UpdateOrCreateWarp(farm, t1.X, 64, assignment.FarmSlotId, targetX, targetY);
-                        UpdateOrCreateWarp(farm, t2.X, 64, assignment.FarmSlotId, targetX, targetY);
-                    }
+                    UpdateOrCreateWarp(location, t1.X, t1.Y, assignment.FarmSlotId, targetX, targetY);
+                    UpdateOrCreateWarp(location, t2.X, t2.Y, assignment.FarmSlotId, targetX, targetY);
                 }
                 else
                 {
-                    RemoveWarpAt(farm, t1.X, t1.Y);
-                    RemoveWarpAt(farm, t2.X, t2.Y);
-                    if (door.TownTileX <= 2)
-                    {
-                        RemoveWarpAt(farm, 0, t1.Y);
-                        RemoveWarpAt(farm, 0, t2.Y);
-                    }
-                    else if (door.TownTileX >= 75)
-                    {
-                        RemoveWarpAt(farm, 79, t1.Y);
-                        RemoveWarpAt(farm, 79, t2.Y);
-                    }
-                    else if (door.TownTileY <= 2)
-                    {
-                        RemoveWarpAt(farm, t1.X, 0);
-                        RemoveWarpAt(farm, t2.X, 0);
-                    }
-                    else
-                    {
-                        RemoveWarpAt(farm, t1.X, 64);
-                        RemoveWarpAt(farm, t2.X, 64);
-                    }
+                    RemoveWarpAt(location, t1.X, t1.Y);
+                    RemoveWarpAt(location, t2.X, t2.Y);
                 }
             }
         }
@@ -1567,7 +1573,7 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void RemoveWarpAt(Farm farm, int x, int y)
+        private static void RemoveWarpAt(GameLocation farm, int x, int y)
         {
             for (int i = farm.warps.Count - 1; i >= 0; i--)
             {

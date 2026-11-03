@@ -2,161 +2,161 @@
   {
     "DoorId": "Farm_Portal_01",
     "LocationName": "Farm",
-    "TownTileX": 1,
-    "TownTileY": 16,
-    "MailboxTileX": 2,
-    "MailboxTileY": 15,
-    "DefaultSlotId": "Pelican4Ever_Farm_01",
-    "Description": "Parcela 01 (Bosque Oeste - Senda del Roble)"
-  },
-  {
-    "DoorId": "Farm_Portal_02",
-    "LocationName": "Farm",
-    "TownTileX": 1,
-    "TownTileY": 26,
-    "MailboxTileX": 2,
-    "MailboxTileY": 25,
-    "DefaultSlotId": "Pelican4Ever_Farm_02",
-    "Description": "Parcela 02 (Bosque Oeste - Claro del Sauce)"
-  },
-  {
-    "DoorId": "Farm_Portal_03",
-    "LocationName": "Farm",
-    "TownTileX": 1,
-    "TownTileY": 36,
-    "MailboxTileX": 2,
-    "MailboxTileY": 35,
-    "DefaultSlotId": "Pelican4Ever_Farm_03",
-    "Description": "Parcela 03 (Bosque Oeste - Arroyo Silencioso)"
-  },
-  {
-    "DoorId": "Farm_Portal_04",
-    "LocationName": "Farm",
-    "TownTileX": 1,
-    "TownTileY": 46,
-    "MailboxTileX": 2,
-    "MailboxTileY": 45,
-    "DefaultSlotId": "Pelican4Ever_Farm_04",
-    "Description": "Parcela 04 (Bosque Oeste - Rincón Umbrío)"
-  },
-  {
-    "DoorId": "Farm_Portal_05",
-    "LocationName": "Farm",
     "TownTileX": 18,
     "TownTileY": 1,
     "MailboxTileX": 17,
     "MailboxTileY": 2,
-    "DefaultSlotId": "Pelican4Ever_Farm_05",
-    "Description": "Parcela 05 (Paso de la Montaña - Desfiladero)"
+    "DefaultSlotId": "Pelican4Ever_Farm_01",
+    "Description": "Parcela 01 (Granja Host - Norte Oeste)"
   },
   {
-    "DoorId": "Farm_Portal_06",
-    "LocationName": "Farm",
-    "TownTileX": 28,
-    "TownTileY": 1,
-    "MailboxTileX": 27,
-    "MailboxTileY": 2,
-    "DefaultSlotId": "Pelican4Ever_Farm_06",
-    "Description": "Parcela 06 (Paso de la Montaña - Riscos Altos)"
-  },
-  {
-    "DoorId": "Farm_Portal_07",
-    "LocationName": "Farm",
-    "TownTileX": 52,
-    "TownTileY": 1,
-    "MailboxTileX": 51,
-    "MailboxTileY": 2,
-    "DefaultSlotId": "Pelican4Ever_Farm_07",
-    "Description": "Parcela 07 (Paso de la Montaña - Peñasco Este)"
-  },
-  {
-    "DoorId": "Farm_Portal_08",
+    "DoorId": "Farm_Portal_02",
     "LocationName": "Farm",
     "TownTileX": 62,
     "TownTileY": 1,
     "MailboxTileX": 61,
     "MailboxTileY": 2,
-    "DefaultSlotId": "Pelican4Ever_Farm_08",
-    "Description": "Parcela 08 (Paso de la Montaña - Mirador del Valle)"
+    "DefaultSlotId": "Pelican4Ever_Farm_02",
+    "Description": "Parcela 02 (Granja Host - Norte Este)"
   },
   {
-    "DoorId": "Farm_Portal_09",
+    "DoorId": "Farm_Portal_03",
     "LocationName": "Farm",
     "TownTileX": 18,
     "TownTileY": 63,
     "MailboxTileX": 17,
     "MailboxTileY": 62,
-    "DefaultSlotId": "Pelican4Ever_Farm_09",
-    "Description": "Parcela 09 (Ribera Sur - Valle Escondido)"
+    "DefaultSlotId": "Pelican4Ever_Farm_03",
+    "Description": "Parcela 03 (Granja Host - Sur Oeste)"
   },
   {
-    "DoorId": "Farm_Portal_10",
-    "LocationName": "Farm",
-    "TownTileX": 28,
-    "TownTileY": 63,
-    "MailboxTileX": 27,
-    "MailboxTileY": 62,
-    "DefaultSlotId": "Pelican4Ever_Farm_10",
-    "Description": "Parcela 10 (Ribera Sur - Paso del Molino)"
-  },
-  {
-    "DoorId": "Farm_Portal_11",
-    "LocationName": "Farm",
-    "TownTileX": 52,
-    "TownTileY": 63,
-    "MailboxTileX": 51,
-    "MailboxTileY": 62,
-    "DefaultSlotId": "Pelican4Ever_Farm_11",
-    "Description": "Parcela 11 (Ribera Sur - Cañada del Sur)"
-  },
-  {
-    "DoorId": "Farm_Portal_12",
+    "DoorId": "Farm_Portal_04",
     "LocationName": "Farm",
     "TownTileX": 62,
     "TownTileY": 63,
-    "MailboxTileX": 65,
+    "MailboxTileX": 61,
     "MailboxTileY": 62,
+    "DefaultSlotId": "Pelican4Ever_Farm_04",
+    "Description": "Parcela 04 (Granja Host - Sur Este)"
+  },
+  {
+    "DoorId": "Farm_Portal_05",
+    "LocationName": "Pelican4Ever_Bridge_1",
+    "TownTileX": 8,
+    "TownTileY": 1,
+    "MailboxTileX": 7,
+    "MailboxTileY": 2,
+    "DefaultSlotId": "Pelican4Ever_Farm_05",
+    "Description": "Parcela 05 (Puente 1 - Norte Izquierda)"
+  },
+  {
+    "DoorId": "Farm_Portal_06",
+    "LocationName": "Pelican4Ever_Bridge_1",
+    "TownTileX": 25,
+    "TownTileY": 1,
+    "MailboxTileX": 24,
+    "MailboxTileY": 2,
+    "DefaultSlotId": "Pelican4Ever_Farm_06",
+    "Description": "Parcela 06 (Puente 1 - Norte Derecha)"
+  },
+  {
+    "DoorId": "Farm_Portal_07",
+    "LocationName": "Pelican4Ever_Bridge_1",
+    "TownTileX": 8,
+    "TownTileY": 28,
+    "MailboxTileX": 7,
+    "MailboxTileY": 27,
+    "DefaultSlotId": "Pelican4Ever_Farm_07",
+    "Description": "Parcela 07 (Puente 1 - Sur Izquierda)"
+  },
+  {
+    "DoorId": "Farm_Portal_08",
+    "LocationName": "Pelican4Ever_Bridge_1",
+    "TownTileX": 25,
+    "TownTileY": 28,
+    "MailboxTileX": 24,
+    "MailboxTileY": 27,
+    "DefaultSlotId": "Pelican4Ever_Farm_08",
+    "Description": "Parcela 08 (Puente 1 - Sur Derecha)"
+  },
+  {
+    "DoorId": "Farm_Portal_09",
+    "LocationName": "Pelican4Ever_Bridge_2",
+    "TownTileX": 8,
+    "TownTileY": 1,
+    "MailboxTileX": 7,
+    "MailboxTileY": 2,
+    "DefaultSlotId": "Pelican4Ever_Farm_09",
+    "Description": "Parcela 09 (Puente 2 - Norte Izquierda)"
+  },
+  {
+    "DoorId": "Farm_Portal_10",
+    "LocationName": "Pelican4Ever_Bridge_2",
+    "TownTileX": 25,
+    "TownTileY": 1,
+    "MailboxTileX": 24,
+    "MailboxTileY": 2,
+    "DefaultSlotId": "Pelican4Ever_Farm_10",
+    "Description": "Parcela 10 (Puente 2 - Norte Derecha)"
+  },
+  {
+    "DoorId": "Farm_Portal_11",
+    "LocationName": "Pelican4Ever_Bridge_2",
+    "TownTileX": 8,
+    "TownTileY": 28,
+    "MailboxTileX": 7,
+    "MailboxTileY": 27,
+    "DefaultSlotId": "Pelican4Ever_Farm_11",
+    "Description": "Parcela 11 (Puente 2 - Sur Izquierda)"
+  },
+  {
+    "DoorId": "Farm_Portal_12",
+    "LocationName": "Pelican4Ever_Bridge_2",
+    "TownTileX": 25,
+    "TownTileY": 28,
+    "MailboxTileX": 24,
+    "MailboxTileY": 27,
     "DefaultSlotId": "Pelican4Ever_Farm_12",
-    "Description": "Parcela 12 (Ribera Sur - Pradera Baja)"
+    "Description": "Parcela 12 (Puente 2 - Sur Derecha)"
   },
   {
     "DoorId": "Farm_Portal_13",
-    "LocationName": "Farm",
+    "LocationName": "Pelican4Ever_Bridge_3",
     "TownTileX": 8,
     "TownTileY": 1,
     "MailboxTileX": 7,
     "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_13",
-    "Description": "Parcela 13 (Paso de la Montaña - Rincón Noroeste)"
+    "Description": "Parcela 13 (Puente 3 - Norte Izquierda)"
   },
   {
     "DoorId": "Farm_Portal_14",
-    "LocationName": "Farm",
-    "TownTileX": 72,
+    "LocationName": "Pelican4Ever_Bridge_3",
+    "TownTileX": 25,
     "TownTileY": 1,
-    "MailboxTileX": 71,
+    "MailboxTileX": 24,
     "MailboxTileY": 2,
     "DefaultSlotId": "Pelican4Ever_Farm_14",
-    "Description": "Parcela 14 (Paso de la Montaña - Rincón Noreste)"
+    "Description": "Parcela 14 (Puente 3 - Norte Derecha)"
   },
   {
     "DoorId": "Farm_Portal_15",
-    "LocationName": "Farm",
+    "LocationName": "Pelican4Ever_Bridge_3",
     "TownTileX": 8,
-    "TownTileY": 63,
-    "MailboxTileX": 11,
-    "MailboxTileY": 62,
+    "TownTileY": 28,
+    "MailboxTileX": 7,
+    "MailboxTileY": 27,
     "DefaultSlotId": "Pelican4Ever_Farm_15",
-    "Description": "Parcela 15 (Ribera Sur - Rincón Suroeste)"
+    "Description": "Parcela 15 (Puente 3 - Sur Izquierda)"
   },
   {
     "DoorId": "Farm_Portal_16",
-    "LocationName": "Farm",
-    "TownTileX": 47,
-    "TownTileY": 63,
-    "MailboxTileX": 46,
-    "MailboxTileY": 62,
+    "LocationName": "Pelican4Ever_Bridge_3",
+    "TownTileX": 25,
+    "TownTileY": 28,
+    "MailboxTileX": 24,
+    "MailboxTileY": 27,
     "DefaultSlotId": "Pelican4Ever_Farm_16",
-    "Description": "Parcela 16 (Ribera Sur - Cañada Central)"
+    "Description": "Parcela 16 (Puente 3 - Sur Derecha)"
   }
 ]

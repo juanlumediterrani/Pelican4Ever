@@ -11,14 +11,11 @@ namespace Pelican4Ever.Tests
     {
         [Theory]
         [InlineData(18, 63, 40, 1, 2)] // Sur del Host -> Entrada Norte residencia (Backwoods)
-        [InlineData(28, 63, 40, 1, 2)]
-        [InlineData(47, 63, 40, 1, 2)]
+        [InlineData(62, 63, 40, 1, 2)]
+        [InlineData(25, 28, 40, 1, 2)] // Sur del Puente -> Entrada Norte residencia
         [InlineData(18, 1, 40, 63, 0)]  // Norte del Host -> Entrada Sur residencia (Forest)
-        [InlineData(28, 1, 40, 63, 0)]
-        [InlineData(8, 1, 40, 63, 0)]
-        [InlineData(1, 16, 78, 17, 3)] // Oeste del Host -> Entrada Este residencia (BusStop)
-        [InlineData(1, 26, 78, 17, 3)]
-        [InlineData(1, 46, 78, 17, 3)]
+        [InlineData(62, 1, 40, 63, 0)]
+        [InlineData(8, 1, 40, 63, 0)]   // Norte del Puente -> Entrada Sur residencia
         public void GetResidenceArrivalCoordinates_ResolvesCorrectEntranceAndFacing(
             int hostX, int hostY, int expectedX, int expectedY, int expectedFacing)
         {
@@ -116,10 +113,10 @@ namespace Pelican4Ever.Tests
 
                     // No debe estar en la zona inaccesible del acantilado sudeste (72, 63)
                     Assert.NotEqual(72, x);
-                    Assert.Equal(47, x);
-                    Assert.Equal(63, y);
-                    Assert.Equal(46, mx);
-                    Assert.Equal(62, my);
+                    Assert.Equal(25, x);
+                    Assert.Equal(28, y);
+                    Assert.Equal(24, mx);
+                    Assert.Equal(27, my);
                 }
             }
 
@@ -144,10 +141,11 @@ namespace Pelican4Ever.Tests
             string json = File.ReadAllText(doorsPath);
             using var doc = JsonDocument.Parse(json);
 
-            var seenSigns = new System.Collections.Generic.HashSet<(int, int)>();
+            var seenSigns = new System.Collections.Generic.HashSet<(string, int, int)>();
             foreach (var el in doc.RootElement.EnumerateArray())
             {
                 string id = el.GetProperty("DoorId").GetString()!;
+                string locName = el.GetProperty("LocationName").GetString()!;
                 int x = el.GetProperty("TownTileX").GetInt32();
                 int y = el.GetProperty("TownTileY").GetInt32();
                 int mx = el.GetProperty("MailboxTileX").GetInt32();
@@ -163,8 +161,8 @@ namespace Pelican4Ever.Tests
                 int gap = path.Min(t => Math.Max(Math.Abs(mx - t.X), Math.Abs(my - t.Y)));
                 Assert.True(gap <= 2, $"{id} mailbox is too far from its path (dist={gap})");
 
-                // Cada poste/buzón es único
-                Assert.True(seenSigns.Add((mx, my)), $"Duplicate sign tile at ({mx}, {my}) for {id}");
+                // Cada poste/buzón es único en su localización
+                Assert.True(seenSigns.Add((locName, mx, my)), $"Duplicate sign tile at ({mx}, {my}) in {locName} for {id}");
             }
 
             Assert.Equal(16, seenSigns.Count);
@@ -195,19 +193,15 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
-        [InlineData(47, 63, 47, 63, true)]  // Sur: apertura
-        [InlineData(47, 63, 48, 64, true)]  // Sur: borde del mapa
-        [InlineData(47, 63, 48, 62, false)] // Sur: tercera casilla desde el borde
-        [InlineData(47, 63, 48, 60, false)] // Sur: entrada del camino desde la plaza (captura del fallo)
-        [InlineData(47, 63, 49, 64, false)] // Sur: fuera de las columnas del camino
-        [InlineData(28, 1, 29, 0, true)]    // Norte: borde
-        [InlineData(28, 1, 28, 1, true)]    // Norte: apertura
-        [InlineData(28, 1, 28, 2, false)]
-        [InlineData(28, 1, 28, 8, false)]
-        [InlineData(1, 26, 0, 27, true)]    // Oeste: borde
-        [InlineData(1, 26, 1, 26, true)]    // Oeste: apertura
-        [InlineData(1, 26, 2, 26, false)]
-        [InlineData(1, 26, 6, 27, false)]
+        [InlineData(62, 63, 62, 63, true)]  // Sur: apertura
+        [InlineData(62, 63, 63, 64, true)]  // Sur: borde del mapa
+        [InlineData(62, 63, 63, 62, false)] // Sur: tercera casilla desde el borde
+        [InlineData(62, 63, 63, 60, false)] // Sur: entrada del camino desde la plaza
+        [InlineData(62, 63, 64, 64, false)] // Sur: fuera de las columnas del camino
+        [InlineData(18, 1, 19, 0, true)]    // Norte: borde
+        [InlineData(18, 1, 18, 1, true)]    // Norte: apertura
+        [InlineData(18, 1, 18, 2, false)]
+        [InlineData(18, 1, 18, 8, false)]
         public void IsPortalTriggerTile_OnlyLastTwoTilesTowardTheBorder(int townX, int townY, int tileX, int tileY, bool expected)
         {
             Assert.Equal(expected, SpatialWarpRouter.IsPortalTriggerTile(townX, townY, tileX, tileY));
@@ -216,7 +210,7 @@ namespace Pelican4Ever.Tests
         [Fact]
         public void PortalTriggerTiles_AreTwoTilesDeepAndInsideThePath()
         {
-            var doors = new[] { ("Farm_Portal_02", 1, 26), ("Farm_Portal_08", 62, 1), ("Farm_Portal_16", 47, 63) };
+            var doors = new[] { ("Farm_Portal_01", 18, 1), ("Farm_Portal_07", 8, 28), ("Farm_Portal_16", 25, 28) };
             foreach (var (id, x, y) in doors)
             {
                 var path = SpatialWarpRouter.GetPortalPathTiles(id, x, y);
@@ -229,14 +223,12 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
-        [InlineData(18, 63, "Ranching", 63, 1, 2)]    // Sur del Host -> Entrada Norte Meadowlands (63, 1) en vez de acantilado (40, 1)
-        [InlineData(47, 63, "Ranching", 63, 1, 2)]
-        [InlineData(47, 63, "Meadowlands", 63, 1, 2)]
-        [InlineData(28, 1, "Ranching", 52, 73, 0)]    // Norte del Host -> Entrada Sur Meadowlands (52, 73) en vez de (40, 63)
-        [InlineData(1, 26, "Ranching", 98, 22, 3)]    // Oeste del Host -> Entrada Este Meadowlands (98, 22) en vez de (78, 17)
+        [InlineData(18, 63, "Ranching", 63, 1, 2)]    // Sur del Host -> Entrada Norte Meadowlands (63, 1)
+        [InlineData(62, 63, "Ranching", 63, 1, 2)]
+        [InlineData(62, 63, "Meadowlands", 63, 1, 2)]
+        [InlineData(18, 1, "Ranching", 52, 73, 0)]    // Norte del Host -> Entrada Sur Meadowlands (52, 73)
         [InlineData(18, 63, "Standard", 40, 1, 2)]    // Standard conserva sus coordenadas habituales
-        [InlineData(28, 1, "Standard", 40, 63, 0)]
-        [InlineData(1, 26, "Standard", 78, 17, 3)]
+        [InlineData(62, 1, "Standard", 40, 63, 0)]
         public void GetResidenceArrivalCoordinates_FarmTypeAware_ResolvesCorrectEntrance(
             int hostX, int hostY, string farmType, int expectedX, int expectedY, int expectedFacing)
         {

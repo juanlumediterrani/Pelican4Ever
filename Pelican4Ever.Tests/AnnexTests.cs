@@ -36,8 +36,8 @@ namespace Pelican4Ever.Tests
                 var freeSides = ResidenceExits.FreeSides(door.TownTileX, door.TownTileY);
                 Assert.Equal(2, freeSides.Count);
 
-                // Portales del SUR del Host (TownTileY >= 60): Backwoods (Norte) vuelve al host -> libres Este y Sur
-                if (door.TownTileY >= 60)
+                // Portales del SUR (TownTileY >= 28): Backwoods (Norte) vuelve al origen -> libres Este y Sur
+                if (door.TownTileY >= 28)
                 {
                     Assert.Contains(AnnexSide.East, freeSides);
                     Assert.Contains(AnnexSide.South, freeSides);
