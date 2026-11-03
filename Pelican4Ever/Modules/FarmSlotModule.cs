@@ -481,6 +481,26 @@ namespace Pelican4Ever.Modules
                         hostMap.Properties["Warp"] = string.IsNullOrWhiteSpace(existingWarps) ? westWarps : $"{existingWarps} {westWarps}";
                     }
 
+                    // Reubicar las losas de madera y el cuenco del perro a (53, 6) fuera del vallado
+                    hostMap.Properties["PetBowlLocation"] = "53 6";
+                    var sheetOutdoorsFarm = MapCloneHelper.GetOutdoorsTileSheet(hostMap);
+                    if (sheetOutdoorsFarm != null)
+                    {
+                        ClearTile(bldLayer, 53, 6);
+                        ClearTile(frontLayer, 53, 5);
+                        if (backLayer != null)
+                        {
+                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 53, 6, 612);
+                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 53, 7, 612);
+                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 54, 7, 256);
+                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 54, 8, 256);
+                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 56, 7, 256);
+                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 56, 8, 256);
+                        }
+                        SetTileIfValid(bldLayer, sheetOutdoorsFarm, 56, 9, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
+                        SetTileIfValid(frontLayer, sheetOutdoorsFarm, 56, 8, VerticalMultiTileClassifier.FenceMidTopTileIndex);
+                    }
+
                     return hostMap;
                 }, AssetLoadPriority.Medium);
             }
@@ -800,13 +820,13 @@ namespace Pelican4Ever.Modules
                     }
                     else if (door.TownTileX == 62) // Farm_Portal_02 (NE: bosque campestre, x=62..63, y=0..10)
                     {
-                        // Cerrar de forma redondeada el borde derecho del cerezo izquierdo en x = 61 (y = 0..1),
-                        // dejando libre Front[61, 2] para no dibujar hojas sobre el poste del buzón en Buildings[61, 2]
+                        // Cerrar de forma redondeada y completa el borde derecho del cerezo izquierdo en x = 61 (y = 0..2)
+                        // (el buzón se ubica en el lateral opuesto del sendero en x = 64, y = 2)
                         SetTileIfValid(front, sheetOutdoors, 61, 0, 46);
                         SetTileIfValid(front, sheetOutdoors, 61, 1, 71);
-                        ClearTile(front, 61, 2);
+                        SetTileIfValid(front, sheetOutdoors, 61, 2, 96);
 
-                        // Limpiar restos de arbusto/árbol verde cortado en Buildings (60..61, 0..3) y (64, 0..1)
+                        // Limpiar restos de arbusto/árbol verde cortado en Buildings (60..61, 0..3) y (64, 0..2)
                         SetTileIfValid(bld, sheetOutdoors, 60, 0, 16);
                         ClearTile(bld, 60, 1);
                         SetTileIfValid(bld, sheetOutdoors, 61, 0, 16);
@@ -847,15 +867,15 @@ namespace Pelican4Ever.Modules
                         int lx = 17, rx = 20;
 
                         // Conservar limpio el poste del buzón en (17, 62) y rematar con bordes de hierba redondeados
-                        // (438 en lx, 439 en rx en y = 61) con colisión completa en Buildings para que el jugador
-                        // no pueda caminar detrás ni sobre la cresta de hierba.
+                        // (438 en lx, 439 en rx en y = 61). No inyectar colisión en y = 61 (tierra plana transitable horizontalmente);
+                        // mantener colisión sólida en Buildings únicamente en la cresta/desnivel en y = 62..64.
                         ClearTile(front, lx, 62);
                         ClearTile(front, rx, 62);
                         SetTileIfValid(front, sheetOutdoors, lx, 61, 438);
                         SetTileIfValid(front, sheetOutdoors, rx, 61, 439);
 
-                        SetTileIfValid(bld, sheetOutdoors, lx, 61, 16);
-                        SetTileIfValid(bld, sheetOutdoors, rx, 61, 16);
+                        ClearTile(bld, lx, 61);
+                        ClearTile(bld, rx, 61);
                         SetTileIfValid(bld, sheetOutdoors, rx, 62, 16);
                         SetTileIfValid(bld, sheetOutdoors, lx, 63, 16);
                         SetTileIfValid(bld, sheetOutdoors, rx, 63, 16);
@@ -891,15 +911,15 @@ namespace Pelican4Ever.Modules
                         int lx = 61, rx = 64;
 
                         // Conservar limpio el poste del buzón en (61, 62) y rematar con bordes de hierba redondeados
-                        // (438 en lx, 439 en rx en y = 61) con colisión completa en Buildings para que el jugador
-                        // no pueda caminar detrás ni sobre la cresta de hierba.
+                        // (438 en lx, 439 en rx en y = 61). No inyectar colisión en y = 61 (tierra plana transitable horizontalmente);
+                        // mantener colisión sólida en Buildings únicamente en la cresta/desnivel en y = 62..64.
                         ClearTile(front, lx, 62);
                         ClearTile(front, rx, 62);
                         SetTileIfValid(front, sheetOutdoors, lx, 61, 438);
                         SetTileIfValid(front, sheetOutdoors, rx, 61, 439);
 
-                        SetTileIfValid(bld, sheetOutdoors, lx, 61, 16);
-                        SetTileIfValid(bld, sheetOutdoors, rx, 61, 16);
+                        ClearTile(bld, lx, 61);
+                        ClearTile(bld, rx, 61);
                         SetTileIfValid(bld, sheetOutdoors, rx, 62, 16);
                         SetTileIfValid(bld, sheetOutdoors, lx, 63, 16);
                         SetTileIfValid(bld, sheetOutdoors, rx, 63, 16);
@@ -1258,8 +1278,8 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // 2. Limpiar Front en x = 0..5, y = 25..28 y a lo largo de todo el borde este del acantilado en x = 6..7, y = 22..29
-            // para que ningún tile de desnivel/meseta quede en la capa Front dibujándose sobre el granjero
+            // 2. Limpiar Front en x = 0..5, y = 25..28 y en el corredor este del paso (x = 6..7, y = 26..27),
+            // conservando intacto el remate de esquina vanilla en Front[6, 22] = 438 y el risco vertical en Front[6, 23..24]
             for (int x = 0; x <= 5; x++)
             {
                 for (int y = 25; y <= 28; y++)
@@ -1267,11 +1287,13 @@ namespace Pelican4Ever.Modules
                     ClearTile(front, x, y);
                 }
             }
-            for (int y = 22; y <= 29; y++)
-            {
-                ClearTile(front, 6, y);
-                ClearTile(front, 7, y);
-            }
+            ClearTile(front, 6, 26);
+            ClearTile(front, 6, 27);
+            ClearTile(front, 7, 26);
+            ClearTile(front, 7, 27);
+            SetTileIfValid(front, sheetOutdoors, 6, 22, 438);
+            SetTileIfValid(front, sheetOutdoors, 6, 23, 394);
+            SetTileIfValid(front, sheetOutdoors, 6, 24, 419);
 
             // 3. Reemplazar raíces/troncos cortados en Buildings (3..4, 29) y (1, 31) por colisión invisible (16)
             SetTileIfValid(bld, sheetOutdoors, 3, 29, 16);
@@ -1322,9 +1344,9 @@ namespace Pelican4Ever.Modules
             PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 2, endX: 5, y: 25);
             PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 0, endX: 5, y: 28);
 
-            // Cerrar el borde este del acantilado en Buildings con remate redondeado inferior (444) en (6, 25)
+            // Cerrar el borde este del acantilado en Buildings con remate redondeado suave (364) en (6, 25)
             // y remate redondeado superior (438) en (6, 28)
-            SetTileIfValid(bld, sheetOutdoors, 6, 25, 444);
+            SetTileIfValid(bld, sheetOutdoors, 6, 25, 364);
             SetTileIfValid(bld, sheetOutdoors, 6, 28, 438);
 
             // Normalizar la valla de y = 32 (x = 0..1) bajo el antiguo Tree 2 para que el poste derecho (385) esté en Buildings
@@ -2114,11 +2136,34 @@ namespace Pelican4Ever.Modules
 
             var petBowl = farmLoc.buildings.FirstOrDefault(b =>
                 (b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl")
-                && b.tileX.Value >= 52 && b.tileX.Value <= 55 && b.tileY.Value <= 10);
+                && b.tileX.Value >= 52 && b.tileX.Value <= 58 && b.tileY.Value <= 10);
             if (petBowl != null)
             {
-                petBowl.tileX.Value = 56;
-                petBowl.tileY.Value = 8;
+                petBowl.tileX.Value = 53;
+                petBowl.tileY.Value = 6;
+            }
+
+            if (farmLoc.Map != null)
+                farmLoc.Map.Properties["PetBowlLocation"] = "53 6";
+            var bld = farmLoc.Map?.GetLayer("Buildings");
+            var front = farmLoc.Map?.GetLayer("Front");
+            var back = farmLoc.Map?.GetLayer("Back");
+            var sheetOutdoors = MapCloneHelper.GetOutdoorsTileSheet(farmLoc.Map);
+            if (sheetOutdoors != null)
+            {
+                ClearTile(bld, 53, 6);
+                ClearTile(front, 53, 5);
+                if (back != null)
+                {
+                    SetTileIfValid(back, sheetOutdoors, 53, 6, 612);
+                    SetTileIfValid(back, sheetOutdoors, 53, 7, 612);
+                    SetTileIfValid(back, sheetOutdoors, 54, 7, 256);
+                    SetTileIfValid(back, sheetOutdoors, 54, 8, 256);
+                    SetTileIfValid(back, sheetOutdoors, 56, 7, 256);
+                    SetTileIfValid(back, sheetOutdoors, 56, 8, 256);
+                }
+                SetTileIfValid(bld, sheetOutdoors, 56, 9, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
+                SetTileIfValid(front, sheetOutdoors, 56, 8, VerticalMultiTileClassifier.FenceMidTopTileIndex);
             }
         }
 

@@ -393,6 +393,11 @@ namespace Pelican4Ever.Framework
                 SetTileIfValid(bldLayer, outdoorsSheet, x, 2, 63 + x);
                 SetPassableIfValid(bldLayer, x, 2, false);
 
+                for (int y = 0; y <= 2; y++)
+                {
+                    SetPassableIfValid(backLayer, x, y, false);
+                }
+
                 SetTileIfValid(frontLayer, outdoorsSheet, x, 0, 13 + x);
                 SetTileIfValid(frontLayer, outdoorsSheet, x, 1, 38 + x);
                 frontLayer.Tiles[x, 2] = null;
