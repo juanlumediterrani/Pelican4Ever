@@ -5,7 +5,7 @@ máquina. **Desarrollo corre sin red y preproducción con red.** No hay namespac
 
 | | Preproducción | Desarrollo |
 |---|---|---|
-| Rama Pelican | `pelican/preproduccion` (`~/src/Pelican-4Ever-preprod`) | `pelican/desarrollo` (`~/src/Pelican-4Ever-development`) |
+| Rama Pelican | `main` (`~/src/Pelican-4Ever-preprod`) | `pelican/desarrollo` (`~/src/Pelican-4Ever-development`) |
 | Rama Voyager | `pelican/preproduccion` (`~/src/stardew-voyager-preprod`) | `pelican/desarrollo` (`~/src/stardew-voyager-development`) |
 | Juego | copia en `~/.local/share/pelican4ever/preprod/game` | instalación de Steam |
 | Mods | solo SMAPI (ConsoleCommands, SaveBackup), Pelican 4Ever y el puente | los de la campaña |
@@ -40,8 +40,8 @@ ni en la instalación de Steam mientras haya campaña.
 ## Promoción y rollback
 
 1. Corregir y probar en `pelican/desarrollo` (suite completa verde, 0 avisos).
-2. Llevar los commits a `pelican/preproduccion` con `git cherry-pick -x` (las ramas divergen en su
-   commit de SDK). Volver a pasar la suite allí.
+2. Llevar los commits a `main` (la línea de preproducción de Pelican) con `git cherry-pick -x`.
+   Volver a pasar la suite allí.
 3. Parar `pelican4ever-preprod.service`, compilar y desplegar desde el worktree de preproducción,
    anotar el hash del DLL en `runtime.json`, arrancar y comprobar el anfitrión (puente
    `worldReady/isMultiplayer/isHost`, UDP 24642 y `GET /api/v1/host/clock`).
