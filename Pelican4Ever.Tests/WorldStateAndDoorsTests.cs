@@ -269,4 +269,69 @@ public class WorldStateAndDoorsTests
             }
         }
     }
+
+    [Fact]
+    public void ResolvePlayerResidenceSlot_WhenUnassigned_ReturnsNull()
+    {
+        var state = new ServerWorldState();
+        long newPlayerId = 999888777L;
+
+        // Jugador nuevo sin puerta asignada ni registro
+        string? slotId = state.ResolvePlayerResidenceSlot(newPlayerId);
+        Assert.Null(slotId);
+
+        // Jugador con registro pero sin residencia
+        state.GetOrCreatePlayer(newPlayerId, "Bob");
+        slotId = state.ResolvePlayerResidenceSlot(newPlayerId);
+        Assert.Null(slotId);
+    }
+
+    [Fact]
+    public void ResolvePlayerResidenceSlot_WhenAssignedInDoors_ReturnsFarmSlotId()
+    {
+        var state = new ServerWorldState();
+        long playerId = 123456L;
+
+        state.Doors["Farm_Portal_02"] = new DoorAssignment
+        {
+            DoorId = "Farm_Portal_02",
+            FarmSlotId = "Pelican4Ever_Farm_02",
+            OwnerId = playerId,
+            Policy = AccessPolicy.Locked
+        };
+
+        string? slotId = state.ResolvePlayerResidenceSlot(playerId);
+        Assert.Equal("Pelican4Ever_Farm_02", slotId);
+    }
+
+    [Fact]
+    public void ResolvePlayerResidenceSlot_WhenAssignedInPlayersRecord_ReturnsFarmSlotId()
+    {
+        var state = new ServerWorldState();
+        long playerId = 555666L;
+
+        var rec = state.GetOrCreatePlayer(playerId, "Alice");
+        rec.FarmSlotId = "Pelican4Ever_Farm_04";
+
+        string? slotId = state.ResolvePlayerResidenceSlot(playerId);
+        Assert.Equal("Pelican4Ever_Farm_04", slotId);
+    }
+
+    [Fact]
+    public void ResolvePlayerResidenceSlot_WhenDoorOwnedByDifferentPlayer_ReturnsNull()
+    {
+        var state = new ServerWorldState();
+        long ownerId = 111L;
+        long visitorId = 222L;
+
+        state.Doors["Farm_Portal_01"] = new DoorAssignment
+        {
+            DoorId = "Farm_Portal_01",
+            FarmSlotId = "Pelican4Ever_Farm_01",
+            OwnerId = ownerId,
+            Policy = AccessPolicy.Locked
+        };
+
+        Assert.Null(state.ResolvePlayerResidenceSlot(visitorId));
+    }
 }
