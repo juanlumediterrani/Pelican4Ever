@@ -87,8 +87,37 @@ namespace Pelican4Ever.Modules
             {
                 try
                 {
-                    RegisteredDoors = context.Helper.Data.ReadJsonFile<List<DoorModel>>("assets/doors.json") ?? new();
-                    context.Monitor.Log($"[FarmSlotModule] {RegisteredDoors.Count} residencias/puertas cargadas desde assets/doors.json.", LogLevel.Info);
+                    var rawDoors = context.Helper.Data.ReadJsonFile<List<DoorModel>>("assets/doors.json") ?? new();
+                    var validDoors = new List<DoorModel>();
+                    var seenDoorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var seenSlotIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                    foreach (var door in rawDoors)
+                    {
+                        var spec = door.ToDoorSpec();
+                        var errors = new List<string>(DoorCatalogValidator.ValidateOne(spec, 16));
+
+                        if (!string.IsNullOrWhiteSpace(door.DoorId) && !seenDoorIds.Add(door.DoorId))
+                            errors.Add($"DoorId duplicado: '{door.DoorId}'.");
+
+                        if (!string.IsNullOrWhiteSpace(door.DefaultSlotId) && !seenSlotIds.Add(door.DefaultSlotId))
+                            errors.Add($"DefaultSlotId duplicado: '{door.DefaultSlotId}'.");
+
+                        if (errors.Count > 0)
+                        {
+                            foreach (string err in errors)
+                            {
+                                context.Monitor.Log($"[FarmSlotModule] Error en puerta '{door.DoorId}': {err}", LogLevel.Error);
+                            }
+                        }
+                        else
+                        {
+                            validDoors.Add(door);
+                        }
+                    }
+
+                    RegisteredDoors = validDoors;
+                    context.Monitor.Log($"[FarmSlotModule] {RegisteredDoors.Count} residencias/puertas válidas cargadas desde assets/doors.json.", LogLevel.Info);
                 }
                 catch (Exception ex)
                 {
@@ -417,7 +446,7 @@ namespace Pelican4Ever.Modules
 
         public static (Point tile1, Point tile2) GetOpeningTiles(DoorModel door)
         {
-            if (door.TownTileX <= 2 || door.TownTileX >= 75)
+            if (door.Edge is PortalEdge.West or PortalEdge.East)
             {
                 return (new Point(door.TownTileX, door.TownTileY), new Point(door.TownTileX, door.TownTileY + 1));
             }
@@ -429,12 +458,12 @@ namespace Pelican4Ever.Modules
 
         public static void GetResidenceArrivalCoordinates(DoorModel door, out int targetX, out int targetY, out int facingDirection)
         {
-            SpatialWarpRouter.GetResidenceArrivalCoordinates(door.TownTileX, door.TownTileY, out targetX, out targetY, out facingDirection);
+            SpatialWarpRouter.GetResidenceArrivalCoordinates(door.Edge, out targetX, out targetY, out facingDirection);
         }
 
         public static void GetResidenceArrivalCoordinates(DoorModel door, string? farmType, out int targetX, out int targetY, out int facingDirection)
         {
-            SpatialWarpRouter.GetResidenceArrivalCoordinates(door.TownTileX, door.TownTileY, farmType, out targetX, out targetY, out facingDirection);
+            SpatialWarpRouter.GetResidenceArrivalCoordinates(door.Edge, farmType, out targetX, out targetY, out facingDirection);
         }
 
         public static bool IsInOpening(DoorModel door, int tileX, int tileY)
@@ -445,19 +474,17 @@ namespace Pelican4Ever.Modules
 
         public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
-            var (t1, t2) = GetOpeningTiles(door);
-            if (tileX == t1.X || tileX == t2.X)
+            var loc = HostPlazaLayout.Find(door.LocationName, 16);
+            if (loc == null)
             {
-                if (door.TownTileY <= 2 && tileY >= 0 && tileY <= 10)
-                    return true;
-                if (door.TownTileY >= 60 && tileY >= 60 && tileY <= 64)
-                    return true;
+                var (t1, t2) = GetOpeningTiles(door);
+                return (tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y);
             }
-            if (tileY == t1.Y || tileY == t2.Y)
+
+            var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
+            foreach (var p in path)
             {
-                if (door.TownTileX <= 2 && tileX >= 0 && tileX <= 7)
-                    return true;
-                if (door.TownTileX >= 75 && tileX >= 75 && tileX <= 79)
+                if (p.X == tileX && p.Y == tileY)
                     return true;
             }
 
@@ -480,7 +507,9 @@ namespace Pelican4Ever.Modules
             DoorModel door,
             xTile.Tiles.Tile? sampleTile)
         {
-            var passTiles = SpatialWarpRouter.GetPortalPathTiles(door.DoorId, door.TownTileX, door.TownTileY)
+            var loc = HostPlazaLayout.Find(door.LocationName, 16)
+                   ?? new PlazaLocation(door.LocationName, bld?.LayerWidth ?? 80, bld?.LayerHeight ?? 65, null, null);
+            var passTiles = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc)
                 .Select(t => new Point(t.X, t.Y))
                 .ToList();
             var passTilesSet = new HashSet<Point>(passTiles);
@@ -515,7 +544,8 @@ namespace Pelican4Ever.Modules
                     int mask = TerrainTileClassifier.CalculateAutotileMask(pt.X, pt.Y, (x, y) => passTilesSet.Contains(new Point(x, y)));
 
                     var (tileIndex, _) = TerrainTileClassifier.GetPathTileInfo(
-                        door.DoorId,
+                        door.Edge,
+                        loc,
                         door.TownTileX,
                         door.TownTileY,
                         pt.X,
@@ -542,8 +572,8 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // 4. Limpieza del reborde colgante de hierba en Front (y=61) en la embocadura de las salidas sur
-            if (door.TownTileY >= 60 && front != null)
+            // 4. Limpieza del reborde colgante de hierba en Front (y=61) en la embocadura de las salidas sur de la Granja Host
+            if (door.Edge == PortalEdge.South && string.Equals(door.LocationName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase) && front != null)
             {
                 if (door.TownTileX >= 0 && door.TownTileX < front.LayerWidth && 61 < front.LayerHeight)
                     front.Tiles[door.TownTileX, 61] = null;
@@ -552,7 +582,7 @@ namespace Pelican4Ever.Modules
             }
 
             // 5. Suavizado y remates orgánicos de acantilados y vallas según recursos oficiales del juego
-            if (door.TownTileY <= 2 && bld != null && sheetOutdoors != null)
+            if (door.Edge == PortalEdge.North && bld != null && sheetOutdoors != null)
             {
                 int lx = door.TownTileX - 1;
                 int rx = door.TownTileX + 2;
@@ -817,7 +847,9 @@ namespace Pelican4Ever.Modules
                 string? typeProp = null;
                 existingBack?.Properties.TryGetValue("Type", out typeProp);
 
-                bool isGrass = TerrainTileClassifier.IsMailboxOnGrass(door.DoorId, door.TownTileX, door.TownTileY, mx, my);
+                var loc = HostPlazaLayout.Find(door.LocationName, 16)
+                       ?? new PlazaLocation(door.LocationName, bld.LayerWidth, bld.LayerHeight, null, null);
+                bool isGrass = TerrainTileClassifier.IsMailboxOnGrass(door.Edge, loc, door.TownTileX, door.TownTileY, mx, my);
                 if (!isGrass && existingBack != null && TerrainTileClassifier.IsGrassTileIndex(existingBack.TileIndex, typeProp, existingBack.TileSheet?.Id))
                 {
                     isGrass = true;
@@ -1348,8 +1380,12 @@ namespace Pelican4Ever.Modules
 
             Vector2 playerTile = Game1.player.Tile;
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
-                string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase)
-                && SpatialWarpRouter.IsPortalTriggerTile(d.TownTileX, d.TownTileY, (int)playerTile.X, (int)playerTile.Y));
+            {
+                if (!string.Equals(d.LocationName, "Farm", StringComparison.OrdinalIgnoreCase))
+                    return false;
+                var loc = HostPlazaLayout.Find(d.LocationName, 16);
+                return loc != null && SpatialWarpRouter.IsPortalTriggerTile(d.Edge, d.TownTileX, d.TownTileY, loc, (int)playerTile.X, (int)playerTile.Y);
+            });
 
             string? unclaimedDoorId = door != null && !context.WorldState.Doors.ContainsKey(door.DoorId) ? door.DoorId : null;
             // Se evalúa SIEMPRE (también con null) para rearmar la puerta lógica al salir del tile.
@@ -1371,10 +1407,8 @@ namespace Pelican4Ever.Modules
         {
             if (context == null) return;
 
-            string[] bridgeNames = { "Pelican4Ever_Bridge_1", "Pelican4Ever_Bridge_2", "Pelican4Ever_Bridge_3" };
-            for (int i = 0; i < bridgeNames.Length; i++)
+            foreach (string bName in HostPlazaLayout.AllBridgeNames)
             {
-                string bName = bridgeNames[i];
                 GameLocation? loc = Game1.getLocationFromName(bName);
                 if (loc == null)
                 {
@@ -1399,40 +1433,40 @@ namespace Pelican4Ever.Modules
             Farm? hostFarm = Game1.getFarm();
             if (hostFarm != null)
             {
-                UpdateOrCreateWarp(hostFarm, 0, 26, "Pelican4Ever_Bridge_1", 33, 14);
-                UpdateOrCreateWarp(hostFarm, 0, 27, "Pelican4Ever_Bridge_1", 33, 14);
+                UpdateOrCreateWarp(hostFarm, 0, 26, HostPlazaLayout.BridgeName(1), 33, 14);
+                UpdateOrCreateWarp(hostFarm, 0, 27, HostPlazaLayout.BridgeName(1), 33, 14);
             }
 
-            GameLocation? bridge1 = Game1.getLocationFromName("Pelican4Ever_Bridge_1");
+            GameLocation? bridge1 = Game1.getLocationFromName(HostPlazaLayout.BridgeName(1));
             if (bridge1 != null)
             {
-                UpdateOrCreateWarp(bridge1, 34, 13, "Farm", 2, 26);
-                UpdateOrCreateWarp(bridge1, 34, 14, "Farm", 2, 26);
-                UpdateOrCreateWarp(bridge1, 34, 15, "Farm", 2, 26);
+                UpdateOrCreateWarp(bridge1, 34, 13, HostPlazaLayout.HostFarm, 2, 26);
+                UpdateOrCreateWarp(bridge1, 34, 14, HostPlazaLayout.HostFarm, 2, 26);
+                UpdateOrCreateWarp(bridge1, 34, 15, HostPlazaLayout.HostFarm, 2, 26);
 
-                UpdateOrCreateWarp(bridge1, 0, 13, "Pelican4Ever_Bridge_2", 33, 14);
-                UpdateOrCreateWarp(bridge1, 0, 14, "Pelican4Ever_Bridge_2", 33, 14);
-                UpdateOrCreateWarp(bridge1, 0, 15, "Pelican4Ever_Bridge_2", 33, 14);
+                UpdateOrCreateWarp(bridge1, 0, 13, HostPlazaLayout.BridgeName(2), 33, 14);
+                UpdateOrCreateWarp(bridge1, 0, 14, HostPlazaLayout.BridgeName(2), 33, 14);
+                UpdateOrCreateWarp(bridge1, 0, 15, HostPlazaLayout.BridgeName(2), 33, 14);
             }
 
-            GameLocation? bridge2 = Game1.getLocationFromName("Pelican4Ever_Bridge_2");
+            GameLocation? bridge2 = Game1.getLocationFromName(HostPlazaLayout.BridgeName(2));
             if (bridge2 != null)
             {
-                UpdateOrCreateWarp(bridge2, 34, 13, "Pelican4Ever_Bridge_1", 1, 14);
-                UpdateOrCreateWarp(bridge2, 34, 14, "Pelican4Ever_Bridge_1", 1, 14);
-                UpdateOrCreateWarp(bridge2, 34, 15, "Pelican4Ever_Bridge_1", 1, 14);
+                UpdateOrCreateWarp(bridge2, 34, 13, HostPlazaLayout.BridgeName(1), 1, 14);
+                UpdateOrCreateWarp(bridge2, 34, 14, HostPlazaLayout.BridgeName(1), 1, 14);
+                UpdateOrCreateWarp(bridge2, 34, 15, HostPlazaLayout.BridgeName(1), 1, 14);
 
-                UpdateOrCreateWarp(bridge2, 0, 13, "Pelican4Ever_Bridge_3", 33, 14);
-                UpdateOrCreateWarp(bridge2, 0, 14, "Pelican4Ever_Bridge_3", 33, 14);
-                UpdateOrCreateWarp(bridge2, 0, 15, "Pelican4Ever_Bridge_3", 33, 14);
+                UpdateOrCreateWarp(bridge2, 0, 13, HostPlazaLayout.BridgeName(3), 33, 14);
+                UpdateOrCreateWarp(bridge2, 0, 14, HostPlazaLayout.BridgeName(3), 33, 14);
+                UpdateOrCreateWarp(bridge2, 0, 15, HostPlazaLayout.BridgeName(3), 33, 14);
             }
 
-            GameLocation? bridge3 = Game1.getLocationFromName("Pelican4Ever_Bridge_3");
+            GameLocation? bridge3 = Game1.getLocationFromName(HostPlazaLayout.BridgeName(3));
             if (bridge3 != null)
             {
-                UpdateOrCreateWarp(bridge3, 34, 13, "Pelican4Ever_Bridge_2", 1, 14);
-                UpdateOrCreateWarp(bridge3, 34, 14, "Pelican4Ever_Bridge_2", 1, 14);
-                UpdateOrCreateWarp(bridge3, 34, 15, "Pelican4Ever_Bridge_2", 1, 14);
+                UpdateOrCreateWarp(bridge3, 34, 13, HostPlazaLayout.BridgeName(2), 1, 14);
+                UpdateOrCreateWarp(bridge3, 34, 14, HostPlazaLayout.BridgeName(2), 1, 14);
+                UpdateOrCreateWarp(bridge3, 34, 15, HostPlazaLayout.BridgeName(2), 1, 14);
             }
         }
 
@@ -1447,8 +1481,7 @@ namespace Pelican4Ever.Modules
 
             EnsureLocationPortals(farm);
 
-            string[] bridgeNames = { "Pelican4Ever_Bridge_1", "Pelican4Ever_Bridge_2", "Pelican4Ever_Bridge_3" };
-            foreach (string bName in bridgeNames)
+            foreach (string bName in HostPlazaLayout.AllBridgeNames)
             {
                 GameLocation? bLoc = Game1.getLocationFromName(bName);
                 if (bLoc != null)
@@ -2329,7 +2362,7 @@ namespace Pelican4Ever.Modules
             DoorModel? doorModel = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == residenceSlotId);
 
             var freeSides = doorModel != null
-                ? ResidenceExits.FreeSides(doorModel.TownTileX, doorModel.TownTileY)
+                ? ResidenceExits.FreeSides(doorModel.Edge)
                 : (IReadOnlyCollection<AnnexSide>)Array.Empty<AnnexSide>();
 
             Farmer? farmer = Game1.GetPlayer(playerId);
@@ -2461,7 +2494,7 @@ namespace Pelican4Ever.Modules
                 var residenceDoor = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
                 if (residenceDoor != null)
                 {
-                    var freeSides = ResidenceExits.FreeSides(residenceDoor.TownTileX, residenceDoor.TownTileY);
+                    var freeSides = ResidenceExits.FreeSides(residenceDoor.Edge);
                     string? farmType = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc)?.FarmType;
                     bool isMeadowlands = FarmGrassLogic.IsMeadowlands(farmType);
                     AnnexSide? clickedSide = null;
@@ -3564,7 +3597,7 @@ namespace Pelican4Ever.Modules
                 var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
                 if (door != null)
                 {
-                    if (SpatialWarpRouter.ShouldReturnToHostFarm(door.TownTileX, door.TownTileY, targetLoc))
+                    if (SpatialWarpRouter.ShouldReturnToPlaza(door.Edge, targetLoc))
                     {
                         string dest = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
                         locationRequest = Game1.getLocationRequest(dest);
@@ -3629,7 +3662,7 @@ namespace Pelican4Ever.Modules
 
         private static void RepositionToPortalExit(DoorModel door, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
-            SpatialWarpRouter.GetHostFarmReturnCoordinates(door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
+            SpatialWarpRouter.GetPlazaReturnCoordinates(door.Edge, door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
         }
 
         /// <summary>
@@ -4026,7 +4059,7 @@ namespace Pelican4Ever.Modules
                 var door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == curLoc);
                 if (door != null)
                 {
-                    var freeSides = ResidenceExits.FreeSides(door.TownTileX, door.TownTileY);
+                    var freeSides = ResidenceExits.FreeSides(door.Edge);
                     var doorAssignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc);
                     bool isMine = doorAssignment != null && doorAssignment.OwnerId == myId;
 

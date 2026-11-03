@@ -4,200 +4,183 @@ using System.Collections.Generic;
 namespace Pelican4Ever.Core.World
 {
     /// <summary>
-    /// Gestiona la correspondencia espacial inmersiva entre la Plaza Central (Granja Host)
+    /// Gestiona la correspondencia espacial inmersiva entre la Plaza Central (Granja Host y Mapas Puente)
     /// y las residencias de los jugadores (Pelican4Ever_Farm_XX).
     /// </summary>
     public static class SpatialWarpRouter
     {
         /// <summary>
-        /// Calcula las coordenadas y orientación de entrada a la residencia privada según la ubicación del portal en la Plaza Central o Mapa Puente
+        /// Calcula las coordenadas y orientación de entrada a la residencia privada según el borde del portal en la plaza
         /// y el tipo de granja de la residencia (TASK-602 / Praderas azules).
-        /// - Portales del SUR (TownTileY >= 28) -> Entra por el NORTE de la residencia (salida Backwoods), mirando al Sur (2).
-        /// - Portales del NORTE (TownTileY <= 2) -> Entra por el SUR de la residencia (salida Forest), mirando al Norte (0).
-        /// - Portales del OESTE (TownTileX <= 2) -> Entra por el ESTE de la residencia (salida BusStop), mirando al Oeste (3).
+        /// - Portales del SUR -> Entra por el NORTE de la residencia (salida Backwoods), mirando al Sur (2).
+        /// - Portales del NORTE -> Entra por el SUR de la residencia (salida Forest), mirando al Norte (0).
+        /// - Portales del OESTE y ESTE -> Entra por el ESTE de la residencia (salida BusStop), mirando al Oeste (3).
         /// </summary>
-        public static void GetResidenceArrivalCoordinates(int townTileX, int townTileY, string? farmType, out int targetX, out int targetY, out int facingDirection)
+        public static void GetResidenceArrivalCoordinates(PortalEdge edge, string? farmType, out int targetX, out int targetY, out int facingDirection)
         {
             FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
 
-            if (townTileY >= 28)
+            switch (edge)
             {
-                targetX = template.NorthArrivalTileX;
-                targetY = template.NorthArrivalTileY;
-                facingDirection = 2; // Sur
-            }
-            else if (townTileY <= 2)
-            {
-                targetX = template.SouthArrivalTileX;
-                targetY = template.SouthArrivalTileY;
-                facingDirection = 0; // Norte
-            }
-            else
-            {
-                targetX = template.EastArrivalTileX;
-                targetY = template.EastArrivalTileY;
-                facingDirection = 3; // Oeste
+                case PortalEdge.South:
+                    targetX = template.NorthArrivalTileX;
+                    targetY = template.NorthArrivalTileY;
+                    facingDirection = 2; // Sur
+                    break;
+
+                case PortalEdge.North:
+                    targetX = template.SouthArrivalTileX;
+                    targetY = template.SouthArrivalTileY;
+                    facingDirection = 0; // Norte
+                    break;
+
+                case PortalEdge.West:
+                case PortalEdge.East:
+                    targetX = template.EastArrivalTileX;
+                    targetY = template.EastArrivalTileY;
+                    facingDirection = 3; // Oeste
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(edge), edge, null);
             }
         }
 
-        public static void GetResidenceArrivalCoordinates(int townTileX, int townTileY, out int targetX, out int targetY, out int facingDirection)
+        public static void GetResidenceArrivalCoordinates(PortalEdge edge, out int targetX, out int targetY, out int facingDirection)
         {
-            GetResidenceArrivalCoordinates(townTileX, townTileY, null, out targetX, out targetY, out facingDirection);
+            GetResidenceArrivalCoordinates(edge, null, out targetX, out targetY, out facingDirection);
         }
 
         /// <summary>
-        /// Determina si un warp que sale de la residencia privada debe volver a su localización de origen (Granja Host o Mapa Puente)
+        /// Determina si un warp que sale de la residencia privada debe volver a la plaza (Granja Host o Mapa Puente)
         /// o continuar hacia el mapa vanilla correspondiente.
         /// </summary>
-        public static bool ShouldReturnToHostFarm(int townTileX, int townTileY, string exitTargetLocation)
+        public static bool ShouldReturnToPlaza(PortalEdge edge, string exitTargetLocation)
         {
             if (string.IsNullOrWhiteSpace(exitTargetLocation)) return false;
 
-            if (townTileY >= 28)
+            return edge switch
             {
-                // Portal en el SUR: la salida de ARRIBA (Backwoods / Mountain) vuelve al origen
-                return exitTargetLocation.Equals("Backwoods", StringComparison.OrdinalIgnoreCase)
-                    || exitTargetLocation.Equals("Mountain", StringComparison.OrdinalIgnoreCase);
-            }
-            else if (townTileY <= 2)
-            {
-                // Portal en el NORTE: la salida de ABAJO (Forest) vuelve al origen
-                return exitTargetLocation.Equals("Forest", StringComparison.OrdinalIgnoreCase);
-            }
-            else if (townTileX <= 2)
-            {
-                // Portal en el OESTE: la salida de la DERECHA (BusStop) vuelve al origen
-                return exitTargetLocation.Equals("BusStop", StringComparison.OrdinalIgnoreCase);
-            }
-            else
-            {
-                // Portal en el ESTE: la salida de la DERECHA (BusStop) vuelve al origen
-                return exitTargetLocation.Equals("BusStop", StringComparison.OrdinalIgnoreCase);
-            }
+                PortalEdge.South => exitTargetLocation.Equals("Backwoods", StringComparison.OrdinalIgnoreCase)
+                                 || exitTargetLocation.Equals("Mountain", StringComparison.OrdinalIgnoreCase),
+                PortalEdge.North => exitTargetLocation.Equals("Forest", StringComparison.OrdinalIgnoreCase),
+                PortalEdge.West or PortalEdge.East => exitTargetLocation.Equals("BusStop", StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
         }
 
         /// <summary>
-        /// Calcula la casilla de reaparición y orientación al volver a la localización de origen (Granja Host o Mapa Puente)
+        /// Calcula la casilla de reaparición y orientación al volver a la localización de la plaza (Granja Host o Mapa Puente)
         /// para que el jugador aparezca justo frente a su portal, caminando hacia el interior.
         /// </summary>
-        public static void GetHostFarmReturnCoordinates(int townTileX, int townTileY, out int hostTileX, out int hostTileY, out int facingDirection)
+        public static void GetPlazaReturnCoordinates(PortalEdge edge, int x, int y, out int plazaTileX, out int plazaTileY, out int facingDirection)
         {
-            if (townTileX <= 2)
+            switch (edge)
             {
-                hostTileX = townTileX + 2;
-                hostTileY = townTileY;
-                facingDirection = 1; // Mirando hacia el Este
-            }
-            else if (townTileX >= 75)
-            {
-                hostTileX = townTileX - 2;
-                hostTileY = townTileY;
-                facingDirection = 3; // Mirando hacia el Oeste
-            }
-            else if (townTileY <= 2)
-            {
-                hostTileX = townTileX;
-                hostTileY = townTileY + 2;
-                facingDirection = 2; // Mirando hacia el Sur
-            }
-            else
-            {
-                hostTileX = townTileX;
-                hostTileY = townTileY - 2;
-                facingDirection = 0; // Mirando hacia el Norte
+                case PortalEdge.West:
+                    plazaTileX = x + 2;
+                    plazaTileY = y;
+                    facingDirection = 1; // Mirando hacia el Este
+                    break;
+
+                case PortalEdge.East:
+                    plazaTileX = x - 2;
+                    plazaTileY = y;
+                    facingDirection = 3; // Mirando hacia el Oeste
+                    break;
+
+                case PortalEdge.North:
+                    plazaTileX = x;
+                    plazaTileY = y + 2;
+                    facingDirection = 2; // Mirando hacia el Sur
+                    break;
+
+                case PortalEdge.South:
+                    plazaTileX = x;
+                    plazaTileY = y - 2;
+                    facingDirection = 0; // Mirando hacia el Norte
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(edge), edge, null);
             }
         }
 
         /// <summary>
-        /// Determina si un portal está ubicado en el borde sur (TownTileY >= 28).
+        /// Casillas del camino de una parcela en una ubicación de la plaza: las dos de la apertura y el paso de 2 tiles de ancho
+        /// que se despeja hasta la calzada/plaza despejada.
         /// </summary>
-        public static bool IsSouthBorderPortal(int townTileY) => townTileY >= 28;
-
-        /// <summary>
-        /// Casillas del camino de una parcela en la Granja Host: las dos de la apertura y el paso de 2 tiles de ancho
-        /// que se despeja hasta la plaza. Algunas parcelas necesitan un paso más largo para salvar el acantilado o el seto.
-        /// </summary>
-        public static List<(int X, int Y)> GetPortalPathTiles(string doorId, int townTileX, int townTileY)
+        public static List<(int X, int Y)> GetResidencePathTiles(PortalEdge edge, int x, int y, PlazaLocation loc)
         {
-            bool vertical = townTileX <= 2 || townTileX >= 75;
-            (int X, int Y) t1 = (townTileX, townTileY);
-            (int X, int Y) t2 = vertical ? (townTileX, townTileY + 1) : (townTileX + 1, townTileY);
-            var tiles = new List<(int X, int Y)> { t1, t2 };
+            var tiles = new List<(int X, int Y)>();
 
-            if (townTileX <= 2)
+            switch (edge)
             {
-                int maxDepthX = doorId == "Farm_Portal_02" ? 7 : 6;
-                for (int x = 0; x <= maxDepthX; x++)
-                {
-                    tiles.Add((x, t1.Y));
-                    tiles.Add((x, t2.Y));
-                }
-            }
-            else if (townTileX >= 75)
-            {
-                for (int x = 76; x <= HostFarmMaxTileX; x++)
-                {
-                    tiles.Add((x, t1.Y));
-                    tiles.Add((x, t2.Y));
-                }
-            }
-            else if (townTileY <= 2)
-            {
-                int maxDepthY = 4;
-                for (int y = 0; y <= maxDepthY; y++)
-                {
-                    tiles.Add((t1.X, y));
-                    tiles.Add((t2.X, y));
-                }
-            }
-            else
-            {
-                int startY = townTileY >= 60 ? 60 : townTileY - 3;
-                int maxY = townTileY >= 60 ? HostFarmMaxTileY : townTileY + 1;
-                for (int y = startY; y <= maxY; y++)
-                {
-                    tiles.Add((t1.X, y));
-                    tiles.Add((t2.X, y));
-                }
+                case PortalEdge.North:
+                    for (int py = 0; py <= loc.NorthPathDepth; py++)
+                    {
+                        tiles.Add((x, py));
+                        tiles.Add((x + 1, py));
+                    }
+                    break;
+
+                case PortalEdge.South:
+                    int startY = y - loc.SouthPathStartOffset;
+                    int maxY = loc.Height - 1;
+                    for (int py = startY; py <= maxY; py++)
+                    {
+                        tiles.Add((x, py));
+                        tiles.Add((x + 1, py));
+                    }
+                    break;
+
+                case PortalEdge.West:
+                    for (int px = 0; px <= 6; px++)
+                    {
+                        tiles.Add((px, y));
+                        tiles.Add((px, y + 1));
+                    }
+                    break;
+
+                case PortalEdge.East:
+                    for (int px = loc.Width - 4; px <= loc.Width - 1; px++)
+                    {
+                        tiles.Add((px, y));
+                        tiles.Add((px, y + 1));
+                    }
+                    break;
+
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(edge), edge, null);
             }
 
             return tiles;
         }
-
-        /// <summary>Última columna (este) y última fila (sur) de la Granja Host, de 80×65 tiles.</summary>
-        public const int HostFarmMaxTileX = 79;
-        public const int HostFarmMaxTileY = 64;
 
         /// <summary>
         /// Casillas que disparan el portal de una parcela: las dos de la apertura y las dos del borde del mapa a
         /// continuación, es decir, las dos últimas casillas del camino hacia el borde (las mismas que llevan warp).
         /// El resto del camino es transitable sin abrir el diálogo de la parcela.
         /// </summary>
-        public static bool IsPortalTriggerTile(int townTileX, int townTileY, int tileX, int tileY)
+        public static bool IsPortalTriggerTile(PortalEdge edge, int x, int y, PlazaLocation loc, int tileX, int tileY)
         {
-            if (townTileX <= 2 || townTileX >= 75)
+            return edge switch
             {
-                // Apertura vertical en el borde oeste o este: filas townTileY y townTileY + 1
-                if (tileY != townTileY && tileY != townTileY + 1)
-                    return false;
-                int borderX = townTileX <= 2 ? 0 : HostFarmMaxTileX;
-                return tileX == townTileX || tileX == borderX;
-            }
-
-            // Apertura horizontal en el borde norte o sur: columnas townTileX y townTileX + 1
-            if (tileX != townTileX && tileX != townTileX + 1)
-                return false;
-            int borderY = townTileY <= 2 ? 0 : (townTileY >= 60 ? HostFarmMaxTileY : townTileY + 1);
-            return tileY == townTileY || tileY == borderY;
+                PortalEdge.North => (tileX == x || tileX == x + 1) && (tileY == y || tileY == 0),
+                PortalEdge.South => (tileX == x || tileX == x + 1) && (tileY == y || tileY == loc.Height - 1),
+                PortalEdge.West => (tileY == y || tileY == y + 1) && (tileX == x || tileX == 0),
+                PortalEdge.East => (tileY == y || tileY == y + 1) && (tileX == x || tileX == loc.Width - 1),
+                _ => false
+            };
         }
 
         /// <summary>
         /// Determina si un tile de copa de árbol (hojas en tilesheet) debe conservarse visible en AlwaysFront
         /// por encima del camino a las residencias para que no quede cortado y el jugador camine bajo él sin bloqueo.
         /// </summary>
-        public static bool ShouldPreserveCanopyOverPath(int townTileY, int tileIndex)
+        public static bool ShouldPreserveCanopyOverPath(PortalEdge edge, int tileIndex)
         {
-            return IsSouthBorderPortal(townTileY) || tileIndex < 150;
+            return edge == PortalEdge.South || tileIndex < 150;
         }
     }
 }

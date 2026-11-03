@@ -9,48 +9,34 @@ using Xunit;
 
 namespace Pelican4Ever.Tests
 {
-    public class DoorJsonModel
-    {
-        public string DoorId { get; set; } = string.Empty;
-        public int TownTileX { get; set; }
-        public int TownTileY { get; set; }
-        public string DefaultSlotId { get; set; } = string.Empty;
-    }
-
     public class AnnexTests
     {
         [Fact]
         public void FreeSides_For16PortalsInDoorsJson_ReturnsExactVanillaSidesThatDoNotReturnToHost()
         {
-            // Cargar doors.json real
-            string doorsPath = Path.Combine(Directory.GetCurrentDirectory(), "..", "..", "..", "..", "Pelican4Ever", "assets", "doors.json");
-            Assert.True(File.Exists(doorsPath), $"No se encontró doors.json en: {doorsPath}");
-
-            string json = File.ReadAllText(doorsPath);
-            var doors = JsonSerializer.Deserialize<List<DoorJsonModel>>(json);
-            Assert.NotNull(doors);
-            Assert.Equal(16, doors!.Count);
+            var doors = DoorCatalogFixture.LoadDoors();
+            Assert.Equal(16, doors.Count);
 
             foreach (var door in doors)
             {
-                var freeSides = ResidenceExits.FreeSides(door.TownTileX, door.TownTileY);
+                var freeSides = ResidenceExits.FreeSides(door.Edge);
                 Assert.Equal(2, freeSides.Count);
 
-                // Portales del SUR (TownTileY >= 28): Backwoods (Norte) vuelve al origen -> libres Este y Sur
-                if (door.TownTileY >= 28)
+                // Portales del SUR: Backwoods (Norte) vuelve al origen -> libres Este y Sur
+                if (door.Edge == PortalEdge.South)
                 {
                     Assert.Contains(AnnexSide.East, freeSides);
                     Assert.Contains(AnnexSide.South, freeSides);
                     Assert.DoesNotContain(AnnexSide.North, freeSides);
                 }
-                // Portales del NORTE del Host (TownTileY <= 2): Forest (Sur) vuelve al host -> libres Norte y Este
-                else if (door.TownTileY <= 2)
+                // Portales del NORTE: Forest (Sur) vuelve al host -> libres Norte y Este
+                else if (door.Edge == PortalEdge.North)
                 {
                     Assert.Contains(AnnexSide.North, freeSides);
                     Assert.Contains(AnnexSide.East, freeSides);
                     Assert.DoesNotContain(AnnexSide.South, freeSides);
                 }
-                // Portales del OESTE del Host (TownTileX <= 2): BusStop (Este) vuelve al host -> libres Norte y Sur
+                // Portales OESTE / ESTE: BusStop (Este) vuelve a la plaza -> libres Norte y Sur
                 else
                 {
                     Assert.Contains(AnnexSide.North, freeSides);

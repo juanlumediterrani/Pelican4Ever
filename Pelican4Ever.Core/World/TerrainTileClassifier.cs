@@ -66,57 +66,45 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
-        /// Determina si una coordenada en la senda residencial de la Granja Host o Mapa Puente corresponde a un entorno de hierba o tierra.
+        /// Determina si una coordenada en la senda residencial de la Plaza Central o Mapa Puente corresponde a un entorno de hierba o tierra.
         /// </summary>
         public static bool IsGrassEnvironment(
-            string doorId,
-            int townTileX,
-            int townTileY,
+            PortalEdge edge,
+            PlazaLocation loc,
+            int portalX,
+            int portalY,
             int tileX,
             int tileY)
         {
-            // 1. Portales Norte (01, 02 en Host; 05, 06, 09, 10, 13, 14 en Puentes):
-            if (townTileY <= 2)
+            return edge switch
             {
-                return tileY <= 3;
-            }
-
-            // 2. Portales Sur (03, 04 en Host; 07, 08, 11, 12, 15, 16 en Puentes):
-            if (townTileY >= 25)
-            {
-                return tileY >= townTileY - 2;
-            }
-
-            // 3. Portales Oeste
-            if (townTileX <= 2)
-            {
-                return tileX <= 1;
-            }
-
-            // 4. Portales Este
-            if (townTileX >= 75)
-            {
-                return tileX >= 78;
-            }
-
-            return false;
+                PortalEdge.North => tileY <= 3,
+                PortalEdge.South => tileY >= portalY - 2,
+                PortalEdge.West => tileX <= 1,
+                PortalEdge.East => tileX >= loc.Width - 2,
+                _ => false
+            };
         }
 
         /// <summary>
         /// Determina si el buzón de la parcela debe plantarse sobre hierba (tile 175) o tierra (tile 587)
         /// según si el entorno circundante en esa posición es de hierba o de tierra.
         /// </summary>
-        public static bool IsMailboxOnGrass(string doorId, int townTileX, int townTileY, int mailboxX, int mailboxY)
+        public static bool IsMailboxOnGrass(
+            PortalEdge edge,
+            PlazaLocation loc,
+            int portalX,
+            int portalY,
+            int mailboxX,
+            int mailboxY)
         {
-            // Portales Norte: todos los buzones están sobre la cresta de hierba del norte
-            if (townTileY <= 2)
-                return true;
-
-            // Portales Sur: todos los buzones están sobre la pradera verde del sur
-            if (townTileY >= 25)
-                return true;
-
-            return mailboxX <= 1;
+            return edge switch
+            {
+                PortalEdge.North or PortalEdge.South => true,
+                PortalEdge.West => mailboxX <= 1,
+                PortalEdge.East => mailboxX >= loc.Width - 2,
+                _ => false
+            };
         }
 
         /// <summary>
@@ -147,9 +135,10 @@ namespace Pelican4Ever.Core.World
         /// Obtiene la información del pavimento: índice de tile y confirmación de que pertenece a <see cref="SteppingStonesTileSheetId"/>.
         /// </summary>
         public static (int TileIndex, bool IsSteppingStonesSheet) GetPathTileInfo(
-            string doorId,
-            int townTileX,
-            int townTileY,
+            PortalEdge edge,
+            PlazaLocation loc,
+            int portalX,
+            int portalY,
             int tileX,
             int tileY,
             int? underlyingTileIndex = null,
@@ -157,35 +146,25 @@ namespace Pelican4Ever.Core.World
             string? underlyingSheetId = null,
             int autotileMask = 15)
         {
-            // Determinación del entorno de hierba vs tierra según la zonificación canónica de la parcela
-            bool isGrass = IsGrassEnvironment(doorId, townTileX, townTileY, tileX, tileY);
-
+            bool isGrass = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
             int tileIndex = GetSteppingStoneTileIndex(isGrass, autotileMask);
             return (tileIndex, true);
         }
 
         /// <summary>
-        /// Sobrecarga compatible con versiones anteriores de GetPathTileInfo.
-        /// </summary>
-        public static (int TileIndex, bool IsSteppingStonesSheet) GetPathTileInfo(
-            string doorId,
-            int townTileY,
-            int tileX,
-            int tileY,
-            int? underlyingTileIndex,
-            string? underlyingType = null,
-            int autotileMask = 15)
-        {
-            int townTileX = doorId is "Farm_Portal_01" or "Farm_Portal_03" or "Farm_Portal_05" or "Farm_Portal_07" or "Farm_Portal_09" or "Farm_Portal_11" or "Farm_Portal_13" or "Farm_Portal_15" ? 18 : 25;
-            return GetPathTileInfo(doorId, townTileX, townTileY, tileX, tileY, underlyingTileIndex, underlyingType, null, autotileMask);
-        }
-
-        /// <summary>
         /// Obtiene el índice de baldosa adecuado para un tile de senda según el terreno circundante y la ubicación.
         /// </summary>
-        public static int GetPathTileIndex(string doorId, int townTileY, int tileX, int tileY, int? underlyingTileIndex, string? underlyingType = null)
+        public static int GetPathTileIndex(
+            PortalEdge edge,
+            PlazaLocation loc,
+            int portalX,
+            int portalY,
+            int tileX,
+            int tileY,
+            int? underlyingTileIndex = null,
+            string? underlyingType = null)
         {
-            return GetPathTileInfo(doorId, townTileY, tileX, tileY, underlyingTileIndex, underlyingType).TileIndex;
+            return GetPathTileInfo(edge, loc, portalX, portalY, tileX, tileY, underlyingTileIndex, underlyingType).TileIndex;
         }
     }
 }

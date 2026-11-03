@@ -19,25 +19,18 @@ namespace Pelican4Ever.Core.World
     public static class ResidenceExits
     {
         /// <summary>
-        /// Devuelve los dos lados libres de la residencia privada que no se utilizan para volver a la Plaza Central (Granja Host),
-        /// según la ubicación espacial del portal en la plaza.
+        /// Devuelve los dos lados libres de la residencia privada que no se utilizan para volver a la Plaza Central (Granja Host o Mapa Puente),
+        /// según el borde donde se ubica el portal en la plaza.
         /// </summary>
-        public static IReadOnlyList<AnnexSide> FreeSides(int townTileX, int townTileY)
+        public static IReadOnlyList<AnnexSide> FreeSides(PortalEdge edge)
         {
-            if (SpatialWarpRouter.ShouldReturnToHostFarm(townTileX, townTileY, "Backwoods"))
+            return edge switch
             {
-                // El norte vuelve al host -> quedan libres Este y Sur
-                return new[] { AnnexSide.East, AnnexSide.South };
-            }
-
-            if (SpatialWarpRouter.ShouldReturnToHostFarm(townTileX, townTileY, "Forest"))
-            {
-                // El sur vuelve al host -> quedan libres Norte y Este
-                return new[] { AnnexSide.North, AnnexSide.East };
-            }
-
-            // El este (BusStop) vuelve al host -> quedan libres Norte y Sur
-            return new[] { AnnexSide.North, AnnexSide.South };
+                PortalEdge.South => new[] { AnnexSide.East, AnnexSide.South },
+                PortalEdge.North => new[] { AnnexSide.North, AnnexSide.East },
+                PortalEdge.West or PortalEdge.East => new[] { AnnexSide.North, AnnexSide.South },
+                _ => throw new ArgumentOutOfRangeException(nameof(edge), edge, null)
+            };
         }
 
         /// <summary>

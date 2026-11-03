@@ -71,8 +71,9 @@ namespace Pelican4Ever.Tests
         [Fact]
         public void GetPathTileInfo_InNorthGorge_ReturnsSteppingStonesOnDirt()
         {
-            // Portales del desfiladero norte (y=4..10 en 05, 06, 07, 13) usan Stepping Stones sobre tierra
-            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo("Farm_Portal_05", 1, 18, 5, 175, null, 15);
+            // Portales norte en desfiladero (y=4..10) usan Stepping Stones sobre tierra (0..15)
+            var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
+            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.North, bridge, 8, 1, 8, 5, 175, null, null, 15);
             Assert.True(isSheet);
             Assert.InRange(tile, 0, 15);
         }
@@ -80,8 +81,8 @@ namespace Pelican4Ever.Tests
         [Fact]
         public void GetPathTileInfo_OnGrass_ReturnsSteppingStonesOnGrass()
         {
-            // En terreno con hierba (175), devuelve Stepping Stones sobre hierba (rango 16..31)
-            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo("Farm_Portal_08", 28, 25, 28, 175, null, 15);
+            var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
+            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.South, bridge, 25, 28, 25, 28, 175, null, null, 15);
             Assert.True(isSheet);
             Assert.InRange(tile, 16, 31);
         }
@@ -89,8 +90,8 @@ namespace Pelican4Ever.Tests
         [Fact]
         public void GetPathTileInfo_OnDirt_ReturnsSteppingStonesOnDirt()
         {
-            // En terreno con tierra (587), devuelve Stepping Stones sobre tierra (rango 0..15)
-            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo("Farm_Portal_01", 16, 3, 16, 587, null, 15);
+            var farm = HostPlazaLayout.Find("Farm", 16)!;
+            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.North, farm, 18, 1, 18, 6, 587, null, null, 15);
             Assert.True(isSheet);
             Assert.InRange(tile, 0, 15);
         }
@@ -105,36 +106,51 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
-        // Portales Norte (01..02 en Host, 05..06, 09..10, 13..14 en Puentes): y<=3 hierba, y>=4 tierra
-        [InlineData("Farm_Portal_01", 18, 1, 18, 2, true)]
-        [InlineData("Farm_Portal_01", 18, 1, 18, 3, true)]
-        [InlineData("Farm_Portal_01", 18, 1, 18, 4, false)]
-        [InlineData("Farm_Portal_05", 8, 1, 8, 2, true)]
-        [InlineData("Farm_Portal_05", 8, 1, 8, 4, false)]
-        // Portales Sur (03..04 en Host, 07..08, 11..12, 15..16 en Puentes): y>=ty-2 hierba, y<ty-2 tierra
-        [InlineData("Farm_Portal_03", 18, 63, 18, 63, true)]
-        [InlineData("Farm_Portal_03", 18, 63, 18, 60, false)]
-        [InlineData("Farm_Portal_07", 8, 28, 8, 28, true)]
-        [InlineData("Farm_Portal_07", 8, 28, 8, 24, false)]
-        public void IsGrassEnvironment_ClassifiesTerrainCorrectly(string doorId, int tx, int ty, int px, int py, bool expectedGrass)
+        // Portales Norte: tileY <= 3 hierba, tileY >= 4 tierra
+        [InlineData(PortalEdge.North, "Farm", 18, 1, 18, 2, true)]
+        [InlineData(PortalEdge.North, "Farm", 18, 1, 18, 3, true)]
+        [InlineData(PortalEdge.North, "Farm", 18, 1, 18, 4, false)]
+        [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 8, 2, true)]
+        [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 8, 4, false)]
+        // Portales Sur: tileY >= portalY - 2 hierba, menor es tierra
+        [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 63, true)]
+        [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 61, true)]
+        [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 60, false)]
+        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 28, true)]
+        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 26, true)]
+        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 25, false)]
+        // Portales Oeste: tileX <= 1 hierba
+        [InlineData(PortalEdge.West, "Farm", 0, 26, 1, 26, true)]
+        [InlineData(PortalEdge.West, "Farm", 0, 26, 2, 26, false)]
+        // Portales Este: tileX >= loc.Width - 2 hierba
+        [InlineData(PortalEdge.East, "Farm", 79, 26, 78, 26, true)]
+        [InlineData(PortalEdge.East, "Farm", 79, 26, 77, 26, false)]
+        [InlineData(PortalEdge.East, "Pelican4Ever_Bridge_1", 34, 14, 33, 14, true)]
+        [InlineData(PortalEdge.East, "Pelican4Ever_Bridge_1", 34, 14, 32, 14, false)]
+        public void IsGrassEnvironment_ClassifiesTerrainCorrectly(
+            PortalEdge edge, string locName, int portalX, int portalY, int tileX, int tileY, bool expectedGrass)
         {
-            Assert.Equal(expectedGrass, TerrainTileClassifier.IsGrassEnvironment(doorId, tx, ty, px, py));
+            var loc = HostPlazaLayout.Find(locName, 16)!;
+            Assert.Equal(expectedGrass, TerrainTileClassifier.IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY));
         }
 
         [Theory]
-        // Portales Norte en y=1: buzón plantado sobre césped (true)
-        [InlineData("Farm_Portal_01", 18, 1, 17, 2, true)]
-        [InlineData("Farm_Portal_02", 62, 1, 61, 2, true)]
-        [InlineData("Farm_Portal_05", 8, 1, 7, 2, true)]
-        [InlineData("Farm_Portal_06", 25, 1, 24, 2, true)]
-        // Portales Sur en y=63 ó y=28: buzón sobre césped (true)
-        [InlineData("Farm_Portal_03", 18, 63, 17, 62, true)]
-        [InlineData("Farm_Portal_04", 62, 63, 61, 62, true)]
-        [InlineData("Farm_Portal_07", 8, 28, 7, 27, true)]
-        [InlineData("Farm_Portal_08", 25, 28, 24, 27, true)]
-        public void IsMailboxOnGrass_DeterminesMailboxBaseTileCorrectly(string doorId, int tx, int ty, int mx, int my, bool expectedGrass)
+        // Portales Norte y Sur: buzón siempre sobre césped (true)
+        [InlineData(PortalEdge.North, "Farm", 18, 1, 17, 2, true)]
+        [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 7, 2, true)]
+        [InlineData(PortalEdge.South, "Farm", 18, 63, 17, 62, true)]
+        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 7, 27, true)]
+        // Portales Oeste: mailboxX <= 1
+        [InlineData(PortalEdge.West, "Farm", 0, 26, 1, 26, true)]
+        [InlineData(PortalEdge.West, "Farm", 0, 26, 2, 26, false)]
+        // Portales Este: mailboxX >= loc.Width - 2
+        [InlineData(PortalEdge.East, "Pelican4Ever_Bridge_1", 34, 14, 33, 14, true)]
+        [InlineData(PortalEdge.East, "Pelican4Ever_Bridge_1", 34, 14, 32, 14, false)]
+        public void IsMailboxOnGrass_DeterminesMailboxBaseTileCorrectly(
+            PortalEdge edge, string locName, int portalX, int portalY, int mailboxX, int mailboxY, bool expectedGrass)
         {
-            Assert.Equal(expectedGrass, TerrainTileClassifier.IsMailboxOnGrass(doorId, tx, ty, mx, my));
+            var loc = HostPlazaLayout.Find(locName, 16)!;
+            Assert.Equal(expectedGrass, TerrainTileClassifier.IsMailboxOnGrass(edge, loc, portalX, portalY, mailboxX, mailboxY));
         }
     }
 }
