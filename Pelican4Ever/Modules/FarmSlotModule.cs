@@ -846,13 +846,19 @@ namespace Pelican4Ever.Modules
                     {
                         int lx = 17, rx = 20;
 
-                        // Conservar limpio el poste del buzón en (17, 62) y el reborde de hierba (414/413) en Front y = 61
-                        // sin colocar postes de valla sueltos en y = 63 que solapaban Front[17, 62]
+                        // Conservar limpio el poste del buzón en (17, 62) y rematar con bordes de hierba redondeados
+                        // (438 en lx, 439 en rx en y = 61) con colisión completa en Buildings para que el jugador
+                        // no pueda caminar detrás ni sobre la cresta de hierba.
                         ClearTile(front, lx, 62);
                         ClearTile(front, rx, 62);
-                        ClearTile(bld, lx, 63);
-                        ClearTile(bld, rx, 62);
-                        ClearTile(bld, rx, 63);
+                        SetTileIfValid(front, sheetOutdoors, lx, 61, 438);
+                        SetTileIfValid(front, sheetOutdoors, rx, 61, 439);
+
+                        SetTileIfValid(bld, sheetOutdoors, lx, 61, 16);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 61, 16);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 62, 16);
+                        SetTileIfValid(bld, sheetOutdoors, lx, 63, 16);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 63, 16);
                         SetTileIfValid(bld, sheetOutdoors, lx, 64, 16);
                         SetTileIfValid(bld, sheetOutdoors, rx, 64, 16);
 
@@ -884,13 +890,19 @@ namespace Pelican4Ever.Modules
                     {
                         int lx = 61, rx = 64;
 
-                        // Conservar limpio el poste del buzón en (61, 62) y el reborde de hierba (414/413) en Front y = 61
-                        // sin colocar postes de valla sueltos en y = 63 que solapaban Front[61, 62]
+                        // Conservar limpio el poste del buzón en (61, 62) y rematar con bordes de hierba redondeados
+                        // (438 en lx, 439 en rx en y = 61) con colisión completa en Buildings para que el jugador
+                        // no pueda caminar detrás ni sobre la cresta de hierba.
                         ClearTile(front, lx, 62);
                         ClearTile(front, rx, 62);
-                        ClearTile(bld, lx, 63);
-                        ClearTile(bld, rx, 62);
-                        ClearTile(bld, rx, 63);
+                        SetTileIfValid(front, sheetOutdoors, lx, 61, 438);
+                        SetTileIfValid(front, sheetOutdoors, rx, 61, 439);
+
+                        SetTileIfValid(bld, sheetOutdoors, lx, 61, 16);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 61, 16);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 62, 16);
+                        SetTileIfValid(bld, sheetOutdoors, lx, 63, 16);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 63, 16);
                         SetTileIfValid(bld, sheetOutdoors, lx, 64, 16);
                         SetTileIfValid(bld, sheetOutdoors, rx, 64, 16);
 
@@ -993,13 +1005,17 @@ namespace Pelican4Ever.Modules
                         SetTileIfValid(bld, sheetOutdoors, 28, 0, 16);
                         SetTileIfValid(bld, sheetOutdoors, 29, 0, 16);
                         ClearTile(bld, rx, 1);
-                        SetTileIfValid(bld, sheetOutdoors, rx, 2, 446);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 2, 466);
                         SetTileIfValid(bld, sheetOutdoors, rx, 3, 491);
                         SetTileIfValid(bld, sheetOutdoors, rx, 4, 516);
                         SetTileIfValid(bld, sheetOutdoors, rx, 5, 541);
 
                         if (back != null)
                         {
+                            SetTileIfValid(back, sheetOutdoors, 23, 0, 352);
+                            SetTileIfValid(back, sheetOutdoors, 23, 1, 352);
+                            SetTileIfValid(back, sheetOutdoors, 23, 2, 352);
+                            SetTileIfValid(back, sheetOutdoors, 23, 3, 377);
                             SetTileIfValid(back, sheetOutdoors, 23, 4, 377);
                             SetTileIfValid(back, sheetOutdoors, 23, 5, 175);
                             SetTileIfValid(back, sheetOutdoors, lx, 0, 352);
@@ -1242,8 +1258,8 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // 2. Limpiar Front únicamente en x = 0..5, y = 25..28 y x = 6..7, y = 26..27
-            // conservando intactos la meseta superior (y = 22..24) y su reborde este en (6, 22..25) y (6, 28..29)
+            // 2. Limpiar Front en x = 0..5, y = 25..28 y a lo largo de todo el borde este del acantilado en x = 6..7, y = 22..29
+            // para que ningún tile de desnivel/meseta quede en la capa Front dibujándose sobre el granjero
             for (int x = 0; x <= 5; x++)
             {
                 for (int y = 25; y <= 28; y++)
@@ -1251,10 +1267,10 @@ namespace Pelican4Ever.Modules
                     ClearTile(front, x, y);
                 }
             }
-            for (int x = 6; x <= 7; x++)
+            for (int y = 22; y <= 29; y++)
             {
-                ClearTile(front, x, 26);
-                ClearTile(front, x, 27);
+                ClearTile(front, 6, y);
+                ClearTile(front, 7, y);
             }
 
             // 3. Reemplazar raíces/troncos cortados en Buildings (3..4, 29) y (1, 31) por colisión invisible (16)
@@ -1277,12 +1293,9 @@ namespace Pelican4Ever.Modules
                         {
                             tileIndex = (y == westPassage.FirstRow) ? 201 : 251;
                         }
-                        else if (x == 6)
-                        {
-                            tileIndex = (y == westPassage.FirstRow) ? 202 : 252;
-                        }
                         else
                         {
+                            // En x >= 6 el camino sale a campo abierto de tierra (587), sin esquinas de hierba desalineadas
                             tileIndex = 587;
                         }
 
@@ -1303,11 +1316,16 @@ namespace Pelican4Ever.Modules
                 SetTileIfValid(back, sheetOutdoors, 5, 28, 327);
             }
 
-            // 5. Vallas del corredor en y = 25 (x = 2..5, respetando raíces en 0..1 y borde 394 en x = 6)
-            // y en y = 28 (x = 0..5, respetando borde 419 en x = 6):
+            // 5. Vallas del corredor en y = 25 (x = 2..5, respetando raíces en 0..1 y borde 444 en x = 6)
+            // y en y = 28 (x = 0..5, respetando borde 438 en x = 6):
             // Extremo izquierdo (383/358 |--), interior (384/359 --|--), extremo derecho (385/360 --|).
             PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 2, endX: 5, y: 25);
             PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 0, endX: 5, y: 28);
+
+            // Cerrar el borde este del acantilado en Buildings con remate redondeado inferior (444) en (6, 25)
+            // y remate redondeado superior (438) en (6, 28)
+            SetTileIfValid(bld, sheetOutdoors, 6, 25, 444);
+            SetTileIfValid(bld, sheetOutdoors, 6, 28, 438);
 
             // Normalizar la valla de y = 32 (x = 0..1) bajo el antiguo Tree 2 para que el poste derecho (385) esté en Buildings
             SetTileIfValid(bld, sheetOutdoors, 1, 32, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
@@ -4153,11 +4171,13 @@ namespace Pelican4Ever.Modules
         {
             if (__instance != null && HostPlazaLayout.IsPlazaLocation(__instance.NameOrUniqueName))
             {
-                int leftTile = position.Left / 64;
-                int rightTile = position.Right / 64;
-                int centerTile = position.Center.X / 64;
-                int bottomTile = position.Bottom / 64;
-                int topTile = position.Top / 64;
+                int minX = position.Left / 64;
+                int maxX = (position.Right - 1) / 64;
+                int minY = position.Top / 64;
+                int maxY = (position.Bottom - 1) / 64;
+
+                if (maxX < minX || maxY < minY)
+                    return true;
 
                 string locName = __instance.NameOrUniqueName;
                 int slotCount = context?.Config.FarmSlotCount ?? 16;
@@ -4165,10 +4185,22 @@ namespace Pelican4Ever.Modules
 
                 if (plazaLoc != null)
                 {
-                    if (IsInPlazaPassage(plazaLoc, centerTile, bottomTile)
-                        || IsInPlazaPassage(plazaLoc, leftTile, bottomTile)
-                        || IsInPlazaPassage(plazaLoc, rightTile, bottomTile)
-                        || IsInPlazaPassage(plazaLoc, centerTile, topTile))
+                    bool allInPassage = true;
+                    for (int tx = minX; tx <= maxX; tx++)
+                    {
+                        for (int ty = minY; ty <= maxY; ty++)
+                        {
+                            if (!IsInPlazaPassage(plazaLoc, tx, ty))
+                            {
+                                allInPassage = false;
+                                break;
+                            }
+                        }
+                        if (!allInPassage)
+                            break;
+                    }
+
+                    if (allInPassage)
                     {
                         __result = false;
                         return false;
@@ -4180,10 +4212,22 @@ namespace Pelican4Ever.Modules
                     if (!string.Equals(door.LocationName, locName, StringComparison.OrdinalIgnoreCase))
                         continue;
 
-                    if (IsInOpeningOrBorder(door, plazaLoc, centerTile, bottomTile)
-                        || IsInOpeningOrBorder(door, plazaLoc, leftTile, bottomTile)
-                        || IsInOpeningOrBorder(door, plazaLoc, rightTile, bottomTile)
-                        || IsInOpeningOrBorder(door, plazaLoc, centerTile, topTile))
+                    bool allInDoorPath = true;
+                    for (int tx = minX; tx <= maxX; tx++)
+                    {
+                        for (int ty = minY; ty <= maxY; ty++)
+                        {
+                            if (!IsInOpeningOrBorder(door, plazaLoc, tx, ty))
+                            {
+                                allInDoorPath = false;
+                                break;
+                            }
+                        }
+                        if (!allInDoorPath)
+                            break;
+                    }
+
+                    if (allInDoorPath)
                     {
                         __result = false;
                         return false;

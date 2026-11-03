@@ -380,7 +380,8 @@ namespace Pelican4Ever.Framework
             TileSheet outdoorsSheet)
         {
             // 1. Esquina superior izquierda (x = 0..2, y = 0..2): sustituir los troncos truncados cuya copa caía en y < 0
-            // por un arbusto 3×2 completo (Front y=1: 38..40, Buildings y=2: 63..65) junto al arbusto 1×3 de x = 3 (76/101/126).
+            // por un arbusto 3×3 completo (Front y=0: 13..15, Front y=1: 38..40, Buildings y=2: 63..65),
+            // eliminando el árbol cortado en x = 3 (y = 0..2) para dejar hierba limpia y sin cortes.
             for (int x = 0; x <= 2; x++)
             {
                 SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
@@ -390,12 +391,24 @@ namespace Pelican4Ever.Framework
                 SetTileIfValid(bldLayer, outdoorsSheet, x, 2, 63 + x);
                 SetPassableIfValid(bldLayer, x, 2, false);
 
-                frontLayer.Tiles[x, 0] = null;
+                SetTileIfValid(frontLayer, outdoorsSheet, x, 0, 13 + x);
                 SetTileIfValid(frontLayer, outdoorsSheet, x, 1, 38 + x);
                 frontLayer.Tiles[x, 2] = null;
 
                 alwaysFrontLayer.Tiles[x, 0] = null;
             }
+
+            // Quitar el árbol cortado en x = 3 (y = 0..2)
+            SetTileIfValid(bldLayer, outdoorsSheet, 3, 0, 351);
+            SetPassableIfValid(bldLayer, 3, 0, false);
+            bldLayer.Tiles[3, 1] = null;
+            bldLayer.Tiles[3, 2] = null;
+            frontLayer.Tiles[3, 0] = null;
+            frontLayer.Tiles[3, 1] = null;
+            alwaysFrontLayer.Tiles[3, 0] = null;
+            if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[3, 0] = null;
+            if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[3, 0] = null;
+
             frontLayer.Tiles[4, 0] = null;
             alwaysFrontLayer.Tiles[4, 0] = null;
 

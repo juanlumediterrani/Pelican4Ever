@@ -81,10 +81,13 @@ namespace Pelican4Ever.Core.World
             // Poste indicador
             [SignpostBaseTileIndex] = new[] { SignpostTopTileIndex },
 
-            // Arbusto 3x2 (base 63..65 -> copa 38..40)
+            // Arbusto 3x3 (base 63..65 -> medio 38..40 -> copa 13..15)
             [63] = new[] { 38 },
             [64] = new[] { 39 },
             [65] = new[] { 40 },
+            [38] = new[] { 13 },
+            [39] = new[] { 14 },
+            [40] = new[] { 15 },
 
             // Arbusto 2x2 (base 113..114 -> copa 88..89)
             [113] = new[] { 88 },
@@ -119,6 +122,9 @@ namespace Pelican4Ever.Core.World
             [FenceRightTopTileIndex] = new[] { FenceRightBaseTileIndex },
             [FenceVerticalTopTileIndex] = new[] { FenceVerticalBaseTileIndex, FenceVerticalUpperMidTileIndex, FenceVerticalLowerMidTileIndex },
             [SignpostTopTileIndex] = new[] { SignpostBaseTileIndex },
+            [13] = new[] { 38 },
+            [14] = new[] { 39 },
+            [15] = new[] { 40 },
             [38] = new[] { 63 },
             [39] = new[] { 64 },
             [40] = new[] { 65 },
@@ -151,7 +157,7 @@ namespace Pelican4Ever.Core.World
                 FenceRightBaseTileIndex => VerticalMultiTileKind.FenceRightPost,
                 FenceVerticalBaseTileIndex or FenceVerticalLowerMidTileIndex or FenceVerticalUpperMidTileIndex => VerticalMultiTileKind.FenceVerticalOrStandalone,
                 SignpostBaseTileIndex => VerticalMultiTileKind.Signpost,
-                63 or 64 or 65 or 113 or 114 or 126 or 101 => VerticalMultiTileKind.Bush,
+                63 or 64 or 65 or 113 or 114 or 126 or 101 or 38 or 39 or 40 => VerticalMultiTileKind.Bush,
                 168 or 169 or 143 or 144 or 129 or 104 or 132 or 107 or 133 or 108 or 136 or 111 => VerticalMultiTileKind.TreeTrunk,
                 _ => VerticalMultiTileKind.None
             };
