@@ -35,6 +35,9 @@ namespace Pelican4Ever.Modules
         private static bool welcomeNotified;
         private static bool chatCommandsRegistered;
 
+        /// <summary>Slot cuya residencia no estaba cargada en el cliente al despertar; se viaja a ella en cuanto se pueda.</summary>
+        private static string? pendingResidenceWakeSlotId;
+
         /// <summary>Huecos y tipos con los que se construyó la última versión de Data/Locations.</summary>
         private static string slotDataSignature = string.Empty;
         public static List<DoorModel> RegisteredDoors { get; private set; } = new();
@@ -58,6 +61,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
+            ctx.Helper.Events.GameLoop.UpdateTicked += OnPendingResidenceWakeTicked;
 
             // Comandos de consola y chat
             ctx.Helper.ConsoleCommands.Add("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
@@ -974,6 +978,7 @@ namespace Pelican4Ever.Modules
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
         {
             welcomeNotified = false;
+            pendingResidenceWakeSlotId = null;
             RefreshSlotLocationData();
         }
 
@@ -1296,6 +1301,27 @@ namespace Pelican4Ever.Modules
 
         private static int unclaimedCheckCooldown;
         private static readonly PortalPromptGate portalPromptGate = new();
+
+        private void OnPendingResidenceWakeTicked(object? sender, UpdateTickedEventArgs e)
+        {
+            if (pendingResidenceWakeSlotId == null || !Context.IsWorldReady || Game1.player == null)
+                return;
+
+            // Esperar a que acabe el cambio de día (menús de envío, fundidos, sincronización)
+            if (Game1.activeClickableMenu != null || Game1.isWarping || Game1.eventUp || Game1.globalFade
+                || Game1.fadeToBlack || Game1.newDaySync.hasInstance())
+                return;
+
+            string slotId = pendingResidenceWakeSlotId;
+            pendingResidenceWakeSlotId = null;
+
+            string home = $"{slotId}_Home";
+            if (string.Equals(Game1.currentLocation?.NameOrUniqueName, home, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            context?.Monitor.Log($"[FarmSlotModule] Residencia {home} no cargada al despertar; viajando a la cama.", LogLevel.Debug);
+            Game1.warpFarmer(home, ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY, false);
+        }
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
         {
@@ -2922,16 +2948,11 @@ namespace Pelican4Ever.Modules
 
         public static bool Prefix_FindStructure(GameLocation parentLocation, string name, ref GameLocation? __result)
         {
-            if (string.IsNullOrEmpty(name))
-            {
-                __result = null;
+            // Nunca se delega en el original: Building.GetIndoors() de un interior no instanciado llama a
+            // Game1.getLocationFromName, que vuelve a findStructure (StackOverflowException).
+            __result = null;
+            if (parentLocation?.buildings == null || string.IsNullOrEmpty(name))
                 return false;
-            }
-
-            if (parentLocation?.buildings == null)
-            {
-                return true;
-            }
 
             foreach (Building b in parentLocation.buildings)
             {
@@ -2950,19 +2971,31 @@ namespace Pelican4Ever.Modules
                         __result = b.indoors.Value;
                         return false;
                     }
+
+                    // Interior no instanciado (p. ej. invernadero): buscarlo directamente en la lista sin recursión
+                    GameLocation? nonInstanced = Game1.locations?.FirstOrDefault(l => l != null && string.Equals(l.NameOrUniqueName, name, StringComparison.OrdinalIgnoreCase));
+                    if (nonInstanced != null)
+                    {
+                        __result = nonInstanced;
+                        return false;
+                    }
                 }
 
                 // Si el destino es un interior de residencia de este slot (ej. Pelican4Ever_Farm_01_Home)
                 // y este es el edificio Farmhouse, asegurar su Cabin si indoors aún no está hidratado
                 if (name.EndsWith("_Home", StringComparison.OrdinalIgnoreCase)
                     && string.Equals(parentLocation.NameOrUniqueName, name.Substring(0, name.Length - 5), StringComparison.OrdinalIgnoreCase)
-                    && (b.buildingType.Value.Contains("Farmhouse", StringComparison.OrdinalIgnoreCase) || b.GetIndoors() is Cabin))
+                    && (b.buildingType.Value?.Contains("Farmhouse", StringComparison.OrdinalIgnoreCase) == true || b.indoors.Value is Cabin))
                 {
                     if (b.indoors.Value is Cabin existingCabin)
                     {
                         __result = existingCabin;
                         return false;
                     }
+                    // Solo el host hidrata la residencia; un cliente esperaría a la versión sincronizada
+                    if (!Context.IsMainPlayer)
+                        return false;
+
                     var cabin = new Cabin("Maps\\FarmHouse");
                     cabin.uniqueName.Value = name;
                     cabin.IsFarm = true;
@@ -2973,7 +3006,7 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            return true;
+            return false;
         }
 
         public static void Prefix_SaveGameLoadDataToLocations(List<GameLocation> fromLocations)
@@ -3812,13 +3845,13 @@ namespace Pelican4Ever.Modules
                     {
                         who.currentLocation = lastSleepLoc;
                         Point bedSpot = who.lastSleepPoint.Value;
-                        if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
+                        if (bedSpot == Point.Zero)
                         {
                             if (lastSleepLoc is FarmHouse fh)
                             {
                                 bedSpot = fh.GetPlayerBedSpot();
                             }
-                            if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
+                            if (bedSpot == Point.Zero)
                             {
                                 bedSpot = new Point(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
                             }
@@ -3847,7 +3880,7 @@ namespace Pelican4Ever.Modules
                         {
                             who.currentLocation = farmHouse;
                             Point bedSpot = farmHouse.GetPlayerBedSpot();
-                            if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
+                            if (bedSpot == Point.Zero)
                             {
                                 bedSpot = new Point(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
                             }
@@ -3869,7 +3902,11 @@ namespace Pelican4Ever.Modules
                         }
                         else
                         {
-                            // 6. Fallback final solo si no tiene residencia ni slot conocido (porche de la Plaza Central / Host Farm)
+                            // 6. Fallback final: sin residencia cargada (en un cliente la granja privada puede estar fuera
+                            // del culling de red) o sin slot conocido. Posición provisional; si hay slot, se viaja a él después.
+                            if (!string.IsNullOrEmpty(assignedSlotId) && who == Game1.player)
+                                pendingResidenceWakeSlotId = assignedSlotId;
+
                             GameLocation fallback = Game1.getLocationFromName("Farm")
                                                  ?? Game1.getLocationFromName("Town")
                                                  ?? Game1.locations.FirstOrDefault()
@@ -3907,6 +3944,9 @@ namespace Pelican4Ever.Modules
                         return false;
                     }
                 }
+
+                if (!string.IsNullOrEmpty(assignedSlotId) && who == Game1.player)
+                    pendingResidenceWakeSlotId = assignedSlotId;
 
                 GameLocation fallback = Game1.getLocationFromName("Farm") ?? Game1.currentLocation;
                 who.currentLocation = fallback;

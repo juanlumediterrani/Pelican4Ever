@@ -362,7 +362,7 @@ namespace Pelican4Ever.Modules
             if (Game1.IsMultiplayer && context != null)
             {
                 var bedSpot = (__instance as FarmHouse)?.GetPlayerBedSpot() ?? Game1.player.TilePoint;
-                if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
+                if (bedSpot == Point.Zero)
                 {
                     bedSpot = new Point(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
                 }
