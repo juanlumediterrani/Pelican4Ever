@@ -937,3 +937,27 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     2. Los 16 portales, sus 16 casillas de retorno, sus 16 áreas de despeje de 3×4 y todos los pasos Este/Oeste están en la componente transitable.
     3. El verificador temporal se retira sin dejar archivos residuales y la suite de tests unitarios puros valida la conectividad.
   * **Resolución:** Implementada la lógica de verificación pura en `PlazaTopologyVerifier.cs` (`IsConnected`, `BuildPassageWarpString`, `ParseWarpProperty`, `GetInteriorClearanceTiles`, `ResolvePlazaReturnTarget`), ejecutado el análisis BFS sobre los `.xnb` reales con 0 errores y 100% de transitabilidad validada, y añadidas 29 pruebas unitarias en `PlazaTopologyVerifierTests.cs`. Directorio temporal `InspectMaps` eliminado limpiamente tras la verificación.
+
+#### Fase F — Conectividad e Integración Urbana
+
+- [ ] **TASK-1501: Habilitar y conectar la red de vagonetas en los Puentes de la Plaza**
+  * **Análisis Técnico:**
+    - En el mapa recortado de `Maps/BusStop` (`35×30`), en las coordenadas `x = 0..3, y = 2..6` (correspondientes a `sx = 10..13, sy = 2..6` del mapa vanilla), se conservan visualmente las vías férreas y la vagoneta minera junto a la Parcela 05 del Puente 1.
+    - En `MapCloneHelper.CreateBridgeMap`, las acciones de interacción vanilla fueron suprimidas incondicionalmente para evitar conflictos con la parada de autobús original (`Action "None"`, etc.), dejando la vagoneta en estado decorativo estático sin disparador.
+    - En Stardew Valley vanilla, las vagonetas (`Minecart`) se activan tras completar el lote de la Sala de Calderas del Centro Cívico (o la mejora equivalente de Joja) mediante el flag `ccBoilerRoom`.
+    - Al interactuar con una vagoneta (`GameLocation.performAction` con `"Minecart"`), el juego presenta un menú de selección de destinos (`Mines`, `Town`, `Quarry`, `Bus`).
+  * **Pasos:**
+    1. En `MapCloneHelper.CreateBridgeMap`, preservar o inyectar en la capa `Buildings` la propiedad `Action = "Minecart"` en la vagoneta del Puente 1 (`x = 0, y = 3` o `x = 1, y = 3` según la casilla frontal interactiva).
+    2. Crear un parche Harmony sobre el sistema de vagonetas (`GameLocation.performAction` / `GameLocation.answerDialogueAction`) para:
+       - Detectar la interacción con la vagoneta en cualquier puente de la plaza (`Pelican4Ever_Bridge_1..3`).
+       - Expandir las opciones de diálogo de la red de vagonetas vanilla para incluir «Plaza Central / Puente» entre los destinos rápidos accesibles desde el Pueblo, las Minas y la Cantera.
+       - Respetar la condición de desbloqueo vanilla (`farmer.mailReceived.Contains("ccBoilerRoom")`), con soporte de configuración opcional para saltarse el requisito si el servidor lo desea.
+    3. Configurar la llegada del viaje: posicionar al granjero frente a la vagoneta del Puente 1 (`x = 2, y = 4`) mirando al sur (`2`).
+    4. Añadir tests unitarios en `Pelican4Ever.Tests` verificando el diálogo y los destinos inyectados.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1202.
+  * **Criterios de Aceptación:**
+    1. Al interactuar con la vagoneta en el Puente 1, se despliega el menú de viaje si la red está desbloqueada.
+    2. Desde las vagonetas del Pueblo, Minas o Cantera, se puede seleccionar el viaje hacia el Puente de la Plaza.
+    3. Funciona limpiamente tanto en partidas locales como en multijugador con clientes conectados.
+

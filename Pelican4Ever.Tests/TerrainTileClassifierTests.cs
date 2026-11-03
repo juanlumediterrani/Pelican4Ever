@@ -152,5 +152,44 @@ namespace Pelican4Ever.Tests
             var loc = HostPlazaLayout.Find(locName, 16)!;
             Assert.Equal(expectedGrass, TerrainTileClassifier.IsMailboxOnGrass(edge, loc, portalX, portalY, mailboxX, mailboxY));
         }
+        [Theory]
+        // Granja Host: Portal 01 MountainGorge, Portal 02 WoodPlanks, Portal 03 Cobblestone, Portal 04 StoneWalkway
+        [InlineData("Farm", "Farm_Portal_01", PortalEdge.North, 18, 1, EntranceStyle.MountainGorge)]
+        [InlineData("Farm", "Farm_Portal_02", PortalEdge.North, 62, 1, EntranceStyle.WoodPlanks)]
+        [InlineData("Farm", "Farm_Portal_03", PortalEdge.South, 18, 63, EntranceStyle.Cobblestone)]
+        [InlineData("Farm", "Farm_Portal_04", PortalEdge.South, 62, 63, EntranceStyle.StoneWalkway)]
+        // Puentes: Norte Izquierda (vagoneta) WoodPlanks, Norte Derecha (risco) MountainGorge, Sur Izq Cobblestone, Sur Der StoneWalkway
+        [InlineData("Pelican4Ever_Bridge_1", "Farm_Portal_05", PortalEdge.North, 8, 1, EntranceStyle.WoodPlanks)]
+        [InlineData("Pelican4Ever_Bridge_1", "Farm_Portal_06", PortalEdge.North, 25, 1, EntranceStyle.MountainGorge)]
+        [InlineData("Pelican4Ever_Bridge_1", "Farm_Portal_07", PortalEdge.South, 8, 28, EntranceStyle.Cobblestone)]
+        [InlineData("Pelican4Ever_Bridge_1", "Farm_Portal_08", PortalEdge.South, 25, 28, EntranceStyle.StoneWalkway)]
+        public void ResolveEntranceStyle_AssignsDistinctVanillaStyles(
+            string locName, string doorId, PortalEdge edge, int tx, int ty, EntranceStyle expectedStyle)
+        {
+            var style = TerrainTileClassifier.ResolveEntranceStyle(locName, doorId, edge, tx, ty);
+            Assert.Equal(expectedStyle, style);
+        }
+
+        [Fact]
+        public void GetPathTileInfo_WithWoodPlanksStyle_ReturnsOutdoorsSheetAndWoodPlankIndices()
+        {
+            var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
+            var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
+                PortalEdge.North, bridge, 8, 1, 8, 3, 175, null, null, 15, EntranceStyle.WoodPlanks);
+
+            Assert.False(isStepping);
+            Assert.True(tile is 1244 or 1269);
+        }
+
+        [Fact]
+        public void GetPathTileInfo_WithStoneWalkwayStyle_ReturnsOutdoorsSheetAndStoneFlagstones()
+        {
+            var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
+            var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
+                PortalEdge.South, bridge, 25, 28, 25, 27, 175, null, null, 15, EntranceStyle.StoneWalkway);
+
+            Assert.False(isStepping);
+            Assert.True(tile is 1964 or 1965 or 1966);
+        }
     }
 }

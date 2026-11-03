@@ -3,12 +3,52 @@ using System;
 namespace Pelican4Ever.Core.World
 {
     /// <summary>
+    /// Estilo estético y arquitectónico para las entradas residenciales de la plaza.
+    /// Permite personalizar cada entrada con acabados canónicos vanilla.
+    /// </summary>
+    public enum EntranceStyle
+    {
+        Default,
+        MountainGorge,
+        WoodPlanks,
+        Cobblestone,
+        StoneWalkway,
+        SteppingStones
+    }
+
+    /// <summary>
     /// Clasificador de tiles de terreno y selección de baldosas/losas para caminos residenciales (TASK-501).
     /// Proporciona la lógica de selección de Steppingstone Path (camino de peldaños / stepping stones)
     /// adaptado tanto a hierba como a tierra con autotiling canónico de 4 bits.
     /// </summary>
     public static class TerrainTileClassifier
     {
+        /// <summary>
+        /// Determina el estilo arquitectónico personalizado de una entrada residencial según su ubicación y orientación.
+        /// </summary>
+        public static EntranceStyle ResolveEntranceStyle(string locationName, string? doorId, PortalEdge edge, int townTileX, int townTileY)
+        {
+            if (string.Equals(locationName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase))
+            {
+                if (edge == PortalEdge.North)
+                    return townTileX <= 30 ? EntranceStyle.MountainGorge : EntranceStyle.WoodPlanks;
+                return townTileX <= 30 ? EntranceStyle.Cobblestone : EntranceStyle.StoneWalkway;
+            }
+
+            // En los puentes (Pelican4Ever_Bridge_1..3):
+            if (edge == PortalEdge.North)
+            {
+                // Izquierda (junto a la vagoneta): estilo de andén de madera
+                // Derecha (cortando el acantilado): desfiladero de roca
+                return townTileX <= 15 ? EntranceStyle.WoodPlanks : EntranceStyle.MountainGorge;
+            }
+            else
+            {
+                // Sur izquierda: adoquines que bajan de la acera
+                // Sur derecha: losas de piedra natural
+                return townTileX <= 15 ? EntranceStyle.Cobblestone : EntranceStyle.StoneWalkway;
+            }
+        }
         /// <summary>Nombre de la hoja de tiles de Stepping Stones añadida a la Granja Host.</summary>
         public const string SteppingStonesTileSheetId = "z_Pelican4Ever_SteppingStones";
 
@@ -132,7 +172,7 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
-        /// Obtiene la información del pavimento: índice de tile y confirmación de que pertenece a <see cref="SteppingStonesTileSheetId"/>.
+        /// Obtiene la información del pavimento: índice de tile y confirmación de si pertenece a <see cref="SteppingStonesTileSheetId"/>.
         /// </summary>
         public static (int TileIndex, bool IsSteppingStonesSheet) GetPathTileInfo(
             PortalEdge edge,
@@ -144,11 +184,41 @@ namespace Pelican4Ever.Core.World
             int? underlyingTileIndex = null,
             string? underlyingType = null,
             string? underlyingSheetId = null,
-            int autotileMask = 15)
+            int autotileMask = 15,
+            EntranceStyle style = EntranceStyle.Default)
         {
-            bool isGrass = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
-            int tileIndex = GetSteppingStoneTileIndex(isGrass, autotileMask);
-            return (tileIndex, true);
+            switch (style)
+            {
+                case EntranceStyle.WoodPlanks:
+                    // Tablones de madera vanilla (outdoorsSheet): 1244 y 1269
+                    return (((tileX + tileY) % 2 == 0) ? 1244 : 1269, false);
+
+                case EntranceStyle.StoneWalkway:
+                    // Losas de piedra natural del patio exterior (outdoorsSheet): 1964, 1965, 1966
+                    int stoneIdx = ((tileX + tileY) % 3) switch
+                    {
+                        0 => 1964,
+                        1 => 1965,
+                        _ => 1966
+                    };
+                    return (stoneIdx, false);
+
+                case EntranceStyle.Cobblestone:
+                    // Adoquines de piedra redonda (outdoorsSheet: 401 en hierba, o 736/768 en tierra)
+                    bool isGrassEnv = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
+                    return isGrassEnv ? (401, false) : (((tileX + tileY) % 2 == 0) ? 736 : 768, false);
+
+                case EntranceStyle.MountainGorge:
+                    // Desfiladero rocoso: losas de roca y altar (outdoorsSheet: 1964 y 838)
+                    return (((tileX + tileY) % 2 == 0) ? 1964 : 838, false);
+
+                case EntranceStyle.SteppingStones:
+                case EntranceStyle.Default:
+                default:
+                    bool isGrass = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
+                    int tileIndex = GetSteppingStoneTileIndex(isGrass, autotileMask);
+                    return (tileIndex, true);
+            }
         }
 
         /// <summary>
@@ -162,9 +232,10 @@ namespace Pelican4Ever.Core.World
             int tileX,
             int tileY,
             int? underlyingTileIndex = null,
-            string? underlyingType = null)
+            string? underlyingType = null,
+            EntranceStyle style = EntranceStyle.Default)
         {
-            return GetPathTileInfo(edge, loc, portalX, portalY, tileX, tileY, underlyingTileIndex, underlyingType).TileIndex;
+            return GetPathTileInfo(edge, loc, portalX, portalY, tileX, tileY, underlyingTileIndex, underlyingType, null, 15, style).TileIndex;
         }
     }
 }

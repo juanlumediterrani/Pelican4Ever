@@ -192,14 +192,21 @@ namespace Pelican4Ever.Framework
             Layer alwaysFrontLayer = EnsureLayer(target, "AlwaysFront", width, height, tileSize);
             EnsureLayer(target, "Paths", width, height, tileSize);
 
-            // 4. Despejar el autobús averiado central (x = 10..19, y = 6..10) en Buildings, Front y AlwaysFront
+            Layer? bld2Layer = target.GetLayer("Buildings2");
+            Layer? alwaysFront2Layer = target.GetLayer("AlwaysFront2");
+            Layer? alwaysFront3Layer = target.GetLayer("AlwaysFront3");
+
+            // 4. Despejar el autobús averiado central (x = 10..19, y = 6..10) en todas las capas elevadas
             for (int x = 10; x <= 19; x++)
             {
                 for (int y = 6; y <= 10; y++)
                 {
                     bldLayer.Tiles[x, y] = null;
+                    if (bld2Layer != null) bld2Layer.Tiles[x, y] = null;
                     frontLayer.Tiles[x, y] = null;
                     alwaysFrontLayer.Tiles[x, y] = null;
+                    if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                    if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
                 }
             }
 
@@ -210,8 +217,11 @@ namespace Pelican4Ever.Framework
                 for (int y = 6; y <= 20; y++)
                 {
                     bldLayer.Tiles[x, y] = null;
+                    if (bld2Layer != null) bld2Layer.Tiles[x, y] = null;
                     frontLayer.Tiles[x, y] = null;
                     alwaysFrontLayer.Tiles[x, y] = null;
+                    if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                    if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
 
                     if (backLayer.Tiles[x, y] == null && outdoorsSheet != null)
                     {
