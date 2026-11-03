@@ -6,6 +6,7 @@
     "TownTileY": 1,
     "MailboxTileX": 17,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_01",
     "Description": "Parcela 01 (Granja Host - Norte Oeste)"
   },
@@ -16,6 +17,7 @@
     "TownTileY": 1,
     "MailboxTileX": 61,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_02",
     "Description": "Parcela 02 (Granja Host - Norte Este)"
   },
@@ -26,6 +28,7 @@
     "TownTileY": 63,
     "MailboxTileX": 17,
     "MailboxTileY": 62,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_03",
     "Description": "Parcela 03 (Granja Host - Sur Oeste)"
   },
@@ -36,6 +39,7 @@
     "TownTileY": 63,
     "MailboxTileX": 61,
     "MailboxTileY": 62,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_04",
     "Description": "Parcela 04 (Granja Host - Sur Este)"
   },
@@ -46,6 +50,7 @@
     "TownTileY": 1,
     "MailboxTileX": 7,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_05",
     "Description": "Parcela 05 (Puente 1 - Norte Izquierda)"
   },
@@ -56,6 +61,7 @@
     "TownTileY": 1,
     "MailboxTileX": 24,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_06",
     "Description": "Parcela 06 (Puente 1 - Norte Derecha)"
   },
@@ -66,6 +72,7 @@
     "TownTileY": 28,
     "MailboxTileX": 7,
     "MailboxTileY": 27,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_07",
     "Description": "Parcela 07 (Puente 1 - Sur Izquierda)"
   },
@@ -76,6 +83,7 @@
     "TownTileY": 28,
     "MailboxTileX": 24,
     "MailboxTileY": 27,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_08",
     "Description": "Parcela 08 (Puente 1 - Sur Derecha)"
   },
@@ -86,6 +94,7 @@
     "TownTileY": 1,
     "MailboxTileX": 7,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_09",
     "Description": "Parcela 09 (Puente 2 - Norte Izquierda)"
   },
@@ -96,6 +105,7 @@
     "TownTileY": 1,
     "MailboxTileX": 24,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_10",
     "Description": "Parcela 10 (Puente 2 - Norte Derecha)"
   },
@@ -106,6 +116,7 @@
     "TownTileY": 28,
     "MailboxTileX": 7,
     "MailboxTileY": 27,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_11",
     "Description": "Parcela 11 (Puente 2 - Sur Izquierda)"
   },
@@ -116,6 +127,7 @@
     "TownTileY": 28,
     "MailboxTileX": 24,
     "MailboxTileY": 27,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_12",
     "Description": "Parcela 12 (Puente 2 - Sur Derecha)"
   },
@@ -126,6 +138,7 @@
     "TownTileY": 1,
     "MailboxTileX": 7,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_13",
     "Description": "Parcela 13 (Puente 3 - Norte Izquierda)"
   },
@@ -136,6 +149,7 @@
     "TownTileY": 1,
     "MailboxTileX": 24,
     "MailboxTileY": 2,
+    "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_14",
     "Description": "Parcela 14 (Puente 3 - Norte Derecha)"
   },
@@ -146,6 +160,7 @@
     "TownTileY": 28,
     "MailboxTileX": 7,
     "MailboxTileY": 27,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_15",
     "Description": "Parcela 15 (Puente 3 - Sur Izquierda)"
   },
@@ -156,6 +171,7 @@
     "TownTileY": 28,
     "MailboxTileX": 24,
     "MailboxTileY": 27,
+    "Edge": "South",
     "DefaultSlotId": "Pelican4Ever_Farm_16",
     "Description": "Parcela 16 (Puente 3 - Sur Derecha)"
   }

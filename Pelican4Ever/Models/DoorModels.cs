@@ -12,8 +12,21 @@ namespace Pelican4Ever.Models
         public int TownTileY { get; set; }
         public int? MailboxTileX { get; set; }
         public int? MailboxTileY { get; set; }
+        [System.Text.Json.Serialization.JsonConverter(typeof(System.Text.Json.Serialization.JsonStringEnumConverter))]
+        public PortalEdge Edge { get; set; }
         public string DefaultSlotId { get; set; } = string.Empty;
         public string Description { get; set; } = string.Empty;
+
+        public DoorSpec ToDoorSpec() => new(
+            DoorId,
+            LocationName,
+            TownTileX,
+            TownTileY,
+            Edge,
+            DefaultSlotId,
+            MailboxTileX,
+            MailboxTileY
+        );
     }
 
     public static class ModMessages
