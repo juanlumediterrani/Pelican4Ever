@@ -1,0 +1,32 @@
+# CI: compila Pelican4Ever.Core y pasa Pelican4Ever.Tests con el SDK que fija global.json.
+#
+# El proyecto del mod (Pelican4Ever) necesita las DLL del juego y de SMAPI, que no se pueden
+# instalar en un runner de GitHub: se sigue compilando en local o en la máquina de preproducción.
+name: CI
+
+on:
+  push:
+    branches: [main, pelican/desarrollo, refactor/residence-entrances]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Core y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Compilar y pasar los tests
+        run: dotnet test Pelican4Ever.Tests -c Release

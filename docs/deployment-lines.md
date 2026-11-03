@@ -52,9 +52,14 @@ ni en la instalación de Steam mientras haya campaña.
 
 ## Cascada automática de ramas
 
+`.github/workflows/ci.yml` compila `Pelican4Ever.Core` y pasa `Pelican4Ever.Tests` con el SDK de
+`global.json` en cada push a las tres ramas y en cada PR. El proyecto del mod no se compila en
+GitHub (necesita las DLL del juego y de SMAPI): eso sigue siendo local.
+
 `.github/workflows/cascada-ramas.yml` mantiene `main` → `pelican/desarrollo` →
-`refactor/residence-entrances`: con cada push a `main` o a `pelican/desarrollo` fusiona la rama
-superior en la inferior y sube el resultado. Si una fusión choca, no toca la rama de destino: sube
+`refactor/residence-entrances`: cuando el CI de un push a `main` o a `pelican/desarrollo` termina en
+verde, fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo entonces la
+sube. Si la fusión choca o sus tests fallan, no toca la rama de destino: sube
 `cascada/<origen>-a-<destino>` y abre un PR hacia el destino para resolverlo a mano. Por eso
 `refactor/residence-entrances` ya no se rebasa: recibe merges, y un rebase obligaría a forzar el push.
 
