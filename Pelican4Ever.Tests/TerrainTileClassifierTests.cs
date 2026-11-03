@@ -216,5 +216,37 @@ namespace Pelican4Ever.Tests
                 Assert.NotEqual(EntranceStyle.SteppingStones, style);
             }
         }
+
+        [Fact]
+        public void GetWildTerrainTile_IsDeterministicAndReturnsAuthenticVanillaTiles()
+        {
+            var validIndices = new HashSet<int> { 175, 351, 352, 401, 378, 1028 };
+            var foundTypes = new HashSet<string>();
+            var foundIndices = new HashSet<int>();
+
+            for (int x = 0; x < 35; x++)
+            {
+                for (int y = 21; y <= 25; y++)
+                {
+                    var (tile1, type1) = TerrainTileClassifier.GetWildTerrainTile(x, y);
+                    var (tile2, type2) = TerrainTileClassifier.GetWildTerrainTile(x, y);
+
+                    // Determinismo estricto
+                    Assert.Equal(tile1, tile2);
+                    Assert.Equal(type1, type2);
+
+                    Assert.Contains(tile1, validIndices);
+                    Assert.True(type1 is "Grass" or "Dirt");
+
+                    foundIndices.Add(tile1);
+                    foundTypes.Add(type1);
+                }
+            }
+
+            // Verifica que el terreno salvaje produce tanto césped como tierra en proporciones orgánicas
+            Assert.Contains("Grass", foundTypes);
+            Assert.Contains("Dirt", foundTypes);
+            Assert.True(foundIndices.Count >= 4);
+        }
     }
 }

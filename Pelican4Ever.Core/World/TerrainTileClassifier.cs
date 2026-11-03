@@ -237,5 +237,27 @@ namespace Pelican4Ever.Core.World
         {
             return GetPathTileInfo(edge, loc, portalX, portalY, tileX, tileY, underlyingTileIndex, underlyingType, null, 15, style).TileIndex;
         }
+
+        /// <summary>
+        /// Genera de forma determinista una baldosa de terreno salvaje (hierba y tierra natural)
+        /// a partir de las coordenadas (x, y) usando tiles auténticos de spring_outdoorsTileSheet.
+        /// </summary>
+        public static (int TileIndex, string Type) GetWildTerrainTile(int x, int y)
+        {
+            int hash = ((x * 73856093) ^ (y * 19349663)) & 0x7FFFFFFF;
+            int roll = hash % 100;
+
+            if (roll < 45)
+                return (175, "Grass"); // Hierba pura y tupida
+            if (roll < 70)
+                return (351, "Grass"); // Variante de hierba suave
+            if (roll < 82)
+                return (352, "Grass"); // Textura de hierba fina
+            if (roll < 90)
+                return (401, "Grass"); // Hierba silvestre con briznas/guijarro
+            if (roll < 95)
+                return (378, "Grass"); // Hierba con flores silvestres y trébol
+            return (1028, "Dirt");     // Manchas de tierra campestre natural
+        }
     }
 }

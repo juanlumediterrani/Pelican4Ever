@@ -232,6 +232,68 @@ namespace Pelican4Ever.Framework
                 }
             }
 
+            // 5b. Sustituir la carretera, bordillos de asfalto y vallas de protección por terreno salvaje (hierba y tierra)
+            if (outdoorsSheet != null)
+            {
+                // Limpieza de vallas y remates de carretera en capas elevadas (y = 20..26)
+                for (int x = 0; x < width; x++)
+                {
+                    // Quitar postes y remates de la valla superior en Front (y = 20) y en Buildings (y = 21)
+                    frontLayer.Tiles[x, 20] = null;
+                    if (bldLayer.Tiles[x, 21] != null && x > 0 && x < width - 1)
+                        bldLayer.Tiles[x, 21] = null;
+
+                    // Quitar señal de tráfico, asfalto y valla inferior en Buildings (y = 22..26)
+                    for (int y = 22; y <= 26; y++)
+                    {
+                        if (x > 0 && x < width - 1)
+                        {
+                            bldLayer.Tiles[x, y] = null;
+                            if (bld2Layer != null) bld2Layer.Tiles[x, y] = null;
+                        }
+                    }
+
+                    // Quitar remates de la valla inferior en Front (y = 25)
+                    frontLayer.Tiles[x, 25] = null;
+
+                    // Limpieza en AlwaysFront
+                    for (int y = 20; y <= 26; y++)
+                    {
+                        alwaysFrontLayer.Tiles[x, y] = null;
+                        if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                        if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
+                    }
+
+                    // Reemplazo de Back en la franja de carretera (y = 21..25) por terreno salvaje
+                    for (int y = 21; y <= 25; y++)
+                    {
+                        // En la fila 21, preservar la llegada de la escalinata central (x = 12..15)
+                        if (y == 21 && x >= 12 && x <= 15)
+                            continue;
+
+                        var (tileIdx, type) = TerrainTileClassifier.GetWildTerrainTile(x, y);
+                        var wildTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, tileIdx);
+                        wildTile.Properties["Type"] = type;
+                        wildTile.Properties.Remove("Passable");
+                        backLayer.Tiles[x, y] = wildTile;
+                    }
+
+                    // En la fila 26, reemplazar bordillos residuales de carretera (tiles 325, 326, 328)
+                    if (backLayer.Tiles[x, 26] != null)
+                    {
+                        int tIdx = backLayer.Tiles[x, 26].TileIndex;
+                        if (tIdx == 325 || tIdx == 326 || tIdx == 328)
+                        {
+                            var (tileIdx, type) = TerrainTileClassifier.GetWildTerrainTile(x, 26);
+                            var wildTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, tileIdx);
+                            wildTile.Properties["Type"] = type;
+                            wildTile.Properties.Remove("Passable");
+                            backLayer.Tiles[x, 26] = wildTile;
+                        }
+                    }
+                }
+            }
+
             // 6. Sellar los bordes perimetrales salvo las aperturas de portales y pasos activos
             for (int x = 0; x < width; x++)
             {
@@ -262,12 +324,12 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // Remate con vallas de madera en la carretera (y = 22..25) solo en los bordes donde NO hay paso activo
+            // Remate con vallas de madera en los extremos este/oeste (y = 21..26) solo en los bordes donde NO hay paso activo
             if (outdoorsSheet != null)
             {
                 if (bridgeLoc.West == null)
                 {
-                    for (int y = 22; y <= 25; y++)
+                    for (int y = 21; y <= 26; y++)
                     {
                         SetTileIfValid(bldLayer, outdoorsSheet, 0, y, 385);
                         SetPassableIfValid(bldLayer, 0, y, false);
@@ -276,7 +338,7 @@ namespace Pelican4Ever.Framework
 
                 if (bridgeLoc.East == null)
                 {
-                    for (int y = 22; y <= 25; y++)
+                    for (int y = 21; y <= 26; y++)
                     {
                         SetTileIfValid(bldLayer, outdoorsSheet, width - 1, y, 383);
                         SetPassableIfValid(bldLayer, width - 1, y, false);

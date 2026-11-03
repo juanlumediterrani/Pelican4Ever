@@ -941,15 +941,11 @@ namespace Pelican4Ever.Modules
                     int lx = door.TownTileX - 1;
                     int rx = door.TownTileX + 2;
 
-                    // Remate de valla inferior debajo de la acera
-                    SetTileIfValid(bld, sheetOutdoors, lx, 26, 385);
-                    SetTileIfValid(front, sheetOutdoors, lx, 25, 360);
-                    SetTileIfValid(bld, sheetOutdoors, rx, 26, 383);
-                    SetTileIfValid(front, sheetOutdoors, rx, 25, 358);
-
-                    // Limpiar reborde de la acera y valla en el hueco
-                    ClearTile(front, door.TownTileX, 25);
-                    ClearTile(front, door.TownTileX + 1, 25);
+                    // Remate de valla canónico en el límite sur (y = 28)
+                    SetTileIfValid(bld, sheetOutdoors, lx, 28, 385);
+                    SetTileIfValid(front, sheetOutdoors, lx, 27, 360);
+                    SetTileIfValid(bld, sheetOutdoors, rx, 28, 383);
+                    SetTileIfValid(front, sheetOutdoors, rx, 27, 358);
 
                     // Limpiar follaje y ramas cortadas en AlwaysFront
                     for (int x = lx - 1; x <= rx + 2; x++)
@@ -962,14 +958,14 @@ namespace Pelican4Ever.Modules
                         }
                     }
 
-                    // Detalle decorativo: farola de madera o arbusto en el lado opuesto al buzón
+                    // Detalle decorativo: farola de madera o roca en el lado opuesto al buzón (junto al portal en y = 27)
                     if (door.TownTileX <= 15)
                     {
-                        SetTileIfValid(bld, sheetOutdoors, rx, 25, 378); // Farola de madera junto a la acera
+                        SetTileIfValid(bld, sheetOutdoors, rx, 27, 378); // Farola de madera
                     }
                     else
                     {
-                        SetTileIfValid(bld, sheetOutdoors, rx, 25, 307); // Roca decorativa
+                        SetTileIfValid(bld, sheetOutdoors, rx, 27, 307); // Roca decorativa
                     }
                 }
             }
