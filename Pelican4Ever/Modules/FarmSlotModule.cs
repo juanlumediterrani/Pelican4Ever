@@ -2922,10 +2922,15 @@ namespace Pelican4Ever.Modules
 
         public static bool Prefix_FindStructure(GameLocation parentLocation, string name, ref GameLocation? __result)
         {
-            if (parentLocation?.buildings == null || string.IsNullOrEmpty(name))
+            if (string.IsNullOrEmpty(name))
             {
                 __result = null;
                 return false;
+            }
+
+            if (parentLocation?.buildings == null)
+            {
+                return true;
             }
 
             foreach (Building b in parentLocation.buildings)
@@ -2968,8 +2973,7 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            __result = null;
-            return false;
+            return true;
         }
 
         public static void Prefix_SaveGameLoadDataToLocations(List<GameLocation> fromLocations)
@@ -3793,16 +3797,35 @@ namespace Pelican4Ever.Modules
                         ? (Game1.getLocationFromName(lastSleep) ?? (lastSleep.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) ? ResolveResidenceCabin(lastSleep, assignment) : null))
                         : null;
 
+                    if (lastSleepLoc == null && !string.IsNullOrEmpty(assignedSlotId))
+                    {
+                        lastSleepLoc = ResolveResidenceCabin($"{assignedSlotId}_Home", assignment);
+                    }
+
                     if (lastSleepLoc != null && (lastSleepLoc.CanWakeUpHere(who) || lastSleepLoc is FarmHouse))
                     {
                         who.currentLocation = lastSleepLoc;
                         Point bedSpot = who.lastSleepPoint.Value;
-                        if (bedSpot == Point.Zero && lastSleepLoc is FarmHouse fh)
+                        if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
                         {
-                            bedSpot = fh.GetPlayerBedSpot();
+                            if (lastSleepLoc is FarmHouse fh)
+                            {
+                                bedSpot = fh.GetPlayerBedSpot();
+                            }
+                            if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
+                            {
+                                bedSpot = new Point(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
+                            }
                         }
                         who.Position = Utility.PointToVector2(bedSpot) * 64f;
-                        BedFurniture.ShiftPositionForBed(who);
+                        try
+                        {
+                            BedFurniture.ShiftPositionForBed(who);
+                        }
+                        catch
+                        {
+                            // Ignorar excepciones secundarias al ajustar animación de cama
+                        }
                     }
                     else
                     {
@@ -3817,28 +3840,39 @@ namespace Pelican4Ever.Modules
                         if (farmHouse != null)
                         {
                             who.currentLocation = farmHouse;
-                            who.Position = Utility.PointToVector2(farmHouse.GetPlayerBedSpot()) * 64f;
-                            BedFurniture.ShiftPositionForBed(who);
+                            Point bedSpot = farmHouse.GetPlayerBedSpot();
+                            if (bedSpot == Point.Zero || (bedSpot.X == 0 && bedSpot.Y == 0))
+                            {
+                                bedSpot = new Point(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
+                            }
+                            who.Position = Utility.PointToVector2(bedSpot) * 64f;
+                            try
+                            {
+                                BedFurniture.ShiftPositionForBed(who);
+                            }
+                            catch
+                            {
+                            }
                         }
                         else if (!string.IsNullOrEmpty(assignedSlotId) && Game1.getLocationFromName(assignedSlotId) is Farm assignedFarm)
                         {
-                            // 5. Fallback a su propia granja privada (buzón / porche), ¡nunca al anfitrión!
+                            // 5. Fallback a su propia granja privada (porche / buzón), ¡nunca al anfitrión ni a Pierre!
                             Point mailbox = GetResidenceTotemPoint(assignedSlotId, assignment?.FarmType);
                             who.currentLocation = assignedFarm;
                             who.Position = new Vector2(mailbox.X * 64f, mailbox.Y * 64f);
                         }
                         else
                         {
-                            // 6. Fallback final solo si no tiene residencia ni slot conocido
-                            GameLocation fallback = Game1.getLocationFromName("Town")
-                                                 ?? Game1.getLocationFromName("Farm")
+                            // 6. Fallback final solo si no tiene residencia ni slot conocido (porche de la Plaza Central / Host Farm)
+                            GameLocation fallback = Game1.getLocationFromName("Farm")
+                                                 ?? Game1.getLocationFromName("Town")
                                                  ?? Game1.locations.FirstOrDefault()
-                                                 ?? new GameLocation("Maps\\Town", "Town");
+                                                 ?? new GameLocation("Maps\\Farm", "Farm");
 
                             who.currentLocation = fallback;
-                            who.Position = fallback.NameOrUniqueName == "Town"
-                                ? new Vector2(42f * 64f, 56f * 64f)
-                                : new Vector2(64f * 64f, 15f * 64f);
+                            who.Position = fallback.NameOrUniqueName == "Farm"
+                                ? new Vector2(64f * 64f, 15f * 64f)
+                                : new Vector2(42f * 64f, 56f * 64f);
                         }
                     }
                 }
@@ -3853,8 +3887,24 @@ namespace Pelican4Ever.Modules
             catch (Exception ex)
             {
                 context?.Monitor.Log($"[FarmSlotModule] Advertencia en Prefix_ApplyWakeUpPosition: {ex.Message}. Aplicando recuperación segura.", LogLevel.Warn);
-                who.currentLocation = Game1.getLocationFromName("Town") ?? Game1.currentLocation;
-                who.Position = new Vector2(42f * 64f, 56f * 64f);
+                DoorAssignment? assignment = context?.WorldState?.Doors?.Values
+                    .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
+                string? assignedSlotId = assignment?.FarmSlotId ?? (who.homeLocation.Value?.StartsWith("Pelican4Ever_Farm_", StringComparison.OrdinalIgnoreCase) == true ? who.homeLocation.Value.Replace("_Home", "") : null);
+                if (!string.IsNullOrEmpty(assignedSlotId))
+                {
+                    Cabin? cabin = ResolveResidenceCabin($"{assignedSlotId}_Home", assignment);
+                    if (cabin != null)
+                    {
+                        who.currentLocation = cabin;
+                        who.Position = new Vector2(ResidenceInteriorLogic.BedPlacement.TargetX * 64f, ResidenceInteriorLogic.BedPlacement.TargetY * 64f);
+                        if (who == Game1.player) Game1.currentLocation = cabin;
+                        return false;
+                    }
+                }
+
+                GameLocation fallback = Game1.getLocationFromName("Farm") ?? Game1.currentLocation;
+                who.currentLocation = fallback;
+                who.Position = new Vector2(64f * 64f, 15f * 64f);
                 if (who == Game1.player)
                     Game1.currentLocation = who.currentLocation;
                 return false;
