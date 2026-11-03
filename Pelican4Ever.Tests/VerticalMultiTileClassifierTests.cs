@@ -13,6 +13,8 @@ namespace Pelican4Ever.Tests
         [InlineData(385, VerticalMultiTileKind.FenceRightPost, 360)]
         [InlineData(436, VerticalMultiTileKind.FenceVerticalOrStandalone, 361)]
         [InlineData(435, VerticalMultiTileKind.Signpost, 410)]
+        [InlineData(83, VerticalMultiTileKind.LampPost, 58)]
+        [InlineData(408, VerticalMultiTileKind.Gate, 383)]
         [InlineData(63, VerticalMultiTileKind.Bush, 38)]
         [InlineData(64, VerticalMultiTileKind.Bush, 39)]
         [InlineData(65, VerticalMultiTileKind.Bush, 40)]
@@ -111,6 +113,18 @@ namespace Pelican4Ever.Tests
         public void ShouldClearFrontOverMailboxPost_ClearsFenceCapsAndCanopyOverMailboxPost(int? frontTile, bool expectedClear)
         {
             Assert.Equal(expectedClear, VerticalMultiTileClassifier.ShouldClearFrontOverMailboxPost(frontTile));
+        }
+
+        [Fact]
+        public void ExtendedMultiTileElements_LampPostAndGate_HaveExpectedPairing()
+        {
+            Assert.Equal(VerticalMultiTileKind.LampPost, VerticalMultiTileClassifier.ClassifyOutdoorsBaseTile(VerticalMultiTileClassifier.LampPostBaseTileIndex));
+            Assert.True(VerticalMultiTileClassifier.TryGetExpectedTopTile(VerticalMultiTileClassifier.LampPostBaseTileIndex, out int lampTop, out _));
+            Assert.Equal(VerticalMultiTileClassifier.LampPostTopTileIndex, lampTop);
+
+            Assert.Equal(VerticalMultiTileKind.Gate, VerticalMultiTileClassifier.ClassifyOutdoorsBaseTile(VerticalMultiTileClassifier.GateBaseTileIndex));
+            Assert.True(VerticalMultiTileClassifier.TryGetExpectedTopTile(VerticalMultiTileClassifier.GateBaseTileIndex, out int gateTop, out _));
+            Assert.Equal(VerticalMultiTileClassifier.GateTopTileIndex, gateTop);
         }
     }
 }

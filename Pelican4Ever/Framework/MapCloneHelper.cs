@@ -292,6 +292,7 @@ namespace Pelican4Ever.Framework
             {
                 if (bridgeLoc.West == null)
                 {
+                    SetTileIfValid(frontLayer, outdoorsSheet, 0, 21, VerticalMultiTileClassifier.FenceVerticalTopTileIndex);
                     for (int y = 22; y <= 25; y++)
                     {
                         int vTile = VerticalMultiTileClassifier.GetVerticalFenceBodyTile(y, 22, 25);
@@ -302,6 +303,7 @@ namespace Pelican4Ever.Framework
 
                 if (bridgeLoc.East == null)
                 {
+                    SetTileIfValid(frontLayer, outdoorsSheet, width - 1, 21, VerticalMultiTileClassifier.FenceVerticalTopTileIndex);
                     for (int y = 22; y <= 25; y++)
                     {
                         int vTile = VerticalMultiTileClassifier.GetVerticalFenceBodyTile(y, 22, 25);
@@ -869,7 +871,9 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        SetTileIfValid(bldLayer, mainSheet, x, 0, 384);
+                        // En y = 0 no se puede colocar la base de una valla horizontal de 2 tiles (requeriría y = -1 en Front).
+                        // Se remata con la barandilla rústica canónica de 1 casilla (194), cerrando limpiamente el camino sin decapitaciones.
+                        SetTileIfValid(bldLayer, mainSheet, x, 0, 194);
                         SetPassableIfValid(bldLayer, x, 0, false);
                     }
                 }
@@ -887,7 +891,8 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        SetTileIfValid(bldLayer, mainSheet, x, southY, 384);
+                        // Rematar con barandilla rústica de madera (194) en el límite sur para un cierre limpio y homogéneo
+                        SetTileIfValid(bldLayer, mainSheet, x, southY, 194);
                         SetPassableIfValid(bldLayer, x, southY, false);
                     }
                 }
@@ -907,7 +912,8 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        SetTileIfValid(bldLayer, mainSheet, 0, y, 385);
+                        // En la columna vertical x = 0, usar la barandilla rústica vertical oeste (195) en lugar de fragmentos horizontales
+                        SetTileIfValid(bldLayer, mainSheet, 0, y, 195);
                         SetPassableIfValid(bldLayer, 0, y, false);
                     }
                 }
@@ -925,7 +931,8 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        SetTileIfValid(bldLayer, mainSheet, eastX, y, 383);
+                        // En la columna vertical x = eastX, usar la barandilla rústica vertical este (193) en lugar de fragmentos horizontales
+                        SetTileIfValid(bldLayer, mainSheet, eastX, y, 193);
                         SetPassableIfValid(bldLayer, eastX, y, false);
                     }
                 }

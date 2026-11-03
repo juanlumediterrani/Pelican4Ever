@@ -18,7 +18,9 @@ namespace Pelican4Ever.Core.World
         FenceVerticalOrStandalone,
         Signpost,
         Bush,
-        TreeTrunk
+        TreeTrunk,
+        LampPost,
+        Gate
     }
 
     /// <summary>
@@ -68,6 +70,14 @@ namespace Pelican4Ever.Core.World
         public const int SignpostBaseTileIndex = 435;
         public const int SignpostTopTileIndex = 410;
 
+        // --- Farola de exterior (hoja spring_outdoorsTileSheet) ---
+        public const int LampPostBaseTileIndex = 83;
+        public const int LampPostTopTileIndex = 58;
+
+        // --- Cancela de valla de madera (hoja spring_outdoorsTileSheet) ---
+        public const int GateBaseTileIndex = 408;
+        public const int GateTopTileIndex = 383;
+
         private static readonly Dictionary<int, int[]> BaseToExpectedTops = new()
         {
             // Vallas de madera
@@ -78,8 +88,10 @@ namespace Pelican4Ever.Core.World
             [FenceVerticalBaseTileIndex] = new[] { FenceVerticalTopTileIndex, FenceVerticalLowerMidTileIndex, FenceVerticalUpperMidTileIndex },
             [FenceVerticalLowerMidTileIndex] = new[] { FenceVerticalUpperMidTileIndex, FenceVerticalTopTileIndex },
 
-            // Poste indicador
+            // Poste indicador, farola y cancela
             [SignpostBaseTileIndex] = new[] { SignpostTopTileIndex },
+            [LampPostBaseTileIndex] = new[] { LampPostTopTileIndex },
+            [GateBaseTileIndex] = new[] { GateTopTileIndex },
 
             // Arbusto 3x3 (base 63..65 -> medio 38..40 -> copa 13..15)
             [63] = new[] { 38 },
@@ -122,6 +134,8 @@ namespace Pelican4Ever.Core.World
             [FenceRightTopTileIndex] = new[] { FenceRightBaseTileIndex },
             [FenceVerticalTopTileIndex] = new[] { FenceVerticalBaseTileIndex, FenceVerticalUpperMidTileIndex, FenceVerticalLowerMidTileIndex },
             [SignpostTopTileIndex] = new[] { SignpostBaseTileIndex },
+            [LampPostTopTileIndex] = new[] { LampPostBaseTileIndex },
+            [GateTopTileIndex] = new[] { GateBaseTileIndex },
             [13] = new[] { 38 },
             [14] = new[] { 39 },
             [15] = new[] { 40 },
@@ -157,6 +171,8 @@ namespace Pelican4Ever.Core.World
                 FenceRightBaseTileIndex => VerticalMultiTileKind.FenceRightPost,
                 FenceVerticalBaseTileIndex or FenceVerticalLowerMidTileIndex or FenceVerticalUpperMidTileIndex => VerticalMultiTileKind.FenceVerticalOrStandalone,
                 SignpostBaseTileIndex => VerticalMultiTileKind.Signpost,
+                LampPostBaseTileIndex => VerticalMultiTileKind.LampPost,
+                GateBaseTileIndex => VerticalMultiTileKind.Gate,
                 63 or 64 or 65 or 113 or 114 or 126 or 101 or 38 or 39 or 40 => VerticalMultiTileKind.Bush,
                 168 or 169 or 143 or 144 or 129 or 104 or 132 or 107 or 133 or 108 or 136 or 111 => VerticalMultiTileKind.TreeTrunk,
                 _ => VerticalMultiTileKind.None

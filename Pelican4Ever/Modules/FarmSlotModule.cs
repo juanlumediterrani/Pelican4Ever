@@ -1397,6 +1397,8 @@ namespace Pelican4Ever.Modules
             xTile.Tiles.TileSheet? sheetOutdoors = MapCloneHelper.GetOutdoorsTileSheet(map);
             xTile.Layers.Layer? top = map?.GetLayer(MailboxTopLayerId);
             xTile.Layers.Layer? alwaysFront = map?.GetLayer("AlwaysFront");
+            xTile.Layers.Layer? alwaysFront2 = map?.GetLayer("AlwaysFront2");
+            xTile.Layers.Layer? alwaysFront3 = map?.GetLayer("AlwaysFront3");
             if (bld == null || sheetTown == null || top == null)
                 return;
 
@@ -1416,14 +1418,13 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // Asegurar que AlwaysFront no tape el poste ni la caja del buzón (Front2 ya se dibuja sobre Front)
-            if (alwaysFront != null)
-            {
-                if (mx >= 0 && mx < alwaysFront.LayerWidth && my >= 0 && my < alwaysFront.LayerHeight)
-                    alwaysFront.Tiles[mx, my] = null;
-                if (mx >= 0 && mx < alwaysFront.LayerWidth && my - 1 >= 0 && my - 1 < alwaysFront.LayerHeight)
-                    alwaysFront.Tiles[mx, my - 1] = null;
-            }
+            // Asegurar que AlwaysFront, AlwaysFront2 y AlwaysFront3 no tapen el poste ni la caja del buzón
+            ClearTile(alwaysFront, mx, my);
+            ClearTile(alwaysFront, mx, my - 1);
+            ClearTile(alwaysFront2, mx, my);
+            ClearTile(alwaysFront2, mx, my - 1);
+            ClearTile(alwaysFront3, mx, my);
+            ClearTile(alwaysFront3, mx, my - 1);
 
             // El buzón conserva el tile de hierba o transición natural existente en Back si ya es hierba,
             // o planta 175 (hierba) / 587 (tierra) si era necesario
@@ -1611,6 +1612,7 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer || context == null) return;
 
             EnsureAllPlazaPortals();
+            EnsureAllActiveAnnexCorridorsClean();
         }
 
         public static void SanitizePlayerOrphanedBridgeLocation(Farmer? who, int slotCount)
@@ -2072,6 +2074,35 @@ namespace Pelican4Ever.Modules
                 if (loc != null)
                 {
                     EnsureLocationPortals(loc);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Asegura que los corredores de acceso y llegada de todos los anexos temáticos activos en partida
+        /// permanezcan libres de ramas, maleza, piedras o propiedades de bloqueo al inicio de cada jornada.
+        /// </summary>
+        public static void EnsureAllActiveAnnexCorridorsClean()
+        {
+            if (context == null || Game1.locations == null) return;
+
+            foreach (var loc in Game1.locations)
+            {
+                if (loc != null && loc.NameOrUniqueName.StartsWith("Pelican4Ever_Annex_", StringComparison.OrdinalIgnoreCase))
+                {
+                    string name = loc.NameOrUniqueName;
+                    int lastUnderscore = name.LastIndexOf('_');
+                    if (lastUnderscore > 0 && Enum.TryParse<AnnexSide>(name.Substring(lastUnderscore + 1), ignoreCase: true, out var side))
+                    {
+                        int w = loc.Map?.Layers.Count > 0 ? loc.Map.Layers[0].LayerWidth : 40;
+                        int h = loc.Map?.Layers.Count > 0 ? loc.Map.Layers[0].LayerHeight : 32;
+                        MapCloneHelper.GetEntranceOpeningAndCorridor(side, w, h, out _, out var corridorTiles);
+                        foreach (var (cx, cy) in corridorTiles)
+                        {
+                            loc.removeEverythingFromThisTile(cx, cy);
+                            loc.removeTileProperty(cx, cy, "Back", "Passable");
+                        }
+                    }
                 }
             }
         }
@@ -4210,6 +4241,9 @@ namespace Pelican4Ever.Modules
                 foreach (var door in RegisteredDoors)
                 {
                     if (!string.Equals(door.LocationName, locName, StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    if (!IsDoorActiveForCurrentConfig(door))
                         continue;
 
                     bool allInDoorPath = true;
