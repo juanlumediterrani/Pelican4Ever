@@ -52,13 +52,23 @@ namespace Pelican4Ever.Core.World
             return int.MaxValue;
         }
 
+        public static bool IsDoorActive(string? defaultSlotId, string? locationName, int farmSlotCount)
+        {
+            if (string.IsNullOrWhiteSpace(defaultSlotId))
+                return false;
+
+            int slotNum = ExtractSlotNumber(defaultSlotId);
+            if (slotNum < 1 || slotNum > farmSlotCount)
+                return false;
+
+            string resolvedLocation = string.IsNullOrWhiteSpace(locationName) ? HostPlazaLayout.HostFarm : locationName;
+            return HostPlazaLayout.Find(resolvedLocation, farmSlotCount) != null;
+        }
+
         public static IReadOnlyList<DoorSpec> FilterActiveDoors(IEnumerable<DoorSpec> doors, int farmSlotCount)
         {
-            var chain = HostPlazaLayout.Chain(farmSlotCount);
-            var activeLocations = new HashSet<string>(chain.Select(c => c.Name), StringComparer.OrdinalIgnoreCase);
-
             return doors
-                .Where(d => activeLocations.Contains(d.LocationName) && ExtractSlotNumber(d.DefaultSlotId) <= farmSlotCount)
+                .Where(d => IsDoorActive(d.DefaultSlotId, d.LocationName, farmSlotCount))
                 .OrderBy(d => ExtractSlotNumber(d.DefaultSlotId))
                 .ToList();
         }

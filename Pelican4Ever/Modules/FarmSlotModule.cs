@@ -618,6 +618,18 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
+        public static bool IsDoorActiveForCurrentConfig(DoorModel door)
+        {
+            if (door == null)
+                return false;
+
+            if (context?.WorldState?.Doors != null && context.WorldState.Doors.ContainsKey(door.DoorId))
+                return true;
+
+            int slotCount = context?.Config.FarmSlotCount ?? 16;
+            return PlazaCatalogFormatter.IsDoorActive(door.DefaultSlotId, door.LocationName, slotCount);
+        }
+
         public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
             var loc = HostPlazaLayout.Find(door.LocationName, 16);
@@ -632,9 +644,6 @@ namespace Pelican4Ever.Modules
                 var (t1, t2) = GetOpeningTiles(door);
                 return (tileX == t1.X && tileY == t1.Y) || (tileX == t2.X && tileY == t2.Y);
             }
-
-            if (IsInPlazaPassage(loc, tileX, tileY))
-                return true;
 
             var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
             foreach (var p in path)
@@ -1497,6 +1506,8 @@ namespace Pelican4Ever.Modules
             {
                 if (!string.Equals(d.LocationName, curLoc.NameOrUniqueName, StringComparison.OrdinalIgnoreCase))
                     return false;
+                if (!IsDoorActiveForCurrentConfig(d))
+                    return false;
                 var loc = HostPlazaLayout.Find(d.LocationName, context.Config.FarmSlotCount);
                 return loc != null && SpatialWarpRouter.IsPortalTriggerTile(d.Edge, d.TownTileX, d.TownTileY, loc, (int)playerTile.X, (int)playerTile.Y);
             });
@@ -2203,7 +2214,7 @@ namespace Pelican4Ever.Modules
                     ChatCommands.Register(
                         "doors",
                         HandleDoorsChatCommand,
-                        name => "Muestra el catálogo de residencias de Pelican Town y su estado (/doors o /residencias)",
+                        name => "Muestra el catálogo de residencias de la Plaza Central y su estado (/doors o /residencias)",
                         new[] { "residencias" },
                         mainOnly: false,
                         multiplayerOnly: false,
@@ -2433,10 +2444,11 @@ namespace Pelican4Ever.Modules
             var worldState = context.WorldState;
 
             DoorModel? door = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
+            bool doorActive = door != null && PlazaCatalogFormatter.IsDoorActive(door.DefaultSlotId, door.LocationName, context.Config.FarmSlotCount);
             DoorClaimRejection rejection = worldState.CheckDoorClaim(playerId, doorId, farmType);
-            if (door == null || rejection != DoorClaimRejection.None)
+            if (door == null || !doorActive || rejection != DoorClaimRejection.None)
             {
-                string reason = door == null ? "puerta fuera del catálogo" : rejection.ToString();
+                string reason = door == null ? "puerta fuera del catálogo" : (!doorActive ? "parcela fuera del límite FarmSlotCount" : rejection.ToString());
                 context.Monitor.Log($"[FarmSlotModule] Reclamo de {doorId} por {playerId} rechazado ({reason}).", LogLevel.Warn);
                 if (playerId != Game1.player.UniqueMultiplayerID)
                 {
@@ -2677,7 +2689,8 @@ namespace Pelican4Ever.Modules
             }
 
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
-                string.Equals(string.IsNullOrWhiteSpace(d.LocationName) ? "Farm" : d.LocationName, curLoc, StringComparison.OrdinalIgnoreCase)
+                IsDoorActiveForCurrentConfig(d)
+                && string.Equals(string.IsNullOrWhiteSpace(d.LocationName) ? "Farm" : d.LocationName, curLoc, StringComparison.OrdinalIgnoreCase)
                 && (IsInOpeningOrBorder(d, (int)targetTile.X, (int)targetTile.Y)
                     || ((d.MailboxTileX ?? (d.TownTileX + 1)) == (int)targetTile.X && (d.MailboxTileY ?? d.TownTileY) == (int)targetTile.Y)));
 
@@ -2843,7 +2856,7 @@ namespace Pelican4Ever.Modules
                 };
 
                 QuestionDialog.Ask(
-                    $"Tu residencia en {door.LocationName ?? "Town"}. (Tipo: {assignment.FarmType})",
+                    $"Tu residencia en {PlazaCatalogFormatter.GetLocationDisplayName(door.LocationName)}. (Tipo: {assignment.FarmType})",
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -3390,7 +3403,7 @@ namespace Pelican4Ever.Modules
 
             if (allowedLocations.Count == 0)
             {
-                Game1.drawObjectDialogue("Debes reclamar una residencia en Pelican Town antes de poder encargar obras de construcción.");
+                Game1.drawObjectDialogue("Debes reclamar una residencia en la Plaza Central antes de poder encargar obras de construcción.");
                 return false;
             }
 
@@ -3690,8 +3703,8 @@ namespace Pelican4Ever.Modules
                     if (assignment.OwnerId != myId && assignment.Policy == AccessPolicy.Locked)
                     {
                         Game1.showRedMessage("Esta parcela es privada y está cerrada con llave.");
-                        // Si estaba en la Granja Host, detener al jugador
-                        if (Game1.currentLocation is Farm)
+                        // Detener al jugador tanto en la Granja Host como en los mapas puente de la plaza
+                        if (Game1.currentLocation != null && (Game1.currentLocation is Farm || HostPlazaLayout.IsPlazaLocation(Game1.currentLocation.NameOrUniqueName)))
                         {
                             Game1.player.Halt();
                             Game1.player.completelyStopAnimatingOrDoingAction();
@@ -4273,6 +4286,8 @@ namespace Pelican4Ever.Modules
             {
                 string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? "Farm" : door.LocationName;
                 if (!string.Equals(curLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!IsDoorActiveForCurrentConfig(door))
                     continue;
 
                 var (t1, t2) = GetOpeningTiles(door);

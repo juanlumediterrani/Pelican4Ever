@@ -33,7 +33,24 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
+        [InlineData("Pelican4Ever_Farm_05", "Pelican4Ever_Bridge_1", 6, true)]
+        [InlineData("Pelican4Ever_Farm_06", "Pelican4Ever_Bridge_1", 6, true)]
+        [InlineData("Pelican4Ever_Farm_07", "Pelican4Ever_Bridge_1", 6, false)]
+        [InlineData("Pelican4Ever_Farm_08", "Pelican4Ever_Bridge_1", 6, false)]
+        [InlineData("Pelican4Ever_Farm_05", "Pelican4Ever_Bridge_1", 4, false)]
+        [InlineData("Pelican4Ever_Farm_01", "Farm", 4, true)]
+        public void IsDoorActive_RespectsIntermediateFarmSlotCount(
+            string defaultSlotId,
+            string locationName,
+            int farmSlotCount,
+            bool expectedActive)
+        {
+            Assert.Equal(expectedActive, PlazaCatalogFormatter.IsDoorActive(defaultSlotId, locationName, farmSlotCount));
+        }
+
+        [Theory]
         [InlineData(4, 4, 4, 0, 0, 0)]
+        [InlineData(6, 6, 4, 2, 0, 0)]
         [InlineData(8, 8, 4, 4, 0, 0)]
         [InlineData(12, 12, 4, 4, 4, 0)]
         [InlineData(16, 16, 4, 4, 4, 4)]

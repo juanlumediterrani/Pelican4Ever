@@ -11,7 +11,7 @@ using StardewValley;
 namespace Pelican4Ever.Modules
 {
     /// <summary>
-    /// Gestiona los buzones interactivos de las residencias en Pelican Town (TASK-501).
+    /// Gestiona los buzones interactivos de las residencias en la Plaza Central y los Puentes (TASK-501 / TASK-1301).
     /// Permite leer cartas sin viajar hasta la granja y muestra la banderita / animación de correo pendiente.
     /// </summary>
     public sealed class TownMailboxModule : IModule
@@ -50,6 +50,8 @@ namespace Pelican4Ever.Modules
             {
                 string doorLoc = string.IsNullOrWhiteSpace(door.LocationName) ? HostPlazaLayout.HostFarm : door.LocationName;
                 if (!string.Equals(currentLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!FarmSlotModule.IsDoorActiveForCurrentConfig(door))
                     continue;
 
                 var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
