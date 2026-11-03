@@ -568,8 +568,9 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
 
 #### Fase A — Integración y red de seguridad
 
-- [ ] **TASK-1001: Mantener la integración con `main` sin reabrir el StackOverflow de `findStructure`**
-  * **Estado (2026-11-03):** la integración ya está hecha. La rama está rebasada sobre `main` y `Prefix_FindStructure` termina en `return false`, sin ningún `return true`. Falta subir la guarda.
+- [x] **TASK-1001: Mantener la integración con `main` sin reabrir el StackOverflow de `findStructure`**
+  * **Estado (2026-11-03):** Resuelto. La guarda de regresión `FindStructureGuardTests` verifica que `Prefix_FindStructure` no delegue en el original ni contenga `return true`.
+  * **Resolución:** Resuelto en el commit `c2e52e1` (`test(residence): guarda contra return true en Prefix_FindStructure`). Fichero sin seguimiento `FindStructureGuard.patch` eliminado de la raíz.
   * **Análisis Técnico:**
     - Si `Prefix_FindStructure` vuelve a delegar en el original (`return true`), se reabre la recursión `Building.GetIndoors()` → `Game1.getLocationFromName` → `findStructure`, que provoca un StackOverflow (lo arregló `9b42a58`).
     - Con la cascada automática, cualquier fusión futura desde `main` puede chocar en `FarmSlotModule.cs`.
@@ -589,7 +590,8 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. `FindStructureGuardTests` está versionado y pasa.
     2. Entrar en un invernadero o en una residencia sin instanciar no provoca StackOverflow.
 
-- [ ] **TASK-1002: Sanear `MapVisualizerTests`**
+- [x] **TASK-1002: Sanear `MapVisualizerTests`**
+  * **Resolución:** Resuelto con `DoorCatalogFixture` compartida para cargar `doors.json` subiendo directorios, salida de diagramas al directorio temporal del sistema (`pelican4ever-maps`), método de validación `ValidatePlazaGeometry` verificando que todas las aperturas, caminos y buzones queden dentro de límites, sin solapamientos entre parcelas ni invasión de pasos este/oeste, y test de fallo forzado ante desplazamiento del portal 07 (`y=40`).
   * **Análisis Técnico:** el test escribe en `~/.var/app/com.google.AndroidStudio/...`, la ruta de otro equipo, y solo comprueba que el fichero existe.
   * **Pasos:**
     1. Sustituir `ArtifactScratchDir` por `Path.Combine(Path.GetTempPath(), "pelican4ever-maps")`.
@@ -602,7 +604,8 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. Pasa en cualquier equipo y no escribe fuera del directorio temporal.
     2. Si se cambia el portal 07 a `y=40`, el test falla.
 
-- [ ] **TASK-1003: Ejecutar los tests en CI antes de la cascada**
+- [x] **TASK-1003: Ejecutar los tests en CI antes de la cascada**
+  * **Resolución:** Resuelto en los commits `e4a129f` (`ci: compilar y pasar los tests; la cascada solo propaga ramas en verde`) y `e4e4b01` (`ci(cascada): borrar la rama cascada/* cuando ya no hace falta`), integrando job de test previo a la propagación en cascada.
   * **Análisis Técnico:** `cascada-ramas.yml` fusiona `main` en `pelican/desarrollo` y en esta rama sin compilar ni probar. Un conflicto resuelto solo por git, como un `return true` que vuelve sin marcar conflicto, pasaría sin que nadie lo vea.
   * **Pasos:**
     1. Añadir un job `test` (`actions/setup-dotnet` con `global-json-file: global.json`, y luego `dotnet test Pelican4Ever.Tests`). Solo Core, que no necesita el juego.
@@ -614,7 +617,8 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
 
 #### Fase B — Geometría explícita en Core
 
-- [ ] **TASK-1101: Catálogo `HostPlazaLayout` (Core)**
+- [x] **TASK-1101: Catálogo `HostPlazaLayout` (Core)**
+  * **Resolución:** Resuelto con la creación de `Pelican4Ever.Core/World/HostPlazaLayout.cs` (`PortalEdge`, `PlazaPassage`, `PlazaLocation`, `HostPlazaLayout`), cálculo declarativo de puentes y pasos bidireccionales en `Chain()`, eliminación de literales `"Pelican4Ever_Bridge_` fuera de `HostPlazaLayout` y suite `HostPlazaLayoutTests` con 28 pruebas verdes.
   * **Análisis Técnico:** hoy las medidas y la cadena de puentes están repartidas entre umbrales sueltos y warps escritos a mano. Hay que reunirlas en un solo sitio puro.
   * **Pasos:**
     1. Crear `Pelican4Ever.Core/World/HostPlazaLayout.cs`:
@@ -646,7 +650,8 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. Los tests anteriores pasan.
     2. No queda el literal `"Pelican4Ever_Bridge_` fuera de `HostPlazaLayout`.
 
-- [ ] **TASK-1102: Borde explícito del portal en `doors.json`**
+- [x] **TASK-1102: Borde explícito del portal en `doors.json`**
+  * **Resolución:** Resuelto añadiendo `"Edge": "North"` o `"South"` a las 16 entradas de `doors.json`, propiedad `PortalEdge Edge` a `DoorModel`, validador puro `DoorCatalogValidator` y `DoorSpec` en Core, validación y descarte con log en `FarmSlotModule.LoadDoors()`, y suite de pruebas `DoorCatalogValidatorTests`.
   * **Análisis Técnico:**
     - El borde de cada portal se deduce hoy de umbrales en las coordenadas.
     - `DoorModel` está en el mod y Core no puede validarlo. Hace falta una vista pura en Core.
@@ -666,7 +671,8 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. El catálogo real pasa sin errores.
     2. Una entrada no válida aparece en el log y no rompe la carga del resto.
 
-- [ ] **TASK-1103: Migrar `SpatialWarpRouter` a borde y medidas**
+- [x] **TASK-1103: Migrar `SpatialWarpRouter` a borde y medidas**
+  * **Resolución:** Resuelto migrando `SpatialWarpRouter` y `ResidenceExits` a `PortalEdge` y `PlazaLocation`. Se eliminaron `IsSouthBorderPortal`, `HostFarmMaxTileX`, `HostFarmMaxTileY` y todos los umbrales mágicos numéricos (`60`, `28`, `25`, `64`, `75`, `79`). Todos los llamantes actualizados y suite `SpatialWarpRouterTests` reescrita cubriendo llegada, retorno, senda y disparador.
   * **Análisis Técnico:** el router deduce el borde con `>= 60`, `>= 28`, `<= 2` y `>= 75`, y los bordes del mapa con `HostFarmMaxTileX` y `HostFarmMaxTileY`, que valen 79 y 64 (son las medidas de la Granja Host).
   * **Pasos:**
     1. Cambiar las firmas para que reciban `PortalEdge edge` y la ubicación (`PlazaLocation`, o `width` y `height`) en lugar de deducirlos:
@@ -702,7 +708,8 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. `grep -nE "\b(60|28|25|64|75|79)\b" Pelican4Ever.Core/World/SpatialWarpRouter.cs Pelican4Ever.Core/World/ResidenceExits.cs` no encuentra geometría de portal.
     2. Los tests cubren, por borde, la llegada, la vuelta, el camino y el disparo.
 
-- [ ] **TASK-1104: Migrar `TerrainTileClassifier` a borde y medidas**
+- [x] **TASK-1104: Migrar `TerrainTileClassifier` a borde y medidas**
+  * **Resolución:** Resuelto migrando `IsGrassEnvironment`, `IsMailboxOnGrass` y `GetPathTileInfo` a `PortalEdge` y `PlazaLocation`, eliminando las sobrecargas antiguas con IDs de portal hardcodeados, actualizando `ClearDoorAreaOnMap` y `PlaceMailboxTiles` en `FarmSlotModule.cs`, y cubriendo casos de clasificación en `TerrainTileClassifierTests`.
   * **Análisis Técnico:**
     - `IsGrassEnvironment` usa `>= 25` para el sur, mientras que el router usa `>= 28`.
     - La sobrecarga de `GetPathTileInfo` que no recibe `townTileX` lo deduce del `doorId` con una lista que ya no corresponde a `doors.json`: las puertas impares van a `x=18` y las pares a `x=25`. Las columnas reales son: 01 y 03 en `x=18`; 02 y 04 en `x=62`; 05–16 en `x=8` o `x=25`.
