@@ -5,7 +5,7 @@
 
 ## Contexto
 
-Las 16 residencias se reparten entre la Granja Host (`Farm`, 80×65) y tres mapas puente encadenados (`Pelican4Ever_Bridge_1..3`, 35×30), como hace el commit `019235f` de la rama `refactor/residence-entrances`:
+Las 16 residencias se reparten entre la Granja Host (`Farm`, 80×65) y tres mapas puente encadenados (`Pelican4Ever_Bridge_1..3`, 35×30), como hace el commit `cd7e2cb` (antes `019235f`) de la rama `refactor/residence-entrances`:
 
 * **Granja Host:** cinco salidas propias, que son cuatro portales (norte-oeste, norte-este, sur-oeste y sur-este) y un paso al oeste (`x=0`, `y=26..27`) hacia el puente 1.
 * **Cada puente:** cuatro portales (dos al norte y dos al sur). Su borde oeste lleva al puente siguiente y su borde este, al anterior o a la Granja Host.
