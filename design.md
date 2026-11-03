@@ -2,8 +2,8 @@
 
 * **Nombre:** *Pelican 4Ever* (`SV-RTMP`)
 * **Concepto nuclear:** Transformar Stardew Valley de un juego cooperativo de sesiones síncronas y turnos rápidos a un **mundo persistente en tiempo real (escala 1:1)** alojado en un servidor dedicado 24/7.
-* **Escala y Modelo de Confianza (MVP):** Diseñado para comunidades pequeñas (**4 jugadores en el MVP**, escalable a ~8–12). Funciona bajo un modelo de **servidor entre amigos con cliente modificado obligatorio** (`RequireClientMod = true`): tanto el servidor como los clientes instalan `Pelican 4Ever`.
-* **Pilar de experiencia:** Un "segundo hogar" virtual. El jugador entra entre 30 y 90 minutos al día para cuidar su granja privada (conectada a una puerta de Pelican Town), gestionar su industria pasiva, gastar su presupuesto diario de energía + saciedad en las minas o la pesca y coincidir en el pueblo o en festivales de tarde/noche con el resto de la comunidad.
+* **Escala y Modelo de Confianza:** Diseñado para comunidades de **4 a 16 jugadores** (escalable mediante configuración declarativa `FarmSlotCount = 4..16`). Funciona bajo un modelo de **servidor entre amigos con cliente modificado obligatorio** (`RequireClientMod = true`): tanto el servidor como los clientes instalan `Pelican 4Ever`.
+* **Pilar de experiencia:** Un "segundo hogar" virtual. El jugador entra entre 30 y 90 minutos al día para cuidar su granja privada (conectada a su portal en la Plaza Central o en la cadena de puentes), gestionar su industria pasiva, gastar su presupuesto diario de energía + saciedad en las minas o la pesca y coincidir en la plaza, en el pueblo o en festivales de tarde/noche con el resto de la comunidad.
 
 ---
 
@@ -70,15 +70,25 @@ El estado autoritativo de cada jugador reside únicamente en el servidor (`Serve
 
 ---
 
-## 5. Vivienda Urbana y Huecos de Granja (`Farm Slots`)
+## 5. Plaza Central, Puentes y Residencias Privadas (`Farm Slots`)
 
-* **MVP de 4 Huecos Estándar Declarativos:**
-  * En lugar de instanciar mapas arbitrarios por UID en tiempo de ejecución (que rompen `SaveGame.loadDataToLocations` y dependen del estado global `Game1.whichFarm`), el mod registra **4 ubicaciones fijas** (`Pelican4Ever_Farm_01` a `Pelican4Ever_Farm_04`) en `Data/Locations` con `CreateOnLoad` usando la plantilla `Farm` estándar.
-* **Puertas en Pelican Town:**
-  * Se habilitan 4 puertas reclamables en Pelican Town (definidas en `assets/doors.json`).
-  * Al reclamar una puerta libre, el servidor asigna ese `FarmSlotId` al jugador, vincula su `Cabin` (camuflada como `FarmHouse`) dentro de ese hueco y activa las carteras separadas (`useSeparateWallets = true`).
+* **Escala Flexible de 4 a 16 Residencias Declarativas:**
+  * En lugar de instanciar mapas arbitrarios por UID en tiempo de ejecución, el mod registra hasta **16 ubicaciones fijas** (`Pelican4Ever_Farm_01` a `Pelican4Ever_Farm_16`) en `Data/Locations` con `CreateOnLoad` usando las plantillas de granja correspondientes (`FarmTemplateCatalog`).
+* **Plaza Central (`Farm`) y Cadena de Puentes (`Pelican4Ever_Bridge_1..3`):**
+  * Las residencias no se ubican como puertas en Pelican Town, sino en la **Plaza Central** (el mapa de la Granja Host `Farm`) y en una **cadena determinista de puentes** (`Pelican4Ever_Bridge_1`, `Pelican4Ever_Bridge_2`, `Pelican4Ever_Bridge_3`) que escala dinámicamente según `FarmSlotCount`:
+    - Con `FarmSlotCount = 4`: 4 parcelas en la Granja Host (sin puentes ni paso oeste).
+    - Con `FarmSlotCount = 8`: 4 parcelas en la Granja Host + 4 en el Puente 1.
+    - Con `FarmSlotCount = 12`: 4 parcelas en la Granja Host + 4 por puente en Puentes 1 y 2.
+    - Con `FarmSlotCount = 16`: 4 parcelas en la Granja Host + 4 por puente en Puentes 1, 2 y 3.
+  * Cada puente es un recorte determinista de `35×30` casillas derivado de `Maps/BusStop`, con calzada central limpia, perímetro sellado y pasos direccionales este y oeste continuos.
+* **Portales con Borde Explícito (`PortalEdge`) y Entrada Caminando:**
+  * Cada portal residencial se orienta hacia un borde cardinal (`North` o `South` en `doors.json`), cuenta con un camino de 2 casillas de ancho despejado hasta la calzada, pavimento de losas (`stepping_stones`) y un área de despeje interior de `3×4` casillas.
+  * Al caminar hacia el portal hasta las dos últimas casillas del borde, se dispara el menú de fundación/reclamación de parcela libre o bien la entrada directa a la residencia privada si está ocupada y permitida.
+  * La entrada y salida respetan la orientación espacial inmersiva (`SpatialWarpRouter`): los portales del Norte entran por el Sur de la residencia mirando al Norte, y los del Sur entran por el Norte de la residencia mirando al Sur.
+* **Buzones Individuales:**
+  * Cada portal cuenta con su propio buzón adyacente (`TownMailboxModule` / `TownMailboxLogic`), permitiendo recibir correo privado de los NPCs o del sistema justo al salir de la residencia.
 * **Visitas y Permisos Validados por el Host:**
-  * El propietario configura su puerta en modo **`Locked`**, **`Friends`** o **`Public`**.
+  * El propietario configura su residencia en modo **`Locked`**, **`Friends`** o **`Public`**.
   * En granjas ajenas, el mod bloquea herramientas destructivas (picos, hachas, azadas sobre cultivos, bombas) y apertura de cofres, permitiendo regar en modo `Friends`/`Public`.
 
 ---

@@ -1,6 +1,6 @@
 # Pelican 4Ever (`SV-RTMP`)
 
-Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijugador en un **mundo persistente en tiempo real (1:1)** diseñado para servidores dedicados 24/7 de **hasta 16 jugadores**, con residencias privadas enlazadas a puertas de Pelican Town, anexos temáticos ampliables, economía comunitaria y supervisión DevOps remota.
+Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijugador en un **mundo persistente en tiempo real (1:1)** diseñado para servidores dedicados 24/7 de **hasta 16 jugadores**, con residencias privadas accesibles desde la Plaza Central y la cadena de puentes, anexos temáticos ampliables, economía comunitaria y supervisión DevOps remota.
 
 ---
 
@@ -13,7 +13,7 @@ Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijuga
    - **Amanecer y horarios:** El reloj, la luz y los horarios de Pelican siguen comenzando a las `06:00 AM`; el cambio de fecha no los adelanta.
 
 2. **Hasta 16 Residencias Privadas y Anexos Temáticos:**
-   - **Catálogo de Puertas:** 16 residencias individuales mapeadas en fachadas urbanas y rurales de Pelican Town, con políticas de acceso configurables (`Locked`, `Friends`, `Public`) y protección anti-griefing.
+   - **Catálogo de Portales:** 16 residencias individuales distribuidas en la Plaza Central (`Farm`) y una cadena de puentes deterministas (`Pelican4Ever_Bridge_1..3`), con políticas de acceso configurables (`Locked`, `Friends`, `Public`) y protección anti-griefing.
    - **Variedad de Granjas:** Elección de 7 tipos de granja (Estándar, Fluvial, Bosque, Colinas, Salvaje, Cuatro Esquinas y Playa) con forraje, estanques, minerales y criaturas activas por residencia.
    - **Anexos Adquiribles (40×32):** Minimapas temáticos ampliables acoplados a las salidas perimetrales libres, adquiribles con oro desde un diálogo de compra con soporte de carteras separadas.
    - **Culling Dinámico de Red:** Las residencias y anexos vacíos no consumen ancho de banda ni saturan la red de los clientes.
@@ -24,7 +24,7 @@ Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijuga
    - **Minas Persistentes:** Turnos mineros regenerados cada 12 horas (06:00 y 18:00) para repartir recursos equitativamente.
 
 4. **Inmersión y Vida Comunitaria:**
-   - **Buzones Urbanos:** Envío y recepción de cartas vecinales desde las fachadas de cada residencia.
+   - **Buzones Vecinales:** Envío y recepción de cartas vecinales junto al portal de cada residencia.
    - **Chat Multicanal y de Proximidad:** Canales global (`/g`), local con atenuación por distancia espacial (`/l`) y susurros privados (`/w`).
    - **Mercado Vecinal Asíncrono:** Tablón comunitario para compraventa de objetos y excedentes entre granjeros conectados o desconectados.
    - **Festivales Desacoplados:** Entrada y salida libre sin salto de cámara ni reseteos de hora; minijuegos competitivos por tandas con premios oficiales a las 23:50 y ceremonias comunitarias en vivo (Luau y Medusas Lunares).
@@ -48,6 +48,7 @@ El pack cosmético de Dr4co está en [`agents/Dr4co.FashionSense`](agents/Dr4co.
 * [Especificación de la API de Anfitrión (`docs/host-api.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/host-api.md)
 * [Guía del Modpack persistente (`docs/modpack.md`)](docs/modpack.md)
 * [Servidor persistente desatendido (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
+* [Arquitectura de Producción con Hermes (`docs/arquitectura-produccion-hermes.md`)](docs/arquitectura-produccion-hermes.md)
 * [Decisiones de Arquitectura (`docs/adr/`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/adr)
 
 ---

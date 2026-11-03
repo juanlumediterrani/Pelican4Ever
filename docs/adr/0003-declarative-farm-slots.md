@@ -16,7 +16,7 @@ La inspección de `Stardew Valley.dll` reveló tres restricciones del motor:
 
 1. Acotar el MVP a **4 jugadores (`FarmSlotCount = 4`)**, todos con la **plantilla de granja Estándar (`Maps\Farm`)**.
 2. Registrar de forma declarativa en `Data/Locations` (vía `Helper.Events.Content.AssetRequested`) las 4 ubicaciones fijas `Pelican4Ever_Farm_01` a `Pelican4Ever_Farm_04` con `CreateOnLoad` y `AlwaysActive = true`.
-3. Al reclamar una puerta en Pelican Town, asignar al jugador uno de los 4 huecos fijos y reubicar su `Cabin` dentro de dicho hueco.
+3. Al reclamar un portal residencial en la plaza (inicialmente proyectado en el pueblo y posteriormente consolidado en la Plaza Central y puentes mediante ADR-0005), asignar al jugador uno de los huecos fijos y reubicar su `Cabin` dentro de dicho hueco.
 
 ## Consecuencias
 

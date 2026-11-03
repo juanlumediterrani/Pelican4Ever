@@ -8,8 +8,8 @@
   * El despliegue se apoya en **JunimoServer** (o contenedor Docker Linux con `xvfb` + `noVNC`) combinando el bot nativo `DedicatedServer` con las reglas de reloj continuo de `Pelican 4Ever` (impidiendo que `DedicatedServer.Tick()` pause el mundo cuando `onlineIds.Count == 0`).
 * **Topología Cliente-Servidor y Confianza:**
   * El **mismo paquete del mod (`Pelican4Ever.dll` + `Pelican4Ever.Core.dll`) es obligatorio en Host y Clientes** (`ClientVersionGuardModule` expulsa en `PeerContextReceived` a cualquier cliente sin SMAPI o con distinta versión `Major.Minor`).
-  * **Host (`Context.IsMainPlayer`) = Fuente Única de la Verdad** para el reloj, el calendario, la asignación de puertas/granjas y el registro de jugadores (`ServerWorldState`).
-  * **Cliente (`Context.IsLocalPlayer`) = Ejecutor de Interfaz y Jugador Local** para el recorte de energía al comer (`Farmer.doneEating`), bloqueo local de herramientas en granjas ajenas, diálogos de puerta y cama. Todas las mutaciones de estado compartido se solicitan al Host vía `Helper.Multiplayer.SendMessage`.
+  * **Host (`Context.IsMainPlayer`) = Fuente Única de la Verdad** para el reloj, el calendario, la asignación de portales/residencias y el registro de jugadores (`ServerWorldState`).
+  * **Cliente (`Context.IsLocalPlayer`) = Ejecutor de Interfaz y Jugador Local** para el recorte de energía al comer (`Farmer.doneEating`), bloqueo local de herramientas en granjas ajenas, diálogos de portal y cama. Todas las mutaciones de estado compartido se solicitan al Host vía `Helper.Multiplayer.SendMessage`.
 
 ---
 
@@ -33,13 +33,21 @@ Pelican4Ever.sln
 │   ├── Economy/
 │   │   └── SatietyBudget.cs             # Presupuesto diario de Saciedad (comida) y tope del Spa
 │   └── World/
-│       └── ServerWorldState.cs          # Estado persistido en el Host + migración de esquema (v2)
+│       ├── ServerWorldState.cs          # Estado persistido en el Host + migración de esquema (v2)
+│       ├── HostPlazaLayout.cs           # Plaza Central y cadena de puentes escalables (TASK-1001)
+│       ├── DoorCatalogValidator.cs      # Validación de geometría y portales en la plaza (TASK-1002)
+│       ├── SpatialWarpRouter.cs         # Enrutamiento espacial, llegadas y retornos (TASK-1102)
+│       ├── TerrainTileClassifier.cs     # Clasificación de terreno y autotiling de caminos (TASK-1103)
+│       ├── ResidenceExits.cs            # Puntos de salida por plantilla de granja (TASK-1104)
+│       ├── PlazaCatalogFormatter.cs     # Formateo puro de /residencias para chat y consola (TASK-1304)
+│       └── PlazaTopologyVerifier.cs     # Verificación topológica, warps y áreas de despeje (TASK-1401/1403)
 ├── Pelican4Ever/                        # Mod SMAPI (.NET 6, referencia a Pelican4Ever.Core)
 │   ├── manifest.json
 │   ├── ModEntry.cs                      # Validación de config y registro aislado de módulos (IModule)
 │   ├── Framework/
 │   │   ├── IModule.cs                   # Contrato IModule { Name, Side, Register(ModContext) }
-│   │   └── ModContext.cs                # Contenedor inyectado (Helper, Monitor, Config, Harmony, WorldState)
+│   │   ├── ModContext.cs                # Contenedor inyectado (Helper, Monitor, Config, Harmony, WorldState)
+│   │   └── MapCloneHelper.cs            # Recorte determinista de puentes (35×30) y anexos
 │   ├── Models/
 │   │   └── ModDataKeys.cs               # Claves de GameLocation.modData (vista replicada de solo lectura)
 │   └── Modules/
@@ -49,10 +57,10 @@ Pelican4Ever.sln
 │       ├── RealTimeClockModule.cs       # (Iteración 1) Sincronización 1:1, NightHold y bloqueo de pausa
 │       ├── DailyRolloverModule.cs       # (Iteración 1) Avisos, disparo de NewDay nativo y SleepPolicy
 │       ├── BedLogoutModule.cs           # (Iteración 1) Intercepción de Sleep_Yes y mensaje al Host
-│       ├── FarmSlotModule.cs            # (Iteración 2) Registro en Data/Locations, Cabins y puertas
+│       ├── FarmSlotModule.cs            # (Iteración 2) Registro en Data/Locations, Cabins, plaza y portales
 │       ├── EconomyModule.cs             # (Iteración 3) SatietyBudget, Spa, precios y minas 12h
 │       └── WorldLifeModule.cs           # (Iteración 4) Micro-wandering de NPCs y festivales
-└── Pelican4Ever.Tests/                  # Suite xUnit (.NET 8) sobre Pelican4Ever.Core (59 tests)
+└── Pelican4Ever.Tests/                  # Suite xUnit (.NET 8) sobre Pelican4Ever.Core (793 tests)
 ```
 
 ---
@@ -107,16 +115,33 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 
 ---
 
-### 4.2. Subsistema 2: Huecos de Granja Declarativos (`FarmSlotModule`)
+### 4.2. Subsistema 2: Plaza Central, Puentes Declarativos y Residencias Privadas (`FarmSlotModule`)
 
-1. **Registro en `Data/Locations` (Sin ubicaciones huérfanas al cargar):**
+1. **Registro Declarativo en `Data/Locations` (Sin ubicaciones huérfanas al cargar):**
    * En `SaveGame.loadDataToLocations`, Stardew Valley 1.6 crea las ubicaciones a partir de `Data/Locations` (`CreateOnLoad`).
-   * Mediante `Helper.Events.Content.AssetRequested` sobre `"Data/Locations"`, el mod inyecta `FarmSlotCount` (4 en el MVP) entradas fijas `Pelican4Ever_Farm_01` .. `Pelican4Ever_Farm_04` clonadas de la entrada `"Farm"`, con `CreateOnLoad = new CreateLocationData { MapPath = "Maps\\Farm", Type = "StardewValley.Farm, Stardew Valley", AlwaysActive = true }`.
-   * Nota de motor (verificada en `GameLocation.cs` línea 2459): `CanBuildHere()` exige que `Game1.multiplayer.isAlwaysActiveLocation(this)` sea `true`. Para 4 jugadores del MVP se mantiene `AlwaysActive = true`, lo que garantiza compatibilidad total con Robin, edificios y animales con un coste de red despreciable para 4 pares.
-2. **Vinculación de `Cabins` y Puertas en Pelican Town:**
-   * Cada hueco `Pelican4Ever_Farm_0X` aloja la `Cabin` asociada al `Farmhand` propietario y publica `OwnerId` y `AccessPolicy` en `location.modData`.
-   * Las coordenadas de las 4 puertas en `Town` se cargan desde `assets/doors.json`. Al interactuar, el cliente muestra el menú de reclamación o visita y envía un mensaje `Helper.Multiplayer.SendMessage` al Host para reclamar puerta o cambiar `AccessPolicy`.
-   * Al salir por los bordes de `Pelican4Ever_Farm_0X` hacia `BusStop`/`Backwoods`, se intercepta el warp para dejar al jugador frente a su puerta en `Town`.
+   * Mediante `Helper.Events.Content.AssetRequested` sobre `"Data/Locations"`, el mod inyecta de forma declarativa:
+     - Las residencias privadas `Pelican4Ever_Farm_01` .. `Pelican4Ever_Farm_16` (según `FarmSlotCount`), con `CreateOnLoad = new CreateLocationData { MapPath = template.MapAssetKey, Type = "StardewValley.Farm, Stardew Valley", AlwaysActive = true }`.
+     - Los mapas puente activos `Pelican4Ever_Bridge_1..3` calculados determinísticamente según `FarmSlotCount` (`ceil((FarmSlotCount - 4) / 4)`): tipo `GameLocation`, exteriores (`Nature.NIV.Outside = "true"`), sin recurrir jamás a `Game1.locations.Add` ni a puentes volátiles en memoria.
+   * Nota de motor (verificada en `GameLocation.cs` línea 2459): `CanBuildHere()` exige que `Game1.multiplayer.isAlwaysActiveLocation(this)` sea `true`. Para los granjeros del servidor se mantiene `AlwaysActive = true`, lo que garantiza compatibilidad total con Robin, edificios y animales con un coste de red despreciable.
+
+2. **Generación Determinista de Mapas Puente (`MapCloneHelper.CreateBridgeMap`):**
+   * Cada mapa puente `Pelican4Ever_Bridge_N` (35×30) se genera recortando el área visible central `(10, 0, 35, 30)` de `Maps/BusStop`.
+   * El generador limpia el autobús averiado y arbustos centrales, sella el perímetro contra el vacío salvo las aperturas de portales y pasos activos, coloca vallas en la antigua carretera y talla los pasos Este y Oeste escribiendo los warps declarativos continuos en `map.Properties["Warp"]`.
+
+3. **Arquitectura de Dominio Puro (`Pelican4Ever.Core/World/`):**
+   * **`HostPlazaLayout`:** Define la topología y dimensiones de la plaza (`Farm` de 80×65 y puentes `Pelican4Ever_Bridge_1..3` de 35×30), el conteo de puentes según `FarmSlotCount` y los pasos encadenados Este/Oeste con sus coordenadas de llegada bidireccionales.
+   * **`DoorCatalogValidator`:** Valida el catálogo de 16 portales residenciales en `doors.json` (borde explícito `PortalEdge`, pertenencia a la plaza, márgenes y buzón adyacente).
+   * **`SpatialWarpRouter`:** Calcula de forma determinista las casillas y orientación de llegada a la residencia según el borde cardinal del portal (`North`, `South`, `West`, `East`) y la plantilla de granja, las casillas de retorno a la plaza frente a la apertura, y las casillas de disparo (`IsPortalTriggerTile`).
+   * **`TerrainTileClassifier`:** Clasifica el terreno para el tallado y autotiling procedural de caminos de losas (`stepping_stones`) respetando copas de árboles y terreno firme.
+   * **`ResidenceExits`:** Determina los puntos de salida de cada plantilla de residencia hacia el exterior.
+   * **`PlazaCatalogFormatter`:** Formatea limpiamente las listas de residencias y estados de parcelas para los comandos `/residencias` de chat y consola.
+   * **`PlazaTopologyVerifier`:** Proporciona utilidades puras para el cálculo de áreas de despeje interior de 3×4 (`GetInteriorClearanceTiles`), serialización y parseo de cadenas `Warp` (`BuildPassageWarpString`, `ParseWarpProperty`), resolución segura de retorno a la plaza (`ResolvePlazaReturnTarget`), y verificación BFS de conectividad topológica (`IsConnected`).
+
+4. **Vinculación de Residencias, Portales y Buzones:**
+   * Cada residencia `Pelican4Ever_Farm_0X` aloja la `Cabin` asociada al `Farmhand` propietario y publica `OwnerId` y `AccessPolicy` en `location.modData`.
+   * Los 16 portales residenciales se distribuyen entre la Granja Host (4 portales) y los puentes (4 portales por puente).
+   * Al caminar hasta el portal hacia el borde del mapa, el mod abre el diálogo de fundación si la parcela está libre, o teletransporta de forma fluida a la residencia privada si está ocupada y permitida.
+   * Cada portal dispone de un buzón adyacente individual (`TownMailboxModule`), permitiendo gestionar el correo personal al entrar o salir de la residencia sin interferencias.
 
 ---
 
@@ -149,3 +174,4 @@ Las decisiones arquitectónicas clave y sus alternativas descartadas están docu
 * **ADR-0002:** Reloj 1:1 (`0600–2550`) con congelación en Madrugada (`NightHold`) y calendario derivado de `CalendarEpoch`.
 * **ADR-0003:** 4 huecos de granja declarativos (`Data/Locations`) con plantilla Estándar para el MVP.
 * **ADR-0004:** Autoridad en el Host (`ServerWorldState`), mod obligatorio en clientes y registro modular aislado (`IModule`).
+* **ADR-0005:** Plaza Central en la Granja Host y Mapas Puente Declarativos (`Data/Locations`) para el escalado de hasta 16 residencias privadas.

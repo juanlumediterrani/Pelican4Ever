@@ -50,9 +50,9 @@ En el archivo `config.json` generado por Nature In The Valley (`Mods/NatureInThe
 * Aumentar `MaxSpawnsPerLocation` (o multiplicador de densidad) a un factor de **2.5x o 3x**.
 * Esto asegura que cuando haya 16 granjeros activos recorriendo el Valle simultáneamente, todos encuentren fauna sin agotar la cuota global de la partida.
 
-### 3. Spawns en las 16 Residencias Privadas y Minimapas Anexos (40×32)
+### 3. Spawns en las 16 Residencias Privadas, Plaza Central y Puentes
 * Las criaturas de NITV y SH's Wild Animals se clasifican mediante etiquetas oficiales de entorno en `Data/Locations`:
-  * `"Nature.NIV.Outside"`: Habilitado en las 16 parcelas privadas, todos los anexos perimetrales y la Plaza Central del Host.
+  * `"Nature.NIV.Outside"`: Habilitado en las 16 parcelas privadas, todos los anexos perimetrales, la Plaza Central del Host (`Farm`) y en todos los mapas puente de la plaza (`Pelican4Ever_Bridge_1..3`) mediante `FarmTemplateCatalog.ApplyNitvCustomFields`. Esto garantiza que la fauna salvaje exterior de *Nature In The Valley* aparezca de forma continua y natural tanto en la granja anfitriona como en toda la cadena de puentes transitables.
   * `"Nature.NIV.Forest"`: Inyectado dinámicamente en parcelas y anexos de Recolección (*Foraging*) y Cuatro Esquinas (*FourCorners*). Permite la aparición de fauna de bosque sin depender de superar 60 árboles.
   * `"Nature.NIV.Beach"`: Inyectado dinámicamente en parcelas y anexos Fluviales (*Fishing*) y Costeros (*Beach*). Permite la aparición de fauna acuática y de litoral.
   * `"Nature.NIV.Underground"`: Inyectado en las cuevas privadas de cada residencia (`Pelican4Ever_Farm_XX_Cave`) para habilitar criaturas subterráneas.
