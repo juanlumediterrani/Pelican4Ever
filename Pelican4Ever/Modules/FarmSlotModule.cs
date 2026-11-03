@@ -3388,6 +3388,9 @@ namespace Pelican4Ever.Modules
                     baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.CellarSuffix.Length);
                 else if (baseSlot.EndsWith(ResidenceUpgradeLogic.GreenhouseSuffix, StringComparison.OrdinalIgnoreCase))
                     baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.GreenhouseSuffix.Length);
+                // Interior de la residencia: aplicar la política de la parcela y no crear una granja "…_Home"
+                else if (baseSlot.EndsWith(ResidenceUpgradeLogic.CabinHomeSuffix, StringComparison.OrdinalIgnoreCase))
+                    baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.CabinHomeSuffix.Length);
 
                 if (Context.IsMainPlayer && locationRequest.Location == null)
                 {
