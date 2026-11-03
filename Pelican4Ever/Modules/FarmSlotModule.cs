@@ -2991,7 +2991,11 @@ namespace Pelican4Ever.Modules
                 {
                     if (Game1.getLocationFromName(locName) == null)
                     {
-                        var cellar = savedLoc as Cellar ?? new Cellar("Maps\\Cellar", locName);
+                        // El objeto deserializado del save no tiene mapa cargado: usarlo como ubicación real hace que
+                        // TransferDataFromSavedLocation falle (UpdateMapSeats con mapa nulo). Se crea una ubicación nueva
+                        // con su mapa y el juego le transfiere el estado guardado.
+                        string cellarMap = !string.IsNullOrWhiteSpace(savedLoc!.mapPath.Value) ? savedLoc.mapPath.Value : "Maps\\Cellar";
+                        var cellar = new Cellar(cellarMap, locName);
                         Game1.locations.Add(cellar);
                         context?.Monitor.Log($"[FarmSlotModule] Sótano privado restaurado desde guardado: {locName}", LogLevel.Trace);
                     }
@@ -3002,7 +3006,8 @@ namespace Pelican4Ever.Modules
                 {
                     if (Game1.getLocationFromName(locName) == null)
                     {
-                        var ghLoc = savedLoc ?? new GameLocation("Maps\\Greenhouse", locName);
+                        string ghMap = !string.IsNullOrWhiteSpace(savedLoc!.mapPath.Value) ? savedLoc.mapPath.Value : "Maps\\Greenhouse";
+                        var ghLoc = new GameLocation(ghMap, locName);
                         ghLoc.isGreenhouse.Value = true;
                         ghLoc.IsFarm = true;
                         Game1.locations.Add(ghLoc);
@@ -3019,7 +3024,8 @@ namespace Pelican4Ever.Modules
                         string mapPath = !string.IsNullOrWhiteSpace(savedLoc!.mapPath.Value)
                             ? savedLoc.mapPath.Value
                             : "Maps/Farm";
-                        var farm = savedLoc as Farm ?? new Farm(mapPath, locName);
+                        // Ubicación nueva con mapa cargado; el objeto deserializado (sin mapa) solo aporta el estado a transferir.
+                        var farm = new Farm(mapPath, locName);
                         farm.isAlwaysActive.Value = true;
                         Game1.locations.Add(farm);
                         context?.Monitor.Log($"[FarmSlotModule] Pre-registrada residencia {locName} ({mapPath}) para restaurar cultivos y estructuras.", LogLevel.Trace);
