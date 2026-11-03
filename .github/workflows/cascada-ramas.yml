@@ -63,12 +63,26 @@ jobs:
             echo "::error::Cascada $from → $to detenida ($motivo): PR abierto desde $branch."
           }
 
+          # limpiar_revision <origen> <destino>: con la fusión ya en el destino, borra la rama
+          # cascada/<origen>-a-<destino> si queda alguna y no tiene un PR abierto. Una rama obsoleta
+          # haría que el siguiente fallo (que no fuerza el push) abriera el PR con contenido viejo.
+          limpiar_revision() {
+            local from="$1" to="$2"
+            local branch="cascada/${from//\//-}-a-${to//\//-}"
+            git ls-remote --exit-code --heads origin "$branch" >/dev/null || return 0
+            if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+              git push origin --delete "$branch"
+              echo "Rama $branch borrada: ya no hace falta."
+            fi
+          }
+
           # cascada <origen> <destino>: 0 si el destino ya contiene el origen o se subió la fusión.
           cascada() {
             local from="$1" to="$2"
             git fetch --quiet origin "$from" "$to"
             if git merge-base --is-ancestor "origin/$from" "origin/$to"; then
               echo "$to ya contiene $from."
+              limpiar_revision "$from" "$to"
               return 0
             fi
             git checkout --quiet -B "$to" "origin/$to"
@@ -85,6 +99,7 @@ jobs:
             fi
             git push origin "$to"
             echo "$from fusionada en $to."
+            limpiar_revision "$from" "$to"
           }
 
           cascada main pelican/desarrollo
