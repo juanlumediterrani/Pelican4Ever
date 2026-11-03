@@ -941,13 +941,17 @@ namespace Pelican4Ever.Modules
                     int lx = door.TownTileX - 1;
                     int rx = door.TownTileX + 2;
 
-                    // Remate de valla canónico en el límite sur (y = 28)
-                    SetTileIfValid(bld, sheetOutdoors, lx, 28, 385);
-                    SetTileIfValid(front, sheetOutdoors, lx, 27, 360);
-                    SetTileIfValid(bld, sheetOutdoors, rx, 28, 383);
-                    SetTileIfValid(front, sheetOutdoors, rx, 27, 358);
+                    // 1. Limpiar completamente Front en la zona del portal y valla (x = lx - 1 .. rx + 1, y = 26..29)
+                    // para eliminar hojas cortadas residuales de arbustos y árboles vanilla (ej. 232, 101, 26, 126, 51)
+                    for (int x = lx - 1; x <= rx + 1; x++)
+                    {
+                        for (int y = 26; y <= 29; y++)
+                        {
+                            ClearTile(front, x, y);
+                        }
+                    }
 
-                    // Limpiar follaje y ramas cortadas en AlwaysFront
+                    // 2. Limpiar follaje y ramas cortadas en AlwaysFront
                     for (int x = lx - 1; x <= rx + 2; x++)
                     {
                         for (int y = 23; y <= 29; y++)
@@ -958,14 +962,24 @@ namespace Pelican4Ever.Modules
                         }
                     }
 
-                    // Detalle decorativo: farola de madera o roca en el lado opuesto al buzón (junto al portal en y = 27)
+                    // 3. Remate de valla canónico en el límite sur (poste en Buildings y=28, remate en Front y=27)
+                    SetTileIfValid(bld, sheetOutdoors, lx, 28, 385);
+                    SetTileIfValid(front, sheetOutdoors, lx, 27, 360);
+                    ClearTile(bld, lx, 27);
+
+                    SetTileIfValid(bld, sheetOutdoors, rx, 28, 383);
+                    SetTileIfValid(front, sheetOutdoors, rx, 27, 358);
+                    ClearTile(bld, rx, 27);
+
+                    // 4. Detalle decorativo: farola de madera o roca en el prado salvaje, junto al camino (y = 26)
+                    // Colocado en (rx, 26) para que el remate del poste en Front (rx, 27) quede nítido y sin solapar
                     if (door.TownTileX <= 15)
                     {
-                        SetTileIfValid(bld, sheetOutdoors, rx, 27, 378); // Farola de madera
+                        SetTileIfValid(bld, sheetOutdoors, rx, 26, 378); // Farola de madera
                     }
                     else
                     {
-                        SetTileIfValid(bld, sheetOutdoors, rx, 27, 307); // Roca decorativa
+                        SetTileIfValid(bld, sheetOutdoors, rx, 26, 307); // Roca decorativa
                     }
                 }
             }
