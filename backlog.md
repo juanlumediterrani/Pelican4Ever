@@ -486,3 +486,248 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Un anexo fluvial pesca la tabla fluvial y tiene burbujas de peces.
     2. Un anexo de Colinas genera mineral a diario dentro de su zona.
     3. Un anexo salvaje tiene monstruos nocturnos y la residencia estándar a la que pertenece no.
+
+---
+
+### Épica 10: Plaza Central en la Granja Host y Mapas Puente (rama `refactor/residence-entrances`)
+> **Objetivo:** Llegar a las 16 residencias desde la Granja Host sin pasar por mapas vanilla. La Granja Host tiene cinco salidas: cuatro portales y un paso al oeste hacia una cadena de hasta tres mapas puente. Cada puente tiene cuatro portales. Todo debe funcionar igual en el host y en los clientes, sobrevivir a un reinicio y probarse en Core. Decisión de diseño: ADR-0005.
+
+**Situación de partida (commit `019235f`, revisión del 2026-11-03):**
+- `doors.json` reparte las parcelas así:
+  - Granja Host (`Farm`): 01–04, portales en `x=18/62` e `y=1/63`.
+  - Puentes 1–3, cuatro parcelas cada uno: 05–08, 09–12 y 13–16, portales en `x=8/25` e `y=1/28`.
+- `EnsureBridgeLocations` crea los puentes en caliente, como copias de `Maps/BusStop`, con `Game1.locations.Add` y sin entrada en `Data/Locations`. Se ejecuta también en los clientes y no depende de `FarmSlotCount` (por defecto 4).
+- Los warps de la cadena de puentes están escritos a mano en el código, y `reloadMap` y `updateWarps` los sustituyen por los warps vanilla de `BusStop`.
+- Siguen atados al nombre `"Farm"`:
+  - la detección del portal libre (`OnUpdateTicked`);
+  - la colisión de las aperturas (`Prefix_IsCollidingPosition`);
+  - el refresco de portales tras `DoorsSync`.
+
+  Por eso las parcelas 05–16 no pueden fundarse caminando.
+- La geometría se deduce de umbrales que no coinciden entre sí:
+  - `SpatialWarpRouter` usa `>= 28` y `>= 60`.
+  - `TerrainTileClassifier` usa `>= 25`.
+  - La sobrecarga antigua de `TerrainTileClassifier` asigna `x=25` al portal 02, que está en `x=62`, y `x=18` al portal 05, que está en `x=8`.
+- El paso oeste de la Granja Host (`x=0`, `y=26..27`) no se talla en `Maps/Pelican4Ever_HostFarm`. Al volver del puente se llega a `(2, 26)`, y no se ha comprobado que esa casilla sea transitable.
+- Los caminos norte de la Granja Host pasaron de llegar hasta `y=10` a llegar hasta `y=4`. Además se quitaron el margen despejado al final del camino y los warps del borde absoluto. Falta comprobar en partida que no quede un camino sin salida contra el acantilado.
+- `MapVisualizerTests` escribe en una ruta absoluta de otro equipo (`~/.var/app/com.google.AndroidStudio/...`) y solo comprueba que el fichero existe.
+- `main` va tres commits por delante: `87a575e`, `9b42a58` y `542d46d`.
+
+**Orden de trabajo:** primero la fase A, después la B y la C, que se pueden hacer a la vez; a continuación la D y, por último, la E. Las tareas de una misma fase son independientes salvo que se indique lo contrario.
+
+#### Fase A — Integración y red de seguridad
+
+- [ ] **TASK-1001: Integrar `main` en la rama sin reabrir el StackOverflow de `findStructure`**
+  * **Análisis Técnico:**
+    - Fusionar `main` (`87a575e`, `9b42a58` y `542d46d`) en `refactor/residence-entrances`.
+    - El 2026-11-03 se simuló la fusión: entra sin conflictos y conserva el `return false` final de `Prefix_FindStructure`. La rama sigue cambiando, así que puede haber conflictos más adelante en `FarmSlotModule.cs`.
+    - Si los hay, conservar **siempre** la versión de `main` de `Prefix_FindStructure`: nunca debe delegar en el original. Un `return true` reabre la recursión `Building.GetIndoors()` → `Game1.getLocationFromName` → `findStructure`, que provoca un StackOverflow.
+    - Conservar también el tratamiento del sufijo `_Home` en `Prefix_WarpFarmer` (`542d46d`). Su rama de código está justo antes de la salida de la residencia que esta épica modifica.
+    - Aplicar `FindStructureGuard.patch`: añade `FindStructureGuardTests`, que lee el código fuente y falla si `Prefix_FindStructure` contiene `return true`, si no termina en `return false;` o si aparece dos veces. Se ha comprobado que pasa en `main` y falla con la versión actual de la rama.
+    - Compilar las comprobaciones con `-p:EnableModDeploy=false`. Sin esa opción, ModBuildConfig sobrescribe el mod instalado en `Mods/Pelican4Ever`.
+  * **Prioridad:** Crítica
+  * **Criterios de Aceptación:**
+    1. `FindStructureGuardTests` pasa en la rama después de la fusión.
+    2. `dotnet test` y la compilación del mod pasan sin errores.
+    3. Entrar en un invernadero o en una residencia sin instanciar no provoca StackOverflow.
+
+- [ ] **TASK-1002: Sanear `MapVisualizerTests`**
+  * **Análisis Técnico:**
+    - Escribir el diagrama en `Path.GetTempPath()`, o en `TestContext`, en lugar de la ruta absoluta de otro equipo.
+    - Convertirlo en un test de verdad, que compruebe por cada ubicación de la plaza que:
+      - ningún portal ni su camino se sale del mapa;
+      - los caminos de dos portales no se solapan;
+      - ningún camino se cruza con los pasos este y oeste de la cadena.
+    - La salida ASCII queda como artefacto opcional.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1101, para las medidas de cada ubicación.
+  * **Criterios de Aceptación:**
+    1. El test pasa en cualquier equipo y en CI sin crear carpetas fuera del directorio temporal.
+    2. Si se desplaza un portal de `doors.json` fuera de su mapa, el test falla.
+
+#### Fase B — Geometría explícita en Core
+
+- [ ] **TASK-1101: Catálogo `HostPlazaLayout` (Core)**
+  * **Análisis Técnico:**
+    - Nuevo `Pelican4Ever.Core/World/HostPlazaLayout.cs`, con un registro inmutable por ubicación:
+      - `Name`, `Width` y `Height`;
+      - `WestPassage` y `EastPassage`: filas de la apertura, destino y casilla de llegada.
+    - Medidas: `Farm` 80×65; `Pelican4Ever_Bridge_1..3` 35×30.
+    - `BridgeCount(int farmSlotCount)` = `clamp(ceil((farmSlotCount − 4) / 4), 0, 3)`.
+    - `IsPlazaLocation(string name)`.
+    - `Chain(int farmSlotCount)` devuelve la cadena ordenada. El último puente no tiene paso oeste y, si no hay puentes, la Granja Host tampoco.
+    - Los nombres `Pelican4Ever_Bridge_N` salen de una sola constante. Hoy el array está repetido en dos sitios del módulo y en el test.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Con `FarmSlotCount` = 4, 5, 8, 9 y 16 hay 0, 1, 1, 2 y 3 puentes.
+    2. Cada paso oeste de la cadena lleva al paso este del mapa siguiente, y al revés (test de ida y vuelta).
+    3. Las casillas de llegada caen dentro del mapa de destino y a una casilla del warp de vuelta, para no volver a dispararlo.
+
+- [ ] **TASK-1102: Borde explícito del portal (`PortalEdge`) en `doors.json` y `DoorModel`**
+  * **Análisis Técnico:**
+    - Añadir `"Edge": "North" | "South" | "West" | "East"` a cada entrada de `assets/doors.json` y a `DoorModel`.
+    - Al cargar, validar en Core que el borde coincide con las coordenadas y con las medidas de la ubicación (`HostPlazaLayout`): el norte es `y <= 2` y el sur es `y >= Height − 3`.
+    - Si una entrada no es válida, se registra con `LogLevel.Error` y se ignora. No se adivina el borde.
+    - Validar también que `DefaultSlotId` es único y que `LocationName` pertenece a la plaza.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1101.
+  * **Criterios de Aceptación:**
+    1. Las 16 entradas actuales pasan la validación.
+    2. Un portal sur colocado en `y=10` de un puente se rechaza con un error claro.
+
+- [ ] **TASK-1103: Migrar `SpatialWarpRouter` a borde y medidas**
+  * **Análisis Técnico:**
+    - Cambiar las firmas de estas funciones para que reciban `PortalEdge` y la altura y anchura de la ubicación, en vez de los umbrales `60`, `28`, `2` y `75`:
+      - `GetResidenceArrivalCoordinates`
+      - `ShouldReturnToHostFarm`, que pasa a llamarse `ShouldReturnToPlaza`
+      - `GetHostFarmReturnCoordinates`, que pasa a llamarse `GetPlazaReturnCoordinates`
+      - `IsSouthBorderPortal`
+      - `GetResidencePathTiles`
+      - `IsPortalTriggerTile`
+      - `IsInOpeningOrBorder`
+    - `HostFarmMaxTileX` y `HostFarmMaxTileY` desaparecen del router: el borde se calcula como `Width − 1` y `Height − 1`.
+    - Profundidad del camino por borde:
+      - En la Granja Host, el camino norte debe llegar al campo despejado. La rama lo redujo de `y=10` a `y=4`; decidir el valor en TASK-1302 y declararlo en el layout.
+      - En los puentes, el camino sur empieza en `Height − 5`.
+    - `ResidenceExits.FreeSides` deja de llamar a `ShouldReturnToHostFarm` con nombres vanilla y pasa a trabajar con `PortalEdge`.
+    - Actualizar `SpatialWarpRouterTests`, `AnnexTests` y `WorldStateAndDoorsTests` con casos para la Granja Host y para un puente en cada borde.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1102.
+  * **Criterios de Aceptación:**
+    1. No queda ningún literal `60`, `28`, `25`, `64`, `75` ni `79` de geometría de portal en `SpatialWarpRouter` ni en `ResidenceExits`.
+    2. Los tests cubren, por cada borde, la llegada a la residencia, la vuelta a la plaza y las casillas del camino y del disparo.
+
+- [ ] **TASK-1104: Migrar `TerrainTileClassifier` a borde y medidas**
+  * **Análisis Técnico:**
+    - `IsGrassEnvironment` e `IsMailboxOnGrass` reciben `PortalEdge` y la altura de la ubicación. El sur deja de ser `>= 25` en un sitio y `>= 28` en otro.
+    - Eliminar la sobrecarga antigua de `GetPathTileInfo`, que deduce `townTileX` del `doorId` y asigna mal las columnas: la puerta 02 está en `x=62` y no en 25, y la 05 en `x=8` y no en 18. Los llamantes pasan las coordenadas reales del `DoorModel`.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1102.
+  * **Criterios de Aceptación:**
+    1. `TerrainTileClassifierTests` cubre un portal de cada borde en la Granja Host y en un puente.
+    2. No queda ninguna lista de `DoorId` escrita a mano en el clasificador.
+
+#### Fase C — Puentes declarativos (host y clientes)
+
+- [ ] **TASK-1201: Registrar los puentes en `Data/Locations`**
+  * **Análisis Técnico:**
+    - En `FarmSlotModule.OnAssetRequested`, añadir `Pelican4Ever_Bridge_N` para `N = 1..BridgeCount(FarmSlotCount)`, con:
+      - `CreateOnLoad`: `MapPath = "Maps/Pelican4Ever_Bridge_N"` y `Type = "StardewValley.GameLocation, Stardew Valley"`;
+      - `AlwaysActive = false`: es un mapa público de paso y el culling no lo necesita.
+    - Al cambiar `FarmSlotCount`, invalidar `Data/Locations`, igual que hace `RefreshSlotLocationData` con los huecos.
+    - Eliminar `EnsureBridgeLocations` y su `Game1.locations.Add`. Ni el host ni los clientes deben crear ubicaciones en caliente.
+    - Partidas guardadas con puentes creados en caliente: comprobar si `SaveGame.loadDataToLocations` los descarta sin errores. Si un jugador se desconectó dentro de un puente (`disconnectLocation` o `lastSleepLocation`), reubicarlo en la Granja Host al conectarse.
+    - `CustomFields` de NITV: decidir si los puentes llevan `Nature.NIV.Outside`, como la Plaza Central (`docs/modpack.md`).
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1101.
+  * **Criterios de Aceptación:**
+    1. Tras guardar, reiniciar el servidor y cargar, los puentes existen y conservan los objetos que se dejaron en el suelo.
+    2. Un cliente que cruza al puente 1 ve al host y a otros clientes en el mismo puente, porque la ubicación se sincroniza por red.
+    3. Con `FarmSlotCount = 4` no existe ningún puente y la Granja Host no tiene paso oeste.
+
+- [ ] **TASK-1202: Generar el mapa `Maps/Pelican4Ever_Bridge_N`**
+  * **Análisis Técnico:**
+    - En `AssetRequested`, clonar la plantilla con `MapCloneHelper.CloneMap`. La plantilla actual es `Maps/BusStop`; valorar otra más neutra si `BusStop` da problemas.
+    - Limpiar la plantilla:
+      - quitar la propiedad de mapa `Warp`;
+      - quitar las acciones de tile vanilla (`Action` y `TouchAction`, como la máquina de billetes y el autobús);
+      - quitar los tiles del autobús y de la parada si estorban.
+    - Escribir en la propiedad `Warp` del mapa los pasos este y oeste de `HostPlazaLayout.Chain`, para que `reloadMap` y `updateWarps` los respeten.
+    - Tallar en el mapa, igual que en la Granja Host, las aperturas de los portales (`ClearDoorAreaOnMap`), los buzones (`PlaceMailboxTiles`) y los caminos de los pasos este y oeste.
+    - El resultado debe ser determinista: el mismo mapa en el host y en los clientes, porque ambos generan el asset por su cuenta.
+    - Añadir a Core un test sobre una descripción abstracta del mapa: los pasos y los portales no se solapan.
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1201 y TASK-1103.
+  * **Criterios de Aceptación:**
+    1. Desde ningún puente se llega a `Farm` por el oeste ni a `Town` o `Backwoods` por los warps de `BusStop`.
+    2. Tras `reloadMap` (cambio de estación o reconexión), los pasos de la cadena siguen funcionando.
+    3. Las filas de los pasos y las casillas de llegada son transitables en partida.
+
+- [ ] **TASK-1203: Tallar el paso oeste en `Maps/Pelican4Ever_HostFarm`**
+  * **Análisis Técnico:**
+    - Al generar el mapa de la Granja Host, despejar las filas del paso oeste (`HostPlazaLayout`, hoy `y=26..27`) desde `x=0` hasta un campo abierto, con camino y sin `Passable` bloqueante.
+    - Declarar el warp en la propiedad `Warp` del mapa en lugar de añadirlo en caliente, y solo si `BridgeCount > 0`.
+    - Comprobar que la casilla de llegada desde el puente (hoy `(2, 26)`) queda libre de árboles, troncos y escombros, también al empezar un día nuevo, porque `Farm` genera escombros. Si hace falta, despejarla en `DayStarted`, como los caminos de los portales.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1101.
+  * **Criterios de Aceptación:**
+    1. Se puede ir caminando de la Granja Host al puente 1 y volver sin quedarse atascado en ninguna estación.
+    2. El paso sigue despejado tras varios días de juego.
+
+#### Fase D — Ejecución sobre «ubicación de la plaza» en vez de `"Farm"`
+
+- [ ] **TASK-1301: Generalizar la detección de portal, la colisión y el refresco**
+  * **Análisis Técnico:**
+    - `OnUpdateTicked`: aceptar cualquier `GameLocation` que cumpla `HostPlazaLayout.IsPlazaLocation`, no solo `Farm`, y filtrar las puertas por `door.LocationName == currentLocation.NameOrUniqueName`. Mantener el `portalPromptGate.Reset()` al salir de la plaza.
+    - `Prefix_IsCollidingPosition`: lo mismo, comprobando solo las puertas de la ubicación actual. Ahora recorre todas las de `RegisteredDoors`, también las de otros mapas con coordenadas coincidentes: por ejemplo, `(25, 1)` existe en los tres puentes.
+    - `OnWarped`: llamar a `EnsureLocationPortals` al entrar en cualquier ubicación de la plaza, no solo en `Farm`.
+    - Al recibir `DoorsSync` en el cliente: refrescar la ubicación de la plaza en la que esté, no solo `Farm`.
+    - `HandleClaimDoor`: refrescar solo la ubicación de la puerta reclamada (`door.LocationName`).
+    - `EnsureLocationPortals`: separar las partes que solo tienen sentido en `Farm` (cartel antiguo, cuenco de la mascota y troncos) de las comunes.
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1201 y TASK-1103.
+  * **Criterios de Aceptación:**
+    1. Un jugador sin residencia puede fundar las parcelas 05–16 caminando hasta su portal en el puente.
+    2. Las aperturas de un puente no bloquean al jugador, y las de un puente no afectan a otro.
+    3. Tras reclamar una parcela del puente 2, un cliente que ya está en ese puente ve el warp activo sin tener que salir y volver a entrar.
+
+- [ ] **TASK-1302: Validar los caminos de la Granja Host tras el cambio de profundidad**
+  * **Análisis Técnico:**
+    - La rama acortó los caminos norte de `y=10` a `y=4` y quitó el margen despejado y los warps del borde absoluto. Comprobar en partida que los portales 01 y 02 llegan a terreno abierto.
+    - Si no llegan, declarar la profundidad por portal o por ubicación en `HostPlazaLayout` (TASK-1103) en lugar de volver a escribir un literal.
+    - Decidir si hace falta recuperar el margen despejado al final del camino. Si hace falta, implementarlo una sola vez en función del `PortalEdge`.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1103.
+  * **Criterios de Aceptación:**
+    1. Desde cada portal de la Granja Host se llega caminando al resto de la granja sin obstáculos.
+
+- [ ] **TASK-1303: Vuelta desde la residencia a su ubicación de origen**
+  * **Análisis Técnico:**
+    - `Prefix_WarpFarmer` ya usa `door.LocationName` como destino. Migrarlo a `ShouldReturnToPlaza` y `GetPlazaReturnCoordinates` con `PortalEdge` (TASK-1103).
+    - Revisar los otros caminos de vuelta y añadir un test por cada uno:
+      - el despertar en la cama;
+      - la reubicación de respaldo de la línea 3879, que hoy solo distingue `Farm`;
+      - el tótem y el obelisco, que van a la residencia y no deberían cambiar;
+      - la salida de los anexos.
+    - Si el destino de la reubicación de respaldo es un puente que ya no existe porque bajó `FarmSlotCount`, usar la Granja Host.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1103 y TASK-1201.
+  * **Criterios de Aceptación:**
+    1. Al salir de la residencia 10 se aparece frente a su portal en el puente 2, mirando hacia el interior.
+    2. Ninguna salida de residencia ni de anexo lleva a un mapa vanilla.
+
+- [ ] **TASK-1304: Catálogo `/residencias` y textos**
+  * **Análisis Técnico:**
+    - `/residencias` y `/doors` deben mostrar la ubicación de cada parcela (Granja Host o Puente N) y ocultar las que superan `FarmSlotCount`.
+    - El mensaje de bienvenida y las descripciones de `doors.json` deben hablar de la Plaza Central y de los puentes.
+  * **Prioridad:** Baja
+  * **Criterios de Aceptación:**
+    1. Con `FarmSlotCount = 8`, el catálogo lista 8 parcelas, cuatro de ellas en el «Puente 1».
+
+#### Fase E — Verificación en partida y documentación
+
+- [ ] **TASK-1401: Recorrido de verificación con host y cliente**
+  * **Análisis Técnico:** Con `FarmSlotCount = 16`, un host dedicado y al menos un cliente real, recorrer y anotar:
+    1. Granja Host → puente 1 → puente 2 → puente 3, y la vuelta, en ambos sentidos.
+    2. Fundar las parcelas 05 (norte del puente 1) y 12 (sur del puente 2).
+    3. Entrar y salir de esas residencias y comprobar el lado de llegada y la orientación.
+    4. Comprobar los buzones de esas parcelas y su aviso de correo.
+    5. Comprobar la visibilidad mutua del host y el cliente dentro de cada puente.
+    6. Ejecutar `reloadMap` (cambio de estación o reconexión) y volver a probar los pasos.
+    7. Guardar, reiniciar el servidor y repetir los puntos 1 y 3.
+    8. Dormir en una residencia de un puente y despertar en ella.
+  * **Prioridad:** Crítica
+  * **Dependencias:** Fases A–D.
+  * **Criterios de Aceptación:**
+    1. Los ocho puntos pasan, y se anota el resultado en esta tarea con la fecha y el commit probado.
+
+- [ ] **TASK-1402: Actualizar la documentación**
+  * **Análisis Técnico:**
+    - `design.md` §5: hoy habla de 4 huecos y de puertas en Pelican Town; describir la Plaza Central y los puentes.
+    - `architecture.md`: ubicaciones de la plaza y `HostPlazaLayout`.
+    - Pasar el ADR-0005 a «Aceptado», con el resultado de TASK-1401.
+    - `docs/modpack.md`: estado de NITV en los puentes.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1401.
+  * **Criterios de Aceptación:**
+    1. Ningún documento describe las residencias como puertas de Pelican Town ni limita la plaza a la Granja Host.
