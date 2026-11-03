@@ -4038,10 +4038,15 @@ namespace Pelican4Ever.Modules
                 slotId = assignment.FarmSlotId;
             }
 
+            assignment ??= context?.WorldState?.Doors?.Values.FirstOrDefault(d => string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase));
+
             Farm? farm = Game1.getLocationFromName(slotId) as Farm;
             if (farm == null && Context.IsMainPlayer)
             {
-                farm = EnsureFarmSlotExists(slotId);
+                if (assignment != null)
+                {
+                    farm = EnsureFarmSlotExists(slotId);
+                }
             }
 
             if (farm == null)
@@ -4103,25 +4108,15 @@ namespace Pelican4Ever.Modules
             {
                 SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? 16);
 
-                // 1. Identificar si el jugador posee una residencia asignada
+                // 1. Identificar si el jugador posee una residencia asignada en WorldState
                 DoorAssignment? assignment = context?.WorldState?.Doors?.Values
                     .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
 
                 string? assignedSlotId = assignment?.FarmSlotId;
-                if (string.IsNullOrEmpty(assignedSlotId))
+                if (string.IsNullOrEmpty(assignedSlotId) && context?.WorldState?.Players != null
+                    && context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var playerRec) && !string.IsNullOrEmpty(playerRec.FarmSlotId))
                 {
-                    if (!string.IsNullOrEmpty(who.homeLocation.Value) && who.homeLocation.Value.StartsWith("Pelican4Ever_Farm_", StringComparison.OrdinalIgnoreCase))
-                    {
-                        assignedSlotId = who.homeLocation.Value.EndsWith("_Home", StringComparison.OrdinalIgnoreCase)
-                            ? who.homeLocation.Value.Substring(0, who.homeLocation.Value.Length - 5)
-                            : who.homeLocation.Value;
-                    }
-                    else if (!string.IsNullOrEmpty(who.lastSleepLocation.Value) && who.lastSleepLocation.Value.StartsWith("Pelican4Ever_Farm_", StringComparison.OrdinalIgnoreCase))
-                    {
-                        assignedSlotId = who.lastSleepLocation.Value.EndsWith("_Home", StringComparison.OrdinalIgnoreCase)
-                            ? who.lastSleepLocation.Value.Substring(0, who.lastSleepLocation.Value.Length - 5)
-                            : who.lastSleepLocation.Value;
-                    }
+                    assignedSlotId = playerRec.FarmSlotId;
                 }
 
                 if (!string.IsNullOrEmpty(assignedSlotId))
@@ -4132,7 +4127,7 @@ namespace Pelican4Ever.Modules
                 // 2. Intentar despertar en la ubicación de última desconexión si es el mismo día
                 string? discName = who.disconnectLocation.Value;
                 GameLocation? disconnectLoc = !string.IsNullOrEmpty(discName)
-                    ? (Game1.getLocationFromName(discName) ?? (discName.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) ? ResolveResidenceCabin(discName, assignment) : null))
+                    ? (Game1.getLocationFromName(discName) ?? (discName.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) && assignment != null ? ResolveResidenceCabin(discName, assignment) : null))
                     : null;
 
                 if (disconnectLoc != null && who.disconnectDay.Value == Game1.MasterPlayer.stats.DaysPlayed && !Game1.newDaySync.hasInstance())
@@ -4145,7 +4140,7 @@ namespace Pelican4Ever.Modules
                     // 3. Intentar despertar en la cama donde durmió
                     string? lastSleep = who.lastSleepLocation.Value;
                     GameLocation? lastSleepLoc = !string.IsNullOrEmpty(lastSleep)
-                        ? (Game1.getLocationFromName(lastSleep) ?? (lastSleep.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) ? ResolveResidenceCabin(lastSleep, assignment) : null))
+                        ? (Game1.getLocationFromName(lastSleep) ?? (lastSleep.EndsWith("_Home", StringComparison.OrdinalIgnoreCase) && assignment != null ? ResolveResidenceCabin(lastSleep, assignment) : null))
                         : null;
 
                     if (lastSleepLoc == null && !string.IsNullOrEmpty(assignedSlotId))
@@ -4183,10 +4178,9 @@ namespace Pelican4Ever.Modules
                         // 4. Intentar despertar en su FarmHouse / Cabin de residencia
                         Cabin? homeCabin = !string.IsNullOrEmpty(assignedSlotId)
                             ? ResolveResidenceCabin($"{assignedSlotId}_Home", assignment)
-                            : (!string.IsNullOrEmpty(who.homeLocation.Value) ? Game1.getLocationFromName(who.homeLocation.Value) as Cabin : null);
+                            : null;
 
-                        FarmHouse? farmHouse = homeCabin
-                            ?? (!string.IsNullOrEmpty(who.homeLocation.Value) ? Game1.getLocationFromName(who.homeLocation.Value) as FarmHouse : null);
+                        FarmHouse? farmHouse = homeCabin;
 
                         if (farmHouse != null)
                         {
@@ -4244,7 +4238,12 @@ namespace Pelican4Ever.Modules
                 context?.Monitor.Log($"[FarmSlotModule] Advertencia en Prefix_ApplyWakeUpPosition: {ex.Message}. Aplicando recuperación segura.", LogLevel.Warn);
                 DoorAssignment? assignment = context?.WorldState?.Doors?.Values
                     .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
-                string? assignedSlotId = assignment?.FarmSlotId ?? (who.homeLocation.Value?.StartsWith("Pelican4Ever_Farm_", StringComparison.OrdinalIgnoreCase) == true ? who.homeLocation.Value.Replace("_Home", "") : null);
+                string? assignedSlotId = assignment?.FarmSlotId;
+                if (string.IsNullOrEmpty(assignedSlotId) && context?.WorldState?.Players != null
+                    && context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var pRec) && !string.IsNullOrEmpty(pRec.FarmSlotId))
+                {
+                    assignedSlotId = pRec.FarmSlotId;
+                }
                 if (!string.IsNullOrEmpty(assignedSlotId))
                 {
                     Cabin? cabin = ResolveResidenceCabin($"{assignedSlotId}_Home", assignment);
