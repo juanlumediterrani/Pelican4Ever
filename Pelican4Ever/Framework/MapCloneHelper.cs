@@ -304,26 +304,11 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // 8. Escribir map.Properties["Warp"] con los pasos declarativos
-            var warps = new List<string>();
-            if (bridgeLoc.West is { } westPassage)
+            // 8. Escribir map.Properties["Warp"] con los pasos declarativos (TASK-1202 / TASK-1401)
+            string passageWarps = PlazaTopologyVerifier.BuildPassageWarpString(bridgeLoc);
+            if (!string.IsNullOrEmpty(passageWarps))
             {
-                for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
-                {
-                    warps.Add($"0 {y} {westPassage.TargetLocation} {westPassage.ArrivalX} {westPassage.ArrivalY}");
-                }
-            }
-            if (bridgeLoc.East is { } eastPassage)
-            {
-                for (int y = eastPassage.FirstRow; y < eastPassage.FirstRow + eastPassage.RowCount; y++)
-                {
-                    warps.Add($"{width - 1} {y} {eastPassage.TargetLocation} {eastPassage.ArrivalX} {eastPassage.ArrivalY}");
-                }
-            }
-
-            if (warps.Count > 0)
-            {
-                target.Properties["Warp"] = string.Join(" ", warps);
+                target.Properties["Warp"] = passageWarps;
             }
 
             return target;

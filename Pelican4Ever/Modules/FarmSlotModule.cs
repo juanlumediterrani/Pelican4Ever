@@ -1688,33 +1688,20 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // C. Margen despejado de 3×4 casillas al final interior del camino (TASK-1302)
+                // C. Margen despejado de 3×4 casillas al final interior del camino (TASK-1302 / TASK-1401)
                 if (plazaLoc != null)
                 {
-                    int innerY = door.Edge == PortalEdge.North
-                        ? door.TownTileY + plazaLoc.NorthPathDepth
-                        : door.TownTileY - plazaLoc.SouthPathStartOffset;
-
-                    int startY = door.Edge == PortalEdge.North ? innerY : innerY - 2;
-                    int endY = door.Edge == PortalEdge.North ? innerY + 2 : innerY;
-
-                    for (int ix = door.TownTileX - 1; ix <= door.TownTileX + 2; ix++)
+                    var clearanceTiles = PlazaTopologyVerifier.GetInteriorClearanceTiles(door.Edge, door.TownTileX, door.TownTileY, plazaLoc);
+                    foreach (var (ix, iy) in clearanceTiles)
                     {
-                        for (int iy = startY; iy <= endY; iy++)
+                        location.removeEverythingFromThisTile(ix, iy);
+                        location.removeTileProperty(ix, iy, "Back", "Passable");
+                        if (location is Farm farmRef)
                         {
-                            if (ix >= 0 && ix < (hostMap?.Layers[0].LayerWidth ?? plazaLoc.Width)
-                                && iy >= 0 && iy < (hostMap?.Layers[0].LayerHeight ?? plazaLoc.Height))
+                            for (int i = farmRef.resourceClumps.Count - 1; i >= 0; i--)
                             {
-                                location.removeEverythingFromThisTile(ix, iy);
-                                location.removeTileProperty(ix, iy, "Back", "Passable");
-                                if (location is Farm farmRef)
-                                {
-                                    for (int i = farmRef.resourceClumps.Count - 1; i >= 0; i--)
-                                    {
-                                        if (IsClumpOverTile(farmRef.resourceClumps[i], ix, iy))
-                                            farmRef.resourceClumps.RemoveAt(i);
-                                    }
-                                }
+                                if (IsClumpOverTile(farmRef.resourceClumps[i], ix, iy))
+                                    farmRef.resourceClumps.RemoveAt(i);
                             }
                         }
                     }
@@ -3918,23 +3905,23 @@ namespace Pelican4Ever.Modules
         private static void ResolvePlazaReturn(DoorModel door, ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
             int slotCount = context?.Config.FarmSlotCount ?? 16;
-            string dest = string.IsNullOrWhiteSpace(door.LocationName) ? HostPlazaLayout.HostFarm : door.LocationName;
-            var chain = HostPlazaLayout.Chain(slotCount);
-            bool inChain = chain.Any(l => string.Equals(l.Name, dest, StringComparison.OrdinalIgnoreCase));
-            var targetLoc = Game1.getLocationFromName(dest);
+            var returnTarget = PlazaTopologyVerifier.ResolvePlazaReturnTarget(
+                door.LocationName,
+                door.Edge,
+                door.TownTileX,
+                door.TownTileY,
+                slotCount,
+                name => Game1.getLocationFromName(name) != null);
 
-            if (!inChain || targetLoc == null)
+            if (returnTarget.IsFallback)
             {
-                context?.Monitor.Log($"[FarmSlotModule] Destino de retorno a plaza '{dest}' para puerta {door.DoorId} no está activo o no existe (slotCount={slotCount}). Redirigiendo a Granja Host central.", LogLevel.Warn);
-                locationRequest = Game1.getLocationRequest(HostPlazaLayout.HostFarm);
-                tileX = 64;
-                tileY = 16;
-                facingDirectionAfterWarp = 2;
-                return;
+                context?.Monitor.Log($"[FarmSlotModule] Destino de retorno a plaza '{door.LocationName}' para puerta {door.DoorId} no está activo o no existe (slotCount={slotCount}). Redirigiendo a Granja Host central.", LogLevel.Warn);
             }
 
-            locationRequest = Game1.getLocationRequest(dest);
-            SpatialWarpRouter.GetPlazaReturnCoordinates(door.Edge, door.TownTileX, door.TownTileY, out tileX, out tileY, out facingDirectionAfterWarp);
+            locationRequest = Game1.getLocationRequest(returnTarget.TargetLocation);
+            tileX = returnTarget.TileX;
+            tileY = returnTarget.TileY;
+            facingDirectionAfterWarp = returnTarget.FacingDirection;
         }
 
         /// <summary>
