@@ -116,10 +116,11 @@ namespace Pelican4Ever.Core.World
             int tileX,
             int tileY)
         {
+            bool isFarm = string.Equals(loc.Name, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase);
             return edge switch
             {
-                PortalEdge.North => tileY <= 3,
-                PortalEdge.South => tileY >= portalY - 2,
+                PortalEdge.North => isFarm ? (portalX > 30 ? tileY <= 10 : tileY <= 3) : tileY <= 5,
+                PortalEdge.South => isFarm ? tileY >= portalY - 1 : tileY >= portalY - 3,
                 PortalEdge.West => tileX <= 1,
                 PortalEdge.East => tileX >= loc.Width - 2,
                 _ => false
@@ -187,37 +188,24 @@ namespace Pelican4Ever.Core.World
             int autotileMask = 15,
             EntranceStyle style = EntranceStyle.Default)
         {
-            switch (style)
+            bool isGrass = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
+
+            // Sin baldosas artificiales: únicamente tierra (587) y camino de tierra con bordes suaves de hierba
+            // (225 borde izquierdo, 228 borde derecho en caminos verticales; 201/251 en horizontales) de spring_outdoorsTileSheet.
+            if (!isGrass)
             {
-                case EntranceStyle.WoodPlanks:
-                    // Tablones de madera vanilla (outdoorsSheet): 1244 y 1269
-                    return (((tileX + tileY) % 2 == 0) ? 1244 : 1269, false);
+                return (587, false);
+            }
 
-                case EntranceStyle.StoneWalkway:
-                    // Losas de piedra natural del patio exterior (outdoorsSheet): 1964, 1965, 1966
-                    int stoneIdx = ((tileX + tileY) % 3) switch
-                    {
-                        0 => 1964,
-                        1 => 1965,
-                        _ => 1966
-                    };
-                    return (stoneIdx, false);
-
-                case EntranceStyle.Cobblestone:
-                    // Adoquines de piedra redonda (outdoorsSheet: 401 en hierba, o 736/768 en tierra)
-                    bool isGrassEnv = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
-                    return isGrassEnv ? (401, false) : (((tileX + tileY) % 2 == 0) ? 736 : 768, false);
-
-                case EntranceStyle.MountainGorge:
-                    // Desfiladero rocoso: losas de roca y altar (outdoorsSheet: 1964 y 838)
-                    return (((tileX + tileY) % 2 == 0) ? 1964 : 838, false);
-
-                case EntranceStyle.SteppingStones:
-                case EntranceStyle.Default:
-                default:
-                    bool isGrass = IsGrassEnvironment(edge, loc, portalX, portalY, tileX, tileY);
-                    int tileIndex = GetSteppingStoneTileIndex(isGrass, autotileMask);
-                    return (tileIndex, true);
+            if (edge is PortalEdge.North or PortalEdge.South)
+            {
+                int grassEdgeDirtTile = (tileX == portalX) ? 225 : 228;
+                return (grassEdgeDirtTile, false);
+            }
+            else
+            {
+                int horizEdgeDirtTile = (tileY == portalY) ? 201 : 251;
+                return (horizEdgeDirtTile, false);
             }
         }
 
@@ -239,7 +227,7 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
-        /// Genera de forma determinista una baldosa de terreno salvaje (hierba y tierra natural)
+        /// Genera de forma determinista una baldosa de terreno salvaje (pradera soleada de Stardew Valley)
         /// a partir de las coordenadas (x, y) usando tiles auténticos de spring_outdoorsTileSheet.
         /// </summary>
         public static (int TileIndex, string Type) GetWildTerrainTile(int x, int y)
@@ -247,17 +235,15 @@ namespace Pelican4Ever.Core.World
             int hash = ((x * 73856093) ^ (y * 19349663)) & 0x7FFFFFFF;
             int roll = hash % 100;
 
-            if (roll < 45)
-                return (175, "Grass"); // Hierba pura y tupida
-            if (roll < 70)
-                return (351, "Grass"); // Variante de hierba suave
             if (roll < 82)
-                return (352, "Grass"); // Textura de hierba fina
-            if (roll < 90)
-                return (401, "Grass"); // Hierba silvestre con briznas/guijarro
-            if (roll < 95)
-                return (378, "Grass"); // Hierba con flores silvestres y trébol
-            return (1028, "Dirt");     // Manchas de tierra campestre natural
+                return (175, "Grass"); // Hierba verde soleada estándar
+            if (roll < 89)
+                return (150, "Grass"); // Hierba soleada con brizna suave
+            if (roll < 94)
+                return (256, "Grass"); // Hierba soleada con textura tupida
+            if (roll < 97)
+                return (151, "Grass"); // Hierba soleada con florecillas blancas/azules
+            return (152, "Grass");     // Hierba soleada con florecillas silvestres
         }
     }
 }

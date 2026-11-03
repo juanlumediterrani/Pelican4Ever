@@ -69,31 +69,34 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void GetPathTileInfo_InNorthGorge_ReturnsSteppingStonesOnDirt()
+        public void GetPathTileInfo_InNorthGorge_ReturnsPureDirt()
         {
-            // Portales norte en desfiladero (y=4..10) usan Stepping Stones sobre tierra (0..15)
-            var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
-            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.North, bridge, 8, 1, 8, 5, 175, null, null, 15);
-            Assert.True(isSheet);
-            Assert.InRange(tile, 0, 15);
+            // Portales norte de la granja en desfiladero (y=4..10) usan tierra pura cultivable (587)
+            var farm = HostPlazaLayout.Find("Farm", 16)!;
+            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.North, farm, 18, 1, 18, 5, 175, null, null, 15);
+            Assert.False(isSheet);
+            Assert.Equal(587, tile);
         }
 
         [Fact]
-        public void GetPathTileInfo_OnGrass_ReturnsSteppingStonesOnGrass()
+        public void GetPathTileInfo_OnGrass_ReturnsGrassDirtEdgeTransition()
         {
             var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
-            var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.South, bridge, 25, 28, 25, 28, 175, null, null, 15);
-            Assert.True(isSheet);
-            Assert.InRange(tile, 16, 31);
+            var (leftTile, isLeftSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.South, bridge, 25, 28, 25, 28, 175, null, null, 15);
+            var (rightTile, isRightSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.South, bridge, 25, 28, 26, 28, 175, null, null, 15);
+            Assert.False(isLeftSheet);
+            Assert.False(isRightSheet);
+            Assert.Equal(225, leftTile);
+            Assert.Equal(228, rightTile);
         }
 
         [Fact]
-        public void GetPathTileInfo_OnDirt_ReturnsSteppingStonesOnDirt()
+        public void GetPathTileInfo_OnDirt_ReturnsPureDirt()
         {
             var farm = HostPlazaLayout.Find("Farm", 16)!;
             var (tile, isSheet) = TerrainTileClassifier.GetPathTileInfo(PortalEdge.North, farm, 18, 1, 18, 6, 587, null, null, 15);
-            Assert.True(isSheet);
-            Assert.InRange(tile, 0, 15);
+            Assert.False(isSheet);
+            Assert.Equal(587, tile);
         }
 
         [Fact]
@@ -106,19 +109,23 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
-        // Portales Norte: tileY <= 3 hierba, tileY >= 4 tierra
+        // Portales Norte: en Farm NO (portalX <= 30) tileY <= 3 hierba; en Farm NE (portalX > 30) tileY <= 10 hierba; en Puentes tileY <= 5 hierba
         [InlineData(PortalEdge.North, "Farm", 18, 1, 18, 2, true)]
         [InlineData(PortalEdge.North, "Farm", 18, 1, 18, 3, true)]
         [InlineData(PortalEdge.North, "Farm", 18, 1, 18, 4, false)]
+        [InlineData(PortalEdge.North, "Farm", 62, 1, 62, 10, true)]
+        [InlineData(PortalEdge.North, "Farm", 62, 1, 62, 11, false)]
         [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 8, 2, true)]
-        [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 8, 4, false)]
-        // Portales Sur: tileY >= portalY - 2 hierba, menor es tierra
+        [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 8, 5, true)]
+        [InlineData(PortalEdge.North, "Pelican4Ever_Bridge_1", 8, 1, 8, 6, false)]
+        // Portales Sur: en Farm tileY >= portalY - 1 (62) hierba; en Puentes tileY >= portalY - 3 (25) hierba
         [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 63, true)]
-        [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 61, true)]
+        [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 62, true)]
+        [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 61, false)]
         [InlineData(PortalEdge.South, "Farm", 18, 63, 18, 60, false)]
         [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 28, true)]
-        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 26, true)]
-        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 25, false)]
+        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 25, true)]
+        [InlineData(PortalEdge.South, "Pelican4Ever_Bridge_1", 8, 28, 8, 24, false)]
         // Portales Oeste: tileX <= 1 hierba
         [InlineData(PortalEdge.West, "Farm", 0, 26, 1, 26, true)]
         [InlineData(PortalEdge.West, "Farm", 0, 26, 2, 26, false)]
@@ -171,36 +178,27 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void GetPathTileInfo_WithWoodPlanksStyle_ReturnsOutdoorsSheetAndWoodPlankIndices()
+        public void GetPathTileInfo_WithAllStyles_UsesOnlyDirtAndGrassTransitionsWithoutSteppingStones()
         {
             var bridge = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16)!;
-            var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
-                PortalEdge.North, bridge, 8, 1, 8, 3, 175, null, null, 15, EntranceStyle.WoodPlanks);
-
-            Assert.False(isStepping);
-            Assert.True(tile is 1244 or 1269);
-        }
-
-        [Fact]
-        public void GetPathTileInfo_WithMountainGorgeStyle_ReturnsOutdoorsSheetAndRockIndices()
-        {
             var farm = HostPlazaLayout.Find("Farm", 16)!;
-            var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
-                PortalEdge.North, farm, 18, 1, 18, 5, 175, null, null, 15, EntranceStyle.MountainGorge);
 
-            Assert.False(isStepping);
-            Assert.True(tile is 1964 or 838);
-        }
+            // En césped vertical -> bordes suaves tierra/hierba (225 izq, 228 der), nunca SteppingStones ni pavimentado artificial
+            var (leftGrass, isStepping1) = TerrainTileClassifier.GetPathTileInfo(
+                PortalEdge.North, bridge, 8, 1, 8, 2, 175, null, null, 15, EntranceStyle.WoodPlanks);
+            var (rightGrass, isStepping2) = TerrainTileClassifier.GetPathTileInfo(
+                PortalEdge.North, bridge, 8, 1, 9, 2, 175, null, null, 15, EntranceStyle.WoodPlanks);
 
-        [Fact]
-        public void GetPathTileInfo_WithCobblestoneStyle_ReturnsOutdoorsSheetAndCobblestoneIndices()
-        {
-            var farm = HostPlazaLayout.Find("Farm", 16)!;
-            var (tile, isStepping) = TerrainTileClassifier.GetPathTileInfo(
-                PortalEdge.South, farm, 18, 63, 18, 61, 175, null, null, 15, EntranceStyle.Cobblestone);
+            Assert.False(isStepping1);
+            Assert.False(isStepping2);
+            Assert.Equal(225, leftGrass);
+            Assert.Equal(228, rightGrass);
 
-            Assert.False(isStepping);
-            Assert.True(tile is 401 or 736 or 768);
+            // En tierra -> siempre tierra cultivable pura (587)
+            var (dirtTile, isDirtStepping) = TerrainTileClassifier.GetPathTileInfo(
+                PortalEdge.South, farm, 62, 63, 62, 59, 587, null, null, 15, EntranceStyle.StoneWalkway);
+            Assert.False(isDirtStepping);
+            Assert.Equal(587, dirtTile);
         }
 
         [Fact]
@@ -220,13 +218,13 @@ namespace Pelican4Ever.Tests
         [Fact]
         public void GetWildTerrainTile_IsDeterministicAndReturnsAuthenticVanillaTiles()
         {
-            var validIndices = new HashSet<int> { 175, 351, 352, 401, 378, 1028 };
+            var validIndices = new HashSet<int> { 175, 150, 256, 151, 152 };
             var foundTypes = new HashSet<string>();
             var foundIndices = new HashSet<int>();
 
             for (int x = 0; x < 35; x++)
             {
-                for (int y = 21; y <= 25; y++)
+                for (int y = 5; y <= 11; y++)
                 {
                     var (tile1, type1) = TerrainTileClassifier.GetWildTerrainTile(x, y);
                     var (tile2, type2) = TerrainTileClassifier.GetWildTerrainTile(x, y);
@@ -236,16 +234,15 @@ namespace Pelican4Ever.Tests
                     Assert.Equal(type1, type2);
 
                     Assert.Contains(tile1, validIndices);
-                    Assert.True(type1 is "Grass" or "Dirt");
+                    Assert.Equal("Grass", type1);
 
                     foundIndices.Add(tile1);
                     foundTypes.Add(type1);
                 }
             }
 
-            // Verifica que el terreno salvaje produce tanto césped como tierra en proporciones orgánicas
+            // Verifica que el terreno salvaje produce hierba soleada auténtica con sus variantes naturales
             Assert.Contains("Grass", foundTypes);
-            Assert.Contains("Dirt", foundTypes);
             Assert.True(foundIndices.Count >= 4);
         }
     }
