@@ -50,5 +50,13 @@ ni en la instalación de Steam mientras haya campaña.
    desarrollo, y la partida no se edita a mano: si hiciera falta, se restaura desde
    `Pelican4Ever_Backups/`.
 
+## Cascada automática de ramas
+
+`.github/workflows/cascada-ramas.yml` mantiene `main` → `pelican/desarrollo` →
+`refactor/residence-entrances`: con cada push a `main` o a `pelican/desarrollo` fusiona la rama
+superior en la inferior y sube el resultado. Si una fusión choca, no toca la rama de destino: sube
+`cascada/<origen>-a-<destino>` y abre un PR hacia el destino para resolverlo a mano. Por eso
+`refactor/residence-entrances` ya no se rebasa: recibe merges, y un rebase obligaría a forzar el push.
+
 El token de la API y `host.env` viven en `~/.config/pelican4ever/preprod/` (modo 0600) y nunca se
 versionan.
