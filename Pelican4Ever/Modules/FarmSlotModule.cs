@@ -800,10 +800,11 @@ namespace Pelican4Ever.Modules
                     }
                     else if (door.TownTileX == 62) // Farm_Portal_02 (NE: bosque campestre, x=62..63, y=0..10)
                     {
-                        // Cerrar de forma redondeada el borde derecho del cerezo izquierdo en x = 61
+                        // Cerrar de forma redondeada el borde derecho del cerezo izquierdo en x = 61 (y = 0..1),
+                        // dejando libre Front[61, 2] para no dibujar hojas sobre el poste del buzón en Buildings[61, 2]
                         SetTileIfValid(front, sheetOutdoors, 61, 0, 46);
                         SetTileIfValid(front, sheetOutdoors, 61, 1, 71);
-                        SetTileIfValid(front, sheetOutdoors, 61, 2, 96);
+                        ClearTile(front, 61, 2);
 
                         // Limpiar restos de arbusto/árbol verde cortado en Buildings (60..61, 0..3) y (64, 0..1)
                         SetTileIfValid(bld, sheetOutdoors, 60, 0, 16);
@@ -835,11 +836,8 @@ namespace Pelican4Ever.Modules
                             SetTileIfValid(back, sheetOutdoors, 63, 10, 253);
                         }
 
-                        // Postes de la valla en y = 9
-                        SetTileIfValid(bld, sheetOutdoors, 61, 9, 385);
-                        SetTileIfValid(front, sheetOutdoors, 61, 8, 360);
-                        SetTileIfValid(bld, sheetOutdoors, 64, 9, 383);
-                        SetTileIfValid(front, sheetOutdoors, 64, 8, 358);
+                        // Postes de apertura en la valla horizontal existente en y = 9
+                        PlaceFenceGatePosts(bld, front, sheetOutdoors, leftPostX: 61, rightPostX: 64, y: 9);
                     }
                 }
                 else if (door.Edge == PortalEdge.South)
@@ -848,13 +846,13 @@ namespace Pelican4Ever.Modules
                     {
                         int lx = 17, rx = 20;
 
-                        // Postes de valla en y = 63 conservando intacto el reborde de hierba (414/413) en Front y = 61
-                        SetTileIfValid(bld, sheetOutdoors, lx, 63, 385);
-                        SetTileIfValid(front, sheetOutdoors, lx, 62, 360);
-                        SetTileIfValid(bld, sheetOutdoors, rx, 63, 383);
-                        SetTileIfValid(front, sheetOutdoors, rx, 62, 358);
-
+                        // Conservar limpio el poste del buzón en (17, 62) y el reborde de hierba (414/413) en Front y = 61
+                        // sin colocar postes de valla sueltos en y = 63 que solapaban Front[17, 62]
+                        ClearTile(front, lx, 62);
+                        ClearTile(front, rx, 62);
+                        ClearTile(bld, lx, 63);
                         ClearTile(bld, rx, 62);
+                        ClearTile(bld, rx, 63);
                         SetTileIfValid(bld, sheetOutdoors, lx, 64, 16);
                         SetTileIfValid(bld, sheetOutdoors, rx, 64, 16);
 
@@ -886,13 +884,13 @@ namespace Pelican4Ever.Modules
                     {
                         int lx = 61, rx = 64;
 
-                        // Postes de valla en y = 63 conservando intacto el reborde de hierba (414/413) en Front y = 61
-                        SetTileIfValid(bld, sheetOutdoors, lx, 63, 385);
-                        SetTileIfValid(front, sheetOutdoors, lx, 62, 360);
-                        SetTileIfValid(bld, sheetOutdoors, rx, 63, 383);
-                        SetTileIfValid(front, sheetOutdoors, rx, 62, 358);
-
+                        // Conservar limpio el poste del buzón en (61, 62) y el reborde de hierba (414/413) en Front y = 61
+                        // sin colocar postes de valla sueltos en y = 63 que solapaban Front[61, 62]
+                        ClearTile(front, lx, 62);
+                        ClearTile(front, rx, 62);
+                        ClearTile(bld, lx, 63);
                         ClearTile(bld, rx, 62);
+                        ClearTile(bld, rx, 63);
                         SetTileIfValid(bld, sheetOutdoors, lx, 64, 16);
                         SetTileIfValid(bld, sheetOutdoors, rx, 64, 16);
 
@@ -931,24 +929,31 @@ namespace Pelican4Ever.Modules
                         int lx = door.TownTileX - 1; // 7
                         int rx = door.TownTileX + 2; // 10
 
+                        // No colocar bases de valla en y = 0 (donde no existe y = -1); usar hierba sombreada bloqueante en (6..7, 0)
                         SetTileIfValid(bld, sheetOutdoors, 6, 0, 351);
-                        SetTileIfValid(bld, sheetOutdoors, lx, 0, 385);
-                        SetTileIfValid(bld, sheetOutdoors, rx, 0, 383);
+                        SetTileIfValid(bld, sheetOutdoors, lx, 0, 351);
+                        SetTileIfValid(bld, sheetOutdoors, rx, 0, 351);
 
-                        // Limpiar tronco del cerezo eliminado en (7, 2..3) y follaje en Front/AlwaysFront
+                        // Limpiar tronco del cerezo eliminado en (7, 2..3) y follaje en Front/AlwaysFront (x = 5..9)
                         ClearTile(bld, lx, 2);
                         ClearTile(bld, lx, 3);
                         for (int x = 5; x <= 11; x++)
                         {
                             for (int y = 0; y <= 4; y++)
                             {
-                                if (x >= 6) ClearTile(front, x, y);
-                                if (x == 5 && y == 0) ClearTile(front, x, y);
+                                // Conservar intactos los remates de la valla norte unificada en Front[10..17, 0]
+                                if (x >= 6 && !(x >= 10 && y == 0))
+                                    ClearTile(front, x, y);
+                                if (x == 5 && y == 0)
+                                    ClearTile(front, x, y);
                                 ClearTile(alwaysFront, x, y);
                                 ClearTile(alwaysFront2, x, y);
                                 ClearTile(alwaysFront3, x, y);
                             }
                         }
+
+                        // Asegurar que la valla norte a la derecha del portal (x = 10..17, y = 1) conserve su extremo izquierdo en x = 10..11
+                        PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 10, endX: 17, y: 1);
 
                         if (back != null)
                         {
@@ -1035,16 +1040,13 @@ namespace Pelican4Ever.Modules
 
                     // Postes de remate de la valla en y = 26 (alineados con la valla horizontal del puente en y = 26,
                     // dejando libre lx para que la caja del buzón en (lx, 26) no solape con el poste)
-                    SetTileIfValid(bld, sheetOutdoors, lx - 1, 26, 385);
-                    SetTileIfValid(front, sheetOutdoors, lx - 1, 25, 360);
+                    PlaceFenceGatePosts(bld, front, sheetOutdoors, leftPostX: lx - 1, rightPostX: rx, y: 26);
                     ClearTile(bld, lx, 26);
                     ClearTile(front, lx, 25);
-                    SetTileIfValid(bld, sheetOutdoors, rx, 26, 383);
-                    SetTileIfValid(front, sheetOutdoors, rx, 25, 358);
                     if (door.TownTileX > 15)
                     {
-                        SetTileIfValid(bld, sheetOutdoors, rx + 1, 26, 384);
-                        SetTileIfValid(front, sheetOutdoors, rx + 1, 25, 359);
+                        SetTileIfValid(bld, sheetOutdoors, rx + 1, 26, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
+                        SetTileIfValid(front, sheetOutdoors, rx + 1, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
                     }
 
                     if (back != null)
@@ -1146,6 +1148,55 @@ namespace Pelican4Ever.Modules
             {
                 layer.Tiles[x, y] = null;
             }
+        }
+
+        /// <summary>
+        /// Coloca un tramo continuo de valla horizontal desde <paramref name="startX"/> hasta <paramref name="endX"/>
+        /// con su base en <c>Buildings[x, y]</c> y su remate superior en <c>Front[x, y - 1]</c>, garantizando que
+        /// el extremo izquierdo use <c>(383, 358)</c> (<c>|--</c>), el tramo central <c>(384, 359)</c> (<c>--|--</c>)
+        /// y el extremo derecho <c>(385, 360)</c> (<c>--|</c>).
+        /// </summary>
+        private static void PlaceHorizontalFenceSegment(
+            xTile.Layers.Layer? bld,
+            xTile.Layers.Layer? front,
+            xTile.Tiles.TileSheet sheetOutdoors,
+            int startX,
+            int endX,
+            int y)
+        {
+            int height = bld?.LayerHeight ?? front?.LayerHeight ?? 0;
+            if (!VerticalMultiTileClassifier.CanPlaceVerticalBaseAt(y, height))
+                return;
+
+            for (int x = startX; x <= endX; x++)
+            {
+                var (baseIdx, topIdx) = VerticalMultiTileClassifier.GetHorizontalFencePair(x, startX, endX);
+                SetTileIfValid(bld, sheetOutdoors, x, y, baseIdx);
+                SetTileIfValid(front, sheetOutdoors, x, y - 1, topIdx);
+            }
+        }
+
+        /// <summary>
+        /// Coloca los dos postes de remate que flanquean una apertura practicada en una valla horizontal existente:
+        /// <c>(385, 360)</c> (<c>--|</c>) en <paramref name="leftPostX"/> y <c>(383, 358)</c> (<c>|--</c>) en <paramref name="rightPostX"/>.
+        /// </summary>
+        private static void PlaceFenceGatePosts(
+            xTile.Layers.Layer? bld,
+            xTile.Layers.Layer? front,
+            xTile.Tiles.TileSheet sheetOutdoors,
+            int leftPostX,
+            int rightPostX,
+            int y)
+        {
+            int height = bld?.LayerHeight ?? front?.LayerHeight ?? 0;
+            if (!VerticalMultiTileClassifier.CanPlaceVerticalBaseAt(y, height))
+                return;
+
+            var (leftEnd, rightStart) = VerticalMultiTileClassifier.GetFenceGatePosts();
+            SetTileIfValid(bld, sheetOutdoors, leftPostX, y, leftEnd.BaseTileIndex);
+            SetTileIfValid(front, sheetOutdoors, leftPostX, y - 1, leftEnd.TopTileIndex);
+            SetTileIfValid(bld, sheetOutdoors, rightPostX, y, rightStart.BaseTileIndex);
+            SetTileIfValid(front, sheetOutdoors, rightPostX, y - 1, rightStart.TopTileIndex);
         }
 
         /// <summary>
@@ -1253,26 +1304,15 @@ namespace Pelican4Ever.Modules
             }
 
             // 5. Vallas del corredor en y = 25 (x = 2..5, respetando raíces en 0..1 y borde 394 en x = 6)
-            // y en y = 28 (x = 0..5, respetando borde 419 en x = 6)
-            SetTileIfValid(bld, sheetOutdoors, 2, 25, 385);
-            SetTileIfValid(front, sheetOutdoors, 2, 24, 360);
-            for (int x = 3; x <= 4; x++)
-            {
-                SetTileIfValid(bld, sheetOutdoors, x, 25, 384);
-                SetTileIfValid(front, sheetOutdoors, x, 24, 359);
-            }
-            SetTileIfValid(bld, sheetOutdoors, 5, 25, 383);
-            SetTileIfValid(front, sheetOutdoors, 5, 24, 358);
+            // y en y = 28 (x = 0..5, respetando borde 419 en x = 6):
+            // Extremo izquierdo (383/358 |--), interior (384/359 --|--), extremo derecho (385/360 --|).
+            PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 2, endX: 5, y: 25);
+            PlaceHorizontalFenceSegment(bld, front, sheetOutdoors, startX: 0, endX: 5, y: 28);
 
-            SetTileIfValid(bld, sheetOutdoors, 0, 28, 385);
-            SetTileIfValid(front, sheetOutdoors, 0, 27, 360);
-            for (int x = 1; x <= 4; x++)
-            {
-                SetTileIfValid(bld, sheetOutdoors, x, 28, 384);
-                SetTileIfValid(front, sheetOutdoors, x, 27, 359);
-            }
-            SetTileIfValid(bld, sheetOutdoors, 5, 28, 383);
-            SetTileIfValid(front, sheetOutdoors, 5, 27, 358);
+            // Normalizar la valla de y = 32 (x = 0..1) bajo el antiguo Tree 2 para que el poste derecho (385) esté en Buildings
+            SetTileIfValid(bld, sheetOutdoors, 1, 32, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
+            SetTileIfValid(front, sheetOutdoors, 1, 31, VerticalMultiTileClassifier.FenceRightTopTileIndex);
+            ClearTile(front, 1, 32);
         }
 
         /// <summary>Asset de tilesheet para Steppingstone Path en Maps/z_Pelican4Ever_SteppingStones.</summary>
@@ -1348,6 +1388,15 @@ namespace Pelican4Ever.Modules
 
             bld.Tiles[mx, my] = new xTile.Tiles.StaticTile(bld, sheetTown, xTile.Tiles.BlendMode.Alpha, MailboxPostTileIndex);
             top.Tiles[mx, my - 1] = new xTile.Tiles.StaticTile(top, sheetTown, xTile.Tiles.BlendMode.Alpha, MailboxTopTileIndex);
+
+            // Asegurar que ningún remate de valla ni follaje en Front[mx, my] se dibuje por encima del poste del buzón
+            if (front != null && mx >= 0 && mx < front.LayerWidth && my >= 0 && my < front.LayerHeight)
+            {
+                if (VerticalMultiTileClassifier.ShouldClearFrontOverMailboxPost(front.Tiles[mx, my]?.TileIndex))
+                {
+                    front.Tiles[mx, my] = null;
+                }
+            }
 
             // Asegurar que AlwaysFront no tape el poste ni la caja del buzón (Front2 ya se dibuja sobre Front)
             if (alwaysFront != null)

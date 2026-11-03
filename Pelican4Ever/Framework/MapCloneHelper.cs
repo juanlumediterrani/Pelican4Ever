@@ -286,14 +286,16 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // Remate con vallas de madera en los extremos este/oeste (y = 22..25) solo en los bordes donde NO hay paso activo
+            // Remate con vallas verticales de madera en los extremos este/oeste (y = 22..25) solo en los bordes donde NO hay paso activo,
+            // y saneado de objetos multi-casilla verticales (vallas, arbustos y árboles en los bordes del recorte 35x30)
             if (outdoorsSheet != null)
             {
                 if (bridgeLoc.West == null)
                 {
                     for (int y = 22; y <= 25; y++)
                     {
-                        SetTileIfValid(bldLayer, outdoorsSheet, 0, y, 385);
+                        int vTile = VerticalMultiTileClassifier.GetVerticalFenceBodyTile(y, 22, 25);
+                        SetTileIfValid(bldLayer, outdoorsSheet, 0, y, vTile);
                         SetPassableIfValid(bldLayer, 0, y, false);
                     }
                 }
@@ -302,10 +304,13 @@ namespace Pelican4Ever.Framework
                 {
                     for (int y = 22; y <= 25; y++)
                     {
-                        SetTileIfValid(bldLayer, outdoorsSheet, width - 1, y, 383);
+                        int vTile = VerticalMultiTileClassifier.GetVerticalFenceBodyTile(y, 22, 25);
+                        SetTileIfValid(bldLayer, outdoorsSheet, width - 1, y, vTile);
                         SetPassableIfValid(bldLayer, width - 1, y, false);
                     }
                 }
+
+                SanitizeBridgeMultiTileObjects(backLayer, bldLayer, frontLayer, alwaysFrontLayer, alwaysFront2Layer, alwaysFront3Layer, outdoorsSheet);
             }
 
             // 7. Asegurar transitabilidad de los pasos activos Oeste y Este en el camino de tierra vanilla (y = 22..25)
@@ -358,6 +363,114 @@ namespace Pelican4Ever.Framework
             }
 
             return target;
+        }
+
+        /// <summary>
+        /// Sanea los objetos multi-casilla verticales (vallas, arbustos y árboles) en los bordes del recorte 35×30
+        /// de <c>Maps/BusStop</c> para que ninguna base en <c>y = 0</c> quede decapitada sin <c>y - 1</c> y ningún
+        /// remate en <c>Front</c> quede huérfano o incompleto.
+        /// </summary>
+        private static void SanitizeBridgeMultiTileObjects(
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            Layer? alwaysFront2Layer,
+            Layer? alwaysFront3Layer,
+            TileSheet outdoorsSheet)
+        {
+            // 1. Esquina superior izquierda (x = 0..2, y = 0..2): sustituir los troncos truncados cuya copa caía en y < 0
+            // por un arbusto 3×2 completo (Front y=1: 38..40, Buildings y=2: 63..65) junto al arbusto 1×3 de x = 3 (76/101/126).
+            for (int x = 0; x <= 2; x++)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
+                SetPassableIfValid(bldLayer, x, 0, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 1, 351);
+                SetPassableIfValid(bldLayer, x, 1, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 2, 63 + x);
+                SetPassableIfValid(bldLayer, x, 2, false);
+
+                frontLayer.Tiles[x, 0] = null;
+                SetTileIfValid(frontLayer, outdoorsSheet, x, 1, 38 + x);
+                frontLayer.Tiles[x, 2] = null;
+
+                alwaysFrontLayer.Tiles[x, 0] = null;
+            }
+            frontLayer.Tiles[4, 0] = null;
+            alwaysFrontLayer.Tiles[4, 0] = null;
+
+            // 2. Borde izquierdo (x = 0..3, y = 6..15): limpiar los parches y taludes de la antigua carretera
+            // (AlwaysFront[0..2, 9..10], Buildings[0..2, 6..15] y Back[0..3, 11]) y el roble partido verticalmente
+            // en srcX = 10 (AlwaysFront3[0..1, 9..12], Front[0..1, 13]) para que el cerezo rosa (x = 0..4, y = 5..11)
+            // descanse limpiamente sobre la pradera.
+            for (int x = 0; x <= 5; x++)
+            {
+                for (int y = 11; y <= 16; y++)
+                {
+                    var (wildIdx, wildType) = TerrainTileClassifier.GetWildTerrainTile(x, y);
+                    var wildTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, wildIdx);
+                    wildTile.Properties["Type"] = wildType;
+                    if (x == 0) wildTile.Properties["Passable"] = "F";
+                    backLayer.Tiles[x, y] = wildTile;
+                }
+            }
+            for (int x = 0; x <= 2; x++)
+            {
+                for (int y = 6; y <= 15; y++)
+                {
+                    bldLayer.Tiles[x, y] = null;
+                }
+                alwaysFrontLayer.Tiles[x, 9] = null;
+                alwaysFrontLayer.Tiles[x, 10] = null;
+            }
+            SetTileIfValid(backLayer, outdoorsSheet, 0, 16, 376);
+            SetPassableIfValid(backLayer, 0, 16, false);
+            SetTileIfValid(backLayer, outdoorsSheet, 1, 16, 376);
+            SetTileIfValid(bldLayer, outdoorsSheet, 2, 16, 444);
+            if (alwaysFront3Layer != null)
+            {
+                for (int x = 0; x <= 1; x++)
+                {
+                    for (int y = 9; y <= 12; y++)
+                    {
+                        alwaysFront3Layer.Tiles[x, y] = null;
+                    }
+                }
+            }
+            frontLayer.Tiles[0, 13] = null;
+            frontLayer.Tiles[1, 13] = null;
+
+            SetTileIfValid(frontLayer, outdoorsSheet, 1, 9, 118);
+            SetTileIfValid(frontLayer, outdoorsSheet, 2, 9, 119);
+
+            // 3. Valla norte (x = 10..17, y = 0..1): unificar en y = 1 (base en Buildings y=1, remate en Front y=0)
+            // para eliminar los postes decapitados en y = 0 (donde no existe y = -1), conservando AlwaysFront[14..17, 0] (copa del árbol).
+            for (int x = 10; x <= 17; x++)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
+                SetPassableIfValid(bldLayer, x, 0, false);
+                if (x <= 13)
+                {
+                    alwaysFrontLayer.Tiles[x, 0] = null;
+                }
+
+                var (baseIdx, topIdx) = VerticalMultiTileClassifier.GetHorizontalFencePair(x, 10, 17);
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 1, baseIdx);
+                SetTileIfValid(frontLayer, outdoorsSheet, x, 0, topIdx);
+            }
+
+            // 4. Esquinas derechas (34, 0) y (34, 29): eliminar base de árbol decapitada en y = 0 y cuarto de arbusto huérfano en y = 29
+            SetTileIfValid(bldLayer, outdoorsSheet, 34, 0, 353);
+            SetPassableIfValid(bldLayer, 34, 0, false);
+            frontLayer.Tiles[34, 29] = null;
+            alwaysFrontLayer.Tiles[34, 29] = null;
+
+            // 5. Valla horizontal inferior (y = 26, remates en Front y = 25): completar los remates 359 omitidos en BusStop
+            // en x = 1 y x = 32 y normalizar la continuidad en x = 2.
+            SetTileIfValid(frontLayer, outdoorsSheet, 1, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
+            SetTileIfValid(bldLayer, outdoorsSheet, 2, 26, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
+            SetTileIfValid(frontLayer, outdoorsSheet, 2, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
+            SetTileIfValid(frontLayer, outdoorsSheet, 32, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
         }
 
         /// <summary>
