@@ -59,7 +59,7 @@ namespace Pelican4Ever.Core.World
 
             // Granja Host: 80x65, NorthPathDepth = 10 (acantilado hasta y=7/9), SouthPathStartOffset = 3
             PlazaPassage? farmWest = bridges > 0
-                ? new PlazaPassage(PortalEdge.West, FirstRow: 26, RowCount: 2, TargetLocation: BridgeName(1), ArrivalX: 33, ArrivalY: 14, ArrivalFacing: 3)
+                ? new PlazaPassage(PortalEdge.West, FirstRow: 26, RowCount: 2, TargetLocation: BridgeName(1), ArrivalX: 33, ArrivalY: 24, ArrivalFacing: 3)
                 : null;
 
             locations.Add(new PlazaLocation(
@@ -74,12 +74,13 @@ namespace Pelican4Ever.Core.World
 
             for (int n = 1; n <= bridges; n++)
             {
+                // En los puentes (recorte Maps/BusStop 35x30), la salida natural vanilla es la carretera este-oeste (y = 22..25).
                 PlazaPassage east = n == 1
-                    ? new PlazaPassage(PortalEdge.East, FirstRow: 13, RowCount: 3, TargetLocation: HostFarm, ArrivalX: 2, ArrivalY: 26, ArrivalFacing: 1)
-                    : new PlazaPassage(PortalEdge.East, FirstRow: 13, RowCount: 3, TargetLocation: BridgeName(n - 1), ArrivalX: 1, ArrivalY: 14, ArrivalFacing: 1);
+                    ? new PlazaPassage(PortalEdge.East, FirstRow: 22, RowCount: 4, TargetLocation: HostFarm, ArrivalX: 2, ArrivalY: 26, ArrivalFacing: 1)
+                    : new PlazaPassage(PortalEdge.East, FirstRow: 22, RowCount: 4, TargetLocation: BridgeName(n - 1), ArrivalX: 1, ArrivalY: 24, ArrivalFacing: 1);
 
                 PlazaPassage? west = n < bridges
-                    ? new PlazaPassage(PortalEdge.West, FirstRow: 13, RowCount: 3, TargetLocation: BridgeName(n + 1), ArrivalX: 33, ArrivalY: 14, ArrivalFacing: 3)
+                    ? new PlazaPassage(PortalEdge.West, FirstRow: 22, RowCount: 4, TargetLocation: BridgeName(n + 1), ArrivalX: 33, ArrivalY: 24, ArrivalFacing: 3)
                     : null;
 
                 locations.Add(new PlazaLocation(

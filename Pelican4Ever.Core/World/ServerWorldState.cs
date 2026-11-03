@@ -124,6 +124,22 @@ namespace Pelican4Ever.Core.World
             return Doors.Values.FirstOrDefault(d => d.OwnerId == ownerId);
         }
 
+        /// <summary>Devuelve el identificador de hueco de residencia asignado al jugador (p. ej. "Pelican4Ever_Farm_01"), o null si no posee ninguna.</summary>
+        public string? ResolvePlayerResidenceSlot(long playerId)
+        {
+            if (FindResidenceOf(playerId) is { } assignment && !string.IsNullOrEmpty(assignment.FarmSlotId))
+            {
+                return assignment.FarmSlotId;
+            }
+
+            if (Players.TryGetValue(playerId, out PlayerRecord? record) && !string.IsNullOrEmpty(record.FarmSlotId))
+            {
+                return record.FarmSlotId;
+            }
+
+            return null;
+        }
+
         /// <summary>Valida en el host el reclamo de <paramref name="doorId"/> por <paramref name="playerId"/>.</summary>
         public DoorClaimRejection CheckDoorClaim(long playerId, string doorId, string? farmType)
         {

@@ -16,19 +16,19 @@ namespace Pelican4Ever.Tests
 
             var farm = chain16[0];
             string farmWarps = PlazaTopologyVerifier.BuildPassageWarpString(farm);
-            Assert.Equal("0 26 Pelican4Ever_Bridge_1 33 14 0 27 Pelican4Ever_Bridge_1 33 14", farmWarps);
+            Assert.Equal("0 26 Pelican4Ever_Bridge_1 33 24 0 27 Pelican4Ever_Bridge_1 33 24", farmWarps);
 
             var bridge1 = chain16[1];
             string b1Warps = PlazaTopologyVerifier.BuildPassageWarpString(bridge1);
-            Assert.Equal("0 13 Pelican4Ever_Bridge_2 33 14 0 14 Pelican4Ever_Bridge_2 33 14 0 15 Pelican4Ever_Bridge_2 33 14 34 13 Farm 2 26 34 14 Farm 2 26 34 15 Farm 2 26", b1Warps);
+            Assert.Equal("0 22 Pelican4Ever_Bridge_2 33 24 0 23 Pelican4Ever_Bridge_2 33 24 0 24 Pelican4Ever_Bridge_2 33 24 0 25 Pelican4Ever_Bridge_2 33 24 34 22 Farm 2 26 34 23 Farm 2 26 34 24 Farm 2 26 34 25 Farm 2 26", b1Warps);
 
             var bridge2 = chain16[2];
             string b2Warps = PlazaTopologyVerifier.BuildPassageWarpString(bridge2);
-            Assert.Equal("0 13 Pelican4Ever_Bridge_3 33 14 0 14 Pelican4Ever_Bridge_3 33 14 0 15 Pelican4Ever_Bridge_3 33 14 34 13 Pelican4Ever_Bridge_1 1 14 34 14 Pelican4Ever_Bridge_1 1 14 34 15 Pelican4Ever_Bridge_1 1 14", b2Warps);
+            Assert.Equal("0 22 Pelican4Ever_Bridge_3 33 24 0 23 Pelican4Ever_Bridge_3 33 24 0 24 Pelican4Ever_Bridge_3 33 24 0 25 Pelican4Ever_Bridge_3 33 24 34 22 Pelican4Ever_Bridge_1 1 24 34 23 Pelican4Ever_Bridge_1 1 24 34 24 Pelican4Ever_Bridge_1 1 24 34 25 Pelican4Ever_Bridge_1 1 24", b2Warps);
 
             var bridge3 = chain16[3];
             string b3Warps = PlazaTopologyVerifier.BuildPassageWarpString(bridge3);
-            Assert.Equal("34 13 Pelican4Ever_Bridge_2 1 14 34 14 Pelican4Ever_Bridge_2 1 14 34 15 Pelican4Ever_Bridge_2 1 14", b3Warps);
+            Assert.Equal("34 22 Pelican4Ever_Bridge_2 1 24 34 23 Pelican4Ever_Bridge_2 1 24 34 24 Pelican4Ever_Bridge_2 1 24 34 25 Pelican4Ever_Bridge_2 1 24", b3Warps);
 
             // Granja Host sin puentes (slotCount = 4)
             var chain4 = HostPlazaLayout.Chain(4);
@@ -44,17 +44,19 @@ namespace Pelican4Ever.Tests
             string warpStr = PlazaTopologyVerifier.BuildPassageWarpString(bridge1);
 
             var parsed = PlazaTopologyVerifier.ParseWarpProperty(warpStr);
-            Assert.Equal(6, parsed.Count);
+            Assert.Equal(8, parsed.Count);
 
-            // 3 warps oeste
-            Assert.Equal(new PlazaWarpEntry(0, 13, "Pelican4Ever_Bridge_2", 33, 14), parsed[0]);
-            Assert.Equal(new PlazaWarpEntry(0, 14, "Pelican4Ever_Bridge_2", 33, 14), parsed[1]);
-            Assert.Equal(new PlazaWarpEntry(0, 15, "Pelican4Ever_Bridge_2", 33, 14), parsed[2]);
+            // 4 warps oeste
+            Assert.Equal(new PlazaWarpEntry(0, 22, "Pelican4Ever_Bridge_2", 33, 24), parsed[0]);
+            Assert.Equal(new PlazaWarpEntry(0, 23, "Pelican4Ever_Bridge_2", 33, 24), parsed[1]);
+            Assert.Equal(new PlazaWarpEntry(0, 24, "Pelican4Ever_Bridge_2", 33, 24), parsed[2]);
+            Assert.Equal(new PlazaWarpEntry(0, 25, "Pelican4Ever_Bridge_2", 33, 24), parsed[3]);
 
-            // 3 warps este
-            Assert.Equal(new PlazaWarpEntry(34, 13, "Farm", 2, 26), parsed[3]);
-            Assert.Equal(new PlazaWarpEntry(34, 14, "Farm", 2, 26), parsed[4]);
-            Assert.Equal(new PlazaWarpEntry(34, 15, "Farm", 2, 26), parsed[5]);
+            // 4 warps este
+            Assert.Equal(new PlazaWarpEntry(34, 22, "Farm", 2, 26), parsed[4]);
+            Assert.Equal(new PlazaWarpEntry(34, 23, "Farm", 2, 26), parsed[5]);
+            Assert.Equal(new PlazaWarpEntry(34, 24, "Farm", 2, 26), parsed[6]);
+            Assert.Equal(new PlazaWarpEntry(34, 25, "Farm", 2, 26), parsed[7]);
         }
 
         [Theory]
@@ -196,7 +198,7 @@ namespace Pelican4Ever.Tests
             Assert.NotNull(chain[0].West);
             Assert.Equal("Pelican4Ever_Bridge_1", chain[0].West!.TargetLocation);
             Assert.Equal(33, chain[0].West!.ArrivalX);
-            Assert.Equal(14, chain[0].West!.ArrivalY);
+            Assert.Equal(24, chain[0].West!.ArrivalY);
 
             // Bridge 1 -> Farm
             Assert.NotNull(chain[1].East);
@@ -208,25 +210,25 @@ namespace Pelican4Ever.Tests
             Assert.NotNull(chain[1].West);
             Assert.Equal("Pelican4Ever_Bridge_2", chain[1].West!.TargetLocation);
             Assert.Equal(33, chain[1].West!.ArrivalX);
-            Assert.Equal(14, chain[1].West!.ArrivalY);
+            Assert.Equal(24, chain[1].West!.ArrivalY);
 
             // Bridge 2 -> Bridge 1
             Assert.NotNull(chain[2].East);
             Assert.Equal("Pelican4Ever_Bridge_1", chain[2].East!.TargetLocation);
             Assert.Equal(1, chain[2].East!.ArrivalX);
-            Assert.Equal(14, chain[2].East!.ArrivalY);
+            Assert.Equal(24, chain[2].East!.ArrivalY);
 
             // Bridge 2 -> Bridge 3
             Assert.NotNull(chain[2].West);
             Assert.Equal("Pelican4Ever_Bridge_3", chain[2].West!.TargetLocation);
             Assert.Equal(33, chain[2].West!.ArrivalX);
-            Assert.Equal(14, chain[2].West!.ArrivalY);
+            Assert.Equal(24, chain[2].West!.ArrivalY);
 
             // Bridge 3 -> Bridge 2
             Assert.NotNull(chain[3].East);
             Assert.Equal("Pelican4Ever_Bridge_2", chain[3].East!.TargetLocation);
             Assert.Equal(1, chain[3].East!.ArrivalX);
-            Assert.Equal(14, chain[3].East!.ArrivalY);
+            Assert.Equal(24, chain[3].East!.ArrivalY);
         }
 
         [Fact]

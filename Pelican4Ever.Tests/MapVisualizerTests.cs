@@ -145,29 +145,31 @@ namespace Pelican4Ever.Tests
                     Assert.InRange(my, 0, loc.Height - 1);
                     Assert.InRange(my - 1, 0, loc.Height - 1);
 
-                    // 4. Ningún camino ni buzón pisa las filas de los pasos este/oeste
+                    // 4. Ningún camino ni buzón pisa las casillas de los pasos este/oeste
                     if (loc.West != null)
                     {
                         int wStart = loc.West.FirstRow;
                         int wEnd = loc.West.FirstRow + loc.West.RowCount - 1;
+                        int maxWestX = string.Equals(loc.Name, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase) ? 7 : 5;
                         foreach (var (px, py) in path)
                         {
-                            Assert.False(py >= wStart && py <= wEnd, $"El camino de {door.DoorId} pisa las filas del paso Oeste ({wStart}..{wEnd}): Y={py}");
+                            Assert.False(px <= maxWestX && py >= wStart && py <= wEnd, $"El camino de {door.DoorId} pisa el paso Oeste ({wStart}..{wEnd}): ({px},{py})");
                         }
-                        Assert.False(my >= wStart && my <= wEnd, $"El buzón de {door.DoorId} pisa las filas del paso Oeste ({wStart}..{wEnd}): Y={my}");
-                        Assert.False(my - 1 >= wStart && my - 1 <= wEnd, $"La caja del buzón de {door.DoorId} pisa las filas del paso Oeste ({wStart}..{wEnd}): Y={my - 1}");
+                        Assert.False(mx <= maxWestX && my >= wStart && my <= wEnd, $"El buzón de {door.DoorId} pisa el paso Oeste ({wStart}..{wEnd}): ({mx},{my})");
+                        Assert.False(mx <= maxWestX && my - 1 >= wStart && my - 1 <= wEnd, $"La caja del buzón de {door.DoorId} pisa el paso Oeste ({wStart}..{wEnd}): ({mx},{my - 1})");
                     }
 
                     if (loc.East != null)
                     {
                         int eStart = loc.East.FirstRow;
                         int eEnd = loc.East.FirstRow + loc.East.RowCount - 1;
+                        int eastBoundary = loc.Width - 6;
                         foreach (var (px, py) in path)
                         {
-                            Assert.False(py >= eStart && py <= eEnd, $"El camino de {door.DoorId} pisa las filas del paso Este ({eStart}..{eEnd}): Y={py}");
+                            Assert.False(px >= eastBoundary && py >= eStart && py <= eEnd, $"El camino de {door.DoorId} pisa el paso Este ({eStart}..{eEnd}): ({px},{py})");
                         }
-                        Assert.False(my >= eStart && my <= eEnd, $"El buzón de {door.DoorId} pisa las filas del paso Este ({eStart}..{eEnd}): Y={my}");
-                        Assert.False(my - 1 >= eStart && my - 1 <= eEnd, $"La caja del buzón de {door.DoorId} pisa las filas del paso Este ({eStart}..{eEnd}): Y={my - 1}");
+                        Assert.False(mx >= eastBoundary && my >= eStart && my <= eEnd, $"El buzón de {door.DoorId} pisa el paso Este ({eStart}..{eEnd}): ({mx},{my})");
+                        Assert.False(mx >= eastBoundary && my - 1 >= eStart && my - 1 <= eEnd, $"La caja del buzón de {door.DoorId} pisa el paso Este ({eStart}..{eEnd}): ({mx},{my - 1})");
                     }
                 }
 

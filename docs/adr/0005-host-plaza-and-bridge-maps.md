@@ -40,7 +40,7 @@ Durante la implementación y verificación con los archivos reales de Stardew Va
    * En `Farm`, el acantilado rocoso septentrional desciende hasta `y = 7..9`, requiriendo `NorthPathDepth = 10` para alcanzar la llanura transitable.
    * En los puentes (`BusStop`), la franja superior de árboles y vallas es más estrecha, requiriendo `NorthPathDepth = 5` para conectar con el patio central.
 3. **Paso Oeste en Granja Host:** El corredor oeste hacia el Puente 1 se ubica en `x = 0..7, y = 26..27`. Se despeja el cerezo estático en `AlwaysFront` (`x = 1..6, y = 23..27`) para evitar que copas flotantes obstruyan visualmente el paso al cruzar hacia el puente.
-4. **Sellado de Antigua Carretera:** En los puentes, la antigua calzada pavimentada de la parada (`y = 22..25`) se sella con vallas de madera en los extremos `x = 0` y `x = 34` para impedir caídas accidentales al vacío.
+4. **Aprovechamiento de la Carretera Vanilla (y = 22..25):** En los puentes (`BusStop`), la calzada natural de tierra/asfalto cruza de forma abierta y continua de este a oeste en las filas `y = 22..25`. Se utilizan estas filas como pasos naturales este/oeste entre puentes y hacia la Granja Host (`ArrivalY = 24`), preservando la arboleda natural y evitando perforaciones artificiales en `y = 13..15`. Las vallas de madera solo se colocan como remate en los bordes terminales cerrados (ej. borde oeste del Puente 3).
 
 ## Consecuencias y Verificación
 

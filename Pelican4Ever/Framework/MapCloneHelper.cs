@@ -252,16 +252,25 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // Remate con vallas de madera en la antigua carretera (y = 22..25) en x = 0 y x = width - 1
+            // Remate con vallas de madera en la carretera (y = 22..25) solo en los bordes donde NO hay paso activo
             if (outdoorsSheet != null)
             {
-                for (int y = 22; y <= 25; y++)
+                if (bridgeLoc.West == null)
                 {
-                    SetTileIfValid(bldLayer, outdoorsSheet, 0, y, 385);
-                    SetPassableIfValid(bldLayer, 0, y, false);
+                    for (int y = 22; y <= 25; y++)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, 0, y, 385);
+                        SetPassableIfValid(bldLayer, 0, y, false);
+                    }
+                }
 
-                    SetTileIfValid(bldLayer, outdoorsSheet, width - 1, y, 383);
-                    SetPassableIfValid(bldLayer, width - 1, y, false);
+                if (bridgeLoc.East == null)
+                {
+                    for (int y = 22; y <= 25; y++)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, width - 1, y, 383);
+                        SetPassableIfValid(bldLayer, width - 1, y, false);
+                    }
                 }
             }
 

@@ -513,7 +513,12 @@ namespace Pelican4Ever.Modules
 
                         // 3. Añadir warp hacia Pelican4Ever_Bridge_1 conservando warps vanilla
                         string existingWarps = hostMap.Properties.TryGetValue("Warp", out var wVal) ? wVal.ToString() : string.Empty;
-                        string westWarps = $"0 26 {HostPlazaLayout.BridgeName(1)} 33 14 0 27 {HostPlazaLayout.BridgeName(1)} 33 14";
+                        var westWarpsList = new List<string>();
+                        for (int y = westPassage.FirstRow; y < westPassage.FirstRow + westPassage.RowCount; y++)
+                        {
+                            westWarpsList.Add($"0 {y} {westPassage.TargetLocation} {westPassage.ArrivalX} {westPassage.ArrivalY}");
+                        }
+                        string westWarps = string.Join(" ", westWarpsList);
                         hostMap.Properties["Warp"] = string.IsNullOrWhiteSpace(existingWarps) ? westWarps : $"{existingWarps} {westWarps}";
                     }
 
@@ -557,11 +562,6 @@ namespace Pelican4Ever.Modules
                             ClearDoorAreaOnMap(bldLayer, frontLayer, alwaysFrontLayer, backLayer, door, sampleTile);
                         }
                     }
-
-                    if (bridgeLoc.West is { } westPassage)
-                        ApplyPlazaPassagePavement(bridgeMap, westPassage);
-                    if (bridgeLoc.East is { } eastPassage)
-                        ApplyPlazaPassagePavement(bridgeMap, eastPassage);
 
                     return bridgeMap;
                 }, AssetLoadPriority.Medium);
@@ -653,29 +653,6 @@ namespace Pelican4Ever.Modules
             }
 
             return false;
-        }
-
-        private static void ApplyPlazaPassagePavement(xTile.Map map, PlazaPassage passage)
-        {
-            var backLayer = map.GetLayer("Back");
-            var steppingSheet = map.GetTileSheet(TerrainTileClassifier.SteppingStonesTileSheetId);
-            if (backLayer == null || steppingSheet == null) return;
-
-            int startX = passage.Edge == PortalEdge.West ? 0 : map.Layers[0].LayerWidth - 6;
-            int endX = passage.Edge == PortalEdge.West ? 5 : map.Layers[0].LayerWidth - 1;
-
-            for (int x = startX; x <= endX; x++)
-            {
-                for (int y = passage.FirstRow; y < passage.FirstRow + passage.RowCount; y++)
-                {
-                    if (x >= 0 && x < backLayer.LayerWidth && y >= 0 && y < backLayer.LayerHeight)
-                    {
-                        backLayer.Tiles[x, y] = new xTile.Tiles.StaticTile(backLayer, steppingSheet, xTile.Tiles.BlendMode.Alpha, 0);
-                        backLayer.Tiles[x, y].Properties.Remove("Passable");
-                        backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
-                    }
-                }
-            }
         }
 
         private static void SetTileIfValid(xTile.Layers.Layer? layer, xTile.Tiles.TileSheet sheet, int x, int y, int tileIndex)
@@ -1468,6 +1445,14 @@ namespace Pelican4Ever.Modules
 
             string slotId = pendingResidenceWakeSlotId;
             pendingResidenceWakeSlotId = null;
+
+            // Verificación estricta de propiedad: nunca viajar si el jugador no es dueño de la residencia
+            var assignment = context?.WorldState?.Doors?.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+            if (assignment == null || !string.Equals(assignment.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Cancelado viaje diferido: el jugador {Game1.player.Name} ({Game1.player.UniqueMultiplayerID}) no posee la residencia {slotId}.", LogLevel.Warn);
+                return;
+            }
 
             string home = $"{slotId}_Home";
             if (string.Equals(Game1.currentLocation?.NameOrUniqueName, home, StringComparison.OrdinalIgnoreCase))
@@ -2386,6 +2371,14 @@ namespace Pelican4Ever.Modules
                         if (myDoor != null && !string.IsNullOrEmpty(myDoor.FarmSlotId))
                         {
                             Game1.player.homeLocation.Value = $"{myDoor.FarmSlotId}_Home";
+
+                            // Si el jugador despertó en el fallback provisional de la plaza ("Farm" 64, 15) al unirse
+                            // antes de recibir la sincronización de puertas, programar el viaje a la cama de su residencia.
+                            if (string.Equals(Game1.currentLocation?.NameOrUniqueName, "Farm", StringComparison.OrdinalIgnoreCase)
+                                && (int)Game1.player.Tile.X == 64 && (int)Game1.player.Tile.Y == 15)
+                            {
+                                pendingResidenceWakeSlotId = myDoor.FarmSlotId;
+                            }
                         }
                     }
 
@@ -3690,13 +3683,16 @@ namespace Pelican4Ever.Modules
                 else if (baseSlot.EndsWith(ResidenceUpgradeLogic.CabinHomeSuffix, StringComparison.OrdinalIgnoreCase))
                     baseSlot = baseSlot.Substring(0, baseSlot.Length - ResidenceUpgradeLogic.CabinHomeSuffix.Length);
 
+                var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == baseSlot);
+
                 if (Context.IsMainPlayer && locationRequest.Location == null)
                 {
-                    EnsureFarmSlotExists(baseSlot);
-                    locationRequest = Game1.getLocationRequest(targetLoc);
+                    if (assignment != null)
+                    {
+                        EnsureFarmSlotExists(baseSlot);
+                        locationRequest = Game1.getLocationRequest(targetLoc);
+                    }
                 }
-
-                var assignment = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == baseSlot);
                 if (assignment != null)
                 {
                     long myId = Game1.player.UniqueMultiplayerID;

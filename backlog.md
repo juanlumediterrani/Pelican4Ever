@@ -761,7 +761,7 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     - Las filas 13–15 de los pasos y los puntos de los portales no se han comprobado sobre el mapa real.
   * **Inspección Técnica de `Maps/BusStop`:**
     - Medidas reales: 65×30 casillas; `ViewportClamp = "10 0 35 30"` en vanilla. El recorte determinista de 35×30 casillas iniciado en `(srcX=10, srcY=0)` cubre exactamente el área jugable limpia.
-    - Filas transitables en el mapa recortado: en `x=0` camino a `y=13..15`; en `x=34` carretera a `y=23..24`. Pasos Oeste y Este simétricos tallados con baldosas `SteppingStones` en `y=13..15`.
+    - Filas transitables en el mapa recortado: carretera natural vanilla en `y=22..25` tanto en `x=0` como en `x=34`. Se aprovecha esta calzada continua natural como paso Este y Oeste de los puentes (`ArrivalY = 24`), preservando la vegetación natural y eliminando cualquier perforación artificial o pavimento forzado en `y=13..15`. Las vallas perimetrales solo se colocan en los extremos terminales cerrados (ej. oeste del Puente 3).
     - Propiedad `Warp` vanilla: `"10 23 Farm 79 17 10 24 Farm 79 18 24 6 Backwoods 20 39 25 6 Backwoods 21 39 34 23 Town 0 17 34 24 Town 0 18"`. Eliminada incondicionalmente junto a `Doors`, `NPCWarp` y propiedades no outdoor.
     - Propiedades `Action` y `TouchAction`: autobús en `(18, 9)`, máquina expendedora en `(22, 9)`, bordes vanilla. Recorrido exhaustivo por todas las capas (`Back`, `Buildings`, `Front`, `AlwaysFront`, `Paths`) eliminando incondicionalmente cualquier `Action` o `TouchAction`.
     - Portales de residencia en el recorte:
