@@ -724,7 +724,7 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
 
 #### Fase C — Puentes declarativos (host y clientes)
 
-- [ ] **TASK-1201: Registrar los puentes en `Data/Locations`**
+- [x] **TASK-1201: Registrar los puentes en `Data/Locations`**
   * **Análisis Técnico:** `EnsureBridgeLocations` (`:1370`) crea los puentes con `Game1.locations.Add`. Esos puentes no se guardan, cada cliente crea su propia copia sin sincronizar, y se crean aunque `FarmSlotCount` sea 4.
   * **Pasos:**
     1. En `OnAssetRequested`, rama `Data/Locations` (`:104`), justo después de la Granja Host:
@@ -753,11 +753,23 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. Tras guardar, reiniciar el servidor y cargar, los puentes existen y conservan un objeto dejado en el suelo.
     2. Un cliente que cruza al puente 1 ve al host y a otros clientes en ese puente.
     3. Con `FarmSlotCount = 4` no existe ningún puente.
+  * **Resolución:** `497722d` — Implementado en `FarmSlotModule.cs`: registro declarativo en `Data/Locations` mediante `CreateLocationData` con `AlwaysActive = true` y campos NITV (`Nature.NIV.Outside`). Invalidación automática mediante `slotDataSignature` incluyendo puentes (`slotCount:bridges`). Eliminación de `EnsureBridgeLocations`. En `Prefix_SaveGameLoadDataToLocations`, pre-registro seguro como `GameLocation` para restaurar objetos guardados y descarte de puentes si bajó `FarmSlotCount`. Saneamiento de jugadores huérfanos (`disconnectLocation`, `lastSleepLocation`) en `OnSaveLoaded`, `OnPeerContextReceived` y `Prefix_ApplyWakeUpPosition`.
 
-- [ ] **TASK-1202: Generar el mapa `Maps/Pelican4Ever_Bridge_N`**
+- [x] **TASK-1202: Generar el mapa `Maps/Pelican4Ever_Bridge_N`**
   * **Análisis Técnico:**
     - Hoy el puente es una copia de `Maps/BusStop` con `mapPath` vanilla, así que `reloadMap` y `updateWarps` recuperan los warps de `BusStop` (a `Farm`, `Town` y `Backwoods`).
     - Las filas 13–15 de los pasos y los puntos de los portales no se han comprobado sobre el mapa real.
+  * **Inspección Técnica de `Maps/BusStop`:**
+    - Medidas reales: 65×30 casillas; `ViewportClamp = "10 0 35 30"` en vanilla. El recorte determinista de 35×30 casillas iniciado en `(srcX=10, srcY=0)` cubre exactamente el área jugable limpia.
+    - Filas transitables en el mapa recortado: en `x=0` camino a `y=13..15`; en `x=34` carretera a `y=23..24`. Pasos Oeste y Este simétricos tallados con baldosas `SteppingStones` en `y=13..15`.
+    - Propiedad `Warp` vanilla: `"10 23 Farm 79 17 10 24 Farm 79 18 24 6 Backwoods 20 39 25 6 Backwoods 21 39 34 23 Town 0 17 34 24 Town 0 18"`. Eliminada incondicionalmente junto a `Doors`, `NPCWarp` y propiedades no outdoor.
+    - Propiedades `Action` y `TouchAction`: autobús en `(18, 9)`, máquina expendedora en `(22, 9)`, bordes vanilla. Recorrido exhaustivo por todas las capas (`Back`, `Buildings`, `Front`, `AlwaysFront`, `Paths`) eliminando incondicionalmente cualquier `Action` o `TouchAction`.
+    - Portales de residencia en el recorte:
+      - `(8..9, 0..5)` [Norte Izquierda]: patio superior norte, Back=1028 (tierra), despejado con remate rocoso en borde superior.
+      - `(25..26, 0..5)` [Norte Derecha]: patio superior noreste, Back=1028 (tierra), arbustos despejados.
+      - `(8..9, 24..29)` [Sur Izquierda]: asfalto carretera sur, Back=204/230, despejado con `Passable = "T"`.
+      - `(25..26, 24..29)` [Sur Derecha]: asfalto carretera sureste, Back=204/230/326, despejado con `Passable = "T"`.
+      - Arbustos del patio central `(4..29, 6..20)` y autobús averiado `(10..19, 6..10)` eliminados; perímetro sellado con `Passable = "F"` y remates de valla `(385/383)`.
   * **Pasos:**
     1. Antes de programar, exportar `Maps/BusStop` con `patch export` (ver la guía) y anotar en esta tarea:
        - las medidas reales;
@@ -782,12 +794,16 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. Desde ningún puente se llega a `Farm` (salvo por el paso este del puente 1), a `Town` ni a `Backwoods`.
     2. Tras un cambio de estación o una reconexión, los pasos siguen funcionando.
     3. Las filas de los pasos y las casillas de llegada son transitables.
+  * **Resolución:** `497722d` — Implementado en `MapCloneHelper.CreateBridgeMap` y `FarmSlotModule.cs`. Generación determinista del mapa xnb 35×30 recortando `Maps/BusStop` desde `(10, 0)`, depuración incondicional de propiedades y acciones, sellado perimetral, tallado de pasos este/oeste con warps declarativos de `HostPlazaLayout.Chain`, inyección de buzones y caminos empedrados, e integración de `EnsureLocationPortals` dinámica para parcelas reclamadas.
 
-- [ ] **TASK-1203: Tallar el paso oeste en `Maps/Pelican4Ever_HostFarm`**
+- [x] **TASK-1203: Tallar el paso oeste en `Maps/Pelican4Ever_HostFarm`**
   * **Análisis Técnico:**
     - El warp `Farm (0, 26..27)` se añade en caliente.
     - El mapa no se talla, y en la granja Estándar el borde oeste es acantilado o bosque.
     - La llegada desde el puente es `(2, 26)`, y no se ha comprobado que sea transitable.
+  * **Inspección Técnica de `Maps/Farm`:**
+    - Borde oeste en `x=0..7, y=26..27`: columnas `x=0..6` en `y=26..27` ocupadas por acantilado y cerezo estático en `(2..5, 23..29)` con copa `AlwaysFront` en `(1..6, 23..27)`. La columna `x=7` es campo abierto transitable.
+    - Tallado implementado: limpieza de `Buildings`, `Front` y `AlwaysFront`, relleno de `Back` con `SteppingStones` transitables, remoción de escombros/árboles y colocación de warps continuos a `Pelican4Ever_Bridge_1` en `(0, 26..27)`.
   * **Pasos:**
     1. Exportar `Maps/Farm` con `patch export` y localizar en el borde oeste un tramo de dos filas que pueda abrirse hasta campo abierto. Si `y=26..27` no sirve, cambiarlo en `HostPlazaLayout` y no en el código.
     2. En la generación de `Maps/Pelican4Ever_HostFarm` (`:358`):
@@ -799,10 +815,11 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
   * **Criterios de Aceptación:**
     1. Se puede ir caminando de la Granja Host al puente 1 y volver, en las cuatro estaciones.
     2. Tras 7 días de juego, el paso sigue despejado.
+  * **Resolución:** `497722d` — Implementado en `FarmSlotModule.cs`. Tallado continuo de `(x=0..7, y=26..27)` en la generación de `Maps/Pelican4Ever_HostFarm`, inyección de propiedad declarativa `Warp` a `Pelican4Ever_Bridge_1` condicionado a `BridgeCount > 0`. Suscripción a `GameLoop.DayStarted` en el host para ejecutar `EnsureAllPlazaPortals()` diariamente, manteniendo caminos, aperturas y pasos libres de escombros.
 
 #### Fase D — Ejecución sobre «ubicación de la plaza» en vez de `"Farm"`
 
-- [ ] **TASK-1301: Generalizar la detección de portal, la colisión y el refresco**
+- [x] **TASK-1301: Generalizar la detección de portal, la colisión y el refresco**
   * **Análisis Técnico:** hoy las parcelas 05–16 no pueden fundarse caminando y las aperturas de los puentes no tienen el parche de colisión. Los puntos atados a `"Farm"` son:
 
     | Sitio | Condición actual |
@@ -825,8 +842,9 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. Un jugador sin residencia funda las parcelas 05 y 16 caminando hasta su portal.
     2. Las aperturas del puente 2 no bloquean al jugador, y no aparecen aperturas fantasma en los puentes 1 y 3.
     3. Si un jugador está en el puente 2 cuando otro reclama una parcela de ese puente, ve el warp activo sin salir.
+  * **Resolución:** `497722d` — Implementado en `FarmSlotModule.cs`. Migración integral de condiciones a `HostPlazaLayout.IsPlazaLocation`. En `Prefix_IsCollidingPosition` se filtran puertas por coincidencia exacta con `location.NameOrUniqueName` y se incluyen comprobaciones de pasos `IsInPlazaPassage`. `portalPromptGate.Reset()` se dispara al abandonar cualquier plaza. Aislamiento de `CleanUpHostFarmLegacy` solo para la Granja Host. Actualización dinámica de warps en `EnsureLocationPortals` y `EnsureAllPlazaPortals` en reclamos y sincronización multijugador.
 
-- [ ] **TASK-1302: Validar los caminos de la Granja Host tras el cambio de profundidad**
+- [x] **TASK-1302: Validar los caminos de la Granja Host tras el cambio de profundidad**
   * **Análisis Técnico:** `cd7e2cb` acortó los caminos norte de `y=10` a `y=4` y quitó el margen despejado y los warps del borde absoluto (`x=0`, `x=79`, `y=0`, `y=64`).
   * **Pasos:**
     1. En partida, ir de cada portal (01–04) al centro de la granja y anotar si se queda encerrado. Comparar con `git show cd7e2cb^:Pelican4Ever/Modules/FarmSlotModule.cs`.
@@ -836,8 +854,9 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
   * **Dependencias:** TASK-1103.
   * **Criterios de Aceptación:**
     1. Desde cada portal de la Granja Host se llega caminando al resto de la granja.
+  * **Resolución:** `497722d` — Implementado en `FarmSlotModule.cs`. En `EnsureLocationPortals`, se despeja sistemáticamente un margen interior de 3×4 casillas al final de cada camino para conectar limpiamente con el área transitable de la plaza sin quedar atrapado. Sanadas las aperturas norte (parcelas 01 y 02 en x=18 y x=62) con remates rocosos limpios y las aperturas sur (parcelas 03 y 04) removiendo hierba colgante.
 
-- [ ] **TASK-1303: Vuelta desde la residencia y la cabaña a su ubicación de origen**
+- [x] **TASK-1303: Vuelta desde la residencia y la cabaña a su ubicación de origen**
   * **Análisis Técnico:** `Prefix_WarpFarmer` ya usa `door.LocationName` en dos sitios: la salida de la residencia (`:3571`) y la de la cabaña hacia `"Farm"` (`:3480`). Solo queda migrar la geometría.
   * **Pasos:**
     1. Migrar los dos sitios a `ShouldReturnToPlaza(edge, target)` y `GetPlazaReturnCoordinates(edge, …)`.
@@ -849,8 +868,9 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
   * **Criterios de Aceptación:**
     1. Al salir de la residencia 10 se aparece frente a su portal en el puente 2, mirando hacia el interior.
     2. Ninguna salida de residencia, cabaña ni anexo lleva a un mapa vanilla.
+  * **Resolución:** `497722d` — Implementado en `FarmSlotModule.cs`. Sustituido `RepositionToPortalExit` por `ResolvePlazaReturn(door, ref locationRequest, ref tileX, ref tileY, ref facingDirectionAfterWarp)`. Valida que `door.LocationName` pertenezca a `HostPlazaLayout.Chain(slotCount)` y exista en `Game1.locations`; si el puente quedó inactivo tras reducir `FarmSlotCount`, redirige con seguridad a la Granja Host `(64, 16)` facing Sur (`2`) y emite advertencia en el log. Salidas de cabañas y residencias unificadas con retorno preciso frente a su portal en su respectiva plaza.
 
-- [ ] **TASK-1304: Catálogo `/residencias` y textos**
+- [x] **TASK-1304: Catálogo `/residencias` y textos**
   * **Pasos:**
     1. En `/residencias` y `/doors` (`:2023`), agrupar las parcelas por ubicación (Granja Host y Puente N) y ocultar las que superan `FarmSlotCount`.
     2. Revisar el mensaje de bienvenida (`:1219`): menciona un «cartel verde» y debe explicar el paso hacia los puentes.
@@ -858,6 +878,7 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
   * **Prioridad:** Baja
   * **Criterios de Aceptación:**
     1. Con `FarmSlotCount = 8`, el catálogo lista 8 parcelas, cuatro de ellas en el «Puente 1».
+  * **Resolución:** `d43080c` y `497722d` — Implementado en `PlazaCatalogFormatter.cs` con métodos puros (`GetLocationDisplayName`, `ExtractSlotNumber`, `FilterActiveDoors`, `BuildCatalogEntries`, `FormatChatLine`, `FormatConsoleLine`) y testeado exhaustivamente con 15 pruebas unitarias en `PlazaCatalogFormatterTests.cs`. Integrado en comandos `/residencias` (`HandleDoorsChatCommand`) y consola (`OnConsoleDoors`). Mensaje HUD de bienvenida en `OnPlayerWarped` actualizado para abarcar todas las ubicaciones de la plaza y eliminar la referencia obsoleta al "cartel verde".
 
 #### Fase E — Verificación en partida y documentación
 
