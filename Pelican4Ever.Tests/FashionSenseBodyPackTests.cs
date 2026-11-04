@@ -22,8 +22,8 @@ public class FashionSenseBodyPackTests
         int imageWidth = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16, 4));
         int imageHeight = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20, 4));
 
-        // Four animation frames across and four directions down; Scale controls draw size,
-        // not the source rectangle dimensions.
+        // Four animation frames across and four directions down (24x32 cells). Fashion Sense
+        // ignores Scale for bodies and anchors each cell's top-left on the vanilla 16x32 frame.
         Assert.Equal(width * 4, imageWidth);
         Assert.Equal(height * 4, imageHeight);
         Assert.Equal(4f, scale);
