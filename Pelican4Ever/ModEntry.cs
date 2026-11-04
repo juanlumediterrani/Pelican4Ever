@@ -37,6 +37,7 @@ namespace Pelican4Ever
                 new MaintenanceLockModule(),
                 new ClientSecurityModule(),
                 new StatusCommandModule(),
+                new DebugGiveModule(),
                 new RealTimeClockModule(),
                 new BedLogoutModule(),
                 new DailyRolloverModule(),
