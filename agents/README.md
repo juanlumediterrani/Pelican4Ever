@@ -53,10 +53,24 @@ fotograma y en x=9,5; las vistas
 frontal/trasera se estrechan un 15 %. La arte sale de `dr4co-sid-v2.png`: el
 script `scripts/build_dr4co_body.py` solo calcula la geometría y GIMP
 (`gimp-console-2.10`, Script-Fu) hace el recorte, el escalado NoHalo, el umbral
-de alfa y la paleta indexada de 32 colores.
+de alfa y la paleta indexada de 32 colores. También en GIMP: en las vistas
+laterales se desplaza 1 px el pie delantero (adelante y elevado / atrás) para
+que también dé el paso, y los bordes claros o rojo vivo de la silueta (punta
+del hocico, cuernos, vientre) reciben un contorno rojo muy oscuro.
 
 `HideSleeves: true` en las cuatro direcciones evita que, al usar el hacha o el
 pico, el juego dibuje el brazo/manga del granjero sobre el ala del dragón.
+
+La fila izquierda va 2 px más hacia la cola que la derecha: a la izquierda del
+punto de apoyo solo caben ~8 px y, si no, la punta del hocico se cortaba.
+
+El juego dibuja la herramienta a la altura de las manos de un granjero de
+32 px y Fashion Sense no permite moverla. El módulo `AgentCosmetics` de
+Pelican 4Ever (`Pelican4Ever/Modules/AgentCosmeticsModule.cs`, valores en
+`Pelican4Ever.Core/Players/AgentToolOffset.cs`) la desplaza mientras se dibuja
+cuando el cuerpo activo es el de Dr4co, para que salga de sus garras. Solo lee
+el id del cuerpo en `modData`, así que Pelican 4Ever sigue sin depender de
+Fashion Sense, y la casilla a la que golpea la herramienta no cambia.
 
 Verificado en local (Fashion Sense 7.5.0, SMAPI, partida cargada): dragón visible
 y sin restos humanos andando en las cuatro direcciones.

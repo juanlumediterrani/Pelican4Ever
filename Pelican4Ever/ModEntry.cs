@@ -51,6 +51,7 @@ namespace Pelican4Ever
                 new FestivalMinigameModule(),
                 new FestivalAccessModule(),
                 new FestivalParticipationModule(),
+                new AgentCosmeticsModule(),
                 new AdminApiModule(),
                 new AutoHostModule()
             );
