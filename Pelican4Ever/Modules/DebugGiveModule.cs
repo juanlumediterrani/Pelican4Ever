@@ -3,17 +3,27 @@ using System.Collections.Generic;
 using System.Linq;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
+using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Menus;
 
 namespace Pelican4Ever.Modules
 {
     /// <summary>
-    /// Comandos de consola de testeo solo para el host: <c>p4e_give_gold</c> y <c>p4e_give_item</c>.
-    /// Sin jugador indicado afectan al host; con jugador (nombre o id) afectan a ese farmer.
+    /// Comandos de testeo solo para el host: <c>p4e_give_gold</c> y <c>p4e_give_item</c> (consola SMAPI sin barra,
+    /// chat del juego con barra). Sin jugador indicado afectan al host.
     /// </summary>
+    /// <remarks>
+    /// Cada cliente es el dueño de su propio <see cref="Farmer"/>: si el host le cambia el inventario o el dinero,
+    /// el cliente lo sobrescribe. Por eso, para un jugador conectado, el host le envía un mensaje de mod y es el
+    /// propio cliente quien se aplica el cambio y responde con el resultado. Un farmhand desconectado sí se edita
+    /// directamente en el host, que es quien guarda su estado mientras no está.
+    /// </remarks>
     public sealed class DebugGiveModule : IModule
     {
+        private const string MsgGive = "DebugGive.Give";
+        private const string MsgResult = "DebugGive.Result";
+
         private ModContext context = null!;
         private ChatBox? replyChat;
 
@@ -27,23 +37,26 @@ namespace Pelican4Ever.Modules
             ctx.Helper.ConsoleCommands.Add(
                 "p4e_give_gold",
                 "Da (o quita, si es negativo) oro: p4e_give_gold <cantidad> [jugador_nombre_o_id]",
-                OnGiveGold);
+                (cmd, args) => Run(() => OnGiveGold(args)));
             ctx.Helper.ConsoleCommands.Add(
                 "p4e_give_item",
                 "Da un item: p4e_give_item <id_o_nombre> [cantidad=1] [jugador_nombre_o_id]  (id p.ej. 74 o (O)74; nombre con _ por espacios, p.ej. Prismatic_Shard)",
-                OnGiveItem);
+                (cmd, args) => Run(() => OnGiveItem(args)));
 
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => RegisterChatCommands();
+            ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
         }
+
+        // ---------- Registro y salida ----------
 
         private void RegisterChatCommands()
         {
             try
             {
                 if (!ChatCommands.Exists("p4e_give_gold"))
-                    ChatCommands.Register("p4e_give_gold", (cmd, chat) => RunFromChat(chat, cmd, OnGiveGold), _ => "Da oro: /p4e_give_gold <cantidad> [jugador]", null, mainOnly: true, multiplayerOnly: false, cheatsOnly: false);
+                    ChatCommands.Register("p4e_give_gold", (cmd, chat) => RunFromChat(chat, () => OnGiveGold(cmd.Skip(1).ToArray())), _ => "Da oro: /p4e_give_gold <cantidad> [jugador]", null, mainOnly: true, multiplayerOnly: false, cheatsOnly: false);
                 if (!ChatCommands.Exists("p4e_give_item"))
-                    ChatCommands.Register("p4e_give_item", (cmd, chat) => RunFromChat(chat, cmd, OnGiveItem), _ => "Da un item: /p4e_give_item <id_o_nombre> [cantidad] [jugador]", null, mainOnly: true, multiplayerOnly: false, cheatsOnly: false);
+                    ChatCommands.Register("p4e_give_item", (cmd, chat) => RunFromChat(chat, () => OnGiveItem(cmd.Skip(1).ToArray())), _ => "Da un item: /p4e_give_item <id_o_nombre> [cantidad] [jugador]", null, mainOnly: true, multiplayerOnly: false, cheatsOnly: false);
             }
             catch (Exception ex)
             {
@@ -51,11 +64,24 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private void RunFromChat(ChatBox chat, string[] cmd, Action<string, string[]> handler)
+        private void RunFromChat(ChatBox chat, Action action)
         {
             replyChat = chat;
-            try { handler(cmd[0], cmd.Skip(1).ToArray()); }
+            try { Run(action); }
             finally { replyChat = null; }
+        }
+
+        private void Run(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                Say($"[DebugGive] Error: {ex.Message}", LogLevel.Error);
+                context.Monitor.Log(ex.ToString(), LogLevel.Trace);
+            }
         }
 
         private void Say(string message, LogLevel level)
@@ -64,7 +90,9 @@ namespace Pelican4Ever.Modules
             replyChat?.addInfoMessage(message);
         }
 
-        private void OnGiveGold(string command, string[] args)
+        // ---------- Comandos (host) ----------
+
+        private void OnGiveGold(string[] args)
         {
             if (!CheckHostWorld())
                 return;
@@ -79,11 +107,17 @@ namespace Pelican4Ever.Modules
             if (target == null)
                 return;
 
-            target.Money = Math.Max(0, target.Money + amount);
-            Say($"{target.Name}: {(amount >= 0 ? "+" : string.Empty)}{amount}g -> ahora {target.Money}g.", LogLevel.Info);
+            var payload = new GivePayload { Gold = amount };
+            if (IsRemoteOnline(target))
+            {
+                SendToClient(target, payload);
+                return;
+            }
+
+            Say(ApplyGold(target, amount), LogLevel.Info);
         }
 
-        private void OnGiveItem(string command, string[] args)
+        private void OnGiveItem(string[] args)
         {
             if (!CheckHostWorld())
                 return;
@@ -119,28 +153,118 @@ namespace Pelican4Ever.Modules
             if (target == null)
                 return;
 
-            Item sample = ItemRegistry.Create(itemId, 1);
-            string label = sample.DisplayName;
-            int remaining = count;
-            while (remaining > 0)
+            var payload = new GivePayload { ItemId = itemId, Count = count };
+            if (IsRemoteOnline(target))
             {
-                int chunk = Math.Min(remaining, Math.Max(1, sample.maximumStackSize()));
-                Item item = ItemRegistry.Create(itemId, chunk);
-                int before = item.Stack;
-                int left = AddToInventory(target, item);
-                remaining -= before - left;
-                if (left > 0)
-                    break;
+                SendToClient(target, payload);
+                return;
             }
 
-            int given = count - remaining;
-            if (remaining > 0)
-                Say($"Inventario de {target.Name} lleno: entregado {label} x{given} de {count}.", LogLevel.Warn);
-            else
-                Say($"{target.Name} recibe {label} x{given} ({itemId}).", LogLevel.Info);
+            // Host local: lo que no quepa cae a sus pies. Farmhand desconectado: solo lo que quepa.
+            Say(ApplyItem(target, itemId, count, dropOverflow: target.IsLocalPlayer), LogLevel.Info);
         }
 
-        /// <summary>Inserta en el inventario de cualquier farmer (local o remoto). Devuelve las unidades que no cupieron.</summary>
+        private void SendToClient(Farmer target, GivePayload payload)
+        {
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                MsgGive,
+                new[] { context.Manifest.UniqueID },
+                new[] { target.UniqueMultiplayerID });
+            Say($"Orden enviada al cliente de {target.Name}; esperando confirmación...", LogLevel.Info);
+        }
+
+        // ---------- Mensajes ----------
+
+        private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
+        {
+            if (e.FromModID != context.Manifest.UniqueID)
+                return;
+
+            switch (e.Type)
+            {
+                // Cliente: solo acepta órdenes del host.
+                case MsgGive when !Context.IsMainPlayer && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID:
+                {
+                    GivePayload p = e.ReadAs<GivePayload>();
+                    string result;
+                    try
+                    {
+                        result = p.ItemId != null
+                            ? ApplyItem(Game1.player, p.ItemId, p.Count, dropOverflow: true)
+                            : ApplyGold(Game1.player, p.Gold);
+                    }
+                    catch (Exception ex)
+                    {
+                        result = $"Error en el cliente de {Game1.player.Name}: {ex.Message}";
+                    }
+
+                    context.Monitor.Log($"[DebugGive] {result}", LogLevel.Info);
+                    Game1.addHUDMessage(new HUDMessage(result, HUDMessage.newQuest_type));
+                    context.Helper.Multiplayer.SendMessage(
+                        new GiveResultPayload { Message = result },
+                        MsgResult,
+                        new[] { context.Manifest.UniqueID },
+                        new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+                    break;
+                }
+
+                // Host: confirmación del cliente.
+                case MsgResult when Context.IsMainPlayer:
+                {
+                    string message = e.ReadAs<GiveResultPayload>().Message;
+                    context.Monitor.Log($"[DebugGive] {message}", LogLevel.Info);
+                    Game1.chatBox?.addInfoMessage(message);
+                    break;
+                }
+            }
+        }
+
+        // ---------- Aplicación (en quien sea dueño del Farmer) ----------
+
+        private static string ApplyGold(Farmer target, int amount)
+        {
+            int newValue = Math.Max(0, target.Money + amount);
+            target.Money = newValue;
+            return $"{target.Name}: {(amount >= 0 ? "+" : string.Empty)}{amount}g -> ahora {target.Money}g.";
+        }
+
+        private static string ApplyItem(Farmer target, string itemId, int count, bool dropOverflow)
+        {
+            Item sample = ItemRegistry.Create(itemId, 1);
+            string label = sample.DisplayName;
+            int maxStack = Math.Max(1, sample.maximumStackSize());
+
+            int remaining = count;
+            int dropped = 0;
+            while (remaining > 0)
+            {
+                int chunk = Math.Min(remaining, maxStack);
+                Item item = ItemRegistry.Create(itemId, chunk);
+                int left = AddToInventory(target, item);
+                remaining -= chunk - left;
+
+                if (left > 0)
+                {
+                    if (!dropOverflow)
+                        break;
+
+                    Game1.createItemDebris(item, target.getStandingPosition(), -1, target.currentLocation);
+                    dropped += left;
+                    remaining -= left;
+                }
+            }
+
+            int inInventory = count - remaining - dropped;
+            string text = $"{target.Name} recibe {label} x{count - remaining} ({itemId})";
+            if (dropped > 0)
+                text += $"; inventario lleno, {dropped} en el suelo";
+            if (remaining > 0)
+                text += $"; inventario lleno, {remaining} sin entregar";
+            return text + (inInventory != count ? "." : " en el inventario.");
+        }
+
+        /// <summary>Apila sobre stacks existentes y luego rellena huecos. Devuelve las unidades que no cupieron.</summary>
         private static int AddToInventory(Farmer target, Item item)
         {
             var items = target.Items;
@@ -151,8 +275,7 @@ namespace Pelican4Ever.Modules
                 Item? slot = items[i];
                 if (slot != null && slot.canStackWith(item))
                 {
-                    int space = slot.maximumStackSize() - slot.Stack;
-                    int move = Math.Min(space, item.Stack);
+                    int move = Math.Min(slot.maximumStackSize() - slot.Stack, item.Stack);
                     if (move > 0)
                     {
                         slot.Stack += move;
@@ -173,6 +296,8 @@ namespace Pelican4Ever.Modules
             return item.Stack;
         }
 
+        // ---------- Utilidades ----------
+
         private bool CheckHostWorld()
         {
             if (!Context.IsWorldReady)
@@ -190,19 +315,32 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
-        /// <summary>Sin argumentos devuelve el host; con argumentos busca por id o nombre (conectado o no).</summary>
+        private static bool IsRemoteOnline(Farmer target)
+        {
+            return !target.IsLocalPlayer
+                && Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == target.UniqueMultiplayerID);
+        }
+
+        /// <summary>Sin argumentos devuelve el host; con argumentos busca por id o nombre (conectados primero).</summary>
         private Farmer? ResolveTarget(string[] args)
         {
             if (args.Length == 0)
                 return Game1.player;
 
             string text = string.Join(" ", args).Trim();
-            List<Farmer> all = Game1.getAllFarmers().ToList();
+
+            // Conectados primero: así se usa la instancia viva del farmer y no la copia guardada.
+            List<Farmer> all = Game1.getOnlineFarmers()
+                .Concat(Game1.getAllFarmers())
+                .GroupBy(f => f.UniqueMultiplayerID)
+                .Select(g => g.First())
+                .ToList();
 
             Farmer? found = null;
             if (long.TryParse(text, out long id))
                 found = all.FirstOrDefault(f => f.UniqueMultiplayerID == id);
             found ??= all.FirstOrDefault(f => string.Equals(f.Name, text, StringComparison.OrdinalIgnoreCase));
+            found ??= all.FirstOrDefault(f => f.Name.StartsWith(text, StringComparison.OrdinalIgnoreCase));
 
             if (found == null)
                 Say($"Jugador no encontrado: '{text}'. Disponibles: {string.Join(", ", all.Select(f => $"{f.Name} ({f.UniqueMultiplayerID})"))}", LogLevel.Error);
@@ -226,6 +364,19 @@ namespace Pelican4Ever.Modules
                     && (string.Equals(d.InternalName, text, StringComparison.OrdinalIgnoreCase)
                         || string.Equals(d.DisplayName, text, StringComparison.OrdinalIgnoreCase)));
             return match?.QualifiedItemId;
+        }
+
+        /// <summary>Orden del host al cliente: oro si <see cref="ItemId"/> es null; si no, item.</summary>
+        public sealed class GivePayload
+        {
+            public int Gold { get; set; }
+            public string? ItemId { get; set; }
+            public int Count { get; set; }
+        }
+
+        public sealed class GiveResultPayload
+        {
+            public string Message { get; set; } = string.Empty;
         }
     }
 }
