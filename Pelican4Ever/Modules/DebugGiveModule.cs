@@ -4,6 +4,7 @@ using System.Linq;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewValley;
+using StardewValley.Menus;
 
 namespace Pelican4Ever.Modules
 {
@@ -14,6 +15,7 @@ namespace Pelican4Ever.Modules
     public sealed class DebugGiveModule : IModule
     {
         private ModContext context = null!;
+        private ChatBox? replyChat;
 
         public string Name => "DebugGive";
 
@@ -30,6 +32,36 @@ namespace Pelican4Ever.Modules
                 "p4e_give_item",
                 "Da un item: p4e_give_item <id_o_nombre> [cantidad=1] [jugador_nombre_o_id]  (id p.ej. 74 o (O)74; nombre con _ por espacios, p.ej. Prismatic_Shard)",
                 OnGiveItem);
+
+            ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => RegisterChatCommands();
+        }
+
+        private void RegisterChatCommands()
+        {
+            try
+            {
+                if (!ChatCommands.Exists("p4e_give_gold"))
+                    ChatCommands.Register("p4e_give_gold", (cmd, chat) => RunFromChat(chat, cmd, OnGiveGold), _ => "Da oro: /p4e_give_gold <cantidad> [jugador]", null, mainOnly: true, multiplayerOnly: false, cheatsOnly: false);
+                if (!ChatCommands.Exists("p4e_give_item"))
+                    ChatCommands.Register("p4e_give_item", (cmd, chat) => RunFromChat(chat, cmd, OnGiveItem), _ => "Da un item: /p4e_give_item <id_o_nombre> [cantidad] [jugador]", null, mainOnly: true, multiplayerOnly: false, cheatsOnly: false);
+            }
+            catch (Exception ex)
+            {
+                context.Monitor.Log($"[DebugGive] Error registrando comandos de chat: {ex.Message}", LogLevel.Warn);
+            }
+        }
+
+        private void RunFromChat(ChatBox chat, string[] cmd, Action<string, string[]> handler)
+        {
+            replyChat = chat;
+            try { handler(cmd[0], cmd.Skip(1).ToArray()); }
+            finally { replyChat = null; }
+        }
+
+        private void Say(string message, LogLevel level)
+        {
+            context.Monitor.Log(message, level);
+            replyChat?.addInfoMessage(message);
         }
 
         private void OnGiveGold(string command, string[] args)
@@ -39,7 +71,7 @@ namespace Pelican4Ever.Modules
 
             if (args.Length == 0 || !int.TryParse(args[0], out int amount))
             {
-                context.Monitor.Log("Uso: p4e_give_gold <cantidad> [jugador_nombre_o_id]", LogLevel.Warn);
+                Say("Uso: p4e_give_gold <cantidad> [jugador_nombre_o_id]", LogLevel.Warn);
                 return;
             }
 
@@ -48,7 +80,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             target.Money = Math.Max(0, target.Money + amount);
-            context.Monitor.Log($"{target.Name}: {(amount >= 0 ? "+" : string.Empty)}{amount}g -> ahora {target.Money}g.", LogLevel.Info);
+            Say($"{target.Name}: {(amount >= 0 ? "+" : string.Empty)}{amount}g -> ahora {target.Money}g.", LogLevel.Info);
         }
 
         private void OnGiveItem(string command, string[] args)
@@ -58,7 +90,7 @@ namespace Pelican4Ever.Modules
 
             if (args.Length == 0)
             {
-                context.Monitor.Log("Uso: p4e_give_item <id_o_nombre> [cantidad=1] [jugador_nombre_o_id]", LogLevel.Warn);
+                Say("Uso: p4e_give_item <id_o_nombre> [cantidad=1] [jugador_nombre_o_id]", LogLevel.Warn);
                 return;
             }
 
@@ -72,14 +104,14 @@ namespace Pelican4Ever.Modules
 
             if (count < 1)
             {
-                context.Monitor.Log("La cantidad debe ser >= 1.", LogLevel.Warn);
+                Say("La cantidad debe ser >= 1.", LogLevel.Warn);
                 return;
             }
 
             string? itemId = ResolveItemId(args[0]);
             if (itemId == null)
             {
-                context.Monitor.Log($"Item no encontrado: '{args[0]}'.", LogLevel.Error);
+                Say($"Item no encontrado: '{args[0]}'.", LogLevel.Error);
                 return;
             }
 
@@ -91,24 +123,24 @@ namespace Pelican4Ever.Modules
             string label = item.DisplayName;
             if (!target.addItemToInventoryBool(item))
             {
-                context.Monitor.Log($"Inventario de {target.Name} lleno; no se pudo dar {label} x{count}.", LogLevel.Warn);
+                Say($"Inventario de {target.Name} lleno; no se pudo dar {label} x{count}.", LogLevel.Warn);
                 return;
             }
 
-            context.Monitor.Log($"{target.Name} recibe {label} x{count} ({itemId}).", LogLevel.Info);
+            Say($"{target.Name} recibe {label} x{count} ({itemId}).", LogLevel.Info);
         }
 
         private bool CheckHostWorld()
         {
             if (!Context.IsWorldReady)
             {
-                context.Monitor.Log("Partida no cargada.", LogLevel.Warn);
+                Say("Partida no cargada.", LogLevel.Warn);
                 return false;
             }
 
             if (!Context.IsMainPlayer)
             {
-                context.Monitor.Log("Este comando solo puede ejecutarse en el Host.", LogLevel.Warn);
+                Say("Este comando solo puede ejecutarse en el Host.", LogLevel.Warn);
                 return false;
             }
 
@@ -130,7 +162,7 @@ namespace Pelican4Ever.Modules
             found ??= all.FirstOrDefault(f => string.Equals(f.Name, text, StringComparison.OrdinalIgnoreCase));
 
             if (found == null)
-                context.Monitor.Log($"Jugador no encontrado: '{text}'. Disponibles: {string.Join(", ", all.Select(f => $"{f.Name} ({f.UniqueMultiplayerID})"))}", LogLevel.Error);
+                Say($"Jugador no encontrado: '{text}'. Disponibles: {string.Join(", ", all.Select(f => $"{f.Name} ({f.UniqueMultiplayerID})"))}", LogLevel.Error);
             return found;
         }
 
