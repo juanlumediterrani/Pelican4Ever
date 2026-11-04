@@ -16,6 +16,7 @@ using StardewValley;
 using StardewValley.Buildings;
 using StardewValley.Extensions;
 using StardewValley.GameData.Locations;
+using StardewValley.GameData.Objects;
 using StardewValley.Locations;
 using StardewValley.Menus;
 using StardewValley.Network;
@@ -160,8 +161,24 @@ namespace Pelican4Ever.Modules
                         FarmTemplateCatalog.ApplyNitvCustomFields(hostFarmData.CustomFields, "Standard");
                     }
 
-                    // TASK-1201: Registrar declarativamente los puentes activos en Data/Locations
                     int slotCount = context?.Config.FarmSlotCount ?? 16;
+
+                    // TASK-ArtifactLoot: Excluir las residencias y anexos de la tirada global de libros perdidos (LOST_BOOK_OR_ITEM)
+                    // en Data/Locations["Default"]. Stardew Valley solo excluye "Farm", por lo que en residencias privadas
+                    // se producían tiradas erróneas de Lost Book con 20% de probabilidad.
+                    if (data.TryGetValue("Default", out var defaultData) && defaultData.ArtifactSpots != null)
+                    {
+                        var activeAnnexIds = context?.WorldState.Annexes?.Values.Select(a => a.AnnexId);
+                        foreach (var spot in defaultData.ArtifactSpots)
+                        {
+                            if (spot.Id?.StartsWith("LOST_BOOK_OR_ITEM") == true)
+                            {
+                                spot.Condition = ArtifactLootLogic.UpdateLostBookCondition(spot.Condition, slotCount, activeAnnexIds);
+                            }
+                        }
+                    }
+
+                    // TASK-1201: Registrar declarativamente los puentes activos en Data/Locations
                     int bridges = HostPlazaLayout.BridgeCount(slotCount);
                     for (int n = 1; n <= bridges; n++)
                     {
@@ -395,6 +412,30 @@ namespace Pelican4Ever.Modules
                             data[annex.AnnexId] = annexData;
                         }
                     }
+                });
+            }
+            else if (e.NameWithoutLocale.IsEquivalentTo("Data/Objects"))
+            {
+                // TASK-ArtifactLoot: Replicar las probabilidades de artefactos arqueológicos de "Farm"
+                // en todas las residencias privadas y anexos. En SDV 1.6, RANDOM_ARTIFACT_FOR_DIG_SPOT
+                // lee ArtifactSpotChances de Data/Objects buscando el nombre exacto de la ubicación.
+                e.Edit(asset =>
+                {
+                    var data = asset.AsDictionary<string, ObjectData>().Data;
+                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    var activeAnnexIds = context?.WorldState.Annexes?.Values.Select(a => a.AnnexId);
+
+                    int enrichedCount = 0;
+                    foreach (var obj in data.Values)
+                    {
+                        if (obj.ArtifactSpotChances != null &&
+                            ArtifactLootLogic.ApplyFarmArtifactChances(obj.ArtifactSpotChances, slotCount, activeAnnexIds))
+                        {
+                            enrichedCount++;
+                        }
+                    }
+
+                    context?.Monitor.Log($"[FarmSlotModule] Probabilidades de excavación de artefactos de granja replicadas en residencias para {enrichedCount} objetos de Data/Objects.", LogLevel.Trace);
                 });
             }
             else if (AnnexTemplateCatalog.TryParseAnnexMapAsset(e.NameWithoutLocale.BaseName, out AnnexTemplate annexTemplate, out AnnexSide annexSide))
@@ -1706,6 +1747,7 @@ namespace Pelican4Ever.Modules
 
             slotDataSignature = signature;
             context.Helper.GameContent.InvalidateCache("Data/Locations");
+            context.Helper.GameContent.InvalidateCache("Data/Objects");
             context.Helper.GameContent.InvalidateCache("Maps/Pelican4Ever_HostFarm");
             for (int i = 1; i <= HostPlazaLayout.MaxBridges; i++)
             {
