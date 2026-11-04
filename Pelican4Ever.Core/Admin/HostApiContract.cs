@@ -103,6 +103,76 @@ namespace Pelican4Ever.Core.Admin
         public int RunsCount { get; set; }
     }
 
+    // ── Mapa ────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Tipo de celda para el visor de mapa del panel web.
+    /// El valor numérico se serializa directamente al JSON para reducir el tamaño del payload.
+    /// </summary>
+    public enum MapTileKind : byte
+    {
+        Unknown    = 0,
+        Open       = 1,   // suelo transitable
+        Blocked    = 2,   // muro / objeto sólido
+        Water      = 3,
+        Building   = 4,
+        Path       = 5,
+        Grass      = 6,
+        Tree       = 7,
+        Warp       = 8,   // portal / salida
+        Mine       = 9,
+        NPC        = 10,
+        Player     = 11,
+    }
+
+    /// <summary>
+    /// Datos de un jugador online solapados sobre el mapa.
+    /// </summary>
+    public sealed class MapPlayerMarker
+    {
+        public long   PlayerId     { get; set; }
+        public string Name         { get; set; } = string.Empty;
+        public int    TileX        { get; set; }
+        public int    TileY        { get; set; }
+        public bool   IsHost       { get; set; }
+    }
+
+    /// <summary>
+    /// Información de un warp (salida a otro mapa) para mostrarlo en el visor.
+    /// </summary>
+    public sealed class MapWarpInfo
+    {
+        public int    TileX      { get; set; }
+        public int    TileY      { get; set; }
+        public string TargetMap  { get; set; } = string.Empty;
+        public int    TargetX    { get; set; }
+        public int    TargetY    { get; set; }
+    }
+
+    /// <summary>
+    /// Snapshot de una localización para el visor de mapa del panel web
+    /// (<c>GET /api/v1/host/map?location=Town</c>).
+    /// <para>
+    /// <c>Tiles</c> es un array plano, fila mayor (row-major): índice = Y * Width + X.
+    /// Cada byte es un valor de <see cref="MapTileKind"/>.
+    /// </para>
+    /// </summary>
+    public sealed class HostMapDto
+    {
+        public string            LocationName { get; set; } = string.Empty;
+        public int               Width        { get; set; }
+        public int               Height       { get; set; }
+        public byte[]            Tiles        { get; set; } = Array.Empty<byte>();
+        public List<MapPlayerMarker> Players  { get; set; } = new();
+        public List<MapWarpInfo>     Warps    { get; set; } = new();
+        /// <summary>Nombres de las localizaciones disponibles para el selector del visor.</summary>
+        public List<string>      AvailableMaps { get; set; } = new();
+        public string            Season       { get; set; } = string.Empty;
+        public int               GameDay      { get; set; }
+    }
+
+    // ── Anuncio ─────────────────────────────────────────────────────────────────
+
     /// <summary>
     /// Petición de anuncio para <c>POST /api/v1/host/announce</c>.
     /// </summary>
@@ -151,6 +221,7 @@ namespace Pelican4Ever.Core.Admin
             new("GET",  "/api/v1/host/clock",             MutatesGameState: false, "Hora del juego y real, madrugada, próximo rollover y resultado/copia del último."),
             new("GET",  "/api/v1/host/players",           MutatesGameState: false, "Jugadores conectados y registrados, ubicación, residencia, presencia en festival y PlayerRecord."),
             new("GET",  "/api/v1/host/festival",          MutatesGameState: false, "Festival de hoy, ventana, ubicación, evento principal, apuntados, tandas y quién ha jugado."),
+            new("GET",  "/api/v1/host/map",               MutatesGameState: false, "Snapshot tile-by-tile de una localización (?location=Town) para el visor de mapa del panel web."),
             new("POST", "/api/v1/host/festival/start",    MutatesGameState: true,  "Inicia la siguiente tanda del evento principal con los jugadores apuntados (/evento empezar)."),
             new("POST", "/api/v1/host/festival/ceremony", MutatesGameState: true,  "Inicia la ceremonia comunitaria en vivo (TASK-702) con los vecinos presentes en el recinto."),
             new("POST", "/api/v1/host/announce",          MutatesGameState: true,  "Envía un aviso global por chat y/o en pantalla (HUD) a los jugadores."),

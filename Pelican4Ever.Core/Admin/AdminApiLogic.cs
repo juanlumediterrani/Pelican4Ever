@@ -721,28 +721,69 @@ namespace Pelican4Ever.Core.Admin
     <!-- TAB 5: MAPA                                            -->
     <!-- ══════════════════════════════════════════════════════ -->
     <section id=""tab-map"" class=""tab-panel"" role=""tabpanel"">
-      <div class=""section-header"">
+      <div class=""section-header"" style=""margin-bottom:12px"">
         <h2>Mapa del Mundo</h2>
-      </div>
-
-      <!-- Player positions quick list (available today) -->
-      <div class=""info-row"" style=""margin-bottom:18px"">
-        <h3>📍 Posiciones de Jugadores Online</h3>
-        <div id=""map-player-positions"" class=""info-body"" style=""gap:10px 28px"">
-          <span style=""color:var(--text-muted)"">Cargando…</span>
+        <div style=""display:flex;gap:8px;align-items:center;flex-wrap:wrap"">
+          <select id=""mapLocationSelect"" style=""background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 11px;border-radius:7px;font-size:.88rem"">
+            <option value=""Town"">Town</option>
+          </select>
+          <button class=""btn btn-ghost btn-sm"" onclick=""loadMap()"">↻ Cargar</button>
+          <button class=""btn btn-ghost btn-sm"" onclick=""mapResetView()"">⊙ Centrar</button>
+          <span id=""mapCoords"" style=""font-size:.78rem;color:var(--text-muted);min-width:90px"">—</span>
+          <span id=""mapZoomLabel"" style=""font-size:.78rem;color:var(--text-muted)"">100%</span>
         </div>
       </div>
 
-      <!-- Map viewer placeholder -->
-      <div class=""map-placeholder"">
-        <span class=""map-icon"">🗺️</span>
-        <h2>Visor de Mapa Tile-by-Tile</h2>
-        <p>Aquí se integrará el visor de mapa interactivo al estilo <em>Overviewer / DynMap</em>, renderizando las capas de tiles de Stardew Valley en tiempo real desde los datos del servidor.</p>
-        <div class=""map-meta"">
-          <span>Formato previsto: <strong>Tiles PNG (SMAPI xTile)</strong></span>
-          <span>Capas: <strong>Town, Farm, Mine…</strong></span>
-          <span>Jugadores: <strong>marcadores en vivo</strong></span>
-          <span>Estado: <strong>Planificado</strong></span>
+      <!-- Leyenda -->
+      <div style=""display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:12px;font-size:.76rem;color:var(--text-muted)"">
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#3a4a3a;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Suelo</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#6ca0ff22;border:1px solid #6ca0ff55;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Agua</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#3d4a2a;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Hierba</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#2a3244;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Bloqueado</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#4a3520;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Edificio</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#2d4a1e;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Árbol</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#786020;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Camino</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#a06030;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Warp</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#b0904088;border:1px solid #e8c060;border-radius:2px;vertical-align:middle;margin-right:4px""></span>NPC</span>
+        <span><span style=""display:inline-block;width:12px;height:12px;background:#4ac97e88;border:1px solid #4ac97e;border-radius:2px;vertical-align:middle;margin-right:4px""></span>Jugador</span>
+      </div>
+
+      <!-- Canvas viewport -->
+      <div id=""mapViewport"" style=""
+        position:relative;
+        width:100%;
+        height:600px;
+        background:var(--bg);
+        border:1px solid var(--border);
+        border-radius:10px;
+        overflow:hidden;
+        cursor:grab;
+        user-select:none;
+      "">
+        <canvas id=""mapCanvas"" style=""position:absolute;top:0;left:0;image-rendering:pixelated""></canvas>
+        <!-- Overlay de carga -->
+        <div id=""mapLoadOverlay"" style=""
+          position:absolute;inset:0;display:flex;flex-direction:column;
+          align-items:center;justify-content:center;gap:12px;
+          background:rgba(18,22,28,.85);border-radius:10px;z-index:10;
+        "">
+          <span style=""font-size:2.5rem"">🗺️</span>
+          <span style=""color:var(--text-muted);font-size:.9rem"">Selecciona una localización y pulsa Cargar</span>
+        </div>
+        <!-- Tooltip -->
+        <div id=""mapTooltip"" style=""
+          display:none;position:absolute;pointer-events:none;
+          background:rgba(18,22,28,.92);border:1px solid var(--border);
+          border-radius:6px;padding:5px 9px;font-size:.78rem;color:var(--text);
+          white-space:nowrap;z-index:20;
+        ""></div>
+      </div>
+
+      <!-- Player positions list -->
+      <div class=""info-row"" style=""margin-top:14px"">
+        <h3>📍 Jugadores en esta localización</h3>
+        <div id=""map-player-positions"" class=""info-body"" style=""gap:10px 28px"">
+          <span style=""color:var(--text-muted)"">Carga un mapa primero</span>
         </div>
       </div>
     </section>
@@ -788,7 +829,7 @@ namespace Pelican4Ever.Core.Admin
   </main>
 
   <script>
-    /* ── Estado ──────────────────────────────────────────── */
+    /* ── Estado global ───────────────────────────────────── */
     let lastEventCursor = 0;
 
     /* ── Auth ────────────────────────────────────────────── */
@@ -803,6 +844,7 @@ namespace Pelican4Ever.Core.Admin
       document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       btn.classList.add('active');
+      if (id === 'tab-map') loadMap();
     }
 
     /* ── Helpers ─────────────────────────────────────────── */
@@ -826,7 +868,362 @@ namespace Pelican4Ever.Core.Admin
         'Actualizado: ' + new Date().toLocaleTimeString('es-ES');
     }
 
-    /* ── /api/status (legacy endpoint) ──────────────────── */
+    /* ────────────────────────────────────────────────────── */
+    /*  MAP VIEWER                                             */
+    /* ────────────────────────────────────────────────────── */
+
+    // Paleta de colores por MapTileKind (índice = enum value)
+    const TILE_PALETTE = [
+      '#12161c',   // 0 Unknown  - fondo oscuro
+      '#3a4a3a',   // 1 Open     - suelo
+      '#1e2535',   // 2 Blocked  - muro
+      '#1a3558',   // 3 Water    - agua
+      '#4a3520',   // 4 Building - edificio
+      '#786020',   // 5 Path     - camino
+      '#3d4a2a',   // 6 Grass    - hierba
+      '#2d4a1e',   // 7 Tree     - árbol
+      '#a06030',   // 8 Warp     - portal
+      '#3a2a3a',   // 9 Mine     - mina
+      '#b09040',   // 10 NPC     - NPC
+      '#4ac97e',   // 11 Player  - jugador
+    ];
+    const TILE_LABELS = [
+      'Desconocido','Suelo','Bloqueado','Agua','Edificio',
+      'Camino','Hierba','Árbol','Warp','Mina','NPC','Jugador'
+    ];
+
+    // Estado del visor
+    const MAP = {
+      data:       null,   // HostMapDto
+      offscreen:  null,   // OffscreenCanvas (o canvas oculto)
+      tileSize:   8,      // px por tile al zoom 1×
+      zoom:       1.0,
+      panX:       0,      // offset de pan en pixels del canvas
+      panY:       0,
+      dragging:   false,
+      dragStartX: 0,
+      dragStartY: 0,
+      dragOriginX:0,
+      dragOriginY:0,
+      animFrame:  null,
+    };
+    const MIN_ZOOM = 0.25, MAX_ZOOM = 16;
+
+    function mapInit() {
+      const vp  = document.getElementById('mapViewport');
+      const cvs = document.getElementById('mapCanvas');
+      cvs.width  = vp.clientWidth;
+      cvs.height = vp.clientHeight;
+
+      vp.addEventListener('wheel',     mapOnWheel,     { passive: false });
+      vp.addEventListener('mousedown', mapOnMouseDown);
+      vp.addEventListener('mousemove', mapOnMouseMove);
+      vp.addEventListener('mouseup',   mapOnMouseUp);
+      vp.addEventListener('mouseleave',mapOnMouseUp);
+
+      // Touch
+      vp.addEventListener('touchstart', mapOnTouchStart, { passive: false });
+      vp.addEventListener('touchmove',  mapOnTouchMove,  { passive: false });
+      vp.addEventListener('touchend',   mapOnTouchEnd);
+
+      window.addEventListener('resize', () => {
+        cvs.width  = vp.clientWidth;
+        cvs.height = vp.clientHeight;
+        mapRender();
+      });
+    }
+
+    async function loadMap() {
+      const sel = document.getElementById('mapLocationSelect');
+      const loc = sel?.value || 'Town';
+      const overlay = document.getElementById('mapLoadOverlay');
+      overlay.style.display = 'flex';
+      overlay.innerHTML = '<span style=""font-size:2rem"">⏳</span><span style=""color:var(--text-muted);font-size:.9rem"">Cargando mapa…</span>';
+
+      try {
+        const res = await fetch(`/api/v1/host/map?location=${encodeURIComponent(loc)}`, { headers: getHeaders() });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const dto = await res.json();
+
+        if (!dto.Width || !dto.Height) {
+          overlay.innerHTML = '<span style=""font-size:2rem"">⚠️</span><span style=""color:var(--text-muted);font-size:.9rem"">Mapa no disponible (servidor no activo o sin mundo cargado)</span>';
+          return;
+        }
+
+        MAP.data = dto;
+
+        // Actualizar selector de localizaciones
+        if (dto.AvailableMaps?.length) {
+          sel.innerHTML = dto.AvailableMaps
+            .map(m => `<option value=""${esc(m)}"" ${m===dto.LocationName?'selected':''}>${esc(m)}</option>`)
+            .join('');
+        }
+
+        // Dibujar tiles en offscreen
+        mapBuildOffscreen(dto);
+        mapResetView();
+        overlay.style.display = 'none';
+        mapUpdatePlayerList(dto);
+        setPing(true); setLastUpdate();
+      } catch(e) {
+        overlay.innerHTML = `<span style=""font-size:2rem"">❌</span><span style=""color:var(--danger);font-size:.9rem"">Error: ${esc(e.message)}</span>`;
+        setPing(false);
+      }
+    }
+
+    function mapBuildOffscreen(dto) {
+      const ts = MAP.tileSize;
+      const w  = dto.Width * ts;
+      const h  = dto.Height * ts;
+
+      let cvs;
+      if (typeof OffscreenCanvas !== 'undefined') {
+        cvs = new OffscreenCanvas(w, h);
+      } else {
+        cvs = document.createElement('canvas');
+        cvs.width = w; cvs.height = h;
+      }
+
+      const ctx = cvs.getContext('2d');
+      const tiles = dto.Tiles;  // puede ser array o Uint8Array
+
+      for (let y = 0; y < dto.Height; y++) {
+        for (let x = 0; x < dto.Width; x++) {
+          const kind = tiles[y * dto.Width + x] ?? 0;
+          ctx.fillStyle = TILE_PALETTE[kind] ?? TILE_PALETTE[0];
+          ctx.fillRect(x * ts, y * ts, ts, ts);
+        }
+      }
+
+      // Grid fino (solo visible a partir de zoom 3×)
+      // se dibuja en render para no ensuciar el offscreen
+
+      // Warps: borde naranja
+      if (dto.Warps) {
+        ctx.strokeStyle = '#e07030';
+        ctx.lineWidth = 1;
+        for (const wp of dto.Warps) {
+          ctx.strokeRect(wp.TileX * ts + .5, wp.TileY * ts + .5, ts - 1, ts - 1);
+        }
+      }
+
+      MAP.offscreen = cvs;
+    }
+
+    function mapResetView() {
+      if (!MAP.data) return;
+      const vp  = document.getElementById('mapViewport');
+      const cvs = document.getElementById('mapCanvas');
+      const fw  = cvs.width  / (MAP.data.Width  * MAP.tileSize);
+      const fh  = cvs.height / (MAP.data.Height * MAP.tileSize);
+      MAP.zoom = Math.min(fw, fh, 2);
+      // centra
+      const scaledW = MAP.data.Width  * MAP.tileSize * MAP.zoom;
+      const scaledH = MAP.data.Height * MAP.tileSize * MAP.zoom;
+      MAP.panX = (cvs.width  - scaledW) / 2;
+      MAP.panY = (cvs.height - scaledH) / 2;
+      mapRender();
+    }
+
+    function mapRender() {
+      if (MAP.animFrame) cancelAnimationFrame(MAP.animFrame);
+      MAP.animFrame = requestAnimationFrame(_mapDraw);
+    }
+
+    function _mapDraw() {
+      const cvs = document.getElementById('mapCanvas');
+      if (!cvs) return;
+      const ctx = cvs.getContext('2d');
+      const dto = MAP.data;
+
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      ctx.fillStyle = '#12161c';
+      ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+      if (!MAP.offscreen || !dto) return;
+
+      ctx.save();
+      ctx.translate(MAP.panX, MAP.panY);
+      ctx.scale(MAP.zoom, MAP.zoom);
+
+      // Offscreen tile map
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(MAP.offscreen, 0, 0);
+
+      const ts = MAP.tileSize;
+
+      // Grid (visible a zoom ≥ 3)
+      if (MAP.zoom >= 3) {
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+        ctx.lineWidth = 0.5 / MAP.zoom;
+        for (let x = 0; x <= dto.Width; x++) {
+          ctx.beginPath(); ctx.moveTo(x * ts, 0); ctx.lineTo(x * ts, dto.Height * ts); ctx.stroke();
+        }
+        for (let y = 0; y <= dto.Height; y++) {
+          ctx.beginPath(); ctx.moveTo(0, y * ts); ctx.lineTo(dto.Width * ts, y * ts); ctx.stroke();
+        }
+      }
+
+      // Marcadores de jugadores (círculo con borde, radio 3/4 del tile)
+      if (dto.Players) {
+        for (const p of dto.Players) {
+          const cx = (p.TileX + 0.5) * ts;
+          const cy = (p.TileY + 0.5) * ts;
+          const r  = ts * 0.65;
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.fillStyle = p.IsHost ? '#ffd700' : '#4ac97e';
+          ctx.fill();
+          ctx.strokeStyle = '#fff';
+          ctx.lineWidth = 0.8 / MAP.zoom;
+          ctx.stroke();
+          // Nombre a zoom alto
+          if (MAP.zoom >= 5) {
+            ctx.fillStyle = '#fff';
+            ctx.font = `${ts * 0.7}px sans-serif`;
+            ctx.textAlign = 'center';
+            ctx.fillText(p.Name, cx, (p.TileY - 0.1) * ts);
+          }
+        }
+      }
+
+      ctx.restore();
+
+      // Zoom label
+      document.getElementById('mapZoomLabel').textContent = Math.round(MAP.zoom * 100) + '%';
+    }
+
+    /* ── Wheel zoom ──────────────────────────────────────── */
+    function mapOnWheel(e) {
+      e.preventDefault();
+      const vp  = document.getElementById('mapViewport');
+      const rect = vp.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      const factor = e.deltaY < 0 ? 1.15 : (1 / 1.15);
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, MAP.zoom * factor));
+
+      // Zoom towards mouse cursor
+      MAP.panX = mouseX - (mouseX - MAP.panX) * (newZoom / MAP.zoom);
+      MAP.panY = mouseY - (mouseY - MAP.panY) * (newZoom / MAP.zoom);
+      MAP.zoom = newZoom;
+      mapRender();
+    }
+
+    /* ── Mouse drag ──────────────────────────────────────── */
+    function mapOnMouseDown(e) {
+      MAP.dragging   = true;
+      MAP.dragStartX = e.clientX;
+      MAP.dragStartY = e.clientY;
+      MAP.dragOriginX = MAP.panX;
+      MAP.dragOriginY = MAP.panY;
+      document.getElementById('mapViewport').style.cursor = 'grabbing';
+    }
+    function mapOnMouseMove(e) {
+      const vp   = document.getElementById('mapViewport');
+      const rect = vp.getBoundingClientRect();
+      const mx   = e.clientX - rect.left;
+      const my   = e.clientY - rect.top;
+
+      // Tooltip coords
+      if (MAP.data) {
+        const ts  = MAP.tileSize;
+        const tx  = Math.floor((mx - MAP.panX) / (ts * MAP.zoom));
+        const ty  = Math.floor((my - MAP.panY) / (ts * MAP.zoom));
+        if (tx >= 0 && tx < MAP.data.Width && ty >= 0 && ty < MAP.data.Height) {
+          const kind  = MAP.data.Tiles[ty * MAP.data.Width + tx] ?? 0;
+          const label = TILE_LABELS[kind] ?? '?';
+          // Warp tooltip
+          const warp = MAP.data.Warps?.find(w => w.TileX === tx && w.TileY === ty);
+          const warpStr = warp ? ` → ${warp.TargetMap} (${warp.TargetX},${warp.TargetY})` : '';
+          // Player tooltip
+          const player = MAP.data.Players?.find(p => p.TileX === tx && p.TileY === ty);
+          const playerStr = player ? ` [${player.Name}${player.IsHost?' ★':''}]` : '';
+          const tt = document.getElementById('mapTooltip');
+          tt.style.display = 'block';
+          tt.style.left = (mx + 14) + 'px';
+          tt.style.top  = (my +  8) + 'px';
+          tt.textContent = `(${tx}, ${ty}) ${label}${warpStr}${playerStr}`;
+          document.getElementById('mapCoords').textContent = `(${tx}, ${ty})`;
+        }
+      }
+
+      if (!MAP.dragging) return;
+      MAP.panX = MAP.dragOriginX + (e.clientX - MAP.dragStartX);
+      MAP.panY = MAP.dragOriginY + (e.clientY - MAP.dragStartY);
+      mapRender();
+    }
+    function mapOnMouseUp() {
+      MAP.dragging = false;
+      document.getElementById('mapViewport').style.cursor = 'grab';
+      document.getElementById('mapTooltip').style.display = 'none';
+    }
+
+    /* ── Touch pinch-to-zoom ─────────────────────────────── */
+    let _lastTouchDist = null;
+    let _lastTouchMidX = 0, _lastTouchMidY = 0;
+    function mapOnTouchStart(e) {
+      if (e.touches.length === 2) {
+        const [a, b] = e.touches;
+        _lastTouchDist = Math.hypot(b.clientX-a.clientX, b.clientY-a.clientY);
+        _lastTouchMidX = (a.clientX + b.clientX) / 2;
+        _lastTouchMidY = (a.clientY + b.clientY) / 2;
+      } else if (e.touches.length === 1) {
+        MAP.dragging = true;
+        MAP.dragStartX = e.touches[0].clientX;
+        MAP.dragStartY = e.touches[0].clientY;
+        MAP.dragOriginX = MAP.panX;
+        MAP.dragOriginY = MAP.panY;
+      }
+    }
+    function mapOnTouchMove(e) {
+      e.preventDefault();
+      if (e.touches.length === 2) {
+        const [a, b] = e.touches;
+        const dist = Math.hypot(b.clientX-a.clientX, b.clientY-a.clientY);
+        const midX = (a.clientX + b.clientX) / 2;
+        const midY = (a.clientY + b.clientY) / 2;
+        const vp   = document.getElementById('mapViewport');
+        const rect = vp.getBoundingClientRect();
+        const mx   = midX - rect.left;
+        const my   = midY - rect.top;
+        if (_lastTouchDist) {
+          const factor   = dist / _lastTouchDist;
+          const newZoom  = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, MAP.zoom * factor));
+          MAP.panX = mx - (mx - MAP.panX) * (newZoom / MAP.zoom);
+          MAP.panY = my - (my - MAP.panY) * (newZoom / MAP.zoom);
+          MAP.zoom = newZoom;
+        }
+        _lastTouchDist = dist;
+        mapRender();
+      } else if (e.touches.length === 1 && MAP.dragging) {
+        MAP.panX = MAP.dragOriginX + (e.touches[0].clientX - MAP.dragStartX);
+        MAP.panY = MAP.dragOriginY + (e.touches[0].clientY - MAP.dragStartY);
+        mapRender();
+      }
+    }
+    function mapOnTouchEnd() {
+      MAP.dragging = false;
+      _lastTouchDist = null;
+    }
+
+    function mapUpdatePlayerList(dto) {
+      const container = document.getElementById('map-player-positions');
+      const online = (dto.Players || []);
+      container.innerHTML = online.length
+        ? online.map(p => `<div class=""info-pair"">
+            <span class=""lbl"">${badge(p.IsHost?'HOST':'ONLINE', p.IsHost?'warning':'online')} ${esc(p.Name)}</span>
+            <span class=""val"">${esc(dto.LocationName)} (${p.TileX}, ${p.TileY})</span>
+          </div>`).join('')
+        : '<span style=""color:var(--text-muted)"">Ningún jugador en esta localización</span>';
+    }
+
+    /* ────────────────────────────────────────────────────── */
+    /*  API CALLS                                             */
+    /* ────────────────────────────────────────────────────── */
+
+    /* ── /api/status (legacy) ────────────────────────────── */
     async function fetchStatus() {
       try {
         const res = await fetch('/api/status', { headers: getHeaders() });
@@ -834,14 +1231,12 @@ namespace Pelican4Ever.Core.Admin
         const d = await res.json();
         setPing(true); setLastUpdate();
 
-        /* KPIs */
         document.getElementById('kpi-online').textContent   = d.OnlinePlayersCount ?? '—';
         document.getElementById('kpi-registered').textContent = `de ${d.RegisteredPlayersCount ?? '—'} registrados`;
         document.getElementById('kpi-doors').textContent    = `${d.OccupiedDoorsCount ?? '—'} / ${d.TotalDoorsCount ?? '—'}`;
         document.getElementById('kpi-doors-free').textContent = `${(d.TotalDoorsCount||0)-(d.OccupiedDoorsCount||0)} libres`;
         document.getElementById('kpi-market').textContent   = d.ActiveMarketListingsCount ?? '—';
 
-        /* Residences table */
         const dTbody = document.getElementById('doorsTable');
         if (d.Doors && d.Doors.length) {
           dTbody.innerHTML = d.Doors.map(dr => `<tr>
@@ -876,7 +1271,6 @@ namespace Pelican4Ever.Core.Admin
           : '—';
         document.getElementById('kpi-rollover-time').textContent = c.NextRolloverLocalTime ?? '—';
 
-        /* Overview detail */
         document.getElementById('ov-realtime').textContent  = c.RealTimeUtc ?? '—';
         document.getElementById('ov-localtime').textContent = c.LocalTime ?? '—';
         document.getElementById('ov-timezone').textContent  = c.TimeZoneId ?? '—';
@@ -884,7 +1278,6 @@ namespace Pelican4Ever.Core.Admin
         document.getElementById('ov-mp').textContent        = c.IsMultiplayerServer ? 'Sí' : 'No';
         document.getElementById('ov-save').textContent      = c.SaveFolderName ?? '—';
 
-        /* Rollover summary */
         document.getElementById('roll-day').textContent     = c.LastRolloverGameDay >= 0 ? c.LastRolloverGameDay : '—';
         document.getElementById('roll-outcome').textContent = c.LastRolloverOutcomeSummary || '—';
         document.getElementById('roll-backup').textContent  = c.LastBackupFileName || '—';
@@ -900,17 +1293,6 @@ namespace Pelican4Ever.Core.Admin
         const d = await res.json();
         setPing(true);
 
-        /* Map positions in map tab */
-        const mapPos = document.getElementById('map-player-positions');
-        const online = (d.Players || []).filter(p => p.IsOnline);
-        mapPos.innerHTML = online.length
-          ? online.map(p => `<div class=""info-pair"">
-              <span class=""lbl"">${badge('ONLINE','online')} ${esc(p.Name)}</span>
-              <span class=""val"">${esc(p.LocationName)} (${p.TileX}, ${p.TileY})</span>
-            </div>`).join('')
-          : '<span style=""color:var(--text-muted)"">Ningún jugador online</span>';
-
-        /* Players table */
         const pTbody = document.getElementById('playersTable');
         if (!d.Players || !d.Players.length) {
           pTbody.innerHTML = '<tr><td colspan=""10"" style=""text-align:center;color:var(--text-muted);padding:28px"">Sin jugadores registrados</td></tr>';
@@ -949,13 +1331,11 @@ namespace Pelican4Ever.Core.Admin
           return;
         }
 
-        /* Overview banner */
         banner.style.display = '';
         document.getElementById('fest-name').textContent   = f.FestivalName || f.FestivalId;
         document.getElementById('fest-detail').textContent =
           `${f.Season} ${f.DayOfMonth} · ${f.LocationName} · Ventana ${fmtTime(f.WindowStart)}–${fmtTime(f.WindowEnd)}`;
 
-        /* Festival tab */
         noFest.style.display  = 'none';
         panel.style.display   = '';
         document.getElementById('fst-name').textContent    = f.FestivalName || f.FestivalId;
@@ -990,8 +1370,6 @@ namespace Pelican4Ever.Core.Admin
           item.innerHTML = `<span class=""ev-time"">${esc(ev.Time||ev.Timestamp||'—')}</span><span class=""ev-msg"">${esc(ev.Message||ev.Summary||JSON.stringify(ev))}</span>`;
           frag.appendChild(item);
         });
-
-        /* Keep only last 80 entries */
         log.prepend(frag);
         while (log.children.length > 80) log.removeChild(log.lastChild);
       } catch(e) {}
@@ -1031,7 +1409,7 @@ namespace Pelican4Ever.Core.Admin
       } catch(e) { alert('Error: ' + e); }
     }
 
-    /* ── Generic POST action ─────────────────────────────── */
+    /* ── Generic POST ────────────────────────────────────── */
     async function callAction(url, method, body) {
       if (!confirm(`¿Confirmar: ${url}?`)) return;
       try {
@@ -1054,10 +1432,17 @@ namespace Pelican4Ever.Core.Admin
       fetchPlayers();
       fetchFestival();
       fetchEvents();
+      // Si el tab de mapa está activo, recargar también
+      if (document.getElementById('tab-map')?.classList.contains('active')) {
+        loadMap();
+      }
     }
 
     /* ── Init ────────────────────────────────────────────── */
-    window.onload = refreshAll;
+    window.onload = () => {
+      mapInit();
+      refreshAll();
+    };
     setInterval(refreshAll, 10000);
   </script>
 </body>

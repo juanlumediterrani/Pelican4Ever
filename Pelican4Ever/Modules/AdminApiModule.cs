@@ -14,6 +14,10 @@ using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+// Aliases para los DTOs de mapa sin ambigüedad con xTile
+using MapTileKind      = Pelican4Ever.Core.Admin.MapTileKind;
+using MapPlayerMarker  = Pelican4Ever.Core.Admin.MapPlayerMarker;
+using MapWarpInfo      = Pelican4Ever.Core.Admin.MapWarpInfo;
 
 namespace Pelican4Ever.Modules
 {
@@ -506,6 +510,14 @@ namespace Pelican4Ever.Modules
                     WriteJson(res, eventsDto);
                     break;
                 }
+
+                case "GET /api/v1/host/map":
+                {
+                    string locationName = req.QueryString["location"] ?? "Town";
+                    HostMapDto mapDto = ExecuteOnGameThread(() => BuildHostMapDto(locationName));
+                    WriteJson(res, mapDto);
+                    break;
+                }
             }
         }
 
@@ -750,6 +762,209 @@ namespace Pelican4Ever.Modules
             }
 
             return statusDto;
+        }
+
+        // ── /api/v1/host/map ─────────────────────────────────────────────────────────
+        // Debe ejecutarse en el hilo del juego (accede a Game1 y xTile).
+
+        private static readonly string[] MapLocationPriority = new[]
+        {
+            "Town", "Farm", "BusStop", "Forest", "Beach", "Mountain",
+            "Mine", "Desert", "Railroad", "Woods", "Sewer", "WitchSwamp"
+        };
+
+        private static HostMapDto BuildHostMapDto(string requestedLocation)
+        {
+            if (!Context.IsWorldReady)
+            {
+                return new HostMapDto
+                {
+                    LocationName = requestedLocation,
+                    Width = 0, Height = 0,
+                    AvailableMaps = new List<string>()
+                };
+            }
+
+            // Localizaciones disponibles
+            var availableMaps = new List<string>();
+            foreach (var loc in Game1.locations)
+            {
+                if (loc?.Name != null)
+                    availableMaps.Add(loc.Name);
+            }
+            availableMaps.Sort();
+
+            // Resolver la localización pedida
+            GameLocation? target = Game1.getLocationFromName(requestedLocation)
+                ?? Game1.getLocationFromName("Town");
+
+            if (target == null)
+            {
+                return new HostMapDto
+                {
+                    LocationName = requestedLocation,
+                    Width = 0, Height = 0,
+                    AvailableMaps = availableMaps
+                };
+            }
+
+            var map  = target.Map;
+            int w    = map?.Layers[0]?.LayerWidth  ?? 0;
+            int h    = map?.Layers[0]?.LayerHeight ?? 0;
+            var tiles = new byte[w * h];
+
+            if (map != null && w > 0 && h > 0)
+            {
+                // Capa de colisiones (Back = suelo, Buildings = objetos/muros, Front = decoración)
+                var backLayer     = map.GetLayer("Back");
+                var buildingLayer = map.GetLayer("Buildings");
+                var frontLayer    = map.GetLayer("Front");
+
+                for (int y = 0; y < h; y++)
+                {
+                    for (int x = 0; x < w; x++)
+                    {
+                        int idx = y * w + x;
+                        var loc2 = target;
+
+                        // Prioridad: colisiones reales > tile sheet
+                        bool isPassable = loc2.isTilePassable(new Vector2(x, y))
+                            && !loc2.isObjectAtTile(x, y);
+
+                        var backTile  = backLayer?.Tiles[x, y];
+                        var bldTile   = buildingLayer?.Tiles[x, y];
+
+                        // Water
+                        if (loc2.isWaterTile(x, y))
+                        {
+                            tiles[idx] = (byte)MapTileKind.Water;
+                            continue;
+                        }
+
+                        // Building layer: muros, edificios
+                        if (bldTile != null)
+                        {
+                            tiles[idx] = (byte)MapTileKind.Building;
+                            continue;
+                        }
+
+                        // Back layer nula = fuera del mapa
+                        if (backTile == null)
+                        {
+                            tiles[idx] = (byte)MapTileKind.Unknown;
+                            continue;
+                        }
+
+                        // Propiedades del tile
+                        string? tileType = null;
+                        backTile.Properties.TryGetValue("Type", out var typeProp);
+                        tileType = typeProp?.ToString();
+
+                        if (string.Equals(tileType, "Water", System.StringComparison.OrdinalIgnoreCase))
+                        {
+                            tiles[idx] = (byte)MapTileKind.Water;
+                            continue;
+                        }
+
+                        if (string.Equals(tileType, "Grass", System.StringComparison.OrdinalIgnoreCase)
+                            || Core.World.TerrainTileClassifier.IsGrassTileIndex(backTile.TileIndex, tileType))
+                        {
+                            tiles[idx] = (byte)MapTileKind.Grass;
+                            continue;
+                        }
+
+                        if (isPassable)
+                        {
+                            tiles[idx] = (byte)MapTileKind.Open;
+                            continue;
+                        }
+
+                        tiles[idx] = (byte)MapTileKind.Blocked;
+                    }
+                }
+
+                // Marcar warps
+                if (target.warps != null)
+                {
+                    foreach (var warp in target.warps)
+                    {
+                        int wx = warp.X, wy = warp.Y;
+                        if (wx >= 0 && wx < w && wy >= 0 && wy < h)
+                            tiles[wy * w + wx] = (byte)MapTileKind.Warp;
+                    }
+                }
+
+                // Marcar objetos del mundo: árboles
+                foreach (var tree in target.terrainFeatures.Values)
+                {
+                    var pos = tree.Tile;
+                    int tx = (int)pos.X, ty = (int)pos.Y;
+                    if (tx >= 0 && tx < w && ty >= 0 && ty < h)
+                    {
+                        byte cur = tiles[ty * w + tx];
+                        if (cur == (byte)MapTileKind.Open || cur == (byte)MapTileKind.Grass)
+                            tiles[ty * w + tx] = (byte)MapTileKind.Tree;
+                    }
+                }
+
+                // Marcar NPCs
+                foreach (var npc in target.characters)
+                {
+                    int nx = npc.TilePoint.X, ny = npc.TilePoint.Y;
+                    if (nx >= 0 && nx < w && ny >= 0 && ny < h)
+                        tiles[ny * w + nx] = (byte)MapTileKind.NPC;
+                }
+            }
+
+            // Jugadores online en esta localización
+            var players = new List<MapPlayerMarker>();
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0;
+            foreach (var farmer in Game1.getOnlineFarmers())
+            {
+                if (farmer?.currentLocation?.NameOrUniqueName != target.NameOrUniqueName) continue;
+                int fx = farmer.TilePoint.X, fy = farmer.TilePoint.Y;
+                players.Add(new MapPlayerMarker
+                {
+                    PlayerId = farmer.UniqueMultiplayerID,
+                    Name     = farmer.Name,
+                    TileX    = fx,
+                    TileY    = fy,
+                    IsHost   = farmer.UniqueMultiplayerID == hostId
+                });
+                // Marcamos el tile también
+                if (fx >= 0 && fx < w && fy >= 0 && fy < h)
+                    tiles[fy * w + fx] = (byte)MapTileKind.Player;
+            }
+
+            // Warps como objetos
+            var warps = new List<MapWarpInfo>();
+            if (target.warps != null)
+            {
+                foreach (var warp in target.warps)
+                {
+                    warps.Add(new MapWarpInfo
+                    {
+                        TileX     = warp.X,
+                        TileY     = warp.Y,
+                        TargetMap = warp.TargetName,
+                        TargetX   = warp.TargetX,
+                        TargetY   = warp.TargetY
+                    });
+                }
+            }
+
+            return new HostMapDto
+            {
+                LocationName  = target.NameOrUniqueName,
+                Width         = w,
+                Height        = h,
+                Tiles         = tiles,
+                Players       = players,
+                Warps         = warps,
+                AvailableMaps = availableMaps,
+                Season        = Game1.currentSeason ?? "spring",
+                GameDay       = Game1.Date?.TotalDays ?? 0
+            };
         }
 
         private void ServeDashboard(HttpListenerResponse res)
