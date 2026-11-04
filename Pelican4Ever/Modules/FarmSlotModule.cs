@@ -3992,6 +3992,13 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FindStructure))
                 );
 
+                // Utility.getAllPets hace RequireLocation sobre la casa de cada granjero; en un farmhand las
+                // residencias ajenas no están cargadas y Marnie (animalShop) lanzaba KeyNotFoundException.
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_GetAllPets))
+                );
+
                 context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos y construcción en residencia aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
@@ -5669,6 +5676,38 @@ namespace Pelican4Ever.Modules
         }
 
         // ─── TASK-906: Menú de animales de Marnie redirigido a la granja privada ───
+
+        /// <summary>
+        /// Versión tolerante de Utility.getAllPets: omite las casas de granjeros que no están cargadas en esta
+        /// instancia (residencias ajenas en un farmhand) en lugar de lanzar KeyNotFoundException.
+        /// </summary>
+        public static bool Prefix_Utility_GetAllPets(ref List<StardewValley.Characters.Pet> __result)
+        {
+            var pets = new List<StardewValley.Characters.Pet>();
+            var visited = new HashSet<GameLocation>();
+
+            void Collect(GameLocation? location)
+            {
+                if (location == null || !visited.Add(location))
+                    return;
+                foreach (NPC character in location.characters)
+                {
+                    if (character is StardewValley.Characters.Pet pet)
+                        pets.Add(pet);
+                }
+            }
+
+            Collect(Game1.getFarm());
+            foreach (Farmer farmer in Game1.getAllFarmers())
+            {
+                string? home = farmer.homeLocation.Value;
+                if (!string.IsNullOrEmpty(home))
+                    Collect(Game1.getLocationFromName(home));
+            }
+
+            __result = pets;
+            return false;
+        }
 
         /// <summary>
         /// Indica si la residencia o anexo pertenece al jugador local. Usa el estado sincronizado y, si aún no
