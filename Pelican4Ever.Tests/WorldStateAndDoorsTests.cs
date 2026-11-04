@@ -254,8 +254,11 @@ public class WorldStateAndDoorsTests
 
             if (d.Edge == PortalEdge.North)
             {
-                // Portales norte: el warp está en Y=0..1, el buzón debe estar pegado al warp en Y=2
-                Assert.Equal(2, d.MailboxTileY!.Value);
+                // Portales norte: el warp está en Y=0..1; el buzón está en Y=2 (o Y=3 en Farm_Portal_02 para esquivar el cerezo)
+                if (d.DoorId == "Farm_Portal_02")
+                    Assert.Equal(3, d.MailboxTileY!.Value);
+                else
+                    Assert.Equal(2, d.MailboxTileY!.Value);
             }
             else if (d.Edge == PortalEdge.West)
             {

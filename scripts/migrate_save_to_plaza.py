@@ -20,7 +20,7 @@ Características principales:
   3. Sobrescritura y saneamiento del mapa Host ('--overwrite-host-map'):
      - Purga warps obsoletos de origin/main (x=1..2, y=16, 26, 36, 46, norte/sur secundarios).
      - Inyecta los warps del nuevo paso oeste hacia Pelican4Ever_Bridge_1 (x=0, y=26..27).
-     - Reubica el cuenco del perro (Pet Bowl) fuera del cercado en (53, 6).
+     - Reubica el cuenco del perro (Pet Bowl) fuera del cercado en (53, 7).
      - Despeja objetos, escombros, piedras, ramas y tocones del corredor oeste (x=0..7, y=25..28)
        y los accesos directos a los 4 portales activos.
      - Sanitiza las coordenadas de desconexión de granjeros huérfanos a posición segura (64, 15).
@@ -77,7 +77,7 @@ SLOT_DOOR_MAPPING = {f"Farm_Portal_{i:02d}": f"Farm_Portal_{i:02d}" for i in ran
 NEW_DOOR_CATALOG = {f"Farm_Portal_{i:02d}": f"Pelican4Ever_Farm_{i:02d}" for i in range(1, 17)}
 
 # Coordenadas canónicas
-CANONICAL_PET_BOWL = (53, 6)
+CANONICAL_PET_BOWL = (53, 7)
 
 def list_saves() -> None:
     """Busca y lista todas las partidas en la carpeta de Stardew Valley del usuario."""
@@ -163,7 +163,7 @@ def sanitize_host_farm(farm_elem: ET.Element) -> Tuple[int, bool, int]:
     Sanea el elemento <GameLocation><name>Farm</name>:
       1. Purga warps obsoletos de origin/main.
       2. Inyecta los warps del paso oeste a Pelican4Ever_Bridge_1.
-      3. Reubica el edificio Pet Bowl a (53, 6).
+      3. Reubica el edificio Pet Bowl a (53, 7).
       4. Limpia escombros y objetos del corredor oeste y accesos a portales.
     """
     purged_warps = 0
@@ -228,7 +228,7 @@ def sanitize_host_farm(farm_elem: ET.Element) -> Tuple[int, bool, int]:
                 ty_sub = ET.SubElement(new_warp, "targetY")
                 ty_sub.text = "14"
 
-    # 2. Reubicar Pet Bowl a (53, 6)
+    # 2. Reubicar Pet Bowl a (53, 7)
     buildings_elem = farm_elem.find("buildings")
     if buildings_elem is not None:
         for b in buildings_elem:

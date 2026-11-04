@@ -16,7 +16,7 @@
     "TownTileX": 62,
     "TownTileY": 1,
     "MailboxTileX": 64,
-    "MailboxTileY": 2,
+    "MailboxTileY": 3,
     "Edge": "North",
     "DefaultSlotId": "Pelican4Ever_Farm_02",
     "Description": "Parcela 02 (Granja Host - Norte Este)"

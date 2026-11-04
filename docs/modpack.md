@@ -16,7 +16,7 @@ Todos los mods listados a continuación deben estar instalados en el **servidor 
 | **SpaceCore (1.24+)** | spacechase0 | Framework de C# requerido por NITV para herramientas y skills | [Nexus #1348](https://www.nexusmods.com/stardewvalley/mods/1348) |
 | **Fashion Sense (7.5.0+)** | PeacefulEnd | **Requerido para el sprite del Host.** Framework de cuerpos/animaciones | [Nexus #9969](https://www.nexusmods.com/stardewvalley/mods/9969) |
 | **Dr4co Dragon Body** | Dr4co / Codex | Pack cosmético para Fashion Sense que viste al Host como dragón | [`agents/Dr4co.FashionSense`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/agents/Dr4co.FashionSense) (PR #1) |
-| **Nature In The Valley (NITV)** | w8AwA8w | Mecánica de captura de fauna con red, terrarios e Insectario | [Nexus #30138](https://www.nexusmods.com/stardewvalley/mods/30138) |
+| **Nature In The Valley (NITV) 1.3.4** | w8AwA8w | Mecánica de captura de fauna con red, terrarios e Insectario | [Nexus #30138](https://www.nexusmods.com/stardewvalley/mods/30138) |
 | **NITV Multiplayer Support** | XanCreations | **Parche obligatorio de concurrencia** para spawns con múltiples jugadores | [Nexus #30138 (Addons)](https://www.nexusmods.com/stardewvalley/mods/30138) |
 | **NITV - SH's Wild Animals In The Valley** | plurffle (SmolHooman) | Paquete de fauna salvaje ambiental y agresiva para el framework NITV | [Nexus #42968](https://www.nexusmods.com/stardewvalley/mods/42968) |
 | **Pelican 4Ever NITV Compat** | Pelican 4Ever Team | Pack de Content Patcher que mapea las 16 residencias privadas en NITV | [`deploy/modpack/Pelican4Ever.NITVCompat`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/deploy/modpack/Pelican4Ever.NITVCompat) |

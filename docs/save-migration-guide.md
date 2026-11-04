@@ -19,7 +19,7 @@ En la nueva arquitectura de **Plaza Central y Puentes** (`refactor/residence-ent
   - `Farm_Portal_04` (Sureste, `62, 63`, borde Sur)
 - El borde oeste en `(0..7, 26..27)` se transforma en el **Corredor Oeste**, un paseo transitable y señalizado que conecta la Granja Host con una cadena modular de **Puentes (`Pelican4Ever_Bridge_1..3`)**.
 - Cada puente alberga 4 residencias (2 al norte y 2 al sur), escalando limpiamente según `FarmSlotCount` hasta un total de 16 jugadores.
-- El bebedero de animales (`Pet Bowl`) se reubica fuera del cercado en `(53, 6)`, garantizando accesibilidad y estética 100% fiel a ConcernedApe.
+- El bebedero de animales (`Pet Bowl`) se reubica fuera del cercado en `(53, 7)`, garantizando accesibilidad y estética 100% fiel a ConcernedApe.
 
 ---
 
@@ -81,7 +81,7 @@ En la nueva arquitectura de **Plaza Central y Puentes** (`refactor/residence-ent
 Cuando se juega una partida originaria de `origin/main`, el XML del guardado contiene elementos obsoletos que deben sanearse:
 1. **Purgado de Warps:** Se eliminan los warps guardados en el XML que apuntan a parcelas desde coordenadas obsoletas (`x=1, y=16..46`, `x=28`, `x=52`, etc.), evitando teletransportes fantasma.
 2. **Paso Oeste:** Se inyectan los warps canónicos del corredor oeste (`0 26 Pelican4Ever_Bridge_1 33 14` y `0 27 Pelican4Ever_Bridge_1 33 14`).
-3. **Cuenco del Perro (Pet Bowl):** Se actualiza el edificio `Pet Bowl` a la coordenada exterior `(53, 6)` para evitar que quede atrapado dentro de las vallas de la casa o bloqueando caminos.
+3. **Cuenco del Perro (Pet Bowl):** Se actualiza el edificio `Pet Bowl` a la coordenada exterior `(53, 7)` para evitar que quede atrapado dentro de las vallas de la casa o bloqueando caminos.
 4. **Despeje de Escombros y Vegetación:** Se eliminan malezas, piedras, ramas y tocones en el rectángulo del corredor oeste (`x=0..7, y=25..28`) y en los accesos de los 4 portales activos.
 5. **Seguridad de Granjeros:** Si algún jugador o peón guardó la partida en una coordenada bloqueada o una ubicación huérfana, su posición de reaparición se fija de manera segura en `Farm (64, 15)`.
 
@@ -132,7 +132,7 @@ Si ya has iniciado el juego o prefieres realizar la migración en tiempo real de
    *(O escribe `p4e_migrate_save geo` si deseas aplicar el modo geográfico).*
 3. El mod ejecutará inmediatamente:
    - Purgado de warps obsoletos de la Granja Host.
-   - Reubicación del `Pet Bowl` a `(53, 6)`.
+   - Reubicación del `Pet Bowl` a `(53, 7)`.
    - Despeje de escombros en el corredor oeste y portales.
    - Re-aplicación de los acabados de mapa y sincronización con todos los peones conectados.
    - Actualización del estado autoritativo en `ServerWorldState`.

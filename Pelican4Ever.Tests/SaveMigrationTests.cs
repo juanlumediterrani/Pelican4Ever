@@ -141,7 +141,7 @@ namespace Pelican4Ever.Tests
         public void CanonicalPetBowlLocation_MatchesExpectedCoordinates()
         {
             Assert.Equal(53, SaveMigrationLogic.CanonicalPetBowlLocation.X);
-            Assert.Equal(6, SaveMigrationLogic.CanonicalPetBowlLocation.Y);
+            Assert.Equal(7, SaveMigrationLogic.CanonicalPetBowlLocation.Y);
         }
     }
 }

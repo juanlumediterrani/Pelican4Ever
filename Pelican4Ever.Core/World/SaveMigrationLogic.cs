@@ -37,7 +37,7 @@ namespace Pelican4Ever.Core.World
     public static class SaveMigrationLogic
     {
         /// <summary>Posición canónica y validada del cuenco del perro (Pet Bowl) fuera del cercado.</summary>
-        public static readonly (int X, int Y) CanonicalPetBowlLocation = (53, 6);
+        public static readonly (int X, int Y) CanonicalPetBowlLocation = (53, 7);
 
         /// <summary>
         /// Mapeo geográfico de puertas origin/main -> refactor/residence-entrances.
