@@ -27,6 +27,20 @@ de Fashion Sense y funciona igual si el framework o este pack no están instalad
 
 ### Selección sin el espejo (servidor dedicado / automatizado)
 
+Pelican 4Ever trae un comando para el host que lo hace todo (cuerpo y capas
+`None`), en la consola de SMAPI o en el chat de una partida multijugador:
+
+```
+p4e_dr4co_sprite              # pone el cuerpo de Dr4co al host
+p4e_dr4co_sprite off          # vuelve al granjero normal
+p4e_dr4co_sprite on Pepe      # a otro jugador conectado (nombre o id)
+```
+
+Para otro jugador, el host le envía un mensaje y es su propio cliente quien lo
+aplica (cada cliente es dueño de su granjero), así que tiene que estar
+conectado y con Pelican 4Ever instalado. El cambio queda en el `modData` del
+granjero y se guarda con la partida. Detalle de lo que hace por debajo:
+
 La API pública de Fashion Sense (`SetAppearance`) **no admite el tipo `Player`**
 (devuelve «Failed to set the Player appearance…» aunque el cuerpo esté cargado).
 Hair/Shirt/Pants/Shoes sí se pueden fijar con la API usando el pack
