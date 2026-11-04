@@ -938,6 +938,32 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     3. El verificador temporal se retira sin dejar archivos residuales y la suite de tests unitarios puros valida la conectividad.
   * **Resolución:** Implementada la lógica de verificación pura en `PlazaTopologyVerifier.cs` (`IsConnected`, `BuildPassageWarpString`, `ParseWarpProperty`, `GetInteriorClearanceTiles`, `ResolvePlazaReturnTarget`), ejecutado el análisis BFS sobre los `.xnb` reales con 0 errores y 100% de transitabilidad validada, y añadidas 29 pruebas unitarias en `PlazaTopologyVerifierTests.cs`. Directorio temporal `InspectMaps` eliminado limpiamente tras la verificación.
 
+- [x] **TASK-1404: Herramienta CLI y comando de consola para migración de partidas guardadas (origin/main -> Plaza Central y Puentes)**
+  * **Objetivo:**
+    Proveer herramientas automatizadas y documentación exhaustiva para trasladar partidas guardadas originarias de `origin/main` (16 puertas en la Granja Host) a la nueva arquitectura modular de Plaza Central y Puentes (`refactor/residence-entrances`).
+  * **Componentes Implementados:**
+    1. **Script CLI Python (`scripts/migrate_save_to_plaza.py`):**
+       - Detección de partidas con `--list-saves` y simulación sin escrituras con `--dry-run`.
+       - Copia de seguridad timestamped automática previa a la migración (`<SaveDir>_bak_<timestamp>`).
+       - Modos de reasignación: `slot` (por defecto, preserva la identidad del hueco privado `Pelican4Ever_Farm_XX`), `geo` (preserva la posición física previa en la Granja Host reubicando al nuevo portal equivalente y renombrando de forma segura las ubicaciones en el XML para no perder cultivos, cofres, animales ni edificios), `custom` (mediante JSON de equivalencias) e `interactive`.
+       - Sobrescritura y saneamiento del mapa Host (`--overwrite-host-map` / `--clean-host`): purga de warps obsoletos de `origin/main`, inyección de warps canónicos del corredor oeste a `Pelican4Ever_Bridge_1`, reubicación del bebedero de mascotas (`Pet Bowl`) a `(53, 6)`, y despeje de escombros y objetos del corredor oeste (`x=0..7, y=25..28`) y accesos a portales.
+       - Sanitización de coordenadas de desconexión de granjeros para evitar reaparición en obstáculos.
+    2. **Comando de Consola SMAPI en runtime (`p4e_migrate_save`):**
+       - Añadido en `FarmSlotModule.cs` para ejecutar la migración, saneamiento y sincronización en caliente directamente desde la consola SMAPI del host.
+       - Purgado automático preventivo de warps heredados de `origin/main` en `OnSaveLoaded`.
+    3. **Lógica Pura en Core y Pruebas Automatizadas:**
+       - `Pelican4Ever.Core/World/SaveMigrationLogic.cs` con resolución de mapeos, clasificación de warps obsoletos y normalización de `ServerWorldState`.
+       - 22 pruebas unitarias en `Pelican4Ever.Tests/SaveMigrationTests.cs` (881 tests en verde).
+    4. **Documentación:**
+       - Guía detallada paso a paso en `docs/save-migration-guide.md` con tabla de equivalencias de las 16 salidas y resolución de preguntas frecuentes.
+  * **Prioridad:** Alta
+  * **Dependencias:** Fases A–E.
+  * **Criterios de Aceptación:**
+    1. Las partidas de `origin/main` migran limpiamente tanto en modo slot como en modo geo sin pérdida de posesiones.
+    2. El mapa de la Granja Host queda completamente saneado de warps obsoletos y con el bebedero en su posición canónica.
+    3. Documentación completa y accesible para administradores de servidores y jugadores.
+  * **Resolución:** Implementados `scripts/migrate_save_to_plaza.py`, `p4e_migrate_save` en `FarmSlotModule.cs`, `SaveMigrationLogic.cs` en Core, `docs/save-migration-guide.md` y 22 pruebas unitarias en `SaveMigrationTests.cs`. Verificado con `--dry-run` y tests automatizados con 881 tests pasando.
+
 #### Fase F — Conectividad e Integración Urbana
 
 - [ ] **TASK-1501: Habilitar y conectar la red de vagonetas en los Puentes de la Plaza**

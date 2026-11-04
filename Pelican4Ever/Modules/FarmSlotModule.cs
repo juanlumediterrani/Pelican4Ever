@@ -66,6 +66,7 @@ namespace Pelican4Ever.Modules
 
             // Comandos de consola y chat
             ctx.Helper.ConsoleCommands.Add("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
+            ctx.Helper.ConsoleCommands.Add("p4e_migrate_save", "Migra y sanea el mapa host y las salidas de la partida actual al nuevo diseño de Plaza Central: p4e_migrate_save [slot|geo]", OnConsoleMigrateSave);
             ctx.Helper.Events.GameLoop.GameLaunched += (s, e) =>
             {
                 RegisterChatCommands();
@@ -1519,6 +1520,22 @@ namespace Pelican4Ever.Modules
                     // Eliminar cabañas redundantes de la granja host (Plaza Central)
                     RemoveHostCabins(hostFarm);
 
+                    // Purgar warps obsoletos de origin/main
+                    int purgedLegacyWarps = 0;
+                    for (int i = hostFarm.warps.Count - 1; i >= 0; i--)
+                    {
+                        Warp w = hostFarm.warps[i];
+                        if (SaveMigrationLogic.IsObsoleteFarmWarp(w.X, w.Y, w.TargetName))
+                        {
+                            hostFarm.warps.RemoveAt(i);
+                            purgedLegacyWarps++;
+                        }
+                    }
+                    if (purgedLegacyWarps > 0)
+                    {
+                        context.Monitor.Log($"[FarmSlotModule] Se purgaron {purgedLegacyWarps} warps heredados de origin/main en la Granja Host.", LogLevel.Info);
+                    }
+
                     // Aprovisionar portales físicos continuos de 2 tiles y aceras en la granja del anfitrión
                     EnsureHostFarmPortals(hostFarm);
                 }
@@ -2917,6 +2934,120 @@ namespace Pelican4Ever.Modules
             {
                 context.Monitor.Log(PlazaCatalogFormatter.FormatConsoleLine(entry), LogLevel.Info);
             }
+        }
+
+        private void OnConsoleMigrateSave(string command, string[] args)
+        {
+            if (context == null) return;
+            if (!Context.IsMainPlayer)
+            {
+                context.Monitor.Log("[FarmSlotModule] Este comando solo puede ejecutarse en el servidor host con la partida cargada.", LogLevel.Error);
+                return;
+            }
+
+            MigrationMode mode = (args.Length > 0 && string.Equals(args[0], "geo", StringComparison.OrdinalIgnoreCase))
+                ? MigrationMode.GeoPreserving
+                : MigrationMode.SlotPreserving;
+
+            Farm hostFarm = Game1.getFarm();
+            if (hostFarm == null)
+            {
+                context.Monitor.Log("[FarmSlotModule] No se pudo obtener la Granja Host (¿hay una partida cargada?).", LogLevel.Error);
+                return;
+            }
+
+            context.Monitor.Log($"[FarmSlotModule] Iniciando migración y saneamiento de partida (Modo: {mode})...", LogLevel.Info);
+
+            // 1. Purgar warps obsoletos de origin/main
+            int purgedWarps = 0;
+            for (int i = hostFarm.warps.Count - 1; i >= 0; i--)
+            {
+                Warp w = hostFarm.warps[i];
+                if (SaveMigrationLogic.IsObsoleteFarmWarp(w.X, w.Y, w.TargetName))
+                {
+                    hostFarm.warps.RemoveAt(i);
+                    purgedWarps++;
+                }
+            }
+
+            // 2. Reubicar Pet Bowl canónicamente
+            bool petBowlMoved = false;
+            var petBowl = hostFarm.buildings.FirstOrDefault(b =>
+                b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl");
+            if (petBowl != null)
+            {
+                if (petBowl.tileX.Value != SaveMigrationLogic.CanonicalPetBowlLocation.X || petBowl.tileY.Value != SaveMigrationLogic.CanonicalPetBowlLocation.Y)
+                {
+                    petBowl.tileX.Value = SaveMigrationLogic.CanonicalPetBowlLocation.X;
+                    petBowl.tileY.Value = SaveMigrationLogic.CanonicalPetBowlLocation.Y;
+                    petBowlMoved = true;
+                }
+            }
+            if (hostFarm.Map != null)
+            {
+                hostFarm.Map.Properties["PetBowlLocation"] = $"{SaveMigrationLogic.CanonicalPetBowlLocation.X} {SaveMigrationLogic.CanonicalPetBowlLocation.Y}";
+            }
+
+            // 3. Limpiar obstáculos y escombros del paso oeste y portales activos
+            int clearedTiles = 0;
+            for (int x = 0; x <= 7; x++)
+            {
+                for (int y = 25; y <= 28; y++)
+                {
+                    hostFarm.removeEverythingFromThisTile(x, y);
+                    clearedTiles++;
+                }
+            }
+            int[] portalCols = { 18, 62 };
+            foreach (int col in portalCols)
+            {
+                for (int x = col - 1; x <= col + 2; x++)
+                {
+                    for (int y = 0; y <= 12; y++)
+                    {
+                        hostFarm.removeEverythingFromThisTile(x, y);
+                        clearedTiles++;
+                    }
+                    for (int y = 58; y <= 64; y++)
+                    {
+                        hostFarm.removeEverythingFromThisTile(x, y);
+                        clearedTiles++;
+                    }
+                }
+            }
+
+            // 4. Re-aplicar portales, acabados y corredores
+            EnsureHostFarmPortals(hostFarm);
+            EnsureAllPlazaPortals();
+            EnsureAllActiveAnnexCorridorsClean();
+
+            // 5. Migrar asignaciones de ServerWorldState
+            var catalogSlots = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DoorModel d in RegisteredDoors)
+            {
+                catalogSlots.TryAdd(d.DoorId, d.DefaultSlotId);
+            }
+
+            var report = SaveMigrationLogic.MigrateServerWorldState(context.WorldState, mode, catalogSlots);
+
+            // 6. Guardar estado y sincronizar
+            context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+            BroadcastDoorsSync();
+
+            context.Monitor.Log($"=== INFORME DE MIGRACIÓN P4E ({mode}) ===", LogLevel.Info);
+            context.Monitor.Log($"  - Warps obsoletos purgados: {purgedWarps}", LogLevel.Info);
+            context.Monitor.Log($"  - Pet Bowl reubicado a ({SaveMigrationLogic.CanonicalPetBowlLocation.X}, {SaveMigrationLogic.CanonicalPetBowlLocation.Y}): {petBowlMoved}", LogLevel.Info);
+            context.Monitor.Log($"  - Casillas despejadas en corredor oeste y accesos: {clearedTiles}", LogLevel.Info);
+            context.Monitor.Log($"  - Puertas mapeadas: {report.RemappedDoors.Count}", LogLevel.Info);
+            foreach (var kvp in report.RemappedDoors)
+            {
+                context.Monitor.Log($"    * {kvp.Key} -> {kvp.Value}", LogLevel.Info);
+            }
+            if (report.ReleasedDoors.Count > 0)
+            {
+                context.Monitor.Log($"  - Puertas liberadas: {string.Join(", ", report.ReleasedDoors)}", LogLevel.Warn);
+            }
+            context.Monitor.Log("¡Migración completada con éxito! Guarda la partida pasando el día para fijar todos los cambios.", LogLevel.Info);
         }
 
         private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
