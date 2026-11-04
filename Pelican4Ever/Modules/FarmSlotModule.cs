@@ -3950,6 +3950,16 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions))
                 );
 
+                // TASK-906: Redirigir el menú de compra de animales de Marnie a la granja privada del jugador
+                var purchaseAnimalsCtors = typeof(PurchaseAnimalsMenu).GetConstructors();
+                if (purchaseAnimalsCtors.Length > 0)
+                {
+                    harmony.Patch(
+                        original: purchaseAnimalsCtors[0],
+                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PurchaseAnimalsMenu_Ctor))
+                    );
+                }
+
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
                 harmony.Patch(
                     original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
@@ -4197,7 +4207,8 @@ namespace Pelican4Ever.Modules
             if (allowedLocations.Count == 1)
             {
                 string targetLocName = allowedLocations[0].Key;
-                GameLocation? targetLoc = Game1.getLocationFromName(targetLocName);
+                GameLocation? targetLoc = Game1.getLocationFromName(targetLocName)
+                    ?? EnsureFarmSlotExists(targetLocName);
                 if (targetLoc != null)
                 {
                     Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, targetLoc);
@@ -4215,7 +4226,8 @@ namespace Pelican4Ever.Modules
                 allowedLocations,
                 delegate(string chosenLocationName)
                 {
-                    GameLocation? loc = Game1.getLocationFromName(chosenLocationName);
+                    GameLocation? loc = Game1.getLocationFromName(chosenLocationName)
+                        ?? EnsureFarmSlotExists(chosenLocationName);
                     if (loc != null)
                     {
                         Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, loc);
@@ -5645,6 +5657,46 @@ namespace Pelican4Ever.Modules
                 __result = true;
                 return;
             }
+        }
+
+        // ─── TASK-906: Menú de animales de Marnie redirigido a la granja privada ───
+
+        /// <summary>
+        /// Obtiene la granja privada del jugador actual, creándola si aún no está instanciada.
+        /// Devuelve null si el jugador no tiene residencia asignada (en ese caso se usa la granja host).
+        /// </summary>
+        private static Farm? GetPlayerPrivateFarm()
+        {
+            if (context == null) return null;
+            Farmer who = Game1.player;
+
+            // Buscar el slotId asignado al jugador
+            string? slotId = context.WorldState.Doors.Values
+                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID)?.FarmSlotId;
+
+            if (string.IsNullOrEmpty(slotId))
+            {
+                if (context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var rec) && !string.IsNullOrEmpty(rec.FarmSlotId))
+                    slotId = rec.FarmSlotId;
+            }
+
+            if (string.IsNullOrEmpty(slotId))
+                return null;
+
+            return (Game1.getLocationFromName(slotId) ?? EnsureFarmSlotExists(slotId)) as Farm;
+        }
+
+        /// <summary>
+        /// TASK-906: Antes de construir el PurchaseAnimalsMenu, sustituye la granja que se pasará
+        /// al menú por la granja privada del jugador, de modo que Marnie muestre los corrales
+        /// y gallineros correctos en lugar de los de la granja host.
+        /// El parámetro se llama 'targetLocation' en el ctor de PurchaseAnimalsMenu(List stock, GameLocation targetLocation).
+        /// </summary>
+        public static void Prefix_PurchaseAnimalsMenu_Ctor(ref GameLocation? targetLocation)
+        {
+            Farm? privateFarm = GetPlayerPrivateFarm();
+            if (privateFarm != null)
+                targetLocation = privateFarm;
         }
     }
 }
