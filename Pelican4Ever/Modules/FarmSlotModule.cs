@@ -1968,6 +1968,13 @@ namespace Pelican4Ever.Modules
                 EnsureLocationPortals(e.NewLocation);
             }
 
+            // TASK-906: en el farmhand, conservar la instancia sincronizada de su residencia/anexo para que
+            // Robin (CarpenterMenu) y Marnie (PurchaseAnimalsMenu) puedan resolverla fuera de la granja.
+            if (e.NewLocation != null)
+            {
+                RetainSyncedOwnPrivateLocation(e.NewLocation);
+            }
+
             if (e.NewLocation is Farm farm && farm.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farm.NameOrUniqueName);
@@ -4215,7 +4222,9 @@ namespace Pelican4Ever.Modules
                 }
                 else
                 {
-                    Game1.drawObjectDialogue($"No se pudo acceder a la ubicación '{targetLocName}'. Inténtalo de nuevo.");
+                    Game1.drawObjectDialogue(Context.IsMainPlayer
+                        ? $"No se pudo acceder a la ubicación '{targetLocName}'. Inténtalo de nuevo."
+                        : "Tu residencia aún no está sincronizada. Visítala una vez y vuelve a hablar conmigo.");
                 }
                 return false;
             }
@@ -5660,6 +5669,61 @@ namespace Pelican4Ever.Modules
         }
 
         // ─── TASK-906: Menú de animales de Marnie redirigido a la granja privada ───
+
+        /// <summary>
+        /// Indica si la residencia o anexo pertenece al jugador local. Usa el estado sincronizado y, si aún no
+        /// ha llegado la sincronización de puertas, el propietario publicado por el host en el modData.
+        /// </summary>
+        private static bool IsOwnedByLocalPlayer(GameLocation location)
+        {
+            if (context == null || Game1.player == null) return false;
+
+            long me = Game1.player.UniqueMultiplayerID;
+            string name = location.NameOrUniqueName;
+
+            if (context.WorldState.Doors.Values.Any(d => d.OwnerId == me && string.Equals(d.FarmSlotId, name, StringComparison.OrdinalIgnoreCase)))
+                return true;
+            if (context.WorldState.Players.TryGetValue(me, out var rec) && string.Equals(rec.FarmSlotId, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+            if (context.WorldState.FindAnnexById(name)?.OwnerId == me)
+                return true;
+
+            return location.GetFarmOwnerId() == me;
+        }
+
+        /// <summary>
+        /// Solo farmhand: el juego base nunca añade ubicaciones nuevas a Game1.locations en el cliente
+        /// (readActiveLocation solo sustituye entradas existentes y un warp deja la granja únicamente como
+        /// currentLocation). Sin esto, al salir de la residencia Game1.getLocationFromName devuelve null y
+        /// Robin/Marnie no pueden abrir sus menús sobre ella. Se registra la instancia sincronizada recibida del
+        /// host (sustituyendo cualquier marcador local) para que siga accesible y activa mientras el dueño esté conectado.
+        /// </summary>
+        private static void RetainSyncedOwnPrivateLocation(GameLocation location)
+        {
+            if (Context.IsMainPlayer || location == null || Game1.locations == null)
+                return;
+            if (location.isStructure.Value || !LocationCullingLogic.IsPrivateFarmOrAnnex(location.NameOrUniqueName))
+                return;
+            if (!IsOwnedByLocalPlayer(location))
+                return;
+
+            for (int i = 0; i < Game1.locations.Count; i++)
+            {
+                GameLocation existing = Game1.locations[i];
+                if (ReferenceEquals(existing, location))
+                    return;
+                if (!existing.Equals(location))
+                    continue;
+
+                Game1.removeLocationFromLocationLookup(existing);
+                Game1.locations[i] = location;
+                context?.Monitor.Log($"[FarmSlotModule] Cliente: marcador local de {location.NameOrUniqueName} sustituido por la instancia sincronizada.", LogLevel.Trace);
+                return;
+            }
+
+            Game1.locations.Add(location);
+            context?.Monitor.Log($"[FarmSlotModule] Cliente: {location.NameOrUniqueName} registrada en Game1.locations para menús de Robin/Marnie.", LogLevel.Trace);
+        }
 
         /// <summary>
         /// Obtiene la granja privada del jugador actual, creándola si aún no está instanciada.
