@@ -5368,6 +5368,24 @@ namespace Pelican4Ever.Modules
             RepositionResidenceFurniture(cabin);
             EnsureStarterDecorations(cabin);
             RepositionStarterChests(cabin);
+            RefreshResidenceFurnitureDrawPositions(cabin);
+        }
+
+        /// <summary>
+        /// La Cabin de la residencia vive como interior de la Farmhouse de un slot y, al restaurarse del guardado,
+        /// el juego no recalcula la caja de colisión ni la posición de dibujo de sus muebles: quedan en (0, 0) y el
+        /// farmhand los ve amontonados en la esquina superior izquierda aunque su TileLocation guardada sea correcta.
+        /// Recalcularlas desde TileLocation es idempotente y no genera tráfico de red si ya coinciden.
+        /// </summary>
+        private static void RefreshResidenceFurnitureDrawPositions(Cabin cabin)
+        {
+            if (cabin?.furniture == null) return;
+
+            foreach (var furn in cabin.furniture)
+            {
+                furn.RecalculateBoundingBox();
+                furn.updateDrawPosition();
+            }
         }
 
         private static void RepositionResidenceFurniture(Cabin cabin)
