@@ -119,15 +119,58 @@ namespace Pelican4Ever.Modules
             if (target == null)
                 return;
 
-            Item item = ItemRegistry.Create(itemId, count);
-            string label = item.DisplayName;
-            if (!target.addItemToInventoryBool(item))
+            Item sample = ItemRegistry.Create(itemId, 1);
+            string label = sample.DisplayName;
+            int remaining = count;
+            while (remaining > 0)
             {
-                Say($"Inventario de {target.Name} lleno; no se pudo dar {label} x{count}.", LogLevel.Warn);
-                return;
+                int chunk = Math.Min(remaining, Math.Max(1, sample.maximumStackSize()));
+                Item item = ItemRegistry.Create(itemId, chunk);
+                int before = item.Stack;
+                int left = AddToInventory(target, item);
+                remaining -= before - left;
+                if (left > 0)
+                    break;
             }
 
-            Say($"{target.Name} recibe {label} x{count} ({itemId}).", LogLevel.Info);
+            int given = count - remaining;
+            if (remaining > 0)
+                Say($"Inventario de {target.Name} lleno: entregado {label} x{given} de {count}.", LogLevel.Warn);
+            else
+                Say($"{target.Name} recibe {label} x{given} ({itemId}).", LogLevel.Info);
+        }
+
+        /// <summary>Inserta en el inventario de cualquier farmer (local o remoto). Devuelve las unidades que no cupieron.</summary>
+        private static int AddToInventory(Farmer target, Item item)
+        {
+            var items = target.Items;
+            int max = Math.Min(items.Count, target.MaxItems);
+
+            for (int i = 0; i < max && item.Stack > 0; i++)
+            {
+                Item? slot = items[i];
+                if (slot != null && slot.canStackWith(item))
+                {
+                    int space = slot.maximumStackSize() - slot.Stack;
+                    int move = Math.Min(space, item.Stack);
+                    if (move > 0)
+                    {
+                        slot.Stack += move;
+                        item.Stack -= move;
+                    }
+                }
+            }
+
+            for (int i = 0; i < max && item.Stack > 0; i++)
+            {
+                if (items[i] == null)
+                {
+                    items[i] = item;
+                    return 0;
+                }
+            }
+
+            return item.Stack;
         }
 
         private bool CheckHostWorld()
