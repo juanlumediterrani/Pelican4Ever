@@ -52,11 +52,12 @@ El estado autoritativo de cada jugador reside únicamente en el servidor (`Serve
 
 ## 4. Economía y Balanceo (Pasivo vs. Activo)
 
-1. **Presupuesto Diario de Energía + Saciedad (`SatietyBudget`):**
+1. **Energía por Sesiones + Saciedad (`SatietyBudget`, ADR-0006):**
    * **Barra base:** El jugador empieza la jornada con su barra de energía (`270` base + *Stardrops*).
-   * **Presupuesto de Saciedad (Comida con sentido):** Comer alimentos **sí restaura Energía instantánea**, además de Salud (*Health*) y *Buffs*, pero hasta un **tope diario de Saciedad** equivalente al **50% de su energía máxima** (`DailySatietyFraction = 0.5`, es decir, `+135` de energía extra en una barra de 270). Una vez agotado el presupuesto diario de Saciedad, se puede seguir comiendo para curar Vida en combate o mantener *Buffs*, pero la ganancia de Energía instantánea se recorta a `0`.
-   * **Platos Cocinados ("Bien comido"):** Hasta **2 veces al día** (`MaxDailyWellFedBuffs = 2`), comer un plato cocinado activa regeneración pasiva (`+1 Energía/minuto real` durante 60 minutos).
-   * **Spa con tope diario:** El Spa restaura `1 punto de Energía cada 30 segundos reales`, con un **tope máximo de `+60 Energía` por día real** (`SpaDailyCap = 60`) para evitar el abuso por AFK.
+   * **Ritmo de sesiones:** una sesión dura entre 30 min y 1 h 30 min. El punto dulce es conectarse 30–45 min varias veces al día: tras 4 h desconectado, la barra está llena (`OfflineRegenFullBarHours = 4`) y la Saciedad, vacía. Quien quiera seguir jugando se sienta a descansar; el jugador intensivo puede continuar, pero a un ritmo más relajado.
+   * **Saciedad (Comida con sentido):** Comer alimentos **sí restaura Energía instantánea**, además de Salud (*Health*) y *Buffs*, hasta llenar una **capacidad de Saciedad** equivalente al **50% de su energía máxima** (`DailySatietyFraction = 0.5`, es decir, `135` en una barra de 270). La Saciedad se **vacía de forma continua en 4 horas reales** (`SatietyDrainHours = 4`), conectado o no, y no se reinicia al cambiar de día ni al reconectar. Con la Saciedad llena se puede seguir comiendo para curar Vida o mantener *Buffs*, pero sin ganar Energía instantánea.
+   * **Platos Cocinados ("Bien comido"):** Hasta **2 veces al día** (`MaxDailyWellFedBuffs = 2`), comer un plato cocinado activa "Bien comido" durante 60 minutos. Mientras dura, **sentarse** en un banco, silla o la taberna recupera `1 punto de Energía cada 5 segundos` (`SittingRegenSeconds = 5`, `12/min`). Sin "Bien comido", sentarse no recupera nada.
+   * **Spa (una vez al día):** Quedarse **30 segundos quieto** dentro del agua del Spa o de la piscina activa un buff de **recuperación pasiva de `120` de Energía y `120` de Salud en 2 horas** (`1 punto/min` de cada uno), aunque luego se salga del agua. Solo se puede activar una vez al día.
 
 2. **Persistencia de Minas por Turnos (12 Horas):**
    * Se bloquea la descarga automática de pisos vacíos (`MineShaft.clearInactiveMines`).

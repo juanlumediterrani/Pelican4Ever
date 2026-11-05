@@ -672,9 +672,11 @@ namespace Pelican4Ever.Modules
                     LastActiveGameDay = p.LastActiveGameDay,
                     RestedOnGameDay = p.RestedOnGameDay,
                     LastOutcome = p.LastOutcome.ToString(),
-                    SatietyUsed = p.SatietyUsed,
+                    SatietyUsed = ProjectedSatietyPoints(p, farmer),
                     WellFedBuffsUsed = p.WellFedBuffsUsed,
-                    SpaEnergyUsed = p.SpaEnergyUsed,
+                    WellFedActive = p.IsWellFed(DateTimeOffset.UtcNow),
+                    SpaBuffsUsed = p.SpaBuffsUsed,
+                    SpaBuffActive = p.IsSpaBuffActive(DateTimeOffset.UtcNow),
                     SatietyGameDay = p.SatietyGameDay,
                     PendingMarketGold = p.PendingMarketGold,
                     IsClaimed = PlayerAuthLogic.IsClaimed(p),
@@ -683,6 +685,26 @@ namespace Pelican4Ever.Modules
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Saciedad actual del jugador tras el vaciado continuo, calculada sin modificar su registro: una consulta de lectura
+        /// no debe alterar el estado ni depender de quién la haga. Usa la energía máxima real del granjero, conectado o no.
+        /// </summary>
+        private static int ProjectedSatietyPoints(PlayerRecord p, Farmer? farmer)
+        {
+            farmer ??= Game1.getOnlineFarmers().FirstOrDefault(f => f.UniqueMultiplayerID == p.UniqueMultiplayerID);
+            if (farmer == null && Context.IsWorldReady)
+            {
+                if (Game1.MasterPlayer?.UniqueMultiplayerID == p.UniqueMultiplayerID)
+                    farmer = Game1.MasterPlayer;
+                else
+                    Game1.netWorldState?.Value?.farmhandData?.TryGetValue(p.UniqueMultiplayerID, out farmer);
+            }
+
+            int maxStamina = farmer?.MaxStamina ?? 270;
+            float satiety = p.ProjectedSatiety(DateTimeOffset.UtcNow, maxStamina, context!.Config.DailySatietyFraction, context.Config.SatietyDrainHours);
+            return (int)Math.Round(satiety);
         }
 
         private static ServerStatusDto BuildLegacyStatusDto()
@@ -721,7 +743,7 @@ namespace Pelican4Ever.Modules
                     IsOnline = isOnline,
                     SleepState = SleepPolicy.GetState(p, today, isOnline).ToString(),
                     FarmSlotId = p.FarmSlotId ?? "—",
-                    SatietyUsed = p.SatietyUsed,
+                    SatietyUsed = ProjectedSatietyPoints(p, null),
                     PendingMarketGold = p.PendingMarketGold
                 });
             }

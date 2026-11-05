@@ -3160,8 +3160,18 @@ namespace Pelican4Ever.Modules
                         }
                     }
 
+                    long localId = Game1.player?.UniqueMultiplayerID ?? 0;
                     foreach (var kvp in payload.Players)
                     {
+                        // La copia local del consumo propio (Saciedad, comida, Spa) es más reciente que la del host una vez
+                        // que el jugador ha comido en esta sesión: el host solo la conoce por el informe SatietyReport.
+                        if (kvp.Key == localId
+                            && EconomyModule.HasLocalConsumptionChanges
+                            && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? local))
+                        {
+                            kvp.Value.CopyConsumptionFrom(local);
+                        }
+
                         context.WorldState.Players[kvp.Key] = kvp.Value;
                     }
 

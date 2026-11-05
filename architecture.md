@@ -74,7 +74,7 @@ Para evitar condiciones de carrera sobre `Farmer.modData` (cuyo `NetRoot` perten
 * **`Players` (`Dictionary<long, PlayerRecord>`):**
   * `LastActiveGameDay`, `RestedOnGameDay` (expresados en `Game1.Date.TotalDays`, nunca en `dayOfMonth`).
   * `LastOutcome` (`Untouched` | `Rested` | `Penalized`), del que `SleepPolicy.GetState` deriva `Awake`, `Rested`, `OfflineSafe` u `OfflinePenalized`.
-  * Contadores diarios con auto-reset por día de juego (`SatietyGameDay`, `SatietyUsed`, `WellFedBuffsUsed`, `SpaEnergyUsed`).
+  * Saciedad con vaciado continuo (`Satiety`, `LastSatietyUpdateUtc`), fin de los buffs en curso (`WellFedUntilUtc`, `SpaBuffUntilUtc`) y contadores diarios con auto-reset por día de juego (`SatietyGameDay`, `WellFedBuffsUsed`, `SpaBuffsUsed`). El cliente los comunica al host con el mensaje `SatietyReport` (ADR-0006).
 * **`Doors` (`Dictionary<string, DoorAssignment>`):** Vincula cada `DoorId` del pueblo con su `FarmSlotId` (`Pelican4Ever_Farm_01..04`), su `OwnerId`, su `AccessPolicy` (`Locked`, `Friends`, `Public`) y su conjunto `Friends`.
 
 ### 3.2. Vista Replicada en Ubicaciones (`GameLocation.modData`)
@@ -147,10 +147,11 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 
 ### 4.3. Subsistema 3: Energía, Saciedad, Precios y Minas 12h (`EconomyModule`)
 
-1. **Presupuesto de Saciedad en `Farmer.doneEating` (líneas 8851–8945):**
+1. **Saciedad en `Farmer.doneEating` (líneas 8851–8945, ADR-0006):**
    * En `Farmer.doneEating()`, el motor suma `Stamina = Math.Min(MaxStamina, Stamina + @object.staminaRecoveredOnConsumption())` y `health = Math.Min(maxHealth, health + @object.healthRecoveredOnConsumption())` y aplica los `GetFoodOrDrinkBuffs()`.
    * `Prefix` guarda `float prevStamina = __instance.Stamina`.
-   * `Postfix` calcula `int requestedGain = (int)Math.Round(__instance.Stamina - prevStamina)`, consulta `SatietyBudget.AllowedGain(requestedGain, record.SatietyUsed, budget)` y fija `__instance.Stamina = prevStamina + allowedGain` (respetando casos especiales como `Stardrop (O)434`). Si el ítem es un plato cocinado (`Category == Object.CookingCategory`) y quedan huecos en `MaxDailyWellFedBuffs`, activa el contador de regeneración pasiva (`+1 Energía / 60s reales`).
+   * `Postfix` aplica primero el vaciado continuo (`PlayerRecord.UpdateSatietyDecay`), calcula `int requestedGain = (int)Math.Round(__instance.Stamina - prevStamina)`, consulta `SatietyBudget.AllowedGain(requestedGain, record.Satiety, capacidad)` y fija `__instance.Stamina = prevStamina + allowedGain` (respetando casos especiales como `Stardrop (O)434`). Si el ítem es un plato cocinado (`Category == Object.CookingCategory`) y quedan huecos en `MaxDailyWellFedBuffs`, activa "Bien comido" (`PlayerRecord.TryActivateWellFed`), que permite recuperar energía sentado (`SittingRegenLogic`, `1 punto / 5 s`) durante 60 min.
+   * En `OneSecondUpdateTicked`, 30 s quieto en el agua activan una vez al día el buff del Spa (`PlayerRecord.TryActivateSpaBuff`), que reparte `120` de energía y `120` de salud en 120 min (`PassiveRegenLogic`).
 2. **Persistencia de Minas por Turnos de 12h (`06:00` y `18:00`):**
    * En `MineShaft.UpdateMines10Minutes` (línea 4788), el motor llama en cada tick de 10 minutos a `MineShaft.clearInactiveMines()` (privado estático, línea 4704), que descarga todos los niveles donde no hay jugadores. Al cambiar de día (`Game1.cs` línea 7925) llama a `MineShaft.clearActiveMines()`.
    * Se aplica un `Prefix` sobre `MineShaft.clearInactiveMines` que devuelve `false` durante el turno normal, y a las `06:00` y `18:00` reales el Host invoca la limpieza sobre los pisos sin jugadores activos (notificando por HUD el nuevo turno minero).
@@ -175,3 +176,4 @@ Las decisiones arquitectónicas clave y sus alternativas descartadas están docu
 * **ADR-0003:** 4 huecos de granja declarativos (`Data/Locations`) con plantilla Estándar para el MVP.
 * **ADR-0004:** Autoridad en el Host (`ServerWorldState`), mod obligatorio en clientes y registro modular aislado (`IModule`).
 * **ADR-0005:** Plaza Central en la Granja Host y Mapas Puente Declarativos (`Data/Locations`) para el escalado de hasta 16 residencias privadas.
+* **ADR-0006:** Energía por sesiones: Saciedad con vaciado continuo, "Bien comido" que activa el descanso sentado y buff diario del Spa.
