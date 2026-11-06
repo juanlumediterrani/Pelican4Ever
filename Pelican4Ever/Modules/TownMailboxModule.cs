@@ -1,4 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Reflection.Emit;
+using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.World;
@@ -7,6 +11,7 @@ using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Buildings;
 
 namespace Pelican4Ever.Modules
 {
@@ -28,6 +33,92 @@ namespace Pelican4Ever.Modules
 
             ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
             ctx.Helper.Events.Display.RenderedWorld += OnRenderedWorld;
+
+            try
+            {
+                ctx.Harmony.Patch(
+                    original: AccessTools.Method(typeof(Farm), nameof(Farm.draw), new[] { typeof(SpriteBatch) }),
+                    transpiler: new HarmonyMethod(typeof(TownMailboxModule), nameof(Transpiler_FarmDrawMailboxIndicator))
+                );
+            }
+            catch (Exception ex)
+            {
+                ctx.Monitor.Log($"[TownMailbox] No se pudo parchear Farm.draw (indicador de correo): {ex}", LogLevel.Error);
+            }
+        }
+
+        /// <summary>Casilla fuera de cualquier mapa: el indicador se dibuja fuera de pantalla.</summary>
+        private static readonly Point HiddenMailboxPosition = new(-100, -100);
+
+        /// <summary>
+        /// <c>Farm.draw</c> pinta la carta de correo pendiente en <c>Game1.player.getMailboxPosition()</c> en TODAS las
+        /// ubicaciones de tipo <see cref="Farm"/>. Las residencias y anexos también son <see cref="Farm"/>, y como el
+        /// jugador no tiene cabaña en la Granja Host, esa posición cae en el buzón del host: el bocadillo aparecía en
+        /// mitad de la residencia. Se sustituye la llamada por <see cref="GetMailboxIndicatorPosition"/>.
+        /// </summary>
+        public static IEnumerable<CodeInstruction> Transpiler_FarmDrawMailboxIndicator(IEnumerable<CodeInstruction> instructions)
+        {
+            var original = AccessTools.Method(typeof(Farmer), nameof(Farmer.getMailboxPosition));
+            var replacement = AccessTools.Method(typeof(TownMailboxModule), nameof(GetMailboxIndicatorPosition));
+            bool patched = false;
+
+            foreach (CodeInstruction instruction in instructions)
+            {
+                if (!patched && instruction.Calls(original))
+                {
+                    // Pila: [farmer] → [farmer, this] → GetMailboxIndicatorPosition(farmer, farm)
+                    var loadThis = new CodeInstruction(OpCodes.Ldarg_0);
+                    loadThis.labels.AddRange(instruction.labels);
+                    instruction.labels.Clear();
+                    yield return loadThis;
+                    yield return new CodeInstruction(OpCodes.Call, replacement) { blocks = instruction.blocks };
+                    patched = true;
+                    continue;
+                }
+                yield return instruction;
+            }
+
+            if (!patched)
+                ModContext.Current?.Monitor.Log("[TownMailbox] Farm.draw no contiene getMailboxPosition; el indicador de correo vanilla queda sin corregir.", LogLevel.Warn);
+        }
+
+        /// <summary>
+        /// Dónde dibujar el indicador de correo pendiente de <paramref name="who"/> en <paramref name="farm"/>:
+        /// en su propia residencia, sobre el buzón de su casa; en la Granja Host, el comportamiento vanilla solo si
+        /// es el host o tiene una cabaña allí (el buzón de su residencia ya lo pinta <see cref="OnRenderedWorld"/>);
+        /// en cualquier otra granja (residencias ajenas, anexos), oculto.
+        /// </summary>
+        public static Point GetMailboxIndicatorPosition(Farmer who, Farm farm)
+        {
+            try
+            {
+                if (farm == Game1.getFarm())
+                {
+                    if (who.IsMainPlayer)
+                        return who.getMailboxPosition();
+
+                    foreach (Building building in farm.buildings)
+                    {
+                        if (building.isCabin && building.HasIndoorsName(who.homeLocation.Value))
+                            return building.getMailboxPosition();
+                    }
+                    return HiddenMailboxPosition;
+                }
+
+                string farmName = farm.NameOrUniqueName;
+                // Su casa ({slot}_Home) es el interior del Farmhouse de la residencia; el estado de puertas cubre
+                // el caso de que el interior aún no esté enlazado en este cliente.
+                bool ownResidence = farm.buildings.Any(b => b.HasIndoorsName(who.homeLocation.Value))
+                    || ModContext.Current?.WorldState.Doors.Values.Any(d =>
+                        d.OwnerId == who.UniqueMultiplayerID
+                        && string.Equals(d.FarmSlotId, farmName, StringComparison.OrdinalIgnoreCase)) == true;
+
+                return ownResidence ? farm.GetMainMailboxPosition() : HiddenMailboxPosition;
+            }
+            catch
+            {
+                return HiddenMailboxPosition;
+            }
         }
 
         private void OnButtonPressed(object? sender, ButtonPressedEventArgs e)
@@ -98,7 +189,7 @@ namespace Pelican4Ever.Modules
                 Response[] choices = new[]
                 {
                     new Response("Enter", "🏠 Entrar a mi granja"),
-                    new Response("Mailbox", "📬 Revisar correo"),
+                    new Response("Mailbox", Game1.mailbox.Count > 0 ? $"📬 Revisar correo ({Game1.mailbox.Count} sin leer)" : "📬 Revisar correo (vacío)"),
                     new Response("Policy", $"🔒 Configurar acceso (Actual: {assignment?.Policy})"),
                     new Response("Cancel", "Cancelar")
                 };
