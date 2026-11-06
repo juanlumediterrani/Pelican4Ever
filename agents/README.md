@@ -64,7 +64,7 @@ juego voltea la celda entera (por eso la fila izquierda lleva la misma arte que
 la derecha, sin espejar). A la izquierda del punto de apoyo solo caben ~9 px,
 así que el dragón (~26 px de alto) apoya los pies en la última fila (y=31) de cada
 fotograma y en x=9,5; las vistas
-frontal/trasera se estrechan un 15 %. La arte sale de `dr4co-sid-v2.png`: el
+frontal/trasera se estrechan un 15 %. La arte sale de `agents/sheets/dr4co-sid-v2.png`: el
 script `scripts/build_dr4co_body.py` solo calcula la geometría y GIMP
 (`gimp-console-2.10`, Script-Fu) hace el recorte, el escalado NoHalo, el umbral
 de alfa y la paleta indexada de 32 colores. También en GIMP: en las vistas
