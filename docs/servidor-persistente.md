@@ -54,6 +54,17 @@ está parada y se niega si el servidor sirve otra partida que la autorizada (gu�
 3. El estado del servidor (`ServerWorldState`) migra su esquema al cargar; los clientes con otra versión
    del mod son expulsados hasta que actualicen (`RequireClientMod`).
 
+## Copias de la partida y checkpoints intradía
+
+- **Copias diarias:** las del rollover, en `Pelican4Ever_Backups/<partida>_<fecha UTC>/`, sin comprimir. No se borran salvo que `BackupRetentionDays` sea mayor que 0; entonces se conservan las de esos días y siempre la más reciente.
+- **Checkpoints intradía** (Épica 11 del backlog, **desactivados por defecto**): con `CheckpointIntervalMinutes` mayor que 0, el host guarda la partida cada ese número de minutos sin cambiar de día ni desconectar a nadie. `p4e_checkpoint_now` lanza uno a mano aunque estén desactivados. Cada uno deja una copia en `Pelican4Ever_Backups/checkpoints/<partida>_<fecha UTC>/`, con cada archivo comprimido en `.gz` si `CheckpointCompress` está activo, y se conservan los últimos `CheckpointRetention`. No se hacen durante festivales o eventos, ni en los 10 minutos previos al rollover. Con farmhands conectados solo se hacen si `CheckpointCloneFarmhands` está activo. Cada checkpoint congela el juego mientras guarda; si tarda más de `CheckpointMaxDurationMs`, el intervalo se duplica hasta el día siguiente. Quedan en el registro de sucesos como `checkpoint.created`, `checkpoint.skipped` y `checkpoint.failed`.
+
+**Restaurar una copia** (diaria o checkpoint), con el servicio parado:
+
+1. Aparta la partida actual: `mv Saves/<partida> Saves/<partida>.antes-de-restaurar`.
+2. Copia la carpeta elegida como `Saves/<partida>`. Si es de `checkpoints/` y está comprimida, descomprime sus archivos: `gunzip Saves/<partida>/*.gz`.
+3. Arranca el servicio. Un checkpoint vuelve a abrir el mismo día desde las 06:00 del juego, con lo hecho hasta la hora del checkpoint. El log dice «inicio causado por carga de partida» y no se repiten penalizaciones.
+
 ## Seguridad y posesión de personajes (Anti-usurpación)
 
 En conexiones por IP directa, Stardew Valley nativo no valida usuarios (`userID = ""`). Pelican 4Ever implementa un sistema automático de tokens por cliente/equipo:

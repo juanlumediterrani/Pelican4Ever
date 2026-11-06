@@ -116,7 +116,7 @@ namespace Pelican4Ever.Modules
         {
             if (!Context.IsWorldReady || !Context.IsMainPlayer)
                 return "hace falta una partida cargada y ser el host.";
-            if (save != null || SaveGame.IsProcessing)
+            if (save != null || SaveGame.IsProcessing || CheckpointModule.IsSaving)
                 return "ya hay un guardado en curso.";
             if (DailyRolloverModule.IsBusy)
                 return "el rollover diario está en marcha.";

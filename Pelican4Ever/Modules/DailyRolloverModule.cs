@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
@@ -252,7 +251,7 @@ namespace Pelican4Ever.Modules
             if (context == null || !Context.IsMainPlayer || preCloseSave != null || postCloseSave != null)
                 return;
             // Otro guardado en curso (p. ej. el spike de checkpoint); el disparo programado lo reintenta al segundo siguiente.
-            if (SaveGame.IsProcessing || CheckpointSpikeModule.IsSaving)
+            if (SaveGame.IsProcessing || CheckpointModule.IsSaving || CheckpointSpikeModule.IsSaving)
             {
                 context.Monitor.Log("[DailyRolloverModule] Hay otro guardado en curso; el rollover espera a que termine.", LogLevel.Info);
                 return;
@@ -585,66 +584,29 @@ namespace Pelican4Ever.Modules
 
         private bool CreateSaveBackup()
         {
-            string? partial = null;
-            try
-            {
-                string? savesPath = Constants.CurrentSavePath;
-                if (string.IsNullOrEmpty(savesPath) || !Directory.Exists(savesPath))
-                    return false;
-
-                string backupDir = Path.Combine(Constants.DataPath, "Pelican4Ever_Backups");
-                Directory.CreateDirectory(backupDir);
-
-                string backupFolderName = $"{Constants.SaveFolderName}_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}";
-                string dest = Path.Combine(backupDir, backupFolderName);
-                partial = dest + ".partial";
-                Directory.CreateDirectory(partial);
-
-                string[] files = Directory.GetFiles(savesPath, "*", SearchOption.TopDirectoryOnly);
-                if (files.Length == 0)
-                    throw new IOException("La carpeta de save no contiene archivos que respaldar.");
-
-                foreach (string file in files)
-                {
-                    string copy = Path.Combine(partial, Path.GetFileName(file));
-                    File.Copy(file, copy, overwrite: false);
-                    using FileStream sourceStream = File.OpenRead(file);
-                    using FileStream backupStream = File.OpenRead(copy);
-                    using SHA256 sha = SHA256.Create();
-                    if (!CryptographicOperations.FixedTimeEquals(sha.ComputeHash(sourceStream), sha.ComputeHash(backupStream)))
-                        throw new IOException($"La verificación SHA-256 falló para {Path.GetFileName(file)}.");
-                }
-
-                Directory.Move(partial, dest);
-                LastBackupFileName = backupFolderName;
-                LastBackupCreatedUtc = DateTimeOffset.UtcNow.ToString("O");
-
-                AdminApiModule.EventLog.Append(
-                    HostEventTypes.BackupCreated,
-                    Game1.Date.TotalDays,
-                    Game1.timeOfDay,
-                    $"Copia de seguridad verificada: {backupFolderName}",
-                    new Dictionary<string, object?>
-                    {
-                        ["backupName"] = backupFolderName,
-                        ["createdAtUtc"] = LastBackupCreatedUtc,
-                        ["fileCount"] = files.Length,
-                        ["verifiedBy"] = "SHA-256"
-                    });
-
-                context.Monitor.Log($"[DailyRolloverModule] Backup pre-cierre verificado en: {dest}", LogLevel.Info);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                if (partial != null && Directory.Exists(partial))
-                {
-                    try { Directory.Delete(partial, recursive: true); }
-                    catch (Exception cleanupError) { context.Monitor.Log($"[DailyRolloverModule] No se pudo retirar el backup parcial {partial}: {cleanupError.Message}", LogLevel.Warn); }
-                }
-                context.Monitor.Log($"[DailyRolloverModule] Error al crear backup de seguridad: {ex}", LogLevel.Warn);
+            SaveBackupResult? backup = SaveBackupService.Create(context.Monitor, BackupKind.Daily, compress: false);
+            if (backup == null)
                 return false;
-            }
+
+            LastBackupFileName = backup.FolderName;
+            LastBackupCreatedUtc = backup.CreatedUtc.ToString("O");
+
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.BackupCreated,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"Copia de seguridad verificada: {backup.FolderName}",
+                new Dictionary<string, object?>
+                {
+                    ["backupName"] = backup.FolderName,
+                    ["createdAtUtc"] = LastBackupCreatedUtc,
+                    ["fileCount"] = backup.FileCount,
+                    ["verifiedBy"] = "SHA-256"
+                });
+
+            context.Monitor.Log($"[DailyRolloverModule] Backup verificado en: {backup.FolderPath}", LogLevel.Info);
+            SaveBackupService.ApplyRetention(context.Monitor, BackupKind.Daily, keepCheckpoints: 0, keepDailyDays: context.Config.BackupRetentionDays);
+            return true;
         }
 
         /// <summary>

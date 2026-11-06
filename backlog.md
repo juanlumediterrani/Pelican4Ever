@@ -1090,14 +1090,15 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. El guardado nocturno nativo no cambia.
   * **Resolución:** `PersistenceModule.FlushToSaveData(context, reason)` reúne lo que hacía `OnSaving` (marca `LastSeenUtc` y el ancla de energía del host y llama a `WriteSaveData`), captura los errores y devuelve `false` si falla: el guardado sigue con el último estado volcado, como antes, y no se bloquea el rollover. `OnSaving` lo llama con `"Saving"` y `DailyRolloverModule` justo antes de los dos `SaveGame.Save()` (`"rollover pre-cierre"` y `"rollover post-cierre"`). Si SMAPI también dispara `Saving`, el segundo volcado es inocuo. Compila y pasan los 927 tests; **el criterio 1 está pendiente de comprobar en partida** dentro de TASK-1601.
 
-- [ ] **TASK-1603: Política pura de checkpoint en Core (G8)**
+- [x] **TASK-1603: Política pura de checkpoint en Core (G8)**
   * **Análisis Técnico:** `Pelican4Ever.Core/Admin/CheckpointPolicy.cs` con `Decide(CheckpointInputs)` → `Run` o `Skip(motivo)`. Entradas: hora real, próximo rollover, intervalo, último checkpoint, etapa del rollover, guardado en curso, festival o evento, jugadores conectados, si hubo cambios, duración del último checkpoint y `CheckpointMaxDurationMs` (retroceso de G2).
   * **Prioridad:** Alta
   * **Criterios de Aceptación:**
     1. Un test por cada caso de G8 y por el retroceso de G2.
     2. Con `CheckpointIntervalMinutes = 0`, nunca devuelve `Run` salvo petición manual.
+  * **Resolución:** `CheckpointPolicy.Decide(CheckpointInputs)` devuelve `CheckpointDecision(Run, Reason, Due, EffectiveInterval)`. Las razones de seguridad (`SaveInProgress`, `RolloverActive`, `NearRollover`, `FestivalOrEvent` y `FarmhandsWithoutClone`, que impide guardar farmhands retrasados si no se clonan, G4) bloquean también las peticiones manuales; `Disabled`, `NotDue` y `NoActivity` solo las automáticas. `Due` indica si tocaba por tiempo, para registrar solo los saltos que importan. Retroceso: `EffectiveInterval` duplica el intervalo por cada checkpoint lento del día, hasta 8 veces; `IsSlow` compara el tick más largo con `CheckpointMaxDurationMs`. Tests en `CheckpointPolicyTests`.
 
-- [ ] **TASK-1604: `CheckpointModule` en el host**
+- [x] **TASK-1604: `CheckpointModule` en el host**
   * **Análisis Técnico:**
     - Opciones en `ServerConfig`: `CheckpointIntervalMinutes` (0 = desactivado, **por defecto 0** hasta cerrar G4), `CheckpointMaxDurationMs`, `CheckpointRetention` y `CheckpointCompress`.
     - En `OneSecondUpdateTicked` consulta `CheckpointPolicy`; si toca, avisa en pantalla, llama a `FlushToSaveData()` (TASK-1602) y a `SaveGame.Save()`, lo bombea en `UpdateTicked` y al terminar copia a `checkpoints/` (TASK-1605).
@@ -1110,14 +1111,16 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Con el intervalo a 0, el servidor se comporta como hoy.
     2. Con intervalo, aparece un `checkpoint.created` por intervalo y ninguno durante festivales ni en la ventana previa al rollover.
     3. Un checkpoint nunca coincide con el guardado del rollover (test de la política y prueba en partida).
+  * **Resolución:** `CheckpointModule` (host) con las opciones `CheckpointIntervalMinutes` (0 por defecto), `CheckpointMaxDurationMs` (3000), `CheckpointRetention` (12), `CheckpointCompress` (sí) y `CheckpointCloneFarmhands` (sí), validadas en `ServerConfig`. Cada segundo consulta la política; si toca, avisa en pantalla al host y, con un mensaje de mod, a los farmhands, y a los 3 s vuelve a decidir y guarda. Con farmhands conectados, antes copia su estado vivo a `farmhandData` con `NetRoot.CloneInto` (G4), luego `FlushToSaveData` y `SaveGame.Save()`, bombeado en `UpdateTicked` midiendo el tick más largo. Al terminar copia a `checkpoints/` con `SaveBackupService` y rota. Sucesos `checkpoint.created`, `checkpoint.skipped` (solo cuando tocaba y una vez por motivo) y `checkpoint.failed`; comando `p4e_checkpoint_now`. `DailyRolloverModule.BeginRollover` y el spike esperan mientras `CheckpointModule.IsSaving`. Además de G8, tampoco guarda si algún jugador está en una ubicación temporal (festivales, cinemáticas). Compila y pasan los tests; **pendiente de probar en partida**, y no se debe activar hasta cerrar G4 con el spike (TASK-1601).
 
-- [ ] **TASK-1605: Servicio de copias con retención y compresión (G7)**
+- [x] **TASK-1605: Servicio de copias con retención y compresión (G7)**
   * **Análisis Técnico:** Sacar `CreateSaveBackup()` de `DailyRolloverModule` a un servicio común (`SaveBackupService`) con destino (`daily` o `checkpoints`) y compresión opcional (gzip por archivo, verificando el SHA-256 del contenido sin comprimir). La rotación la decide una política pura en Core (`BackupRetentionPolicy`: últimos N checkpoints, últimos D días de copias diarias, nunca borrar la única copia válida).
   * **Prioridad:** Media (Alta si se activan los checkpoints)
   * **Criterios de Aceptación:**
     1. Tests de `BackupRetentionPolicy`: rota por número y por días y no borra la última copia verificada.
     2. Las copias diarias existentes se siguen leyendo y restaurando igual.
     3. Guía de restauración desde un checkpoint en `docs/servidor-persistente.md`.
+  * **Resolución:** `Framework/SaveBackupService` (`Create` y `ApplyRetention`) sustituye a `DailyRolloverModule.CreateSaveBackup()`. Copia a `<destino>.partial` y renombra al final, verifica cada archivo con SHA-256 sobre el contenido sin comprimir y, con compresión, escribe `<archivo>.gz`. La rotación solo mira carpetas `<partida>_<yyyyMMdd_HHmmss_fff>` de la partida cargada, así que no toca otras partidas, copias parciales, `spike/` ni `checkpoints/` desde las diarias. `BackupRetentionPolicy` (Core): últimos N checkpoints, últimos D días de diarias y nunca la más reciente de cada tipo. `BackupRetentionDays` es 0 por defecto, así que las copias diarias siguen sin borrarse como hasta ahora hasta que se configure. Las copias diarias mantienen nombre y formato. Tests en `BackupRetentionPolicyTests`; guía de restauración en `docs/servidor-persistente.md`.
 
 - [ ] **TASK-1606: Carga desde un checkpoint de mitad de día (G5, G6)**
   * **Análisis Técnico:** `ServerWorldState.LastCheckpoint` (día, hora de juego y UTC, con migración de esquema). En `SaveLoaded`, si el día guardado es el actual y hay `LastCheckpoint`, registrar «restaurado al checkpoint de las HH:MM» en el registro de sucesos y avisar a los jugadores al conectarse. Revisar la idempotencia de los `DayStarted` propios (`WorldLifeModule`, `FestivalParticipationModule`, `FarmSlotModule`) y lanzar `ScheduleCatchUp` para los NPC.
