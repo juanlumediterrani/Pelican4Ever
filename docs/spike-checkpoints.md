@@ -25,8 +25,9 @@ No se lanza a menos de 10 minutos del rollover, con otro guardado en curso ni co
 
 1. Usa una **partida de prueba**, nunca la del servidor real. El spike sobrescribe la partida igual que un guardado normal.
 2. Compila y despliega la rama `feat/day-checkpoints` (sin `EnableModDeploy=false`, para que llegue al juego).
-3. Para el paso G1 basta con `~/.config/StardewValley/ErrorLogs/SMAPI-latest.txt`, que guarda siempre las líneas `TRACE` aunque la consola no las muestre.
-4. Arranca el host y conecta **al menos un farmhand** (mejor dos, para G2).
+3. Activa `CheckpointDebugMode: true` **solo en la copia de prueba**. Sin esta opción, el comando se rechaza; los checkpoints normales no necesitan activarla.
+4. Para el paso G1 basta con `~/.config/StardewValley/ErrorLogs/SMAPI-latest.txt`, que guarda siempre las líneas `TRACE` aunque la consola no las muestre.
+5. Arranca el host y conecta **al menos un farmhand** (mejor dos, para G2).
 
 ## Pasos
 
@@ -79,6 +80,23 @@ Rellenar una fila por prueba y copiar las conclusiones a los gaps de la Épica 1
 
 | Fecha | Commit | Farmhands | Clonar | Total ms | Tick más largo ms | MB | `Saving` | `Saved` | G4 (XML) | Notas |
 |---|---|---|---|---|---|---|---|---|---|---|
-| | | | | | | | | | | |
+| 2026-11-06 | `80cc24e` | 1 | no | 3582 | 3555 | 25,5 | no | no | copia retrasada | Sin desconexión. |
+| 2026-11-06 | `80cc24e` | 2 | sí | 2989 | 2964 | 25,5 | no | no | estado vivo (ambos) | Inventarios, energía, correo y amistad coinciden con el XML. |
+| 2026-11-06 | `80cc24e` | 0 | sí | 3560 | 3546 | 25,5 | no | no | — | Tienda y Junimo desaparecen y no vuelven a los 30 s; el loro vuelve. |
+| 2026-11-06 | `80cc24e` | 1 | sí | 3422 | 3396 | 25,5 | no | no | estado vivo | Reconexión después de restaurar la copia gzip. |
+| 2026-11-06 | `80cc24e` + correcciones locales | 2 | sí | 3410 | 3410 | 25,9 | no | no | estado vivo (ambos) | Enumerador agotado en una llamada, después de la prueba de mercado. |
 
 Decisión al cerrar el spike (criterio 2 de TASK-1601): **viable por defecto / viable con restricciones / no viable**, y por qué.
+
+
+### Resultado del 6 de noviembre de 2026
+
+El mecanismo de guardado intradía es **viable con restricciones**; la promoción queda bloqueada por la pérdida de objetos detectada en la prueba del mercado (G10, informe enlazado al final). Se mantiene `CheckpointIntervalMinutes = 0` por defecto.
+
+- SMAPI 4.5.2 no emite `Saving`/`Saved` al llamar a `SaveGame.Save()`. El volcado explícito conserva `ServerWorldState`. SpaceCore 1.28.4 intercepta el enumerador/serializador mediante Harmony; la copia vuelve a cargar con SpaceCore, NITV, FashionSense y Dr4coVoyagerBridge. Esto no acredita compatibilidad con cualquier mod que dependa de esos eventos.
+- Sin clonación se guarda el inventario anterior del farmhand. Con `NetRoot.CloneInto` coinciden los dos jugadores; el checkpoint de producción cancela si no puede clonar a cualquiera de ellos o volcar el estado del mod.
+- `cleanupBeforeSave()` borra tiendas, Junimos y personajes de WitchHut. El checkpoint normal se omite mientras existan, también dentro de edificios. El spike de diagnóstico puede reproducir el efecto y por eso requiere `CheckpointDebugMode`.
+- El bloqueo medido ronda los 3–3,6 s para 25,5 MB, sin desconexión de los clientes. La clonación, el volcado y el guardado normal se agotan en una única llamada del hilo principal: no se intercalan ticks de red entre la copia de los jugadores y la del mundo.
+- Tras matar el host y descomprimir su copia gzip se conserva el inventario y la amistad; el reloj vuelve a la hora real y `DayStarted` omite penalizaciones y contadores duplicados. Se aplican las reglas normales de carga (salud/posición y recuperación de energía offline), no una reanudación de la simulación exactamente donde se detuvo.
+
+Las pruebas se ejecutan con perfiles XDG separados y host/cliente(s) en un espacio de nombres de red sin LAN. La instalación habitual y las partidas originales no se modifican. El informe de validación está en [checkpoint-validation-2026-11-06.md](checkpoint-validation-2026-11-06.md).

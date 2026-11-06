@@ -30,7 +30,10 @@ namespace Pelican4Ever.Core.Admin
         FestivalOrEvent,
 
         /// <summary>Hay farmhands conectados y no se clona su estado: se guardarían retrasados (gap G4).</summary>
-        FarmhandsWithoutClone
+        FarmhandsWithoutClone,
+
+        /// <summary>El guardado nativo eliminaría tiendas, Junimos o personajes temporales de WitchHut.</summary>
+        DestructiveSaveCleanup
     }
 
     /// <summary>Datos de un instante para decidir si toca checkpoint.</summary>
@@ -59,6 +62,8 @@ namespace Pelican4Ever.Core.Admin
         public bool RolloverActive { get; init; }
 
         public bool FestivalOrEvent { get; init; }
+
+        public bool DestructiveSaveCleanup { get; init; }
 
         /// <summary>Hubo algún jugador conectado o actividad del host desde el último checkpoint.</summary>
         public bool ActivitySinceLast { get; init; }
@@ -116,6 +121,8 @@ namespace Pelican4Ever.Core.Admin
                 return Skip(CheckpointSkipReason.NearRollover, due, interval);
             if (inputs.FestivalOrEvent)
                 return Skip(CheckpointSkipReason.FestivalOrEvent, due, interval);
+            if (inputs.DestructiveSaveCleanup)
+                return Skip(CheckpointSkipReason.DestructiveSaveCleanup, due, interval);
             if (inputs.OnlineFarmhands > 0 && !inputs.CloneFarmhands)
                 return Skip(CheckpointSkipReason.FarmhandsWithoutClone, due, interval);
 

@@ -211,6 +211,9 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public int CheckpointIntervalMinutes { get; set; } = 0;
 
+        /// <summary>Permite el spike de diagnóstico, que puede eliminar elementos temporales. Solo en partidas de prueba.</summary>
+        public bool CheckpointDebugMode { get; set; } = false;
+
         /// <summary>Si un checkpoint bloquea el juego más de estos milisegundos, el intervalo se duplica hasta el día siguiente. 0 = sin límite.</summary>
         public int CheckpointMaxDurationMs { get; set; } = 3000;
 

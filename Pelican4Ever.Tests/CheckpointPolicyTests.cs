@@ -51,6 +51,7 @@ public class CheckpointPolicyTests
     [InlineData(nameof(CheckpointSkipReason.NearRollover))]
     [InlineData(nameof(CheckpointSkipReason.FestivalOrEvent))]
     [InlineData(nameof(CheckpointSkipReason.FarmhandsWithoutClone))]
+    [InlineData(nameof(CheckpointSkipReason.DestructiveSaveCleanup))]
     public void SafetyReasonsBlockEvenManualAndAreReportedAsDue(string reasonName)
     {
         var reason = Enum.Parse<CheckpointSkipReason>(reasonName);
@@ -60,6 +61,7 @@ public class CheckpointPolicyTests
             CheckpointSkipReason.RolloverActive => Due() with { RolloverActive = true },
             CheckpointSkipReason.NearRollover => Due() with { UntilRollover = TimeSpan.FromMinutes(10) },
             CheckpointSkipReason.FestivalOrEvent => Due() with { FestivalOrEvent = true },
+            CheckpointSkipReason.DestructiveSaveCleanup => Due() with { DestructiveSaveCleanup = true },
             _ => Due() with { CloneFarmhands = false }
         };
 

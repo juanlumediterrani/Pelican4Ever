@@ -21,7 +21,7 @@ namespace Pelican4Ever.Modules
     /// un informe para cerrar los gaps G1–G5 y G10. Solo consola SMAPI del host: <c>p4e_checkpoint_spike [clonar] [forzar]</c>.
     /// </summary>
     /// <remarks>
-    /// <para>Es una herramienta de medición, no el checkpoint definitivo (TASK-1604). Se retira al cerrar TASK-1601.</para>
+    /// <para>Es una herramienta de medición, no el checkpoint definitivo (TASK-1604). Solo se habilita con CheckpointDebugMode para partidas de prueba.</para>
     /// <para>
     /// <c>SaveGame.Save()</c> guarda los farmhands desde <c>netWorldState.farmhandData</c>, que es una copia aparte que el
     /// juego solo refresca al desconectarse el jugador o al dormir (<c>Multiplayer.saveFarmhands</c>). Esa función no
@@ -58,7 +58,6 @@ namespace Pelican4Ever.Modules
                 OnCommand);
             ctx.Helper.Events.GameLoop.Saving += (_, _) => { if (save != null && report != null) report.SavingEventFired = true; };
             ctx.Helper.Events.GameLoop.Saved += (_, _) => { if (report != null && (save != null || report.SaveFinished)) report.SavedEventFired = true; };
-            ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
         }
 
@@ -67,6 +66,12 @@ namespace Pelican4Ever.Modules
 
         private void OnCommand(string command, string[] args)
         {
+            if (!context.Config.CheckpointDebugMode)
+            {
+                context.Monitor.Log("[CheckpointSpike] Desactivado: requiere CheckpointDebugMode=true y una partida de prueba.", LogLevel.Warn);
+                return;
+            }
+
             bool clone = args.Any(a => a.Equals("clonar", StringComparison.OrdinalIgnoreCase));
             bool force = args.Any(a => a.Equals("forzar", StringComparison.OrdinalIgnoreCase));
 
@@ -105,6 +110,17 @@ namespace Pelican4Ever.Modules
                 save = SaveGame.Save();
                 IsSaving = true;
                 context.Monitor.Log($"[CheckpointSpike] Guardado iniciado (clonar={clone}, farmhands conectados={report.OnlineFarmhands}).", LogLevel.Info);
+                // Mismo tramo síncrono que el checkpoint: no procesar otro tick entre clonar y guardar.
+                bool more;
+                do
+                {
+                    more = save.MoveNext();
+                    report.SaveTicks++;
+                } while (more);
+                report.LongestTickMs = total.Elapsed.TotalMilliseconds;
+                Finish(Game1.gameMode != Game1.playingGameMode
+                    ? new IOException($"El juego no pudo escribir el spike: {Game1.debugOutput}")
+                    : null);
             }
             catch (Exception ex)
             {
@@ -131,30 +147,6 @@ namespace Pelican4Ever.Modules
                 return "hay un festival o un evento en curso (usa 'forzar' para lanzarlo igualmente).";
 
             return null;
-        }
-
-        private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
-        {
-            if (save == null || report == null)
-                return;
-
-            var step = Stopwatch.StartNew();
-            bool more;
-            try
-            {
-                more = save.MoveNext();
-            }
-            catch (Exception ex)
-            {
-                Finish(failure: ex);
-                return;
-            }
-
-            double ms = step.Elapsed.TotalMilliseconds;
-            report.SaveTicks++;
-            report.LongestTickMs = Math.Max(report.LongestTickMs, ms);
-            if (!more)
-                Finish(failure: null);
         }
 
         private void Finish(Exception? failure)
@@ -187,7 +179,7 @@ namespace Pelican4Ever.Modules
 
             context.Monitor.Log(
                 $"[CheckpointSpike] {(failure == null ? "Guardado terminado" : "Guardado FALLIDO")}: " +
-                $"{report.TotalMs:F0} ms en {report.SaveTicks} ticks, tick más largo {report.LongestTickMs:F0} ms. " +
+                $"{report.TotalMs:F0} ms en {report.SaveTicks} pasos del enumerador, tick más largo {report.LongestTickMs:F0} ms. " +
                 $"Saving={(report.SavingEventFired ? "sí" : "no")}, Saved={(report.SavedEventFired ? "sí" : "no")}, " +
                 $"farmhands conectados {report.OnlineFarmhands}→{report.OnlineFarmhandsAfter}. " +
                 $"Informe: {reportPath ?? "no escrito"}",

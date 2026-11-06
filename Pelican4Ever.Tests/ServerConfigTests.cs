@@ -97,6 +97,7 @@ public class ServerConfigTests
     {
         var config = new ServerConfig();
         Assert.Equal(0, config.CheckpointIntervalMinutes);
+        Assert.False(config.CheckpointDebugMode);
         Assert.Equal(0, config.BackupRetentionDays);
         Assert.Empty(config.Validate());
 

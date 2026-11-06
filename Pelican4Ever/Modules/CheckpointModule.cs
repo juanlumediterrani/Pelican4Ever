@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using Netcode;
 using Pelican4Ever.Core.Admin;
@@ -9,6 +10,8 @@ using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Characters;
+using StardewValley.TerrainFeatures;
 using StardewValley.Network;
 
 namespace Pelican4Ever.Modules
@@ -22,7 +25,7 @@ namespace Pelican4Ever.Modules
     /// Cuándo se hace lo decide <see cref="CheckpointPolicy"/>. Con farmhands conectados, antes de guardar se copia su
     /// estado vivo a <c>farmhandData</c> con <c>NetRoot.CloneInto</c> (gap G4): el juego guarda esa copia, que solo
     /// refresca al desconectar o dormir, y su <c>saveFarmhands()</c> no sirve a mitad de día porque reinicia al
-    /// jugador vivo. Pendiente de verificar en partida con el spike de TASK-1601.
+    /// jugador vivo. Validación y límites en docs/spike-checkpoints.md (TASK-1601).
     /// </remarks>
     public sealed class CheckpointModule : IModule
     {
@@ -64,7 +67,6 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => ResetDay();
             ctx.Helper.Events.GameLoop.DayStarted += (_, _) => ResetDay();
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
-            ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
         }
 
@@ -163,46 +165,35 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
+            runningManual = manual;
+            longestTickMs = 0;
+            total.Restart();
+            IsSaving = true;
             try
             {
                 int cloned = 0;
                 if (Game1.otherFarmers.Count > 0)
                     cloned = CloneLiveFarmhandsIntoSaveData();
 
-                PersistenceModule.FlushToSaveData(context, "checkpoint");
-                runningManual = manual;
-                longestTickMs = 0;
-                total.Restart();
+                if (!PersistenceModule.FlushToSaveData(context, "checkpoint"))
+                    throw new IOException("No se pudo volcar ServerWorldState; se cancela el checkpoint para no guardar un estado incoherente.");
                 save = SaveGame.Save();
-                IsSaving = true;
                 context.Monitor.Log($"[Checkpoint] Guardado iniciado ({(manual ? "manual" : "programado")}; farmhands clonados: {cloned}).", LogLevel.Info);
+                // SMAPI ejecuta la tarea nativa de Save sincrónicamente. Agotar el enumerador aquí evita
+                // ticks de red o del mundo entre el clon de los farmhands y la serialización del mundo.
+                while (save.MoveNext()) { }
+                if (Game1.gameMode != Game1.playingGameMode)
+                    throw new IOException($"El juego no pudo escribir el checkpoint: {Game1.debugOutput}");
             }
             catch (Exception ex)
             {
-                Finish(ex);
-            }
-        }
-
-        private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
-        {
-            if (save == null)
-                return;
-
-            var step = Stopwatch.StartNew();
-            bool more;
-            try
-            {
-                more = save.MoveNext();
-            }
-            catch (Exception ex)
-            {
+                longestTickMs = total.Elapsed.TotalMilliseconds;
                 Finish(ex);
                 return;
             }
 
-            longestTickMs = Math.Max(longestTickMs, step.Elapsed.TotalMilliseconds);
-            if (!more)
-                Finish(null);
+            longestTickMs = total.Elapsed.TotalMilliseconds;
+            Finish(null);
         }
 
         private void Finish(Exception? failure)
@@ -216,7 +207,7 @@ namespace Pelican4Ever.Modules
 
             if (failure != null)
             {
-                context.Monitor.Log($"[Checkpoint] El guardado falló; la partida en disco sigue siendo la anterior: {failure}", LogLevel.Error);
+                context.Monitor.Log($"[Checkpoint] El guardado falló; comprueba la partida en disco y las copias verificadas antes de restaurar: {failure}", LogLevel.Error);
                 AppendEvent(HostEventTypes.CheckpointFailed, "Checkpoint fallido.", new Dictionary<string, object?>
                 {
                     ["manual"] = runningManual,
@@ -271,6 +262,7 @@ namespace Pelican4Ever.Modules
                 SaveInProgress = save != null || SaveGame.IsProcessing || CheckpointSpikeModule.IsSaving,
                 RolloverActive = DailyRolloverModule.IsBusy,
                 FestivalOrEvent = IsFestivalOrEvent(),
+                DestructiveSaveCleanup = HasDestructiveSaveCleanup(),
                 ActivitySinceLast = activitySinceLast,
                 OnlineFarmhands = Game1.otherFarmers.Count,
                 CloneFarmhands = context.Config.CheckpointCloneFarmhands
@@ -284,17 +276,30 @@ namespace Pelican4Ever.Modules
             || Game1.CurrentEvent != null
             || Game1.getOnlineFarmers().Any(f => f.currentLocation == null || f.currentLocation.IsTemporary);
 
+        /// <summary>cleanupBeforeSave elimina estos elementos también en los interiores de edificios.</summary>
+        private static bool HasDestructiveSaveCleanup()
+        {
+            bool destructive = false;
+            Utility.ForEachLocation(location =>
+            {
+                destructive = location.largeTerrainFeatures.Any(f => f is Tent)
+                    || location.characters.Any(npc => npc is Junimo)
+                    || (location.Name == "WitchHut" && location.characters.Count > 0);
+                return !destructive;
+            });
+            return destructive;
+        }
+
         private int CloneLiveFarmhandsIntoSaveData()
         {
             int cloned = 0;
             foreach (KeyValuePair<long, NetRoot<Farmer>> pair in Game1.otherFarmers.Roots.ToList())
             {
                 if (pair.Value is not NetFarmerRoot root)
-                    continue;
+                    throw new InvalidOperationException($"No se puede clonar el farmhand {pair.Key}; se cancela el checkpoint.");
                 if (!Game1.netWorldState.Value.farmhandData.FieldDict.TryGetValue(pair.Key, out NetRef<Farmer>? stored))
                 {
-                    context.Monitor.Log($"[Checkpoint] {root.Value?.Name} ({pair.Key}) no tiene entrada en farmhandData; se guardará como estaba.", LogLevel.Warn);
-                    continue;
+                    throw new InvalidOperationException($"{root.Value?.Name} ({pair.Key}) no tiene entrada en farmhandData; se cancela el checkpoint.");
                 }
                 root.CloneInto(stored);
                 cloned++;
@@ -325,6 +330,7 @@ namespace Pelican4Ever.Modules
             CheckpointSkipReason.NearRollover => "queda poco para el rollover, que ya guardará",
             CheckpointSkipReason.FestivalOrEvent => "hay un festival, un evento o un jugador en una ubicación temporal",
             CheckpointSkipReason.FarmhandsWithoutClone => "hay farmhands conectados y CheckpointCloneFarmhands está desactivado",
+            CheckpointSkipReason.DestructiveSaveCleanup => "el guardado eliminaría tiendas de campaña, Junimos o personajes de WitchHut",
             _ => reason.ToString()
         };
 
