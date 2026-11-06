@@ -62,6 +62,13 @@ namespace Pelican4Ever.Core.World
             ["FourCorners"] = new FarmTemplate("FourCorners", "Granja Cuatro Esquinas", "Maps\\Farm_FourCorners", 48, 39, 52, 40, "Farm_FourCorners",
                 CaveEntranceX: 30, CaveEntranceY: 35, CaveExitX: 30, CaveExitY: 36),
             ["Ranching"] = RanchingTemplate,
+            // El mapa vanilla de la Granja de la Playa es Farm_Island (110×110): sin FarmHouseEntry (casa en 64,15),
+            // Backwoods en (40,-1), BusStop en (81,16-18), Forest en (81-83,105) y FarmCave en (34,15)
+            ["Beach"] = new FarmTemplate("Beach", "Granja de la Playa", "Maps\\Farm_Island", 64, 15, 68, 16, "Farm_Beach",
+                NorthArrivalTileX: 40, NorthArrivalTileY: 1,
+                SouthArrivalTileX: 82, SouthArrivalTileY: 103,
+                EastArrivalTileX: 79, EastArrivalTileY: 17,
+                CaveEntranceX: 34, CaveEntranceY: 15, CaveExitX: 34, CaveExitY: 16),
         };
 
         /// <summary>

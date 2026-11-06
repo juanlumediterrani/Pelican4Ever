@@ -43,6 +43,7 @@
   "AutoHostSaveName": "",
   "RestartExitsProcess": false,
   "CheckpointIntervalMinutes": 0,
+  "EnableTestCommands": false,
   "CheckpointDebugMode": false,
   "CheckpointMaxDurationMs": 3000,
   "CheckpointRetention": 12,

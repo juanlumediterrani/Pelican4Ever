@@ -214,6 +214,13 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Permite el spike de diagnóstico, que puede eliminar elementos temporales. Solo en partidas de prueba.</summary>
         public bool CheckpointDebugMode { get; set; } = false;
 
+        /// <summary>
+        /// Activa los comandos de prueba de residencias (<c>p4e_farm_*</c>, <c>p4e_skill</c>, <c>p4e_weather</c>, <c>p4e_lightning</c>),
+        /// que refundan residencias, cambian niveles y fuerzan clima y rayos. Solo en partidas de prueba: hacer
+        /// <c>p4e_checkpoint_now</c> y una copia antes de usarlos.
+        /// </summary>
+        public bool EnableTestCommands { get; set; } = false;
+
         /// <summary>Si un checkpoint bloquea el juego más de estos milisegundos, el intervalo se duplica hasta el día siguiente. 0 = sin límite.</summary>
         public int CheckpointMaxDurationMs { get; set; } = 3000;
 

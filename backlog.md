@@ -246,7 +246,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     - **Resolución/Descarte explícito de puntos secundarios:**
       - *Misiones:* Se mantiene la misión inicial estándar vanilla (la alternativa no aporta valor al modo persistente).
       - *Monstruos salvajes:* Los monstruos nocturnos ya operan en residencias de combate (TASK-604); la variante de proporción 0.66 vs 0.33 se descarta por irrelevante para el juego.
-      - *Arbustos forestales y mapa playa:* Descartados; la granja playa no está en el catálogo de plantillas por no admitir aspersores en arena.
+      - *Arbustos forestales y mapa playa:* Arbustos descartados. La granja playa se incorpora en TASK-607 (el juego ya bloquea los aspersores en la arena con `NoSprinklers`).
       - *Mobiliario:* La cabaña ya inicializa su mobiliario óptimo con `CleanAndArrangeResidenceInterior`.
       - *Lobby/MapArea:* Descartados por ser cosméticos sin impacto en la simulación 24/7.
   * **Prioridad:** Baja
@@ -263,6 +263,38 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
   * **Criterios de Aceptación:**
     1. Una residencia sin intervención del jugador gana matas de hierba nuevas a diario en proporción similar a la granja host.
     2. Las residencias de Pradera generan hierba azul silvestre de forma periódica.
+
+- [ ] **TASK-607: Mecánicas restantes por tipo de granja en residencias y anexos** (rama `farm_fix_improvements`)
+  * **Análisis Técnico:** Repaso contra el código vanilla 1.6 (manda sobre la wiki) y las páginas [Tipos de Granja](https://es.stardewvalleywiki.com/Tipos_de_Granja) (desactualizada en la XP de combate y sin novedades de 1.6) y [Farm Maps](https://stardewvalleywiki.com/Farm_Maps) (al día con 1.6). Criterio: antes de parchear, comprobar si el juego ya lo hace por ubicación (propiedad de mapa o `Data/Locations` copiado al hueco); solo se parchea lo que mira `Game1.whichFarm` o `Game1.getFarm()`.
+    - **Hecho en la rama:**
+      - *Granja de la Playa:* plantilla `Beach` sobre `Maps\Farm_Island` (110×110; `Maps\Farm_Beach` no existe) con casa en 64,15, buzón 68,16, cueva 34,15→34,16 y llegadas N (40,1), S (82,103) y E (79,17); seleccionable al fundar. Anexo `Beach` recortado en (15,30) con el rectángulo fértil. `SpawnBeachFarmForage` activa el forraje de playa, las cajas de suministros (922–924) y el forraje del bosque en el césped. Los aspersores ya no riegan la arena (`NoSprinklers=T` del mapa).
+      - *Regalo inicial:* `ApplyStarterGift` usa `FarmHouseStarterGift` del mapa de la residencia (Pradera: 15 de heno) y, en la fluvial, añade el Ahumador de pescado `(BC)FishSmoker` que vanilla 1.6 coloca en la casa (va en el regalo para no chocar con los muebles de la residencia). FarmHouse lo leía siempre del mapa de la granja principal.
+      - *Salvaje:* `Prefix_SpawnGroundMonster` replica `spawnGroundMonsterOffScreen` con el nivel de Combate del dueño; con nivel 9+, 50 % de Gólem de iridio.
+      - *Rayos:* el tope diario de `WorldLifeModule` se reparte entre la granja principal (camino vanilla) y las residencias con dueño, que cargan sus pararrayos `(BC)9` o reciben el impacto como en vanilla.
+      - *Decoración de la casa:* `ApplyStarterHouseStyle` aplica el papel de pared y el suelo del tipo de la residencia (propiedad del mapa o valor fijo de vanilla, `FarmTypeVanillaLogic.StarterStyleFor`). Los muebles no se cambian: los coloca `CleanAndArrangeResidenceInterior`.
+      - *Cajas de suministros:* `FarmTypeLootModule` (host y clientes, porque la caja se rompe en el juego de quien la golpea) trata como partida de playa el reparto de `BreakableContainer.releaseContents` en residencias y anexos de playa, así que sueltan `(O)920` en vez de Geoda omni. La playa se reconoce por `mapPath`.
+      - *Minerales por nivel del dueño:* `Prefix_DailyMountainFarmUpdate` replica `doDailyMountainFarmUpdate` en la zona de la residencia o anexo con el nivel de Minería del dueño.
+    - **Ya cubierto por vanilla (sin parche):** Muyu de la forestal (`(O)734` al 5 % en `Farm_Forest`), pesca por bioma, hierbajos forestales con semillas variadas (`SpawnForestFarmForage`), cuervos (`Farm.DayUpdate` → `addCrows`), cultivos gigantes (`Crop.TryGrowGiantCrop` en cualquier `Farm`), tazón de mascota (`PetBowl.performToolAction`) y regeneración de la cantera.
+      - *Bloqueo inicial de la cantera:* lo pone `loadObjects` con los marcadores 19/20/21 (tronco, roca, tocón) de la capa `Paths` del mapa, y la residencia lo llama al fundarse.
+      - *Toneles del sótano:* el sótano `Pelican4Ever_Farm_XX_Cellar` es un `Cellar` en `Game1.locations`, así que recibe su `DayUpdate` y los toneles envejecen.
+      - *Maleza y escombros:* `Farm.DayUpdate` llama a `spawnWeedsAndStones` y `spawnWeeds` en cualquier `Farm`, residencias y anexos incluidos.
+      - *Reparación del invernadero:* cada residencia tiene su `greenhouseUnlocked` y su propio flujo de reparación (`TryRepairGreenhouseWithJoja` y por materiales).
+      - *Contenedor de envíos:* vanilla ingresa al jugador que deposita (`getShippingBin(who)`) con carteras separadas. Decidido así también para visitantes: cobra quien deposita, no el dueño de la residencia.
+    - **Descartado:**
+      - *0 XP de Combate en la Salvaje:* vanilla da 1/3 de la XP (mínimo 1) en cualquier granja (`isFarm`), como recoge la wiki inglesa; la española está desactualizada.
+      - *Burbujas en Cuatro Esquinas:* vanilla solo las crea en la fluvial (`whichFarm == 1`).
+    - **Pendiente:**
+      - *Cueva individual:* el evento de Demetrius guarda la elección en `Game1.MasterPlayer.caveChoice` y `FarmCave` lee solo ese valor (murciélagos con fruta en `DayUpdate`). Hay que guardar la elección en el jugador que ve el evento, que la cueva de cada residencia lea la de su dueño y comprobar que el evento se dispara para los farmhands en su residencia (no se llama `Farm`). Requiere prueba en partida.
+      - *Traslado del invernadero y de la casa:* verificar que Robin y la Torre del Mago pueden mover el invernadero de una residencia, y qué pasa si se mueve su casa (1.6 lo permite): la puerta, el buzón, la cueva y los warps de la residencia dependen de su posición.
+      - *Anexo de Pradera:* evaluar establo/vallas o hierba azul optimizada para 40×32.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Una residencia de playa carga `Farm_Island`, genera forraje y cajas y sus aspersores no riegan la arena.
+    2. Una residencia de Pradera empieza con 15 de heno; las demás, con el regalo de su mapa o el vanilla.
+    3. En una residencia salvaje los monstruos escalan con el nivel del dueño.
+    4. Los pararrayos de las residencias producen pilas en días de tormenta.
+    5. Cada punto pendiente queda implementado o descartado explícitamente en esta tarea.
+  * **Pruebas en vivo:** comandos de host `p4e_farm_found`, `p4e_farm_tp`, `p4e_farm_inspect`, `p4e_farm_spawn`, `p4e_lightning`, `p4e_weather` y `p4e_skill` (`FarmTestCommandsModule`, con `EnableTestCommands`). Guía y casos en `docs/pruebas-residencias.md`.
 
 ---
 

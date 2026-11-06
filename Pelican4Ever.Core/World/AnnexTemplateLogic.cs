@@ -121,6 +121,19 @@ namespace Pelican4Ever.Core.World
                 "Maps/Farm_Ranching",
                 12, 18,
                 FarmTypeBehavior.None
+            ),
+            ["Beach"] = new AnnexTemplate(
+                "Beach",
+                "Costa Tropical",
+                "Beach",
+                "Maps/Pelican4Ever_Annex_Beach",
+                40, 32,
+                30000,
+                "Farm_Beach",
+                "Maps/Farm_Island",
+                // Recorte con el rectángulo fértil (25-44, 50-59) y la arena de alrededor
+                15, 30,
+                FarmTypeBehavior.None with { BeachForage = true }
             )
         };
 

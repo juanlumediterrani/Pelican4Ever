@@ -21,6 +21,7 @@ namespace Pelican4Ever.Core.World
     /// <param name="RiverFishSplashes">Burbujas de peces en el agua de la granja.</param>
     /// <param name="NightMonsters">Monstruos nocturnos de la granja salvaje.</param>
     /// <param name="FourCornersExtras">Tocón fijo y forraje en el cuadrante forestal de Cuatro Esquinas.</param>
+    /// <param name="BeachForage">Forraje de playa y cajas de suministros en las casillas <c>BeachSpawn</c> del mapa (Granja de la Playa).</param>
     public sealed record FarmTypeBehavior(
         TileArea? MountainOreArea,
         int InitialMountainOreDays,
@@ -28,7 +29,8 @@ namespace Pelican4Ever.Core.World
         bool ForestStumps,
         bool RiverFishSplashes,
         bool NightMonsters,
-        bool FourCornersExtras)
+        bool FourCornersExtras,
+        bool BeachForage = false)
     {
         public static readonly FarmTypeBehavior None = new(null, 0, false, false, false, false, false);
     }
@@ -43,9 +45,11 @@ namespace Pelican4Ever.Core.World
             // Farm.doDailyMountainFarmUpdate / onNewGame: Colinas usa (5,37,22,8) y 28 días iniciales
             ["Mining"] = FarmTypeBehavior.None with { MountainOreArea = new TileArea(5, 37, 22, 8), InitialMountainOreDays = 28 },
             ["Combat"] = FarmTypeBehavior.None with { NightMonsters = true },
-            // Cuatro Esquinas usa (51,67,11,3) y 10 días iniciales
+            // Cuatro Esquinas usa (51,67,11,3) y 10 días iniciales; sin burbujas: vanilla solo las crea en la fluvial (whichFarm 1)
             ["FourCorners"] = FarmTypeBehavior.None with { MountainOreArea = new TileArea(51, 67, 11, 3), InitialMountainOreDays = 10, FourCornersExtras = true },
             ["Ranching"] = FarmTypeBehavior.None,
+            // La arena del mapa ya lleva NoSprinklers; el juego solo necesita SpawnBeachFarmForage para cajas y forraje
+            ["Beach"] = FarmTypeBehavior.None with { BeachForage = true },
         };
 
         /// <summary>Comportamientos del tipo de granja; los desconocidos se tratan como estándar.</summary>

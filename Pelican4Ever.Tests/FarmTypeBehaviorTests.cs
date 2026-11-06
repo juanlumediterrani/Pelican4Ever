@@ -23,6 +23,20 @@ public class FarmTypeBehaviorTests
         Assert.Equal(new TileArea(51, 67, 11, 3), fourCorners.MountainOreArea);
         Assert.Equal(10, fourCorners.InitialMountainOreDays);
         Assert.True(fourCorners.FourCornersExtras);
+        Assert.False(fourCorners.RiverFishSplashes);
+    }
+
+    [Fact]
+    public void Beach_EnablesBeachForageOnly()
+    {
+        FarmTypeBehavior beach = FarmTypeBehaviors.For("Beach");
+
+        Assert.True(beach.BeachForage);
+        Assert.Null(beach.MountainOreArea);
+        Assert.False(beach.ForestForage);
+        Assert.False(beach.NightMonsters);
+        Assert.True(AnnexTemplateCatalog.GetTemplate("Beach").Behavior.BeachForage);
+        Assert.False(FarmTypeBehaviors.For("Standard").BeachForage);
     }
 
     [Theory]

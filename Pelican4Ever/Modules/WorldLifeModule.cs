@@ -9,7 +9,9 @@ using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Locations;
+using StardewValley.Extensions;
 using StardewValley.Pathfinding;
+using StardewValley.TerrainFeatures;
 
 namespace Pelican4Ever.Modules
 {
@@ -191,8 +193,117 @@ namespace Pelican4Ever.Modules
             }
 
             dailyLightningStrikes++;
-            context?.Monitor.Log($"[WorldLifeModule] Rayo de tormenta permitido ({dailyLightningStrikes}/{maxDailyLightningStrikes} hoy).", LogLevel.Trace);
-            return true;
+
+            // Repartir el rayo entre la granja principal y las residencias con dueño: la principal sigue el camino vanilla
+            var residences = new List<Farm>();
+            if (context != null)
+            {
+                foreach (var door in context.WorldState.Doors.Values)
+                {
+                    if (door.OwnerId != 0 && !string.IsNullOrEmpty(door.FarmSlotId)
+                        && Game1.getLocationFromName(door.FarmSlotId) is Farm residence)
+                    {
+                        residences.Add(residence);
+                    }
+                }
+            }
+
+            int pick = Game1.random.Next(residences.Count + 1);
+            if (pick == residences.Count)
+            {
+                context?.Monitor.Log($"[WorldLifeModule] Rayo de tormenta permitido en la granja principal ({dailyLightningStrikes}/{maxDailyLightningStrikes} hoy).", LogLevel.Trace);
+                return true;
+            }
+
+            PerformLightningStrike(residences[pick], time_of_day);
+            context?.Monitor.Log($"[WorldLifeModule] Rayo de tormenta permitido en {residences[pick].NameOrUniqueName} ({dailyLightningStrikes}/{maxDailyLightningStrikes} hoy).", LogLevel.Trace);
+            return false;
+        }
+
+        /// <summary>
+        /// Réplica de Utility.performLightningUpdate para una residencia: carga un pararrayos libre con una pila
+        /// o, si no hay, puede alcanzar un árbol frutal o un elemento del terreno. Vanilla solo mira Game1.getFarm().
+        /// </summary>
+        /// <param name="guaranteed">Comando de prueba <c>p4e_lightning</c>: el rayo cae siempre (sin la tirada de 12,5 % + suerte).</param>
+        public static void PerformLightningStrike(Farm farm, int timeOfDay, bool guaranteed = false)
+        {
+            Random random = guaranteed
+                ? Utility.CreateRandom(Game1.random.Next())
+                : Utility.CreateRandom(Game1.uniqueIDForThisGame, Game1.stats.DaysPlayed, timeOfDay, Game1.hash.GetDeterministicHashCode(farm.NameOrUniqueName));
+            double luck = Game1.player.team.AverageDailyLuck() + Game1.player.team.AverageLuckLevel() / 100.0;
+            if (!guaranteed && random.NextDouble() >= 0.125 + luck)
+            {
+                if (random.NextDouble() < 0.1)
+                    farm.lightningStrikeEvent.Fire(new Farm.LightningStrikeEvent { smallFlash = true });
+                return;
+            }
+
+            var strike = new Farm.LightningStrikeEvent { bigFlash = true };
+            var rods = new List<Vector2>();
+            foreach (var pair in farm.objects.Pairs)
+            {
+                if (pair.Value.QualifiedItemId == "(BC)9")
+                    rods.Add(pair.Key);
+            }
+
+            if (rods.Count > 0)
+            {
+                for (int i = 0; i < 2; i++)
+                {
+                    Vector2 tile = random.ChooseFrom(rods);
+                    StardewValley.Object rod = farm.objects[tile];
+                    if (rod.heldObject.Value == null)
+                    {
+                        rod.heldObject.Value = ItemRegistry.Create<StardewValley.Object>("(O)787");
+                        rod.MinutesUntilReady = Utility.CalculateMinutesUntilMorning(Game1.timeOfDay);
+                        rod.shakeTimer = 1000;
+                        strike.createBolt = true;
+                        strike.boltPosition = tile * 64f + new Vector2(32f, 0f);
+                        farm.lightningStrikeEvent.Fire(strike);
+                        return;
+                    }
+                }
+            }
+
+            if (random.NextDouble() < 0.25 - luck)
+            {
+                try
+                {
+                    if (Utility.TryGetRandom(farm.terrainFeatures, out Vector2 key, out TerrainFeature feature))
+                    {
+                        if (feature is FruitTree fruitTree)
+                        {
+                            fruitTree.struckByLightningCountdown.Value = 4;
+                            fruitTree.shake(key, doEvenIfStillShaking: true);
+                            strike.createBolt = true;
+                            strike.boltPosition = key * 64f + new Vector2(32f, -128f);
+                        }
+                        else
+                        {
+                            Crop? crop = (feature as HoeDirt)?.crop;
+                            bool wasAlive = crop != null && !crop.dead.Value;
+                            if (feature.performToolAction(null, 50, key))
+                            {
+                                strike.destroyedTerrainFeature = true;
+                                strike.createBolt = true;
+                                farm.terrainFeatures.Remove(key);
+                                strike.boltPosition = key * 64f + new Vector2(32f, -128f);
+                            }
+                            if (wasAlive && crop!.dead.Value)
+                            {
+                                strike.createBolt = true;
+                                strike.boltPosition = key * 64f + new Vector2(32f, 0f);
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    context?.Monitor.Log($"[WorldLifeModule] Error al aplicar el rayo en {farm.NameOrUniqueName}: {ex.Message}", LogLevel.Trace);
+                }
+            }
+
+            farm.lightningStrikeEvent.Fire(strike);
         }
 
         private void OnAssetRequested(object? sender, AssetRequestedEventArgs e)
@@ -259,14 +370,14 @@ namespace Pelican4Ever.Modules
                 {
                     string locName = npc.currentLocation?.NameOrUniqueName ?? "";
                     bool isOutdoors = npc.currentLocation?.IsOutdoors ?? false;
-                    bool isDoingRouteAnim = npc.doingEndOfRouteAnimation.Value 
-                        || npc.goingToDoEndOfRouteAnimation.Value 
+                    bool isDoingRouteAnim = npc.doingEndOfRouteAnimation.Value
+                        || npc.goingToDoEndOfRouteAnimation.Value
                         || !string.IsNullOrEmpty(npc.endOfRouteBehaviorName.Value);
                     bool isSleeping = npc.isSleeping.Value;
                     bool isSitting = !string.IsNullOrEmpty(npc.endOfRouteBehaviorName.Value) && npc.endOfRouteBehaviorName.Value.Contains("sit");
-                    bool hasActivity = npc.currentScheduleDelay > 0 
-                        || npc.shouldPlayRobinHammerAnimation.Value 
-                        || npc.shouldPlaySpousePatioAnimation.Value 
+                    bool hasActivity = npc.currentScheduleDelay > 0
+                        || npc.shouldPlayRobinHammerAnimation.Value
+                        || npc.shouldPlaySpousePatioAnimation.Value
                         || npc.Sprite?.CurrentAnimation != null;
                     bool isEmoting = npc.isEmoting;
 

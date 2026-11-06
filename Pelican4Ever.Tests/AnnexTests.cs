@@ -124,9 +124,9 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void AnnexTemplateCatalog_ContainsAll7FarmTypes()
+        public void AnnexTemplateCatalog_ContainsAll8FarmTypes()
         {
-            Assert.Equal(7, AnnexTemplateCatalog.Templates.Count);
+            Assert.Equal(8, AnnexTemplateCatalog.Templates.Count);
             Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("Standard"));
             Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("Fishing"));
             Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("Foraging"));
@@ -134,6 +134,7 @@ namespace Pelican4Ever.Tests
             Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("Combat"));
             Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("FourCorners"));
             Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("Ranching"));
+            Assert.True(AnnexTemplateCatalog.Templates.ContainsKey("Beach"));
 
             // GetTemplate con fallback a Standard
             var fallback = AnnexTemplateCatalog.GetTemplate("TipoInexistente");
@@ -368,6 +369,7 @@ namespace Pelican4Ever.Tests
             Assert.Equal(35000, AnnexTemplateCatalog.GetTemplate("Combat").BasePriceGold);
             Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("FourCorners").BasePriceGold);
             Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("Ranching").BasePriceGold);
+            Assert.Equal(30000, AnnexTemplateCatalog.GetTemplate("Beach").BasePriceGold);
         }
 
         [Theory]
@@ -513,10 +515,10 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void AnnexTemplates_All7Templates_HaveMeticulousDesignParameters()
+        public void AnnexTemplates_All8Templates_HaveMeticulousDesignParameters()
         {
             var templates = AnnexTemplateCatalog.Templates;
-            Assert.Equal(7, templates.Count);
+            Assert.Equal(8, templates.Count);
 
             foreach (var kvp in templates)
             {

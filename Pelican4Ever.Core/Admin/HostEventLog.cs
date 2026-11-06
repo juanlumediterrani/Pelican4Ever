@@ -28,6 +28,7 @@ namespace Pelican4Ever.Core.Admin
         public const string RestartScheduled = "host.restart.scheduled";
         public const string RestartCancelled = "host.restart.cancelled";
         public const string RestartExecuted = "host.restart.executed";
+        public const string TestCommand = "host.test.command";
     }
 
     /// <summary>

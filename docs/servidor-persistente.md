@@ -67,6 +67,8 @@ está parada y se niega si el servidor sirve otra partida que la autorizada (gu�
 
 Validación local con dos clientes y límites de compatibilidad: [informe del 6 de noviembre de 2026](checkpoint-validation-2026-11-06.md). El comando de diagnóstico `p4e_checkpoint_spike` requiere `CheckpointDebugMode=true`; debe reservarse a partidas de prueba, ya que reproduce los efectos destructivos del guardado nativo.
 
+**Comandos de prueba de residencias** (`p4e_farm_*`, `p4e_skill`, `p4e_weather`, `p4e_lightning`): requieren `EnableTestCommands=true` y solo deben usarse en partidas de prueba. Guía en [pruebas-residencias.md](pruebas-residencias.md).
+
 ## Seguridad y posesión de personajes (Anti-usurpación)
 
 En conexiones por IP directa, Stardew Valley nativo no valida usuarios (`userID = ""`). Pelican 4Ever implementa un sistema automático de tokens por cliente/equipo:

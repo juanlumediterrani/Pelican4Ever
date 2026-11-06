@@ -2457,12 +2457,13 @@ namespace Pelican4Ever.Modules
         /// reclamado) recoloca los edificios de inicio y regenera la vegetación según el mapa nuevo.
         /// Devuelve true si cambió el mapa.
         /// </summary>
-        public static bool ApplyFarmTemplate(Farm farm, string? farmType, bool regenerate, long ownerId = 0)
+        public static bool ApplyFarmTemplate(Farm farm, string? farmType, bool regenerate, long ownerId = 0, bool force = false)
         {
             if (!Context.IsMainPlayer) return false;
 
             FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
-            if (string.Equals(farm.mapPath.Value?.Replace('/', '\\'), template.MapPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase))
+            // force (p4e_farm_found): regenerar aunque el hueco ya tenga el mapa de esa plantilla
+            if (!force && string.Equals(farm.mapPath.Value?.Replace('/', '\\'), template.MapPath.Replace('/', '\\'), StringComparison.OrdinalIgnoreCase))
                 return false;
 
             farm.mapPath.Value = template.MapPath;
@@ -2491,6 +2492,8 @@ namespace Pelican4Ever.Modules
                 farm.loadObjects();
                 FarmTypeModule.SpawnInitialOres(farm, template.Id);
                 FarmTypeModule.SpawnInitialMeadowlandsSetup(farm, template.Id, ownerId);
+                FarmTypeModule.ApplyStarterGift(farm, template.Id);
+                FarmTypeModule.ApplyStarterHouseStyle(farm, template.Id);
             }
             else
             {
@@ -3241,6 +3244,42 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>Procesa en el host un reclamo de puerta. Si lo rechaza, reenvía el estado al jugador para deshacer su copia optimista.</summary>
+        /// <summary>
+        /// Comando de prueba <c>p4e_farm_found</c>: reclama la puerta del hueco para el jugador o, si ya es suya, cambia el
+        /// tipo y regenera la residencia como al fundarla. Devuelve un mensaje con el resultado.
+        /// </summary>
+        public static string AdminFoundResidence(string slotId, string farmType, long playerId)
+        {
+            if (context == null) return "Módulo FarmSlot no inicializado.";
+
+            DoorModel? door = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == slotId);
+            if (door == null)
+                return $"No hay puerta registrada para {slotId}.";
+
+            if (!context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment))
+            {
+                return HandleClaimDoor(playerId, door.DoorId, farmType)
+                    ? $"{slotId} fundada como {farmType} para {playerId}."
+                    : $"No se pudo fundar {slotId} para {playerId} (ver el motivo en la consola; un jugador solo puede tener una residencia).";
+            }
+
+            if (assignment.OwnerId != playerId)
+                return $"{slotId} ya es de {assignment.OwnerId}; refúndala con ese mismo dueño.";
+
+            assignment.FarmType = farmType;
+            Farm? farm = EnsureFarmSlotExists(slotId);
+            if (farm == null)
+                return $"No se pudo crear la ubicación {slotId}.";
+
+            ApplyFarmTemplate(farm, farmType, regenerate: true, playerId, force: true);
+            FarmTypeModule.ApplyMapProperties(farm, farmType);
+            EnsureFarmSlotBuildings(farm, assignment);
+            RefreshSlotLocationData();
+            EnsureAllPlazaPortals();
+            BroadcastDoorsSync();
+            return $"{slotId} refundada como {farmType} (dueño {playerId}).";
+        }
+
         private static bool HandleClaimDoor(long playerId, string doorId, string farmType)
         {
             if (context == null) return false;
@@ -3581,6 +3620,7 @@ namespace Pelican4Ever.Modules
                     new Response("Mining", "Granja Minera (Colinas y minerales)"),
                     new Response("FourCorners", "Granja Cuatro Esquinas (Parcelas)"),
                     new Response("Ranching", "Granja Pradera (Ganadería y pasto azul)"),
+                    new Response("Beach", "Granja de la Playa (Arena y forraje marino)"),
                     new Response("Cancel", "Cancelar")
                 };
 

@@ -14,6 +14,7 @@ namespace Pelican4Ever.Tests
         [InlineData("Combat", "Maps\\Farm_Combat", 68, 14)]
         [InlineData("FourCorners", "Maps\\Farm_FourCorners", 48, 39)]
         [InlineData("Ranching", "Maps\\Farm_Ranching", 59, 17)]
+        [InlineData("Beach", "Maps\\Farm_Island", 64, 15)]
         public void FarmTemplateCatalog_ReturnsCorrectMapPathAndCoords(
             string templateId,
             string expectedMapPath,
@@ -35,6 +36,7 @@ namespace Pelican4Ever.Tests
         [InlineData("FourCorners", 40, 1, 40, 63, 78, 17)]
         [InlineData("Ranching", 63, 1, 52, 73, 98, 22)]
         [InlineData("Meadowlands", 63, 1, 52, 73, 98, 22)]
+        [InlineData("Beach", 40, 1, 82, 103, 79, 17)]
         public void FarmTemplateCatalog_ReturnsCorrectArrivalCoords(
             string templateId, int nx, int ny, int sx, int sy, int ex, int ey)
         {
@@ -56,6 +58,7 @@ namespace Pelican4Ever.Tests
         [InlineData("Combat", "Farm_Wilderness")]
         [InlineData("FourCorners", "Farm_FourCorners")]
         [InlineData("Ranching", "Farm_MeadowlandsFarm")]
+        [InlineData("Beach", "Farm_Beach")]
         public void FarmTemplateCatalog_MapsToVanillaLocationData(string templateId, string expectedKey)
         {
             Assert.Equal(expectedKey, FarmTemplateCatalog.GetTemplate(templateId).LocationDataKey);
@@ -102,6 +105,7 @@ namespace Pelican4Ever.Tests
         [InlineData("Combat", 34, 5, 34, 6)]
         [InlineData("FourCorners", 30, 35, 30, 36)]
         [InlineData("Ranching", 88, 54, 88, 55)]
+        [InlineData("Beach", 34, 15, 34, 16)]
         public void FarmTemplateCatalog_CaveCoordinates_ValidAndConfigured(string templateId, int expEntranceX, int expEntranceY, int expExitX, int expExitY)
         {
             var template = FarmTemplateCatalog.GetTemplate(templateId);
