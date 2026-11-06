@@ -41,6 +41,8 @@ namespace Pelican4Ever
                 new RealTimeClockModule(),
                 new BedLogoutModule(),
                 new DailyRolloverModule(),
+                new CheckpointModule(),
+                new CheckpointSpikeModule(),
                 new FarmSlotModule(),
                 new FarmTypeModule(),
                 new TownMailboxModule(),

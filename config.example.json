@@ -42,5 +42,12 @@
   "SafeRestartWarningMinutes": 5,
   "AutoHostSaveName": "",
   "RestartExitsProcess": false,
+  "CheckpointIntervalMinutes": 0,
+  "CheckpointDebugMode": false,
+  "CheckpointMaxDurationMs": 3000,
+  "CheckpointRetention": 12,
+  "CheckpointCompress": true,
+  "CheckpointCloneFarmhands": true,
+  "BackupRetentionDays": 0,
   "Modules": {}
 }

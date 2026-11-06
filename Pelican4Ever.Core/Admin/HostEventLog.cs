@@ -20,6 +20,9 @@ namespace Pelican4Ever.Core.Admin
         public const string RolloverCompleted = "rollover.completed";
         public const string RolloverStalled = "rollover.stalled";
         public const string BackupCreated = "backup.created";
+        public const string CheckpointCreated = "checkpoint.created";
+        public const string CheckpointSkipped = "checkpoint.skipped";
+        public const string CheckpointFailed = "checkpoint.failed";
         public const string HostRested = "host.rested";
         public const string HostAnnouncement = "host.announcement";
         public const string RestartScheduled = "host.restart.scheduled";

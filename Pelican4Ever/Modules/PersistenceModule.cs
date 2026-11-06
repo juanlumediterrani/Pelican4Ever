@@ -41,17 +41,42 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer)
                 return;
 
-            if (Game1.player != null && context.WorldState.Players.TryGetValue(Game1.player.UniqueMultiplayerID, out var hostRecord))
-            {
-                hostRecord.LastSeenUtc = DateTimeOffset.UtcNow;
-                if (hostRecord.OfflineStaminaAnchorUtc == DateTimeOffset.MinValue)
-                {
-                    hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
-                }
-            }
+            FlushToSaveData(context, "Saving");
+        }
 
-            context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
-            context.Monitor.Log("ServerWorldState guardado en la partida maestra.", LogLevel.Trace);
+        /// <summary>
+        /// Vuelca <see cref="ServerWorldState"/> a los datos de la partida para que el siguiente guardado lo incluya.
+        /// Hay que llamarlo antes de cada <c>SaveGame.Save()</c> que lance el mod: no consta que SMAPI dispare
+        /// <c>GameLoop.Saving</c> en un guardado que no pasa por el menú de guardado nativo (TASK-1602, gap G1).
+        /// </summary>
+        /// <param name="context">Contexto del mod.</param>
+        /// <param name="reason">Quién pide el volcado; solo para el log.</param>
+        /// <returns><c>false</c> si no se pudo escribir; el guardado seguiría con el último estado volcado.</returns>
+        public static bool FlushToSaveData(Framework.ModContext context, string reason)
+        {
+            if (!Context.IsMainPlayer)
+                return false;
+
+            try
+            {
+                if (Game1.player != null && context.WorldState.Players.TryGetValue(Game1.player.UniqueMultiplayerID, out var hostRecord))
+                {
+                    hostRecord.LastSeenUtc = DateTimeOffset.UtcNow;
+                    if (hostRecord.OfflineStaminaAnchorUtc == DateTimeOffset.MinValue)
+                    {
+                        hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                    }
+                }
+
+                context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+                context.Monitor.Log($"ServerWorldState guardado en la partida maestra ({reason}).", LogLevel.Trace);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                context.Monitor.Log($"No se pudo volcar ServerWorldState antes del guardado ({reason}); se guardará el último estado volcado: {ex}", LogLevel.Error);
+                return false;
+            }
         }
     }
 }
