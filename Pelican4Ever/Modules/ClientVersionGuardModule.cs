@@ -1,8 +1,12 @@
 using System;
+using System.Collections;
 using System.Linq;
+using HarmonyLib;
+using Pelican4Ever.Core.Networking;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Network;
 
 namespace Pelican4Ever.Modules
 {
@@ -14,6 +18,7 @@ namespace Pelican4Ever.Modules
     public sealed class ClientVersionGuardModule : Framework.IModule
     {
         private Framework.ModContext context = null!;
+        private static byte modContextMessageType;
 
         public string Name => "ClientVersionGuard";
 
@@ -22,7 +27,28 @@ namespace Pelican4Ever.Modules
         public void Register(Framework.ModContext context)
         {
             this.context = context;
+            // SMAPI 4.5.2 drops the NEW context when its peer table still contains an
+            // offline connection. Repair only that stale entry before the normal handshake.
+            var multiplayerType = AccessTools.TypeByName("StardewModdingAPI.Framework.SMultiplayer");
+            var messageType = typeof(IModHelper).Assembly.GetTypes()
+                .Single(t => t.IsEnum && t.Name == "MessageType");
+            modContextMessageType = Convert.ToByte(Enum.Parse(messageType, "ModContext"));
+            context.Harmony.Patch(
+                AccessTools.Method(multiplayerType, "OnServerProcessingMessage"),
+                prefix: new HarmonyMethod(typeof(ClientVersionGuardModule), nameof(BeforeServerMessage)));
             context.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
+        }
+
+        private static void BeforeServerMessage(object __instance, IncomingMessage message)
+        {
+            if (!Context.IsMainPlayer || message.MessageType != modContextMessageType)
+                return;
+
+            var peers = (IDictionary)AccessTools.Property(__instance.GetType(), "Peers").GetValue(__instance)!;
+            bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == message.FarmerID);
+            if (StalePeerContext.Remove(peers, message.FarmerID, isOnline))
+                Framework.ModContext.Current.Monitor.Log(
+                    $"[ClientVersionGuard] Contexto obsoleto eliminado para reconexión de {message.FarmerID}.", LogLevel.Debug);
         }
 
         private void OnPeerContextReceived(object? sender, PeerContextReceivedEventArgs e)

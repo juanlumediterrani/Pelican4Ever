@@ -203,6 +203,35 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool RestartExitsProcess { get; set; } = false;
 
+        // ─────────────────────── Checkpoints intradía (Épica 11) ───────────────────────
+
+        /// <summary>
+        /// Minutos reales entre checkpoints intradía (guardado nativo sin cambiar de día). 0 (por defecto) los desactiva;
+        /// <c>p4e_checkpoint_now</c> sigue funcionando. Ver la Épica 11 del backlog antes de activarlo.
+        /// </summary>
+        public int CheckpointIntervalMinutes { get; set; } = 0;
+
+        /// <summary>Permite el spike de diagnóstico, que puede eliminar elementos temporales. Solo en partidas de prueba.</summary>
+        public bool CheckpointDebugMode { get; set; } = false;
+
+        /// <summary>Si un checkpoint bloquea el juego más de estos milisegundos, el intervalo se duplica hasta el día siguiente. 0 = sin límite.</summary>
+        public int CheckpointMaxDurationMs { get; set; } = 3000;
+
+        /// <summary>Checkpoints que se conservan en <c>Pelican4Ever_Backups/checkpoints/</c>. 0 = no se borra ninguno.</summary>
+        public int CheckpointRetention { get; set; } = 12;
+
+        /// <summary>Comprime con gzip cada archivo de la copia de un checkpoint.</summary>
+        public bool CheckpointCompress { get; set; } = true;
+
+        /// <summary>
+        /// Copia el estado vivo de los farmhands conectados a la partida antes de guardar (gap G4). Sin esto, con
+        /// farmhands conectados no se hace checkpoint: se guardarían como estaban al conectarse.
+        /// </summary>
+        public bool CheckpointCloneFarmhands { get; set; } = true;
+
+        /// <summary>Días que se conservan las copias diarias del rollover. 0 (por defecto) = no se borra ninguna, como hasta ahora.</summary>
+        public int BackupRetentionDays { get; set; } = 0;
+
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
 
@@ -296,6 +325,16 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(TravelingCartClosingTime)} debe situarse entre 0600 y 2600.");
             if (!string.IsNullOrEmpty(AutoHostSaveName) && !AutoHostLogic.IsValidSaveName(AutoHostSaveName))
                 errors.Add($"{nameof(AutoHostSaveName)} debe ser el nombre exacto de una carpeta de Saves/, sin rutas. Valor: '{AutoHostSaveName}'.");
+            if (CheckpointIntervalMinutes is < 0 or > 1440)
+                errors.Add($"{nameof(CheckpointIntervalMinutes)} debe estar entre 0 (desactivado) y 1440. Valor: {CheckpointIntervalMinutes}.");
+            else if (CheckpointIntervalMinutes is > 0 and < 5)
+                errors.Add($"{nameof(CheckpointIntervalMinutes)} debe ser 0 o al menos 5: cada checkpoint congela el juego mientras guarda. Valor: {CheckpointIntervalMinutes}.");
+            if (CheckpointMaxDurationMs < 0)
+                errors.Add($"{nameof(CheckpointMaxDurationMs)} no puede ser negativo.");
+            if (CheckpointRetention < 0)
+                errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
+            if (BackupRetentionDays < 0)
+                errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
                 errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
 
