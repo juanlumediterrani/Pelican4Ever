@@ -1013,7 +1013,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - **G1 · ¿Se disparan `Saving`/`Saved` de SMAPI cuando el mod llama a `SaveGame.Save()`?** *(sin verificar; riesgo alto)*
   - **Indicios:** en el código descompilado, `SaveGame.Save()` no toca `Game1.game1.IsSaving`; lo ponen los menús de guardado (`SaveGameMenu`, `ShippingMenu`). Si SMAPI deduce el guardado de ese estado, un guardado lanzado por el mod no avisa a nadie.
   - **Qué rompe:** `PersistenceModule.OnSaving` no escribiría `ServerWorldState`, y el checkpoint llevaría el estado del mod del último guardado nocturno. SpaceCore también se suscribe a `Saving`/`Saved`. **Afectaría ya a los guardados pre-cierre y post-cierre de las 02:00 y a sus copias.** El guardado de `Game1.NewDay` usa el menú de guardado nativo y no debería verse afectado.
-  - **Acotarlo:** (1) Comprobarlo en el spike (TASK-1601): `p4e_rollover_now` con log `TRACE` y buscar `ServerWorldState guardado en la partida maestra`. (2) No depender del evento: volcar `ServerWorldState` explícitamente antes de cada `SaveGame.Save()` del mod (TASK-1602). (3) Si no se dispara, revisar qué hacen los manejadores de SpaceCore y decidir si basta con el volcado del mod o hace falta otra vía. No se finge `IsSaving`: congela el `Update` del juego y no está documentado para este uso.
+  - **Acotarlo:** (1) Comprobarlo en el spike (TASK-1601): `p4e_rollover_now` con log `TRACE` y buscar `ServerWorldState guardado en la partida maestra (Saving)`. Desde TASK-1602 el mismo mensaje sale también con `(rollover pre-cierre)`; solo el `(Saving)` prueba que el evento se disparó. (2) No depender del evento: volcar `ServerWorldState` explícitamente antes de cada `SaveGame.Save()` del mod (TASK-1602). (3) Si no se dispara, revisar qué hacen los manejadores de SpaceCore y decidir si basta con el volcado del mod o hace falta otra vía. No se finge `IsSaving`: congela el `Update` del juego y no está documentado para este uso.
 
 - **G2 · Bloqueo del hilo del juego mientras se serializa** *(confirmado el mecanismo; duración sin medir)*
   - **Indicios:** la serialización es síncrona (ver arriba) y la partida pesa unos 26 MB de XML.
@@ -1059,7 +1059,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - [ ] **TASK-1601: Spike de verificación del guardado intradía (G1, G2, G3, G4, G5, G10)**
   * **Análisis Técnico:** Comando temporal `p4e_checkpoint_spike` que llama a `SaveGame.Save()`, lo bombea como `PumpPreCloseSave` y mide la duración con `Stopwatch`. Ejecutarlo en una partida de prueba con un farmhand conectado y luego recargar.
   * **Pasos:**
-    1. Log en `TRACE`: ¿aparece `ServerWorldState guardado en la partida maestra` y algún `Saving` de SpaceCore? (G1)
+    1. Log en `TRACE`: ¿aparece `ServerWorldState guardado en la partida maestra (Saving)` tras el de `(rollover pre-cierre)`, y algún `Saving` de SpaceCore? (G1)
     2. Medir la duración del bloqueo con 1 y con 2 farmhands, y ver si algún cliente da timeout. (G2)
     3. Con una cabaña Junimo activa, una tienda de campaña y un trinket equipado: ver qué desaparece y qué vuelve. (G3)
     4. El farmhand cambia de inventario y dinero, deja un objeto en un cofre y vende en el mercado comunitario; checkpoint; comparar el XML con lo que se ve en partida. (G4, G10)
@@ -1070,12 +1070,13 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Decisión explícita: los checkpoints son viables por defecto, viables con restricciones o no viables.
     3. El comando del spike se retira o queda tras `DebugMode`.
 
-- [ ] **TASK-1602: Volcado explícito de `ServerWorldState` antes de cada guardado del mod (G1)**
+- [x] **TASK-1602: Volcado explícito de `ServerWorldState` antes de cada guardado del mod (G1)**
   * **Análisis Técnico:** Extraer de `PersistenceModule.OnSaving` un método `FlushToSaveData()` (marca `LastSeenUtc` del host y llama a `WriteSaveData`) y llamarlo justo antes de cada `SaveGame.Save()` lanzado por el mod (`BeginRollover`, `StartPostCloseSave` y el futuro checkpoint). `OnSaving` sigue llamándolo para el guardado nativo.
   * **Prioridad:** Alta (independiente del resultado del spike; corrige también el guardado pre-cierre).
   * **Criterios de Aceptación:**
     1. Un cambio en `ServerWorldState` hecho justo antes de `p4e_rollover_now` aparece en la copia pre-cierre.
     2. El guardado nocturno nativo no cambia.
+  * **Resolución:** `PersistenceModule.FlushToSaveData(context, reason)` reúne lo que hacía `OnSaving` (marca `LastSeenUtc` y el ancla de energía del host y llama a `WriteSaveData`), captura los errores y devuelve `false` si falla: el guardado sigue con el último estado volcado, como antes, y no se bloquea el rollover. `OnSaving` lo llama con `"Saving"` y `DailyRolloverModule` justo antes de los dos `SaveGame.Save()` (`"rollover pre-cierre"` y `"rollover post-cierre"`). Si SMAPI también dispara `Saving`, el segundo volcado es inocuo. Compila y pasan los 927 tests; **el criterio 1 está pendiente de comprobar en partida** dentro de TASK-1601.
 
 - [ ] **TASK-1603: Política pura de checkpoint en Core (G8)**
   * **Análisis Técnico:** `Pelican4Ever.Core/Admin/CheckpointPolicy.cs` con `Decide(CheckpointInputs)` → `Run` o `Skip(motivo)`. Entradas: hora real, próximo rollover, intervalo, último checkpoint, etapa del rollover, guardado en curso, festival o evento, jugadores conectados, si hubo cambios, duración del último checkpoint y `CheckpointMaxDurationMs` (retroceso de G2).

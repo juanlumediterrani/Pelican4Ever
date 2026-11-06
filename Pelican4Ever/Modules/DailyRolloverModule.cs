@@ -253,6 +253,7 @@ namespace Pelican4Ever.Modules
                 new Dictionary<string, object?> { ["trigger"] = trigger, ["gameDay"] = Game1.Date.TotalDays });
             try
             {
+                PersistenceModule.FlushToSaveData(context, "rollover pre-cierre");
                 preCloseSave = SaveGame.Save();
                 context.Monitor.Log("[DailyRolloverModule] Guardado nativo pre-cierre iniciado.", LogLevel.Info);
             }
@@ -317,6 +318,7 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                PersistenceModule.FlushToSaveData(context, "rollover post-cierre");
                 postCloseSave = SaveGame.Save();
                 context.Monitor.Log("[DailyRolloverModule] Peers cerrados; guardando su estado final antes de avanzar la fecha.", LogLevel.Info);
             }
