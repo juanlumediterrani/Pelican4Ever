@@ -84,9 +84,9 @@ namespace Pelican4Ever.Core.Economy
         }
 
         /// <summary>
-        /// Procesa la compra de una oferta por parte de un jugador comprador.
+        /// Valida la compra y calcula el oro sin cerrar la oferta antes de entregar el objeto.
         /// </summary>
-        public static MarketTransactionResult BuyListing(MarketListing? listing, long buyerId, string buyerName, int buyerGold)
+        public static MarketTransactionResult ValidatePurchase(MarketListing? listing, long buyerId, int buyerGold)
         {
             if (listing == null)
                 return new MarketTransactionResult(MarketTransactionStatus.InvalidListing, "Oferta no encontrada.");
@@ -104,17 +104,26 @@ namespace Pelican4Ever.Core.Economy
                 );
 
             int remainingGold = buyerGold - listing.PriceGold;
-            listing.IsSold = true;
-            listing.BuyerId = buyerId;
-            listing.BuyerName = buyerName;
-            listing.SoldAtUtc = DateTimeOffset.UtcNow;
-
             return new MarketTransactionResult(
                 MarketTransactionStatus.Success,
                 $"Has adquirido {listing.ItemDisplayName} (x{listing.Stack}) por {listing.PriceGold}g.",
                 RemainingBuyerGold: remainingGold,
                 SellerProfit: listing.PriceGold
             );
+        }
+
+        /// <summary>Confirma una compra después de validar y entregar el objeto en el hilo del anfitrión.</summary>
+        public static MarketTransactionResult BuyListing(MarketListing? listing, long buyerId, string buyerName, int buyerGold)
+        {
+            MarketTransactionResult result = ValidatePurchase(listing, buyerId, buyerGold);
+            if (result.Status != MarketTransactionStatus.Success)
+                return result;
+
+            listing!.IsSold = true;
+            listing.BuyerId = buyerId;
+            listing.BuyerName = buyerName;
+            listing.SoldAtUtc = DateTimeOffset.UtcNow;
+            return result;
         }
 
         /// <summary>

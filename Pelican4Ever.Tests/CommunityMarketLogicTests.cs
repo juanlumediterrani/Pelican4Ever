@@ -6,6 +6,26 @@ namespace Pelican4Ever.Tests
 {
     public class CommunityMarketLogicTests
     {
+        [Fact]
+        public void ValidatePurchase_LeavesListingOpenUntilDeliveryIsConfirmed()
+        {
+            var listing = new MarketListing { SellerId = 100L, PriceGold = 100, Stack = 17, ItemId = "388" };
+
+            var result = CommunityMarketLogic.ValidatePurchase(listing, 200L, 500);
+
+            Assert.Equal(MarketTransactionStatus.Success, result.Status);
+            Assert.Equal(400, result.RemainingBuyerGold);
+            Assert.False(listing.IsSold);
+            Assert.Null(listing.BuyerId);
+            Assert.Null(listing.BuyerName);
+            Assert.Null(listing.SoldAtUtc);
+
+            var confirmed = CommunityMarketLogic.BuyListing(listing, 200L, "Buyer", 500);
+            Assert.Equal(MarketTransactionStatus.Success, confirmed.Status);
+            Assert.True(listing.IsSold);
+            Assert.Equal(MarketTransactionStatus.AlreadySold, CommunityMarketLogic.BuyListing(listing, 200L, "Buyer", 400).Status);
+        }
+
         [Theory]
         [InlineData("388", 10, 100, true)]
         [InlineData("", 10, 100, false)] // empty itemId

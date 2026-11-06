@@ -1,7 +1,7 @@
 {
   "Name": "Pelican 4Ever",
   "Author": "Pelican 4Ever Team",
-  "Version": "0.1.0",
+  "Version": "0.2.0",
   "Description": "Transforms Stardew Valley into a 24/7 real-time persistent MORPG world.",
   "UniqueID": "Pelican4Ever.SVRTMP",
   "EntryDll": "Pelican4Ever.dll",

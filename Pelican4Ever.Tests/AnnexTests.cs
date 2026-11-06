@@ -168,7 +168,7 @@ namespace Pelican4Ever.Tests
             bool changed = state.Migrate();
 
             Assert.True(changed);
-            Assert.Equal(3, state.SchemaVersion);
+            Assert.Equal(ServerWorldState.CurrentSchemaVersion, state.SchemaVersion);
             Assert.NotNull(state.Annexes);
             Assert.Empty(state.Annexes);
 
