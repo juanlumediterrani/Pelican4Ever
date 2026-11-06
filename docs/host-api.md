@@ -227,7 +227,7 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
 ### `GET /api/v1/host/events?since=N`
 
 Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados.
-Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado y completado (`rollover.started`, `rollover.completed`), copia de seguridad creada (`backup.created`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
 
 **Respuesta `200 OK` (`HostEventsResponseDto`):**
 ```json

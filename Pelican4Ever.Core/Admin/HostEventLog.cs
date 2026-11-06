@@ -18,6 +18,7 @@ namespace Pelican4Ever.Core.Admin
         public const string FestivalCeremonyStarted = "festival.ceremony.started";
         public const string RolloverStarted = "rollover.started";
         public const string RolloverCompleted = "rollover.completed";
+        public const string RolloverStalled = "rollover.stalled";
         public const string BackupCreated = "backup.created";
         public const string HostRested = "host.rested";
         public const string HostAnnouncement = "host.announcement";

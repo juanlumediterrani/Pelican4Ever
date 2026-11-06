@@ -29,6 +29,9 @@ namespace Pelican4Ever.Modules
         private bool dayStartCausedByLoad;
         private DateTimeOffset peerCloseDeadlineUtc = DateTimeOffset.MinValue;
         private bool forcedPeerDisconnect;
+        private DateTimeOffset dayAdvanceStartedUtc = DateTimeOffset.MinValue;
+        private DateTimeOffset dayAdvanceLastAttemptUtc = DateTimeOffset.MinValue;
+        private int dayAdvanceNudges;
         private const string RolloverCloseMessageType = "Pelican4Ever.RolloverClose";
         private static readonly TimeSpan PeerGracePeriod = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan ForcedDisconnectGracePeriod = TimeSpan.FromSeconds(10);
@@ -81,6 +84,7 @@ namespace Pelican4Ever.Modules
             int newDay = Game1.Date.TotalDays;
             int endedDay = newDay - 1;
             rollover.DayStarted();
+            dayAdvanceNudges = 0;
             postCloseSave?.Dispose();
             postCloseSave = null;
 
@@ -193,6 +197,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             ProcessPeerClose();
+            WatchNativeDayAdvance();
             var cfg = context.Config;
             DateTime now = ServerTime.LocalNow(cfg.TimeZoneId);
             TimeSpan timeOfDay = now.TimeOfDay;
@@ -435,13 +440,70 @@ namespace Pelican4Ever.Modules
                 // Game1.NewDay es la transición nativa que ejecuta ReadyCheckDialog al completarse.
                 // Todos los farmhands ya se han guardado y desconectado, así que no queda un peer bloqueando el check.
                 Game1.NewDay(0f);
-                context.Monitor.Log("[DailyRolloverModule] Cambio de día nativo iniciado tras guardar y cerrar todos los peers.", LogLevel.Info);
+                string fade = EnsureNewDayFade();
+                dayAdvanceStartedUtc = dayAdvanceLastAttemptUtc = DateTimeOffset.UtcNow;
+                dayAdvanceNudges = 0;
+                context.Monitor.Log($"[DailyRolloverModule] Cambio de día nativo iniciado tras guardar y cerrar todos los peers ({fade}).", LogLevel.Info);
             }
             catch (Exception ex)
             {
                 rollover.Fail();
                 context.Monitor.Log($"[DailyRolloverModule] Error al iniciar el cambio de día nativo: {ex}", LogLevel.Error);
             }
+        }
+
+        /// <summary>
+        /// <c>Game1.NewDay</c> solo marca el cambio de día; el juego lo ejecuta al terminar un fundido a negro
+        /// (<c>onFadeToBlackComplete</c>), y <c>NewDay</c> solo lanza ese fundido si el host está en la cama o
+        /// desmayado. Con el host despierto (modo anfitrión agente) el día se quedaba esperando hasta la siguiente
+        /// puerta que cruzase. Aquí se lanza el mismo fundido que el de la cama, sin desmayar al host.
+        /// </summary>
+        /// <returns>Descripción para el log de qué fundido lleva el cambio de día.</returns>
+        private static string EnsureNewDayFade()
+        {
+            if (Game1.player.isInBed.Value || Game1.player.passedOut)
+                return "host en la cama: fundido nativo";
+            if (Game1.fadeToBlack || Game1.globalFade)
+                return "fundido ya en curso";
+
+            Game1.nonWarpFade = true;
+            Game1.fadeScreenToBlack();
+            Game1.player.Halt();
+            return "host despierto: fundido lanzado por el mod";
+        }
+
+        /// <summary>
+        /// Vigila que el cambio de día nativo arranque. Si el juego sigue esperando el fundido sin que haya ninguno
+        /// en curso, lo vuelve a lanzar y lo registra como <c>rollover.stalled</c>.
+        /// </summary>
+        private void WatchNativeDayAdvance()
+        {
+            if (rollover.Stage != SafeRolloverStage.AdvancingDay)
+                return;
+
+            bool fadeInProgress = Game1.fadeToBlack || Game1.globalFade;
+            if (!RolloverTiming.ShouldNudgeDayAdvance(Game1.newDay, fadeInProgress, DateTimeOffset.UtcNow - dayAdvanceLastAttemptUtc))
+                return;
+
+            dayAdvanceNudges++;
+            dayAdvanceLastAttemptUtc = DateTimeOffset.UtcNow;
+            int secondsSinceAdvance = (int)(DateTimeOffset.UtcNow - dayAdvanceStartedUtc).TotalSeconds;
+            string fade = EnsureNewDayFade();
+            context.Monitor.Log(
+                $"[DailyRolloverModule] El cambio de día sigue esperando un fundido tras {secondsSinceAdvance} s; se vuelve a lanzar ({fade}, intento {dayAdvanceNudges}).",
+                LogLevel.Error);
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.RolloverStalled,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"El cambio de día no arrancaba; fundido relanzado (intento {dayAdvanceNudges}).",
+                new Dictionary<string, object?>
+                {
+                    ["nudges"] = dayAdvanceNudges,
+                    ["secondsSinceAdvance"] = secondsSinceAdvance,
+                    ["hostInBed"] = Game1.player.isInBed.Value,
+                    ["hostLocation"] = Game1.player.currentLocation?.NameOrUniqueName
+                });
         }
 
         private static void BroadcastHUDMessage(string message, int type)
