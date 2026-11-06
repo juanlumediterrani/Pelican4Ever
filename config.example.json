@@ -20,6 +20,7 @@
   "SpaBuffTotalPoints": 120,
   "SpaBuffDurationMinutes": 120,
   "SittingRegenSeconds": 5,
+  "GroundSitKey": "OemPeriod",
   "CropPriceMultiplier": 1.0,
   "ArtisanPriceMultiplier": 1.0,
   "MineResetTimes": [

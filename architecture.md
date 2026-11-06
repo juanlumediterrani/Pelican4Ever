@@ -59,6 +59,7 @@ Pelican4Ever.sln
 │       ├── BedLogoutModule.cs           # (Iteración 1) Intercepción de Sleep_Yes y mensaje al Host
 │       ├── FarmSlotModule.cs            # (Iteración 2) Registro en Data/Locations, Cabins, plaza y portales
 │       ├── EconomyModule.cs             # (Iteración 3) SatietyBudget, Spa, precios y minas 12h
+│       ├── GroundSitModule.cs           # Sentarse en el suelo (tecla GroundSitKey), pose sincronizada entre jugadores
 │       └── WorldLifeModule.cs           # (Iteración 4) Micro-wandering de NPCs y festivales
 └── Pelican4Ever.Tests/                  # Suite xUnit (.NET 8) sobre Pelican4Ever.Core (793 tests)
 ```

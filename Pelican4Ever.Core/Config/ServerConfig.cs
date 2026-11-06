@@ -92,6 +92,12 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public int SittingRegenSeconds { get; set; } = 5;
 
+        /// <summary>
+        /// Tecla para sentarse en el suelo o levantarse (nombre de <c>SButton</c> de SMAPI, p. ej. "OemPeriod" para la tecla punto).
+        /// Sentado en el suelo cuenta como sentado para el descanso de "Bien comido".
+        /// </summary>
+        public string GroundSitKey { get; set; } = "OemPeriod";
+
         /// <summary>Segundos reales quieto dentro del agua del Spa o de la piscina para activar el buff del Spa (una vez al día).</summary>
         public int SpaStillSeconds { get; set; } = 30;
 

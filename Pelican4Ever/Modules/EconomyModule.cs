@@ -30,6 +30,7 @@ namespace Pelican4Ever.Modules
         private static int spaStillSeconds = 0;
         private static double spaRegenCarry = 0;
         private static int sittingSecondAccumulator = 0;
+        private static bool wasSitting = false;
 
         // Seguimiento en el Host de cooldown de desocupación de pisos de minas (GAP-14)
         public static readonly System.Collections.Generic.Dictionary<int, DateTime> MineFloorLastOccupiedUtc = new();
@@ -59,6 +60,7 @@ namespace Pelican4Ever.Modules
                 spaStillSeconds = 0;
                 spaRegenCarry = 0;
                 sittingSecondAccumulator = 0;
+                wasSitting = false;
             };
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
 
@@ -121,9 +123,14 @@ namespace Pelican4Ever.Modules
                 spaRegenCarry = 0;
             }
 
-            // 3. Descanso sentado (GAP-07): solo recupera energía mientras dura "Bien comido"
+            // 3. Descanso sentado (GAP-07), en banco, silla o en el suelo: solo recupera energía mientras dura "Bien comido"
+            bool isSitting = (Game1.player.IsSitting() || GroundSitModule.IsLocalSittingOnGround) && !Game1.player.isInBed.Value;
+            if (isSitting && !wasSitting)
+                ShowSittingRestHint(playerRecord, nowUtc);
+            wasSitting = isSitting;
+
             if (SittingRegenLogic.Tick(
-                Game1.player.IsSitting(),
+                isSitting,
                 Game1.player.isInBed.Value,
                 playerRecord.IsWellFed(nowUtc),
                 Game1.player.Stamina,
@@ -401,7 +408,7 @@ namespace Pelican4Ever.Modules
                 {
                     changed = true;
                     Game1.addHUDMessage(new HUDMessage(
-                        $"Bien comido: durante {FormatMinutes(context.Config.WellFedDurationMinutes)}, sentarte en un banco, silla o la taberna recupera energía.",
+                        $"Bien comido: durante {FormatMinutes(context.Config.WellFedDurationMinutes)}, sentarte (banco, silla o suelo) recupera energía.",
                         HUDMessage.newQuest_type));
                 }
                 else if (!record.IsWellFed(nowUtc))
@@ -412,6 +419,29 @@ namespace Pelican4Ever.Modules
 
             if (changed)
                 ReportConsumptionToHost(record, nowUtc);
+        }
+
+        /// <summary>
+        /// Al sentarse, avisa de si el descanso recupera energía: solo lo hace con "Bien comido", y sin aviso parecería un fallo.
+        /// </summary>
+        private static void ShowSittingRestHint(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (context == null)
+                return;
+
+            if (record.IsWellFed(nowUtc))
+            {
+                int minutesLeft = Math.Max(1, (int)Math.Ceiling((record.WellFedUntilUtc - nowUtc).TotalMinutes));
+                Game1.addHUDMessage(new HUDMessage(
+                    $"Descansando: +1 de energía cada {context.Config.SittingRegenSeconds} s (Bien comido, {FormatMinutes(minutesLeft)}).",
+                    HUDMessage.stamina_type));
+            }
+            else if (Game1.player.Stamina < Game1.player.MaxStamina)
+            {
+                Game1.addHUDMessage(new HUDMessage(
+                    "Sentarte solo recupera energía con \"Bien comido\": come un plato cocinado.",
+                    HUDMessage.error_type));
+            }
         }
 
         private static string FormatMinutes(int minutes)
