@@ -19,6 +19,8 @@ espejo hay que elegir **Dr4co** como cuerpo y **None** en esos cuatro tipos (la
 ruta `/fs_body` del puente de Voyager lo hace sola). `HidePlayerBase: true` no
 sirve para esto: Fashion Sense deja de dibujar el propio cuerpo.
 
+El boceto original de la hoja SiD se conserva como `Dr4co.FashionSense/source/dr4co-sid-v2.png`; el pack usa una copia como textura `body.png`.
+
 ### Dependencia opcional
 
 - **Fashion Sense 7.5.0 o posterior** (`PeacefulEnd.FashionSense`): requerido
