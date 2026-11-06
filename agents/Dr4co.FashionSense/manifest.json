@@ -1,7 +1,7 @@
 {
   "Name": "Dr4co Dragon Body",
   "Author": "Dr4co / OpenAI image generation",
-  "Version": "0.4.0",
+  "Version": "0.5.0",
   "Description": "Cuerpo de Dr4co para el granjero, con ciclo de movimiento en cuatro direcciones. Incluye apariencias transparentes None (pelo, camisa, pantalón, zapatos) para que las capas vanilla no tapen el cuerpo. No se selecciona automáticamente.",
   "UniqueID": "Dr4co.Stardew.FashionSenseBody",
   "UpdateKeys": [ "GitHub:juanlumediterrani/Pelican-4Ever" ],
