@@ -1,7 +1,8 @@
-# Cascada de ramas: main → pelican/desarrollo → refactor/residence-entrances.
+# Cascada de ramas: main → dev, para que lo que se sube en caliente a main llegue a dev.
 #
-# Arranca cuando el CI de un push a main o a pelican/desarrollo termina en verde: una rama rota no
-# se propaga. Fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo
+# Arranca cuando el CI de un push a main termina en verde: una rama rota no se propaga. La lógica
+# está en .github/scripts/cascada.sh, que admite varios pares <origen> <destino> si vuelve a haber
+# más ramas en cadena. (pelican/desarrollo y refactor/residence-entrances se retiraron el 2026-11-05.) Fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo
 # entonces la sube. Las dos fusiones van en el mismo job porque un push hecho con GITHUB_TOKEN no
 # dispara otro workflow (ni el CI): por eso los tests de la fusión se pasan aquí.
 #
@@ -14,7 +15,7 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main, pelican/desarrollo]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -40,67 +41,12 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Fusionar en cascada
+      # La cascada cambia de rama en el checkout, y esas ramas pueden no tener el script (o tener otra
+      # versión): se ejecuta una copia fuera del repositorio.
+      - name: Preparar el script de la cascada
+        run: cp .github/scripts/cascada.sh "$RUNNER_TEMP/cascada.sh"
+
+      - name: Fusionar main en dev
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # pedir_revision <origen> <destino> <motivo> <commit> <detalle>: sube <commit> a
-          # cascada/<origen>-a-<destino> y abre un PR hacia el destino si no hay uno abierto.
-          pedir_revision() {
-            local from="$1" to="$2" motivo="$3" commit="$4" detalle="$5"
-            local branch="cascada/${from//\//-}-a-${to//\//-}"
-            # Sin --force: si la rama ya lleva una resolución a medias, el push se rechaza y se conserva.
-            git push origin "$commit:refs/heads/$branch" || echo "$branch ya tiene cambios propios; no se toca."
-            if [ -z "$(gh pr list --head "$branch" --base "$to" --state open --json number --jq '.[].number')" ]; then
-              gh pr create --head "$branch" --base "$to" \
-                --title "Cascada: fusionar $from en $to ($motivo)" \
-                --body "$detalle Fusiona este PR cuando esté resuelto; la siguiente ejecución seguirá la cascada."
-            fi
-            echo "::error::Cascada $from → $to detenida ($motivo): PR abierto desde $branch."
-          }
-
-          # limpiar_revision <origen> <destino>: con la fusión ya en el destino, borra la rama
-          # cascada/<origen>-a-<destino> si queda alguna y no tiene un PR abierto. Una rama obsoleta
-          # haría que el siguiente fallo (que no fuerza el push) abriera el PR con contenido viejo.
-          limpiar_revision() {
-            local from="$1" to="$2"
-            local branch="cascada/${from//\//-}-a-${to//\//-}"
-            git ls-remote --exit-code --heads origin "$branch" >/dev/null || return 0
-            if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
-              git push origin --delete "$branch"
-              echo "Rama $branch borrada: ya no hace falta."
-            fi
-          }
-
-          # cascada <origen> <destino>: 0 si el destino ya contiene el origen o se subió la fusión.
-          cascada() {
-            local from="$1" to="$2"
-            git fetch --quiet origin "$from" "$to"
-            if git merge-base --is-ancestor "origin/$from" "origin/$to"; then
-              echo "$to ya contiene $from."
-              limpiar_revision "$from" "$to"
-              return 0
-            fi
-            git checkout --quiet -B "$to" "origin/$to"
-            if ! git merge --no-edit -m "Merge $from en $to (cascada automática)" "origin/$from"; then
-              git merge --abort
-              pedir_revision "$from" "$to" "conflictos" "origin/$from" \
-                "La cascada automática no pudo fusionar \`$from\` en \`$to\` por conflictos. Resuélvelos en este PR."
-              return 1
-            fi
-            if ! dotnet test Pelican4Ever.Tests -c Release; then
-              pedir_revision "$from" "$to" "tests en rojo" "HEAD" \
-                "La fusión de \`$from\` en \`$to\` no pasa los tests. Este PR ya lleva la fusión: corrígela aquí."
-              return 1
-            fi
-            git push origin "$to"
-            echo "$from fusionada en $to."
-            limpiar_revision "$from" "$to"
-          }
-
-          cascada main pelican/desarrollo
-          cascada pelican/desarrollo refactor/residence-entrances
+        run: bash "$RUNNER_TEMP/cascada.sh" main dev

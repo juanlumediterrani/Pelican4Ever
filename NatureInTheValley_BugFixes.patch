@@ -1,0 +1,822 @@
+diff --git a/1.2.7/[Gen]NatureInTheValley/NatureInTheValley/MainData.json b/1.2.7/[Gen]NatureInTheValley/NatureInTheValley/MainData.json
+index bf2ec55..a19aa9a 100644
+--- a/1.2.7/[Gen]NatureInTheValley/NatureInTheValley/MainData.json
++++ b/1.2.7/[Gen]NatureInTheValley/NatureInTheValley/MainData.json
+@@ -1,5 +1,5 @@
+ {
+-    "CommonButterfly": "0/false/0.005/0/1.75/true/true/0/false/spring,summer,fall,winter/0/1,1/600/1600/4/Mods\\NatureInTheValley\\Creatures\\CommonButterFly/0/0/0/80/1/60/15/Mods\\NatureInTheValley\\Creatures\\Items/CommonButterfly/Butterfly/32/32/ /2/false",
++    "CommonButterfly": "0/false/0.005/0/1.75/true/true/0/false/spring,summer,fall,winter/0/1,1/600/1600/4/Mods\\NatureInTheValley\\Creatures\\CommonButterfly/0/0/0/80/1/60/15/Mods\\NatureInTheValley\\Creatures\\Items/CommonButterfly/Butterfly/32/32/ /2/false",
+     "Moth": "0/false/0.004/0/1.5/true/true/0/false/spring,summer,fall,winter/0/0,1/1900/2600/4/Mods\\NatureInTheValley\\Creatures\\Moth/0/0/0/50/65/32/11",
+     "SmallGrassYellowButterfly": "0/false/0.007/0/1.6/true/true/1/false/summer,fall/1/0,1,2/1000/2000/4/Mods\\NatureInTheValley\\Creatures\\SmallGrassYellowButterfly/0/0/0/110/2/44/20",
+     "GreenDarner": "0/false/0.008/0/1.4/true/true/1/false/spring,summer/0/1,1/600/2000/4/Mods\\NatureInTheValley\\Creatures\\GreenDarner/0/0/0/120/3/35/13",
+@@ -69,7 +69,7 @@
+     "FunnelWebSpider" : "3/true/0.006/1300/1.7/true/true/4/true/fall,spring/1/1,3/2000/2600/4/Mods\\NatureInTheValley\\Creatures\\FunnelWebSpider/-6/0/8/2100/47/15/13",
+     "Axolotl" : "3/true/0.006/0/1.5/true/true/3/false/spring,summer,winter,fall/0/3,3/600/2600/3/Mods\\NatureInTheValley\\Creatures\\Axolotl/-7/3/0/2000/48/19/23",
+     "GiantPetaltail": "3/false/0.009/0/2/true/true/1/false/summer,fall/0/1,1/800/1800/4/Mods\\NatureInTheValley\\Creatures\\GiantPetaltail/0/0/0/1800/49/56/18",
+-    "YellowSpottedLizard" : "3/true/0.006/900/1.5/true/true/4/false/spring,summer,fall,winter/2/1,1/2000/2600/4/Mods\\NatureInTheValley\\Creatures\\YellowSpottedLizard/3/0/-4/2000/50/31/12",
++    "YellowSpottedLizard" : "3/true/0.006/900/1.5/true/true/4/false/spring,summer,fall,winter/0/4,4/2000/2600/4/Mods\\NatureInTheValley\\Creatures\\YellowSpottedLizard/3/0/-4/2000/50/31/12",
+     "AtlasMoth": "3/false/0.007/0/1.95/true/false/5/false/spring,summer,fall/1/1,1/1700/2600/4/Mods\\NatureInTheValley\\Creatures\\AtlasMoth/2/1/0/4000/51/63.75/25.6",
+     "AgriasButterfly": "2/false/0.007/0/2.0/true/true/3/false/spring,summer/1/1,2/1100/1700/4/Mods\\NatureInTheValley\\Creatures\\AgriasButterfly/1/0/0/2300/52/22/38",
+     "DesertWhiteTail": "3/false/0.008/0/1.7/true/true/2/false/fall,winter/0/4,4/600/1600/4/Mods\\NatureInTheValley\\Creatures\\DesertWhiteTail/0/0/0/4500/53/66/38",
+diff --git a/1.2.7/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json b/1.2.7/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
+index 1f12471..e2037f1 100644
+--- a/1.2.7/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
++++ b/1.2.7/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
+@@ -3,13 +3,13 @@
+    "Changes": [
+         {
+             "Action": "Load",
+-            "Target": "Mods/NatureInTheValley/Creatures/Items,Mods/NatureInTheValley/Creatures/Hat,Mods/NatureInTheValley/Creatures/Shirt,Mods/NatureInTheValley/Creatures/BlueringOctopus,Mods/NatureInTheValley/Creatures/Mudskipper,Mods/NatureInTheValley/Creatures/Antlion,Mods/NatureInTheValley/Creatures/FireFly,Mods/NatureInTheValley/Creatures/Chameleon,Mods/NatureInTheValley/Creatures/HoneyAnt,Mods/NatureInTheValley/Creatures/GoldenStag,Mods/NatureInTheValley/Creatures/JuneBeetle,Mods/NatureInTheValley/Creatures/CaveBeetle,Mods/NatureInTheValley/Creatures/SandWorm,Mods/NatureInTheValley/Creatures/TigerBeetle,Mods/NatureInTheValley/Creatures/BlisterBeetle,Mods/NatureInTheValley/Creatures/WispOfWinter,Mods/NatureInTheValley/Creatures/DivingBeetle,Mods/NatureInTheValley/Creatures/Tuatara,Mods/NatureInTheValley/Creatures/StickBug,Mods/NatureInTheValley/Creatures/CaveCrayfish,Mods/NatureInTheValley/Creatures/CaveSalamander,Mods/NatureInTheValley/Creatures/SnappingTurtle,Mods/NatureInTheValley/Creatures/Moth,Mods/NatureInTheValley/Creatures/SeaTurtle,Mods/NatureInTheValley/Creatures/SandFlea,Mods/NatureInTheValley/Creatures/StAndrewsSpider, Mods/NatureInTheValley/Creatures/PotterWasp,Mods/NatureInTheValley/Creatures/Bee,Mods/NatureInTheValley/Creatures/CactusCrab,Mods/NatureInTheValley/Creatures/RegalMoth,Mods/NatureInTheValley/Creatures/HickoryHornedDevil,Mods/NatureInTheValley/Creatures/MonarchCaterpillar,Mods/NatureInTheValley/Creatures/YellowGrassCaterpillar,Mods/NatureInTheValley/Creatures/PeriodicalCicada,Mods/NatureInTheValley/Creatures/AnnualCicada,Mods/NatureInTheValley/Creatures/LadyBug,Mods/NatureInTheValley/Creatures/TreeFrog,Mods/NatureInTheValley/Creatures/Bullfrog,Mods/NatureInTheValley/Creatures/CaneToad,Mods/NatureInTheValley/Creatures/FlyingFish,Mods/NatureInTheValley/Creatures/CapeCobra,Mods/NatureInTheValley/Creatures/HermitCrab,Mods/NatureInTheValley/Creatures/Millipede,Mods/NatureInTheValley/Creatures/Centipede,Mods/NatureInTheValley/Creatures/BlackWitchMoth,Mods/NatureInTheValley/Creatures/MonarchButterfly,Mods/NatureInTheValley/Creatures/WeidemeyersAdmiral,Mods/NatureInTheValley/Creatures/BlueAxolotl,Mods/NatureInTheValley/Creatures/Axolotl,Mods/NatureInTheValley/Creatures/MarineIguana,Mods/NatureInTheValley/Creatures/ThornyDevil,Mods/NatureInTheValley/Creatures/LeopardGecko,Mods/NatureInTheValley/Creatures/BeardedDragon,Mods/NatureInTheValley/Creatures/FrilledLizard,Mods/NatureInTheValley/Creatures/YellowSpottedLizard,Mods/NatureInTheValley/Creatures/BlueTonguedSkink,Mods/NatureInTheValley/Creatures/Scorpion,Mods/NatureInTheValley/Creatures/DesertWhiteTail,Mods/NatureInTheValley/Creatures/FireAnt,Mods/NatureInTheValley/Creatures/BlackAnt,/Mods/NatureInTheValley/Creatures/DesertLocust,Mods/NatureInTheValley/Creatures/OrchidMantis,Mods/NatureInTheValley/Creatures/BarkBeetle,Mods/NatureInTheValley/Creatures/SweetGemBeetle,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/GiantPetaltail,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/ScarletDarner,Mods/NatureInTheValley/Creatures/GreenDarner,Mods/NatureInTheValley/Creatures/AtlasMoth,Mods/NatureInTheValley/Creatures/Slug,Mods/NatureInTheValley/Creatures/PillBug,Mods/NatureInTheValley/Creatures/PlantHopper,Mods/NatureInTheValley/Creatures/WharfRoach,Mods/NatureInTheValley/Creatures/Grasshopper,Mods/NatureInTheValley/Creatures/GarterSnake,Mods/NatureInTheValley/Creatures/PondSkater,Mods/NatureInTheValley/Creatures/CoralSnake,Mods/NatureInTheValley/Creatures/JewelBeetle,Mods/NatureInTheValley/Creatures/CommonButterfly,Mods/NatureInTheValley/Creatures/SmallGrassYellowButterfly,Mods/NatureInTheValley/Creatures/AgriasButterfly,Mods/NatureInTheValley/Creatures/StagBeetle,Mods/NatureInTheValley/Creatures/HerculesBeetle,Mods/NatureInTheValley/Creatures/Cricket,Mods/NatureInTheValley/Creatures/GardenSnail,Mods/NatureInTheValley/Creatures/PrayingMantis,Mods/NatureInTheValley/Creatures/FunnelWebSpider",
++            "Target": "Mods/NatureInTheValley/Creatures/Items,Mods/NatureInTheValley/Creatures/Hat,Mods/NatureInTheValley/Creatures/Shirt,Mods/NatureInTheValley/Creatures/BlueringOctopus,Mods/NatureInTheValley/Creatures/Mudskipper,Mods/NatureInTheValley/Creatures/Antlion,Mods/NatureInTheValley/Creatures/FireFly,Mods/NatureInTheValley/Creatures/Chameleon,Mods/NatureInTheValley/Creatures/HoneyAnt,Mods/NatureInTheValley/Creatures/GoldenStag,Mods/NatureInTheValley/Creatures/JuneBeetle,Mods/NatureInTheValley/Creatures/CaveBeetle,Mods/NatureInTheValley/Creatures/SandWorm,Mods/NatureInTheValley/Creatures/TigerBeetle,Mods/NatureInTheValley/Creatures/BlisterBeetle,Mods/NatureInTheValley/Creatures/WispOfWinter,Mods/NatureInTheValley/Creatures/DivingBeetle,Mods/NatureInTheValley/Creatures/Tuatara,Mods/NatureInTheValley/Creatures/StickBug,Mods/NatureInTheValley/Creatures/CaveCrayfish,Mods/NatureInTheValley/Creatures/CaveSalamander,Mods/NatureInTheValley/Creatures/SnappingTurtle,Mods/NatureInTheValley/Creatures/Moth,Mods/NatureInTheValley/Creatures/SeaTurtle,Mods/NatureInTheValley/Creatures/SandFlea,Mods/NatureInTheValley/Creatures/StAndrewsSpider, Mods/NatureInTheValley/Creatures/PotterWasp,Mods/NatureInTheValley/Creatures/Bee,Mods/NatureInTheValley/Creatures/CactusCrab,Mods/NatureInTheValley/Creatures/RegalMoth,Mods/NatureInTheValley/Creatures/HickoryHornedDevil,Mods/NatureInTheValley/Creatures/MonarchCaterpillar,Mods/NatureInTheValley/Creatures/YellowGrassCaterpillar,Mods/NatureInTheValley/Creatures/PeriodicalCicada,Mods/NatureInTheValley/Creatures/AnnualCicada,Mods/NatureInTheValley/Creatures/LadyBug,Mods/NatureInTheValley/Creatures/TreeFrog,Mods/NatureInTheValley/Creatures/BullFrog,Mods/NatureInTheValley/Creatures/CaneToad,Mods/NatureInTheValley/Creatures/FlyingFish,Mods/NatureInTheValley/Creatures/CapeCobra,Mods/NatureInTheValley/Creatures/HermitCrab,Mods/NatureInTheValley/Creatures/Millipede,Mods/NatureInTheValley/Creatures/Centipede,Mods/NatureInTheValley/Creatures/BlackWitchMoth,Mods/NatureInTheValley/Creatures/MonarchButterfly,Mods/NatureInTheValley/Creatures/WeidemeyersAdmiral,Mods/NatureInTheValley/Creatures/BlueAxolotl,Mods/NatureInTheValley/Creatures/Axolotl,Mods/NatureInTheValley/Creatures/MarineIguana,Mods/NatureInTheValley/Creatures/ThornyDevil,Mods/NatureInTheValley/Creatures/LeopardGecko,Mods/NatureInTheValley/Creatures/BeardedDragon,Mods/NatureInTheValley/Creatures/FrilledLizard,Mods/NatureInTheValley/Creatures/YellowSpottedLizard,Mods/NatureInTheValley/Creatures/BlueTonguedSkink,Mods/NatureInTheValley/Creatures/Scorpion,Mods/NatureInTheValley/Creatures/DesertWhiteTail,Mods/NatureInTheValley/Creatures/FireAnt,Mods/NatureInTheValley/Creatures/BlackAnt,Mods/NatureInTheValley/Creatures/DesertLocust,Mods/NatureInTheValley/Creatures/OrchidMantis,Mods/NatureInTheValley/Creatures/BarkBeetle,Mods/NatureInTheValley/Creatures/SweetGemBeetle,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/GiantPetaltail,Mods/NatureInTheValley/Creatures/ScarletDarner,Mods/NatureInTheValley/Creatures/GreenDarner,Mods/NatureInTheValley/Creatures/AtlasMoth,Mods/NatureInTheValley/Creatures/Slug,Mods/NatureInTheValley/Creatures/PillBug,Mods/NatureInTheValley/Creatures/PlantHopper,Mods/NatureInTheValley/Creatures/WharfRoach,Mods/NatureInTheValley/Creatures/Grasshopper,Mods/NatureInTheValley/Creatures/GarterSnake,Mods/NatureInTheValley/Creatures/PondSkater,Mods/NatureInTheValley/Creatures/CoralSnake,Mods/NatureInTheValley/Creatures/JewelBeetle,Mods/NatureInTheValley/Creatures/CommonButterfly,Mods/NatureInTheValley/Creatures/SmallGrassYellowButterfly,Mods/NatureInTheValley/Creatures/AgriasButterfly,Mods/NatureInTheValley/Creatures/StagBeetle,Mods/NatureInTheValley/Creatures/HerculesBeetle,Mods/NatureInTheValley/Creatures/Cricket,Mods/NatureInTheValley/Creatures/GardenSnail,Mods/NatureInTheValley/Creatures/PrayingMantis,Mods/NatureInTheValley/Creatures/FunnelWebSpider",
+             "FromFile": "PNGs/{{TargetWithoutPath}}.png"
+         },
+         {
+             "Action": "Load",
+             "Target": "Mods/NatureInTheValley/Maps/InsectariumInterior",
+-            "FromFile": "MapStuff/{{TargetWithoutPath}}.tbin"
++            "FromFile": "MapStuff/{{TargetWithoutPath}}.tmx"
+         },
+    	{
+       "Action": "EditData",
+diff --git a/1.2.8/[Gen]NatureInTheValley/NatureInTheValley/MainData.json b/1.2.8/[Gen]NatureInTheValley/NatureInTheValley/MainData.json
+index bf2ec55..a19aa9a 100644
+--- a/1.2.8/[Gen]NatureInTheValley/NatureInTheValley/MainData.json
++++ b/1.2.8/[Gen]NatureInTheValley/NatureInTheValley/MainData.json
+@@ -1,5 +1,5 @@
+ {
+-    "CommonButterfly": "0/false/0.005/0/1.75/true/true/0/false/spring,summer,fall,winter/0/1,1/600/1600/4/Mods\\NatureInTheValley\\Creatures\\CommonButterFly/0/0/0/80/1/60/15/Mods\\NatureInTheValley\\Creatures\\Items/CommonButterfly/Butterfly/32/32/ /2/false",
++    "CommonButterfly": "0/false/0.005/0/1.75/true/true/0/false/spring,summer,fall,winter/0/1,1/600/1600/4/Mods\\NatureInTheValley\\Creatures\\CommonButterfly/0/0/0/80/1/60/15/Mods\\NatureInTheValley\\Creatures\\Items/CommonButterfly/Butterfly/32/32/ /2/false",
+     "Moth": "0/false/0.004/0/1.5/true/true/0/false/spring,summer,fall,winter/0/0,1/1900/2600/4/Mods\\NatureInTheValley\\Creatures\\Moth/0/0/0/50/65/32/11",
+     "SmallGrassYellowButterfly": "0/false/0.007/0/1.6/true/true/1/false/summer,fall/1/0,1,2/1000/2000/4/Mods\\NatureInTheValley\\Creatures\\SmallGrassYellowButterfly/0/0/0/110/2/44/20",
+     "GreenDarner": "0/false/0.008/0/1.4/true/true/1/false/spring,summer/0/1,1/600/2000/4/Mods\\NatureInTheValley\\Creatures\\GreenDarner/0/0/0/120/3/35/13",
+@@ -69,7 +69,7 @@
+     "FunnelWebSpider" : "3/true/0.006/1300/1.7/true/true/4/true/fall,spring/1/1,3/2000/2600/4/Mods\\NatureInTheValley\\Creatures\\FunnelWebSpider/-6/0/8/2100/47/15/13",
+     "Axolotl" : "3/true/0.006/0/1.5/true/true/3/false/spring,summer,winter,fall/0/3,3/600/2600/3/Mods\\NatureInTheValley\\Creatures\\Axolotl/-7/3/0/2000/48/19/23",
+     "GiantPetaltail": "3/false/0.009/0/2/true/true/1/false/summer,fall/0/1,1/800/1800/4/Mods\\NatureInTheValley\\Creatures\\GiantPetaltail/0/0/0/1800/49/56/18",
+-    "YellowSpottedLizard" : "3/true/0.006/900/1.5/true/true/4/false/spring,summer,fall,winter/2/1,1/2000/2600/4/Mods\\NatureInTheValley\\Creatures\\YellowSpottedLizard/3/0/-4/2000/50/31/12",
++    "YellowSpottedLizard" : "3/true/0.006/900/1.5/true/true/4/false/spring,summer,fall,winter/0/4,4/2000/2600/4/Mods\\NatureInTheValley\\Creatures\\YellowSpottedLizard/3/0/-4/2000/50/31/12",
+     "AtlasMoth": "3/false/0.007/0/1.95/true/false/5/false/spring,summer,fall/1/1,1/1700/2600/4/Mods\\NatureInTheValley\\Creatures\\AtlasMoth/2/1/0/4000/51/63.75/25.6",
+     "AgriasButterfly": "2/false/0.007/0/2.0/true/true/3/false/spring,summer/1/1,2/1100/1700/4/Mods\\NatureInTheValley\\Creatures\\AgriasButterfly/1/0/0/2300/52/22/38",
+     "DesertWhiteTail": "3/false/0.008/0/1.7/true/true/2/false/fall,winter/0/4,4/600/1600/4/Mods\\NatureInTheValley\\Creatures\\DesertWhiteTail/0/0/0/4500/53/66/38",
+diff --git a/1.2.8/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json b/1.2.8/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
+index 1f12471..e2037f1 100644
+--- a/1.2.8/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
++++ b/1.2.8/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
+@@ -3,13 +3,13 @@
+    "Changes": [
+         {
+             "Action": "Load",
+-            "Target": "Mods/NatureInTheValley/Creatures/Items,Mods/NatureInTheValley/Creatures/Hat,Mods/NatureInTheValley/Creatures/Shirt,Mods/NatureInTheValley/Creatures/BlueringOctopus,Mods/NatureInTheValley/Creatures/Mudskipper,Mods/NatureInTheValley/Creatures/Antlion,Mods/NatureInTheValley/Creatures/FireFly,Mods/NatureInTheValley/Creatures/Chameleon,Mods/NatureInTheValley/Creatures/HoneyAnt,Mods/NatureInTheValley/Creatures/GoldenStag,Mods/NatureInTheValley/Creatures/JuneBeetle,Mods/NatureInTheValley/Creatures/CaveBeetle,Mods/NatureInTheValley/Creatures/SandWorm,Mods/NatureInTheValley/Creatures/TigerBeetle,Mods/NatureInTheValley/Creatures/BlisterBeetle,Mods/NatureInTheValley/Creatures/WispOfWinter,Mods/NatureInTheValley/Creatures/DivingBeetle,Mods/NatureInTheValley/Creatures/Tuatara,Mods/NatureInTheValley/Creatures/StickBug,Mods/NatureInTheValley/Creatures/CaveCrayfish,Mods/NatureInTheValley/Creatures/CaveSalamander,Mods/NatureInTheValley/Creatures/SnappingTurtle,Mods/NatureInTheValley/Creatures/Moth,Mods/NatureInTheValley/Creatures/SeaTurtle,Mods/NatureInTheValley/Creatures/SandFlea,Mods/NatureInTheValley/Creatures/StAndrewsSpider, Mods/NatureInTheValley/Creatures/PotterWasp,Mods/NatureInTheValley/Creatures/Bee,Mods/NatureInTheValley/Creatures/CactusCrab,Mods/NatureInTheValley/Creatures/RegalMoth,Mods/NatureInTheValley/Creatures/HickoryHornedDevil,Mods/NatureInTheValley/Creatures/MonarchCaterpillar,Mods/NatureInTheValley/Creatures/YellowGrassCaterpillar,Mods/NatureInTheValley/Creatures/PeriodicalCicada,Mods/NatureInTheValley/Creatures/AnnualCicada,Mods/NatureInTheValley/Creatures/LadyBug,Mods/NatureInTheValley/Creatures/TreeFrog,Mods/NatureInTheValley/Creatures/Bullfrog,Mods/NatureInTheValley/Creatures/CaneToad,Mods/NatureInTheValley/Creatures/FlyingFish,Mods/NatureInTheValley/Creatures/CapeCobra,Mods/NatureInTheValley/Creatures/HermitCrab,Mods/NatureInTheValley/Creatures/Millipede,Mods/NatureInTheValley/Creatures/Centipede,Mods/NatureInTheValley/Creatures/BlackWitchMoth,Mods/NatureInTheValley/Creatures/MonarchButterfly,Mods/NatureInTheValley/Creatures/WeidemeyersAdmiral,Mods/NatureInTheValley/Creatures/BlueAxolotl,Mods/NatureInTheValley/Creatures/Axolotl,Mods/NatureInTheValley/Creatures/MarineIguana,Mods/NatureInTheValley/Creatures/ThornyDevil,Mods/NatureInTheValley/Creatures/LeopardGecko,Mods/NatureInTheValley/Creatures/BeardedDragon,Mods/NatureInTheValley/Creatures/FrilledLizard,Mods/NatureInTheValley/Creatures/YellowSpottedLizard,Mods/NatureInTheValley/Creatures/BlueTonguedSkink,Mods/NatureInTheValley/Creatures/Scorpion,Mods/NatureInTheValley/Creatures/DesertWhiteTail,Mods/NatureInTheValley/Creatures/FireAnt,Mods/NatureInTheValley/Creatures/BlackAnt,/Mods/NatureInTheValley/Creatures/DesertLocust,Mods/NatureInTheValley/Creatures/OrchidMantis,Mods/NatureInTheValley/Creatures/BarkBeetle,Mods/NatureInTheValley/Creatures/SweetGemBeetle,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/GiantPetaltail,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/ScarletDarner,Mods/NatureInTheValley/Creatures/GreenDarner,Mods/NatureInTheValley/Creatures/AtlasMoth,Mods/NatureInTheValley/Creatures/Slug,Mods/NatureInTheValley/Creatures/PillBug,Mods/NatureInTheValley/Creatures/PlantHopper,Mods/NatureInTheValley/Creatures/WharfRoach,Mods/NatureInTheValley/Creatures/Grasshopper,Mods/NatureInTheValley/Creatures/GarterSnake,Mods/NatureInTheValley/Creatures/PondSkater,Mods/NatureInTheValley/Creatures/CoralSnake,Mods/NatureInTheValley/Creatures/JewelBeetle,Mods/NatureInTheValley/Creatures/CommonButterfly,Mods/NatureInTheValley/Creatures/SmallGrassYellowButterfly,Mods/NatureInTheValley/Creatures/AgriasButterfly,Mods/NatureInTheValley/Creatures/StagBeetle,Mods/NatureInTheValley/Creatures/HerculesBeetle,Mods/NatureInTheValley/Creatures/Cricket,Mods/NatureInTheValley/Creatures/GardenSnail,Mods/NatureInTheValley/Creatures/PrayingMantis,Mods/NatureInTheValley/Creatures/FunnelWebSpider",
++            "Target": "Mods/NatureInTheValley/Creatures/Items,Mods/NatureInTheValley/Creatures/Hat,Mods/NatureInTheValley/Creatures/Shirt,Mods/NatureInTheValley/Creatures/BlueringOctopus,Mods/NatureInTheValley/Creatures/Mudskipper,Mods/NatureInTheValley/Creatures/Antlion,Mods/NatureInTheValley/Creatures/FireFly,Mods/NatureInTheValley/Creatures/Chameleon,Mods/NatureInTheValley/Creatures/HoneyAnt,Mods/NatureInTheValley/Creatures/GoldenStag,Mods/NatureInTheValley/Creatures/JuneBeetle,Mods/NatureInTheValley/Creatures/CaveBeetle,Mods/NatureInTheValley/Creatures/SandWorm,Mods/NatureInTheValley/Creatures/TigerBeetle,Mods/NatureInTheValley/Creatures/BlisterBeetle,Mods/NatureInTheValley/Creatures/WispOfWinter,Mods/NatureInTheValley/Creatures/DivingBeetle,Mods/NatureInTheValley/Creatures/Tuatara,Mods/NatureInTheValley/Creatures/StickBug,Mods/NatureInTheValley/Creatures/CaveCrayfish,Mods/NatureInTheValley/Creatures/CaveSalamander,Mods/NatureInTheValley/Creatures/SnappingTurtle,Mods/NatureInTheValley/Creatures/Moth,Mods/NatureInTheValley/Creatures/SeaTurtle,Mods/NatureInTheValley/Creatures/SandFlea,Mods/NatureInTheValley/Creatures/StAndrewsSpider, Mods/NatureInTheValley/Creatures/PotterWasp,Mods/NatureInTheValley/Creatures/Bee,Mods/NatureInTheValley/Creatures/CactusCrab,Mods/NatureInTheValley/Creatures/RegalMoth,Mods/NatureInTheValley/Creatures/HickoryHornedDevil,Mods/NatureInTheValley/Creatures/MonarchCaterpillar,Mods/NatureInTheValley/Creatures/YellowGrassCaterpillar,Mods/NatureInTheValley/Creatures/PeriodicalCicada,Mods/NatureInTheValley/Creatures/AnnualCicada,Mods/NatureInTheValley/Creatures/LadyBug,Mods/NatureInTheValley/Creatures/TreeFrog,Mods/NatureInTheValley/Creatures/BullFrog,Mods/NatureInTheValley/Creatures/CaneToad,Mods/NatureInTheValley/Creatures/FlyingFish,Mods/NatureInTheValley/Creatures/CapeCobra,Mods/NatureInTheValley/Creatures/HermitCrab,Mods/NatureInTheValley/Creatures/Millipede,Mods/NatureInTheValley/Creatures/Centipede,Mods/NatureInTheValley/Creatures/BlackWitchMoth,Mods/NatureInTheValley/Creatures/MonarchButterfly,Mods/NatureInTheValley/Creatures/WeidemeyersAdmiral,Mods/NatureInTheValley/Creatures/BlueAxolotl,Mods/NatureInTheValley/Creatures/Axolotl,Mods/NatureInTheValley/Creatures/MarineIguana,Mods/NatureInTheValley/Creatures/ThornyDevil,Mods/NatureInTheValley/Creatures/LeopardGecko,Mods/NatureInTheValley/Creatures/BeardedDragon,Mods/NatureInTheValley/Creatures/FrilledLizard,Mods/NatureInTheValley/Creatures/YellowSpottedLizard,Mods/NatureInTheValley/Creatures/BlueTonguedSkink,Mods/NatureInTheValley/Creatures/Scorpion,Mods/NatureInTheValley/Creatures/DesertWhiteTail,Mods/NatureInTheValley/Creatures/FireAnt,Mods/NatureInTheValley/Creatures/BlackAnt,Mods/NatureInTheValley/Creatures/DesertLocust,Mods/NatureInTheValley/Creatures/OrchidMantis,Mods/NatureInTheValley/Creatures/BarkBeetle,Mods/NatureInTheValley/Creatures/SweetGemBeetle,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/GiantPetaltail,Mods/NatureInTheValley/Creatures/ScarletDarner,Mods/NatureInTheValley/Creatures/GreenDarner,Mods/NatureInTheValley/Creatures/AtlasMoth,Mods/NatureInTheValley/Creatures/Slug,Mods/NatureInTheValley/Creatures/PillBug,Mods/NatureInTheValley/Creatures/PlantHopper,Mods/NatureInTheValley/Creatures/WharfRoach,Mods/NatureInTheValley/Creatures/Grasshopper,Mods/NatureInTheValley/Creatures/GarterSnake,Mods/NatureInTheValley/Creatures/PondSkater,Mods/NatureInTheValley/Creatures/CoralSnake,Mods/NatureInTheValley/Creatures/JewelBeetle,Mods/NatureInTheValley/Creatures/CommonButterfly,Mods/NatureInTheValley/Creatures/SmallGrassYellowButterfly,Mods/NatureInTheValley/Creatures/AgriasButterfly,Mods/NatureInTheValley/Creatures/StagBeetle,Mods/NatureInTheValley/Creatures/HerculesBeetle,Mods/NatureInTheValley/Creatures/Cricket,Mods/NatureInTheValley/Creatures/GardenSnail,Mods/NatureInTheValley/Creatures/PrayingMantis,Mods/NatureInTheValley/Creatures/FunnelWebSpider",
+             "FromFile": "PNGs/{{TargetWithoutPath}}.png"
+         },
+         {
+             "Action": "Load",
+             "Target": "Mods/NatureInTheValley/Maps/InsectariumInterior",
+-            "FromFile": "MapStuff/{{TargetWithoutPath}}.tbin"
++            "FromFile": "MapStuff/{{TargetWithoutPath}}.tmx"
+         },
+    	{
+       "Action": "EditData",
+diff --git a/1.3.0/NatureInTheValley/ClickIntoCreatureInfoMenu.cs b/1.3.0/NatureInTheValley/ClickIntoCreatureInfoMenu.cs
+index 92d701e..f155808 100644
+--- a/1.3.0/NatureInTheValley/ClickIntoCreatureInfoMenu.cs
++++ b/1.3.0/NatureInTheValley/ClickIntoCreatureInfoMenu.cs
+@@ -110,7 +110,7 @@ namespace NatureInTheValley
+ 			for (int i = 96 * this.currentPage; i < Math.Min(this.creatureCount, 96 * (this.currentPage + 1)); i++)
+ 			{
+ 				string text;
+-				this.Collection[i].draw(b, Game1.getLocationFromName("NIVInnerInsec").modData.TryGetValue("NatureInTheValley/Donated/" + this.Collection[i].name.Split("NatInValley.Creature.", StringSplitOptions.None)[1], out text) ? Color.White : (Color.Black * 0.2f), 0.86f, 0, 0, 0);
++				this.Collection[i].draw(b, NatureInTheValleyEntry.TryGetInsectariumDonated(this.Collection[i].name.Split("NatInValley.Creature.", StringSplitOptions.None)[1], out text) ? Color.White : (Color.Black * 0.2f), 0.86f, 0, 0, 0);
+ 			}
+ 			b.End();
+ 			b.Begin(SpriteSortMode.Deferred, BlendState.AlphaBlend, SamplerState.PointClamp, null, null, null, null);
+diff --git a/1.3.0/NatureInTheValley/CreatureHighlightPage.cs b/1.3.0/NatureInTheValley/CreatureHighlightPage.cs
+index e129244..ae58c83 100644
+--- a/1.3.0/NatureInTheValley/CreatureHighlightPage.cs
++++ b/1.3.0/NatureInTheValley/CreatureHighlightPage.cs
+@@ -17,7 +17,7 @@ namespace NatureInTheValley
+ 		{
+ 			this.Item = item;
+ 			string text;
+-			this.donated = Game1.getLocationFromName("NIVInnerInsec").modData.TryGetValue("NatureInTheValley/Donated/" + item.ItemId.Split("NatInValley.Creature.", StringSplitOptions.None)[1], out text);
++			this.donated = NatureInTheValleyEntry.TryGetInsectariumDonated(item.ItemId.Split("NatInValley.Creature.", StringSplitOptions.None)[1], out text);
+ 			this._title = (this.donated ? item.DisplayName : "????????");
+ 			this.width = 600 + IClickableMenu.borderWidth * 2;
+ 			this.height = 800 + IClickableMenu.borderWidth * 2;
+diff --git a/1.3.0/NatureInTheValley/CreatureModel.cs b/1.3.0/NatureInTheValley/CreatureModel.cs
+index 50f096a..600d9be 100644
+--- a/1.3.0/NatureInTheValley/CreatureModel.cs
++++ b/1.3.0/NatureInTheValley/CreatureModel.cs
+@@ -140,7 +140,6 @@ namespace NatureInTheValley
+ 		public CreatureModel()
+ 		{
+ 			this.variantGSQs = new List<string>();
+-			base..ctor();
+ 			this.displayedLocation = "";
+ 			this.displayedLocalLocation = "";
+ 			this.isTerrariumable = true;
+diff --git a/1.3.0/NatureInTheValley/NatureInTheValley.csproj b/1.3.0/NatureInTheValley/NatureInTheValley.csproj
+index 42592d7..f7c4c61 100644
+--- a/1.3.0/NatureInTheValley/NatureInTheValley.csproj
++++ b/1.3.0/NatureInTheValley/NatureInTheValley.csproj
+@@ -1,103 +1,17 @@
+-﻿<?xml version="1.0" encoding="utf-8"?>
+-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++﻿<Project Sdk="Microsoft.NET.Sdk">
+   <PropertyGroup>
+-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+-    <ProjectGuid>{A6019541-0457-437F-A78F-6DDB25A6C47C}</ProjectGuid>
+-    <OutputType>Library</OutputType>
+-    <AppDesignerFolder>Properties</AppDesignerFolder>
+-    <RootNamespace>NatureInTheValley</RootNamespace>
+-    <AssemblyName>NatureInTheValley</AssemblyName>
+-    <TargetFrameworkVersion>v6.0</TargetFrameworkVersion>
+-    <TargetFrameworkIdentifier>.NETCoreApp</TargetFrameworkIdentifier>
+-    <FileAlignment>512</FileAlignment>
+-  </PropertyGroup>
+-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+-    <PlatformTarget>AnyCPU</PlatformTarget>
+-    <DebugSymbols>true</DebugSymbols>
+-    <DebugType>full</DebugType>
+-    <Optimize>false</Optimize>
+-    <OutputPath>bin\Debug\</OutputPath>
+-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+-    <ErrorReport>prompt</ErrorReport>
+-    <WarningLevel>4</WarningLevel>
+-    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+-  </PropertyGroup>
+-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+-    <PlatformTarget>AnyCPU</PlatformTarget>
+-    <DebugType>pdbonly</DebugType>
+-    <Optimize>true</Optimize>
+-    <OutputPath>bin\Release\</OutputPath>
+-    <DefineConstants>TRACE</DefineConstants>
+-    <ErrorReport>prompt</ErrorReport>
+-    <WarningLevel>4</WarningLevel>
++    <TargetFramework>net6.0</TargetFramework>
++    <Nullable>disable</Nullable>
++    <LangVersion>latest</LangVersion>
++    <ImplicitUsings>disable</ImplicitUsings>
++    <EnableHarmony>true</EnableHarmony>
+     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
++    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
++    <EnableModDeploy>false</EnableModDeploy>
++    <EnableModZip>false</EnableModZip>
+   </PropertyGroup>
++
+   <ItemGroup>
+-    <Reference Include="0Harmony">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\smapi-internal\0Harmony.dll</HintPath>
+-    </Reference>
+-    <Reference Include="MonoGame.Framework">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\MonoGame.Framework.dll</HintPath>
+-    </Reference>
+-    <Reference Include="SMAPI.Toolkit.CoreInterfaces">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\smapi-internal\SMAPI.Toolkit.CoreInterfaces.dll</HintPath>
+-    </Reference>
+-    <Reference Include="Stardew\u0020Valley">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\Stardew Valley.dll</HintPath>
+-    </Reference>
+-    <Reference Include="Stardew\u0020Valley">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\Stardew Valley.dll</HintPath>
+-    </Reference>
+-    <Reference Include="StardewModdingAPI">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\StardewModdingAPI.dll</HintPath>
+-    </Reference>
+-    <Reference Include="StardewValley.GameData">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\StardewValley.GameData.dll</HintPath>
+-    </Reference>
+-    <Reference Include="System.Linq">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.32\System.Linq.dll</HintPath>
+-    </Reference>
+-    <Reference Include="System.Private.CoreLib">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.32\System.Private.CoreLib.dll</HintPath>
+-    </Reference>
+-    <Reference Include="System.Private.CoreLib">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.32\System.Private.CoreLib.dll</HintPath>
+-    </Reference>
+-    <Reference Include="System.Private.Xml">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.32\System.Private.Xml.dll</HintPath>
+-    </Reference>
+-    <Reference Include="System.Runtime.Serialization.Primitives">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files\dotnet\shared\Microsoft.NETCore.App\6.0.32\System.Runtime.Serialization.Primitives.dll</HintPath>
+-    </Reference>
+-    <Reference Include="xTile">
+-      <HintPath>..\..\..\..\..\..\..\..\Program Files (x86)\Steam\steamapps\common\Stardew Valley\xTile.dll</HintPath>
+-    </Reference>
+-  </ItemGroup>
+-  <ItemGroup>
+-    <AppDesigner Include="Properties\" />
+-  </ItemGroup>
+-  <ItemGroup>
+-    <Compile Include="ClickIntoCreatureInfoMenu.cs" />
+-    <Compile Include="CreatureDonationMenu.cs" />
+-    <Compile Include="CreatureHighlightPage.cs" />
+-    <Compile Include="CreatureModel.cs" />
+-    <Compile Include="Creatures\NatCreature.cs" />
+-    <Compile Include="CreatureTerrariumMenu.cs" />
+-    <Compile Include="IGenericModConfigMenuApi.cs" />
+-    <Compile Include="IInformant.cs" />
+-    <Compile Include="ISpaceCoreAPI.cs" />
+-    <Compile Include="IToolbarIconsApi.cs" />
+-    <Compile Include="MobileCreatureDonationMenu.cs" />
+-    <Compile Include="NatInValeyGoldenNet.cs" />
+-    <Compile Include="NatInValeyJadeNet.cs" />
+-    <Compile Include="NatInValeyNet.cs" />
+-    <Compile Include="NatInValeySaphNet.cs" />
+-    <Compile Include="NatInValleyConfig.cs" />
+-    <Compile Include="NatureInTheValleyEntry.cs" />
+-    <Compile Include="Properties\AssemblyInfo.cs" />
+-    <Compile Include="RewardModel.cs" />
+-    <Compile Include="Terrarium.cs" />
++    <PackageReference Include="Pathoschild.Stardew.ModBuildConfig" Version="4.3.2" />
+   </ItemGroup>
+-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+-</Project>
+\ No newline at end of file
++</Project>
+diff --git a/1.3.0/NatureInTheValley/NatureInTheValleyEntry.cs b/1.3.0/NatureInTheValley/NatureInTheValleyEntry.cs
+index d516e51..033ddf1 100644
+--- a/1.3.0/NatureInTheValley/NatureInTheValleyEntry.cs
++++ b/1.3.0/NatureInTheValley/NatureInTheValleyEntry.cs
+@@ -1728,17 +1728,18 @@ namespace NatureInTheValley
+ 		// Token: 0x0600001D RID: 29 RVA: 0x000093B0 File Offset: 0x000075B0
+ 		public void CommandTwo(string common, string[] args)
+ 		{
+-			GameLocation locationFromName = Game1.getLocationFromName("NIVInnerInsec");
++			GameLocation locationFromName = GetInsectariumLocation();
++			if (locationFromName == null || locationFromName.modData == null) return;
+ 			foreach (KeyValuePair<string, List<string>> keyValuePair in this.creatureData)
+ 			{
+ 				locationFromName.modData["NatureInTheValley/Donated/" + keyValuePair.Key] = "true";
+ 			}
+ 		}
+ 
+-		// Token: 0x0600001E RID: 30 RVA: 0x00009428 File Offset: 0x00007628
+ 		public void CommandThree(string common, string[] args)
+ 		{
+-			GameLocation locationFromName = Game1.getLocationFromName("NIVInnerInsec");
++			GameLocation locationFromName = GetInsectariumLocation();
++			if (locationFromName == null || locationFromName.modData == null) return;
+ 			foreach (KeyValuePair<string, List<string>> keyValuePair in this.creatureData)
+ 			{
+ 				locationFromName.modData.Remove("NatureInTheValley/Donated/" + keyValuePair.Key);
+@@ -1760,7 +1761,7 @@ namespace NatureInTheValley
+ 			foreach (KeyValuePair<string, List<string>> keyValuePair in NatureInTheValleyEntry.staticCreatureData)
+ 			{
+ 				string text;
+-				if (Game1.currentLocation.modData.TryGetValue("NatureInTheValley/Donated/" + keyValuePair.Key, out text))
++				if (TryGetInsectariumDonated(keyValuePair.Key, out text))
+ 				{
+ 					num++;
+ 				}
+@@ -1779,7 +1780,7 @@ namespace NatureInTheValley
+ 						foreach (string str in keyValuePair2.Value.creatureRequirements)
+ 						{
+ 							string text2;
+-							if (!Game1.currentLocation.modData.TryGetValue("NatureInTheValley/Donated/" + str, out text2))
++							if (!TryGetInsectariumDonated(str, out text2))
+ 							{
+ 								flag = false;
+ 							}
+@@ -1921,7 +1922,7 @@ namespace NatureInTheValley
+ 			foreach (KeyValuePair<string, List<string>> keyValuePair in this.creatureData)
+ 			{
+ 				string text;
+-				if (Game1.getLocationFromName("NIVInnerInsec").modData.TryGetValue("NatureInTheValley/Donated/" + keyValuePair.Key, out text))
++				if (TryGetInsectariumDonated(keyValuePair.Key, out text))
+ 				{
+ 					num++;
+ 				}
+@@ -2133,15 +2134,40 @@ namespace NatureInTheValley
+ 		}
+ 
+ 		// Token: 0x0600002F RID: 47 RVA: 0x0000A31C File Offset: 0x0000851C
++		public static GameLocation GetInsectariumLocation()
++		{
++			return Game1.getLocationFromName("NIVInnerInsec");
++		}
++
++		public static bool IsInsectariumDonated(string creatureKey)
++		{
++			GameLocation loc = GetInsectariumLocation();
++			if (loc == null || loc.modData == null)
++			{
++				return false;
++			}
++			return loc.modData.ContainsKey("NatureInTheValley/Donated/" + creatureKey);
++		}
++
++		public static bool TryGetInsectariumDonated(string creatureKey, out string value)
++		{
++			value = null;
++			GameLocation loc = GetInsectariumLocation();
++			if (loc == null || loc.modData == null)
++			{
++				return false;
++			}
++			return loc.modData.TryGetValue("NatureInTheValley/Donated/" + creatureKey, out value);
++		}
++
+ 		public static bool DonatedTotalGSQ(string[] query, GameStateQueryContext context)
+ 		{
+ 			int num = 0;
+ 			int num2 = 0;
+-			GameLocation locationFromName = Game1.getLocationFromName("NIVInnerInsec");
+ 			foreach (KeyValuePair<string, List<string>> keyValuePair in NatureInTheValleyEntry.staticCreatureData)
+ 			{
+ 				string text;
+-				if (locationFromName.modData.TryGetValue("NatureInTheValley/Donated/" + keyValuePair.Key, out text))
++				if (TryGetInsectariumDonated(keyValuePair.Key, out text))
+ 				{
+ 					num++;
+ 				}
+@@ -2150,14 +2176,14 @@ namespace NatureInTheValley
+ 					num2++;
+ 				}
+ 			}
+-			return float.Parse(query[1]) <= (float)num / (float)num2;
++			return num2 > 0 && float.Parse(query[1]) <= (float)num / (float)num2;
+ 		}
+ 
+-		// Token: 0x06000030 RID: 48 RVA: 0x0000A3DC File Offset: 0x000085DC
+ 		public static bool DonatedSpecificGSQ(string[] query, GameStateQueryContext context)
+ 		{
++			if (query == null || query.Length < 2) return false;
+ 			string text;
+-			return Game1.getLocationFromName("NIVInnerInsec").modData.TryGetValue("NatureInTheValley/Donated/" + query[1], out text);
++			return TryGetInsectariumDonated(query[1], out text);
+ 		}
+ 
+ 		// Token: 0x06000031 RID: 49 RVA: 0x0000A40C File Offset: 0x0000860C
+@@ -2435,12 +2461,12 @@ namespace NatureInTheValley
+ 		// Token: 0x0600003C RID: 60 RVA: 0x0000AE74 File Offset: 0x00009074
+ 		public Texture2D Decorate(Item input)
+ 		{
+-			if (input.Category != -81 || !input.ItemId.Contains("NatInValley.Creature."))
++			if (input == null || input.Category != -81 || string.IsNullOrEmpty(input.ItemId) || !input.ItemId.Contains("NatInValley.Creature."))
+ 			{
+ 				return null;
+ 			}
+ 			string text;
+-			if (!Game1.getLocationFromName("NIVInnerInsec").modData.TryGetValue("NatureInTheValley/Donated/" + input.Name, out text))
++			if (!TryGetInsectariumDonated(input.Name, out text))
+ 			{
+ 				return this.helper.ModContent.Load<Texture2D>("PNGs/Icon.png");
+ 			}
+@@ -2850,9 +2876,17 @@ namespace NatureInTheValley
+ 		// Token: 0x06000049 RID: 73 RVA: 0x0000D0B4 File Offset: 0x0000B2B4
+ 		public void ClearUnclaimedCreatures(GameLocation newlocation)
+ 		{
++			if (newlocation == null) return;
+ 			for (int i = 0; i < NatureInTheValleyEntry.creatures.Count; i++)
+ 			{
+-				if (NatureInTheValleyEntry.creatures[i].GetLocation().Name != newlocation.Name && !NatureInTheValleyEntry.creatures[i].released)
++				if (NatureInTheValleyEntry.creatures[i] == null)
++				{
++					NatureInTheValleyEntry.creatures.RemoveAt(i);
++					i--;
++					continue;
++				}
++				GameLocation loc = NatureInTheValleyEntry.creatures[i].GetLocation();
++				if (loc == null || (loc.Name != newlocation.Name && !NatureInTheValleyEntry.creatures[i].released))
+ 				{
+ 					NatureInTheValleyEntry.creatures.RemoveAt(i);
+ 					i--;
+@@ -2890,16 +2924,19 @@ namespace NatureInTheValley
+ 		// Token: 0x0600004C RID: 76 RVA: 0x0000D598 File Offset: 0x0000B798
+ 		private static void Ticking(GameTime gameTime)
+ 		{
+-			if (!Game1.shouldTimePass(false) || Game1.currentLocation == null)
++			if (!Game1.shouldTimePass(false) || Game1.currentLocation == null || Game1.player == null)
+ 			{
+ 				return;
+ 			}
+ 			for (int i = 0; i < NatureInTheValleyEntry.creatures.Count; i++)
+ 			{
+-				if (NatureInTheValleyEntry.creatures[i].GetLocation().Name == Game1.currentLocation.Name && Vector2.Distance(NatureInTheValleyEntry.creatures[i].Position, Game1.player.Position) < 2000f)
++				NatCreature creature = NatureInTheValleyEntry.creatures[i];
++				if (creature == null) continue;
++				GameLocation loc = creature.GetLocation();
++				if (loc != null && loc.Name == Game1.currentLocation.Name && Vector2.Distance(creature.Position, Game1.player.Position) < 2000f)
+ 				{
+-					NatureInTheValleyEntry.creatures[i].Update(gameTime);
+-					NatureInTheValleyEntry.creatures[i].UpdateAnim(gameTime);
++					creature.Update(gameTime);
++					creature.UpdateAnim(gameTime);
+ 				}
+ 			}
+ 		}
+@@ -2932,7 +2969,16 @@ namespace NatureInTheValley
+ 		// Token: 0x0600004E RID: 78 RVA: 0x0000D704 File Offset: 0x0000B904
+ 		public static string descriptCover(string __result, StardewValley.Object __instance)
+ 		{
+-			if (!__instance.ItemId.Contains("NatInValley.Creature.") || Game1.getLocationFromName("NIVInnerInsec").modData.ContainsKey("NatureInTheValley/Donated/" + __instance.ItemId.Split("NatInValley.Creature.", StringSplitOptions.None)[1]))
++			if (__instance == null || string.IsNullOrEmpty(__instance.ItemId) || !__instance.ItemId.Contains("NatInValley.Creature."))
++			{
++				return __result;
++			}
++			string[] parts = __instance.ItemId.Split("NatInValley.Creature.", StringSplitOptions.None);
++			if (parts.Length < 2)
++			{
++				return __result;
++			}
++			if (IsInsectariumDonated(parts[1]))
+ 			{
+ 				return __result;
+ 			}
+diff --git a/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.deps.json b/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.deps.json
+new file mode 100644
+index 0000000..410953e
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.deps.json
+@@ -0,0 +1,34 @@
++{
++  "runtimeTarget": {
++    "name": ".NETCoreApp,Version=v6.0",
++    "signature": ""
++  },
++  "compilationOptions": {},
++  "targets": {
++    ".NETCoreApp,Version=v6.0": {
++      "NatureInTheValley/1.0.0": {
++        "dependencies": {
++          "Pathoschild.Stardew.ModBuildConfig": "4.3.2"
++        },
++        "runtime": {
++          "NatureInTheValley.dll": {}
++        }
++      },
++      "Pathoschild.Stardew.ModBuildConfig/4.3.2": {}
++    }
++  },
++  "libraries": {
++    "NatureInTheValley/1.0.0": {
++      "type": "project",
++      "serviceable": false,
++      "sha512": ""
++    },
++    "Pathoschild.Stardew.ModBuildConfig/4.3.2": {
++      "type": "package",
++      "serviceable": true,
++      "sha512": "sha512-wRnRRTgB84YPyNIGFpI12Gdjfwery/JTgRbTboG0uJK5VJsuQ2VWT4fS4bcvPgOKMK8lqYyqxV7sEq7zgd60gQ==",
++      "path": "pathoschild.stardew.modbuildconfig/4.3.2",
++      "hashPath": "pathoschild.stardew.modbuildconfig.4.3.2.nupkg.sha512"
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.dll b/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.dll
+new file mode 100644
+index 0000000..ff5dbc1
+Binary files /dev/null and b/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.dll differ
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/.NETCoreApp,Version=v6.0.AssemblyAttributes.cs b/1.3.0/NatureInTheValley/obj/Debug/net6.0/.NETCoreApp,Version=v6.0.AssemblyAttributes.cs
+new file mode 100644
+index 0000000..ed92695
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/Debug/net6.0/.NETCoreApp,Version=v6.0.AssemblyAttributes.cs
+@@ -0,0 +1,4 @@
++// <autogenerated />
++using System;
++using System.Reflection;
++[assembly: global::System.Runtime.Versioning.TargetFrameworkAttribute(".NETCoreApp,Version=v6.0", FrameworkDisplayName = ".NET 6.0")]
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.GeneratedMSBuildEditorConfig.editorconfig b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.GeneratedMSBuildEditorConfig.editorconfig
+new file mode 100644
+index 0000000..759ab10
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.GeneratedMSBuildEditorConfig.editorconfig
+@@ -0,0 +1,13 @@
++is_global = true
++build_property.TargetFramework = net6.0
++build_property.TargetPlatformMinVersion = 
++build_property.UsingMicrosoftNETSdkWeb = 
++build_property.ProjectTypeGuids = 
++build_property.InvariantGlobalization = 
++build_property.PlatformNeutralAssembly = 
++build_property.EnforceExtendedAnalyzerRules = 
++build_property._SupportedPlatformList = Linux,macOS,Windows
++build_property.RootNamespace = NatureInTheValley
++build_property.ProjectDir = /tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/
++build_property.EnableComHosting = 
++build_property.EnableGeneratedComInterfaceComImportInterop = 
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.assets.cache b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.assets.cache
+new file mode 100644
+index 0000000..a0ea58b
+Binary files /dev/null and b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.assets.cache differ
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.AssemblyReference.cache b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.AssemblyReference.cache
+new file mode 100644
+index 0000000..380c90f
+Binary files /dev/null and b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.AssemblyReference.cache differ
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.CoreCompileInputs.cache b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.CoreCompileInputs.cache
+new file mode 100644
+index 0000000..df7f2b9
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.CoreCompileInputs.cache
+@@ -0,0 +1 @@
++0455305ad1e9738937282e57b954356c1442a1ebd8380fcb174ae072e8750f51
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.FileListAbsolute.txt b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.FileListAbsolute.txt
+new file mode 100644
+index 0000000..57fda20
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.FileListAbsolute.txt
+@@ -0,0 +1,7 @@
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.AssemblyReference.cache
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.GeneratedMSBuildEditorConfig.editorconfig
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.csproj.CoreCompileInputs.cache
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.sourcelink.json
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.deps.json
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/bin/Debug/net6.0/NatureInTheValley.dll
++/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.dll
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.dll b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.dll
+new file mode 100644
+index 0000000..ff5dbc1
+Binary files /dev/null and b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.dll differ
+diff --git a/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.sourcelink.json b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.sourcelink.json
+new file mode 100644
+index 0000000..73b8ced
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/Debug/net6.0/NatureInTheValley.sourcelink.json
+@@ -0,0 +1 @@
++{"documents":{"/tmp/Nature-In-The-Valley/*":"https://raw.githubusercontent.com/8AwA8/Nature-In-The-Valley/4b5628935a19bd7b7beaa1ebef3074a9d230ef3f/*"}}
+\ No newline at end of file
+diff --git a/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.dgspec.json b/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.dgspec.json
+new file mode 100644
+index 0000000..1b5a696
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.dgspec.json
+@@ -0,0 +1,82 @@
++{
++  "format": 1,
++  "restore": {
++    "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj": {}
++  },
++  "projects": {
++    "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj": {
++      "version": "1.0.0",
++      "restore": {
++        "projectUniqueName": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj",
++        "projectName": "NatureInTheValley",
++        "projectPath": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj",
++        "packagesPath": "/home/mtx/.nuget/packages/",
++        "outputPath": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/",
++        "projectStyle": "PackageReference",
++        "configFilePaths": [
++          "/home/mtx/.nuget/NuGet/NuGet.Config"
++        ],
++        "originalTargetFrameworks": [
++          "net6.0"
++        ],
++        "sources": {
++          "https://api.nuget.org/v3/index.json": {}
++        },
++        "frameworks": {
++          "net6.0": {
++            "targetAlias": "net6.0",
++            "projectReferences": {}
++          }
++        },
++        "warningProperties": {
++          "warnAsError": [
++            "NU1605"
++          ]
++        },
++        "restoreAuditProperties": {
++          "enableAudit": "true",
++          "auditLevel": "low",
++          "auditMode": "direct"
++        }
++      },
++      "frameworks": {
++        "net6.0": {
++          "targetAlias": "net6.0",
++          "dependencies": {
++            "Pathoschild.Stardew.ModBuildConfig": {
++              "target": "Package",
++              "version": "[4.3.2, )"
++            }
++          },
++          "imports": [
++            "net461",
++            "net462",
++            "net47",
++            "net471",
++            "net472",
++            "net48",
++            "net481"
++          ],
++          "assetTargetFallback": true,
++          "warn": true,
++          "downloadDependencies": [
++            {
++              "name": "Microsoft.AspNetCore.App.Ref",
++              "version": "[6.0.36, 6.0.36]"
++            },
++            {
++              "name": "Microsoft.NETCore.App.Ref",
++              "version": "[6.0.36, 6.0.36]"
++            }
++          ],
++          "frameworkReferences": {
++            "Microsoft.NETCore.App": {
++              "privateAssets": "all"
++            }
++          },
++          "runtimeIdentifierGraphPath": "/home/mtx/.dotnet/sdk/8.0.425/RuntimeIdentifierGraph.json"
++        }
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.g.props b/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.g.props
+new file mode 100644
+index 0000000..9c6b71e
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.g.props
+@@ -0,0 +1,15 @@
++﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
++    <RestoreSuccess Condition=" '$(RestoreSuccess)' == '' ">True</RestoreSuccess>
++    <RestoreTool Condition=" '$(RestoreTool)' == '' ">NuGet</RestoreTool>
++    <ProjectAssetsFile Condition=" '$(ProjectAssetsFile)' == '' ">$(MSBuildThisFileDirectory)project.assets.json</ProjectAssetsFile>
++    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">/home/mtx/.nuget/packages/</NuGetPackageRoot>
++    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">/home/mtx/.nuget/packages/</NuGetPackageFolders>
++    <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
++    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">6.11.2</NuGetToolVersion>
++  </PropertyGroup>
++  <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
++    <SourceRoot Include="/home/mtx/.nuget/packages/" />
++  </ItemGroup>
++</Project>
+\ No newline at end of file
+diff --git a/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.g.targets b/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.g.targets
+new file mode 100644
+index 0000000..0f1b7d2
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/NatureInTheValley.csproj.nuget.g.targets
+@@ -0,0 +1,6 @@
++﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
++<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
++  <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
++    <Import Project="$(NuGetPackageRoot)pathoschild.stardew.modbuildconfig/4.3.2/build/Pathoschild.Stardew.ModBuildConfig.targets" Condition="Exists('$(NuGetPackageRoot)pathoschild.stardew.modbuildconfig/4.3.2/build/Pathoschild.Stardew.ModBuildConfig.targets')" />
++  </ImportGroup>
++</Project>
+\ No newline at end of file
+diff --git a/1.3.0/NatureInTheValley/obj/project.assets.json b/1.3.0/NatureInTheValley/obj/project.assets.json
+new file mode 100644
+index 0000000..3cd6ec7
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/project.assets.json
+@@ -0,0 +1,117 @@
++{
++  "version": 3,
++  "targets": {
++    "net6.0": {
++      "Pathoschild.Stardew.ModBuildConfig/4.3.2": {
++        "type": "package",
++        "build": {
++          "build/Pathoschild.Stardew.ModBuildConfig.targets": {}
++        }
++      }
++    }
++  },
++  "libraries": {
++    "Pathoschild.Stardew.ModBuildConfig/4.3.2": {
++      "sha512": "wRnRRTgB84YPyNIGFpI12Gdjfwery/JTgRbTboG0uJK5VJsuQ2VWT4fS4bcvPgOKMK8lqYyqxV7sEq7zgd60gQ==",
++      "type": "package",
++      "path": "pathoschild.stardew.modbuildconfig/4.3.2",
++      "files": [
++        ".nupkg.metadata",
++        ".signature.p7s",
++        "analyzers/dotnet/cs/SMAPI.ModBuildConfig.Analyzer.dll",
++        "build/Newtonsoft.Json.dll",
++        "build/Pathoschild.Stardew.ModBuildConfig.targets",
++        "build/SMAPI.ModBuildConfig.dll",
++        "build/SMAPI.Toolkit.CoreInterfaces.dll",
++        "build/SMAPI.Toolkit.dll",
++        "build/find-game-folder.targets",
++        "images/icon.png",
++        "mod-package.md",
++        "pathoschild.stardew.modbuildconfig.4.3.2.nupkg.sha512",
++        "pathoschild.stardew.modbuildconfig.nuspec"
++      ]
++    }
++  },
++  "projectFileDependencyGroups": {
++    "net6.0": [
++      "Pathoschild.Stardew.ModBuildConfig >= 4.3.2"
++    ]
++  },
++  "packageFolders": {
++    "/home/mtx/.nuget/packages/": {}
++  },
++  "project": {
++    "version": "1.0.0",
++    "restore": {
++      "projectUniqueName": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj",
++      "projectName": "NatureInTheValley",
++      "projectPath": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj",
++      "packagesPath": "/home/mtx/.nuget/packages/",
++      "outputPath": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/obj/",
++      "projectStyle": "PackageReference",
++      "configFilePaths": [
++        "/home/mtx/.nuget/NuGet/NuGet.Config"
++      ],
++      "originalTargetFrameworks": [
++        "net6.0"
++      ],
++      "sources": {
++        "https://api.nuget.org/v3/index.json": {}
++      },
++      "frameworks": {
++        "net6.0": {
++          "targetAlias": "net6.0",
++          "projectReferences": {}
++        }
++      },
++      "warningProperties": {
++        "warnAsError": [
++          "NU1605"
++        ]
++      },
++      "restoreAuditProperties": {
++        "enableAudit": "true",
++        "auditLevel": "low",
++        "auditMode": "direct"
++      }
++    },
++    "frameworks": {
++      "net6.0": {
++        "targetAlias": "net6.0",
++        "dependencies": {
++          "Pathoschild.Stardew.ModBuildConfig": {
++            "target": "Package",
++            "version": "[4.3.2, )"
++          }
++        },
++        "imports": [
++          "net461",
++          "net462",
++          "net47",
++          "net471",
++          "net472",
++          "net48",
++          "net481"
++        ],
++        "assetTargetFallback": true,
++        "warn": true,
++        "downloadDependencies": [
++          {
++            "name": "Microsoft.AspNetCore.App.Ref",
++            "version": "[6.0.36, 6.0.36]"
++          },
++          {
++            "name": "Microsoft.NETCore.App.Ref",
++            "version": "[6.0.36, 6.0.36]"
++          }
++        ],
++        "frameworkReferences": {
++          "Microsoft.NETCore.App": {
++            "privateAssets": "all"
++          }
++        },
++        "runtimeIdentifierGraphPath": "/home/mtx/.dotnet/sdk/8.0.425/RuntimeIdentifierGraph.json"
++      }
++    }
++  }
++}
+\ No newline at end of file
+diff --git a/1.3.0/NatureInTheValley/obj/project.nuget.cache b/1.3.0/NatureInTheValley/obj/project.nuget.cache
+new file mode 100644
+index 0000000..dcfaf2e
+--- /dev/null
++++ b/1.3.0/NatureInTheValley/obj/project.nuget.cache
+@@ -0,0 +1,12 @@
++{
++  "version": 2,
++  "dgSpecHash": "l2XUdma13I4=",
++  "success": true,
++  "projectFilePath": "/tmp/Nature-In-The-Valley/1.3.0/NatureInTheValley/NatureInTheValley.csproj",
++  "expectedPackageFiles": [
++    "/home/mtx/.nuget/packages/pathoschild.stardew.modbuildconfig/4.3.2/pathoschild.stardew.modbuildconfig.4.3.2.nupkg.sha512",
++    "/home/mtx/.nuget/packages/microsoft.netcore.app.ref/6.0.36/microsoft.netcore.app.ref.6.0.36.nupkg.sha512",
++    "/home/mtx/.nuget/packages/microsoft.aspnetcore.app.ref/6.0.36/microsoft.aspnetcore.app.ref.6.0.36.nupkg.sha512"
++  ],
++  "logs": []
++}
+\ No newline at end of file
+
+diff --git a/1.3.4/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json b/1.3.4/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
+index 7a269d7..e2037f1 100644
+--- a/1.3.4/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
++++ b/1.3.4/[Gen]NatureInTheValley/[CP]NatureInTheValley/content.json
+@@ -17,7 +17,7 @@
+         {
+             "Action": "Load",
+-            "Target": "Mods/NatureInTheValley/Creatures/Items,Mods/NatureInTheValley/Creatures/Hat,Mods/NatureInTheValley/Creatures/Shirt,Mods/NatureInTheValley/Creatures/BlueringOctopus,Mods/NatureInTheValley/Creatures/Mudskipper,Mods/NatureInTheValley/Creatures/Antlion,Mods/NatureInTheValley/Creatures/FireFly,Mods/NatureInTheValley/Creatures/Chameleon,Mods/NatureInTheValley/Creatures/HoneyAnt,Mods/NatureInTheValley/Creatures/GoldenStag,Mods/NatureInTheValley/Creatures/JuneBeetle,Mods/NatureInTheValley/Creatures/CaveBeetle,Mods/NatureInTheValley/Creatures/SandWorm,Mods/NatureInTheValley/Creatures/TigerBeetle,Mods/NatureInTheValley/Creatures/BlisterBeetle,Mods/NatureInTheValley/Creatures/WispOfWinter,Mods/NatureInTheValley/Creatures/DivingBeetle,Mods/NatureInTheValley/Creatures/Tuatara,Mods/NatureInTheValley/Creatures/StickBug,Mods/NatureInTheValley/Creatures/CaveCrayfish,Mods/NatureInTheValley/Creatures/CaveSalamander,Mods/NatureInTheValley/Creatures/SnappingTurtle,Mods/NatureInTheValley/Creatures/Moth,Mods/NatureInTheValley/Creatures/SeaTurtle,Mods/NatureInTheValley/Creatures/SandFlea,Mods/NatureInTheValley/Creatures/StAndrewsSpider, Mods/NatureInTheValley/Creatures/PotterWasp,Mods/NatureInTheValley/Creatures/Bee,Mods/NatureInTheValley/Creatures/CactusCrab,Mods/NatureInTheValley/Creatures/RegalMoth,Mods/NatureInTheValley/Creatures/HickoryHornedDevil,Mods/NatureInTheValley/Creatures/MonarchCaterpillar,Mods/NatureInTheValley/Creatures/YellowGrassCaterpillar,Mods/NatureInTheValley/Creatures/PeriodicalCicada,Mods/NatureInTheValley/Creatures/AnnualCicada,Mods/NatureInTheValley/Creatures/LadyBug,Mods/NatureInTheValley/Creatures/TreeFrog,Mods/NatureInTheValley/Creatures/Bullfrog,Mods/NatureInTheValley/Creatures/CaneToad,Mods/NatureInTheValley/Creatures/FlyingFish,Mods/NatureInTheValley/Creatures/CapeCobra,Mods/NatureInTheValley/Creatures/HermitCrab,Mods/NatureInTheValley/Creatures/Millipede,Mods/NatureInTheValley/Creatures/Centipede,Mods/NatureInTheValley/Creatures/BlackWitchMoth,Mods/NatureInTheValley/Creatures/MonarchButterfly,Mods/NatureInTheValley/Creatures/WeidemeyersAdmiral,Mods/NatureInTheValley/Creatures/BlueAxolotl,Mods/NatureInTheValley/Creatures/Axolotl,Mods/NatureInTheValley/Creatures/MarineIguana,Mods/NatureInTheValley/Creatures/ThornyDevil,Mods/NatureInTheValley/Creatures/LeopardGecko,Mods/NatureInTheValley/Creatures/BeardedDragon,Mods/NatureInTheValley/Creatures/FrilledLizard,Mods/NatureInTheValley/Creatures/YellowSpottedLizard,Mods/NatureInTheValley/Creatures/BlueTonguedSkink,Mods/NatureInTheValley/Creatures/Scorpion,Mods/NatureInTheValley/Creatures/DesertWhiteTail,Mods/NatureInTheValley/Creatures/FireAnt,Mods/NatureInTheValley/Creatures/BlackAnt,/Mods/NatureInTheValley/Creatures/DesertLocust,Mods/NatureInTheValley/Creatures/OrchidMantis,Mods/NatureInTheValley/Creatures/BarkBeetle,Mods/NatureInTheValley/Creatures/SweetGemBeetle,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/GiantPetaltail,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/ScarletDarner,Mods/NatureInTheValley/Creatures/GreenDarner,Mods/NatureInTheValley/Creatures/AtlasMoth,Mods/NatureInTheValley/Creatures/Slug,Mods/NatureInTheValley/Creatures/PillBug,Mods/NatureInTheValley/Creatures/PlantHopper,Mods/NatureInTheValley/Creatures/WharfRoach,Mods/NatureInTheValley/Creatures/Grasshopper,Mods/NatureInTheValley/Creatures/GarterSnake,Mods/NatureInTheValley/Creatures/PondSkater,Mods/NatureInTheValley/Creatures/CoralSnake,Mods/NatureInTheValley/Creatures/JewelBeetle,Mods/NatureInTheValley/Creatures/CommonButterfly,Mods/NatureInTheValley/Creatures/SmallGrassYellowButterfly,Mods/NatureInTheValley/Creatures/AgriasButterfly,Mods/NatureInTheValley/Creatures/StagBeetle,Mods/NatureInTheValley/Creatures/HerculesBeetle,Mods/NatureInTheValley/Creatures/Cricket,Mods/NatureInTheValley/Creatures/GardenSnail,Mods/NatureInTheValley/Creatures/PrayingMantis,Mods/NatureInTheValley/Creatures/FunnelWebSpider",
++            "Target": "Mods/NatureInTheValley/Creatures/Items,Mods/NatureInTheValley/Creatures/Hat,Mods/NatureInTheValley/Creatures/Shirt,Mods/NatureInTheValley/Creatures/BlueringOctopus,Mods/NatureInTheValley/Creatures/Mudskipper,Mods/NatureInTheValley/Creatures/Antlion,Mods/NatureInTheValley/Creatures/FireFly,Mods/NatureInTheValley/Creatures/Chameleon,Mods/NatureInTheValley/Creatures/HoneyAnt,Mods/NatureInTheValley/Creatures/GoldenStag,Mods/NatureInTheValley/Creatures/JuneBeetle,Mods/NatureInTheValley/Creatures/CaveBeetle,Mods/NatureInTheValley/Creatures/SandWorm,Mods/NatureInTheValley/Creatures/TigerBeetle,Mods/NatureInTheValley/Creatures/BlisterBeetle,Mods/NatureInTheValley/Creatures/WispOfWinter,Mods/NatureInTheValley/Creatures/DivingBeetle,Mods/NatureInTheValley/Creatures/Tuatara,Mods/NatureInTheValley/Creatures/StickBug,Mods/NatureInTheValley/Creatures/CaveCrayfish,Mods/NatureInTheValley/Creatures/CaveSalamander,Mods/NatureInTheValley/Creatures/SnappingTurtle,Mods/NatureInTheValley/Creatures/Moth,Mods/NatureInTheValley/Creatures/SeaTurtle,Mods/NatureInTheValley/Creatures/SandFlea,Mods/NatureInTheValley/Creatures/StAndrewsSpider, Mods/NatureInTheValley/Creatures/PotterWasp,Mods/NatureInTheValley/Creatures/Bee,Mods/NatureInTheValley/Creatures/CactusCrab,Mods/NatureInTheValley/Creatures/RegalMoth,Mods/NatureInTheValley/Creatures/HickoryHornedDevil,Mods/NatureInTheValley/Creatures/MonarchCaterpillar,Mods/NatureInTheValley/Creatures/YellowGrassCaterpillar,Mods/NatureInTheValley/Creatures/PeriodicalCicada,Mods/NatureInTheValley/Creatures/AnnualCicada,Mods/NatureInTheValley/Creatures/LadyBug,Mods/NatureInTheValley/Creatures/TreeFrog,Mods/NatureInTheValley/Creatures/BullFrog,Mods/NatureInTheValley/Creatures/CaneToad,Mods/NatureInTheValley/Creatures/FlyingFish,Mods/NatureInTheValley/Creatures/CapeCobra,Mods/NatureInTheValley/Creatures/HermitCrab,Mods/NatureInTheValley/Creatures/Millipede,Mods/NatureInTheValley/Creatures/Centipede,Mods/NatureInTheValley/Creatures/BlackWitchMoth,Mods/NatureInTheValley/Creatures/MonarchButterfly,Mods/NatureInTheValley/Creatures/WeidemeyersAdmiral,Mods/NatureInTheValley/Creatures/BlueAxolotl,Mods/NatureInTheValley/Creatures/Axolotl,Mods/NatureInTheValley/Creatures/MarineIguana,Mods/NatureInTheValley/Creatures/ThornyDevil,Mods/NatureInTheValley/Creatures/LeopardGecko,Mods/NatureInTheValley/Creatures/BeardedDragon,Mods/NatureInTheValley/Creatures/FrilledLizard,Mods/NatureInTheValley/Creatures/YellowSpottedLizard,Mods/NatureInTheValley/Creatures/BlueTonguedSkink,Mods/NatureInTheValley/Creatures/Scorpion,Mods/NatureInTheValley/Creatures/DesertWhiteTail,Mods/NatureInTheValley/Creatures/FireAnt,Mods/NatureInTheValley/Creatures/BlackAnt,Mods/NatureInTheValley/Creatures/DesertLocust,Mods/NatureInTheValley/Creatures/OrchidMantis,Mods/NatureInTheValley/Creatures/BarkBeetle,Mods/NatureInTheValley/Creatures/SweetGemBeetle,Mods/NatureInTheValley/Creatures/EarthWorm,Mods/NatureInTheValley/Creatures/GiantPetaltail,Mods/NatureInTheValley/Creatures/ScarletDarner,Mods/NatureInTheValley/Creatures/GreenDarner,Mods/NatureInTheValley/Creatures/AtlasMoth,Mods/NatureInTheValley/Creatures/Slug,Mods/NatureInTheValley/Creatures/PillBug,Mods/NatureInTheValley/Creatures/PlantHopper,Mods/NatureInTheValley/Creatures/WharfRoach,Mods/NatureInTheValley/Creatures/Grasshopper,Mods/NatureInTheValley/Creatures/GarterSnake,Mods/NatureInTheValley/Creatures/PondSkater,Mods/NatureInTheValley/Creatures/CoralSnake,Mods/NatureInTheValley/Creatures/JewelBeetle,Mods/NatureInTheValley/Creatures/CommonButterfly,Mods/NatureInTheValley/Creatures/SmallGrassYellowButterfly,Mods/NatureInTheValley/Creatures/AgriasButterfly,Mods/NatureInTheValley/Creatures/StagBeetle,Mods/NatureInTheValley/Creatures/HerculesBeetle,Mods/NatureInTheValley/Creatures/Cricket,Mods/NatureInTheValley/Creatures/GardenSnail,Mods/NatureInTheValley/Creatures/PrayingMantis,Mods/NatureInTheValley/Creatures/FunnelWebSpider",
+             "FromFile": "PNGs/{{TargetWithoutPath}}.png"
+         },

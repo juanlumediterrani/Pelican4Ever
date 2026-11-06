@@ -3,7 +3,7 @@ using System;
 namespace Pelican4Ever.Core.Economy
 {
     /// <summary>
-    /// Lógica de descanso y recuperación pasiva de estamina sentado (GAP-07).
+    /// Lógica de descanso y recuperación pasiva de estamina sentado (GAP-07). Solo funciona con el buff "Bien comido".
     /// </summary>
     public static class SittingRegenLogic
     {
@@ -13,6 +13,7 @@ namespace Pelican4Ever.Core.Economy
         public static bool Tick(
             bool isSitting,
             bool isInBed,
+            bool isWellFed,
             float currentStamina,
             int maxStamina,
             int currentAccumulator,
@@ -23,7 +24,7 @@ namespace Pelican4Ever.Core.Economy
             staminaGain = 0f;
             newAccumulator = 0;
 
-            if (!isSitting || isInBed || regenSeconds <= 0)
+            if (!isSitting || isInBed || !isWellFed || regenSeconds <= 0)
                 return false;
 
             int acc = currentAccumulator + 1;

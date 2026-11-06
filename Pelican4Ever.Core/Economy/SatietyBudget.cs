@@ -17,26 +17,20 @@ namespace Pelican4Ever.Core.Economy
             return Math.Max(0, (int)Math.Floor(maxStamina * dailyFraction));
         }
 
-        /// <summary>Energía instantánea que se concede al comer, dado lo ya consumido hoy.</summary>
+        /// <summary>Energía instantánea que se concede al comer, dado la Saciedad acumulada actual y la capacidad máxima.</summary>
         /// <param name="requestedGain">Energía que el motor habría sumado (ya recortada al máximo de la barra).</param>
-        /// <param name="alreadyUsed">Saciedad consumida hoy.</param>
-        /// <param name="budget">Saciedad total del día.</param>
-        public static int AllowedGain(int requestedGain, int alreadyUsed, int budget)
+        /// <param name="currentSatiety">Nivel de Saciedad actual acumulado.</param>
+        /// <param name="maxSatiety">Capacidad máxima de Saciedad.</param>
+        public static int AllowedGain(int requestedGain, float currentSatiety, int maxSatiety)
         {
             if (requestedGain <= 0)
                 return 0;
 
-            int remaining = Math.Max(0, budget - alreadyUsed);
+            int remaining = Math.Max(0, maxSatiety - (int)Math.Floor(currentSatiety));
             return Math.Min(requestedGain, remaining);
         }
 
-        /// <summary>Energía regenerada en el Spa, respetando el tope diario.</summary>
-        public static int AllowedSpaGain(int requestedGain, int alreadyUsed, int dailyCap)
-        {
-            if (requestedGain <= 0)
-                return 0;
-
-            return Math.Min(requestedGain, Math.Max(0, dailyCap - alreadyUsed));
-        }
+        public static int AllowedGain(int requestedGain, int currentSatiety, int maxSatiety)
+            => AllowedGain(requestedGain, (float)currentSatiety, maxSatiety);
     }
 }

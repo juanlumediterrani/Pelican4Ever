@@ -1,4 +1,4 @@
-"""Genera Bodies/Dr4co/body.png a partir de dr4co-sid-v2.png usando GIMP (gimp-console, Script-Fu).
+"""Genera Bodies/Dr4co/body.png a partir de agents/sheets/dr4co-sid-v2.png usando GIMP (gimp-console, Script-Fu).
 
 Uso (desde agents/Dr4co.FashionSense):
     python3 ../../scripts/build_dr4co_body.py Bodies/Dr4co/body.png [n_colores]
@@ -25,7 +25,7 @@ FOOTX=9.5     # feet centre, counted from the anchor side
 HS=0.95       # global size trim
 SQUASH=0.85   # horizontal squash of front/back (wings would not fit left of the anchor)
 TOP=40        # source rows above this are empty in every cell
-SRC=os.path.abspath("dr4co-sid-v2.png")
+SRC=os.path.join(os.path.dirname(os.path.abspath(__file__)),"..","agents","sheets","dr4co-sid-v2.png")   # hoja fuente de la v0.4.0
 src=Image.open(SRC).convert("RGBA")
 
 FOOT_H=5      # rows of the front foot that are moved to make the step

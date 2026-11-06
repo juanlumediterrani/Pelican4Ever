@@ -64,13 +64,35 @@ juego voltea la celda entera (por eso la fila izquierda lleva la misma arte que
 la derecha, sin espejar). A la izquierda del punto de apoyo solo caben ~9 px,
 así que el dragón (~26 px de alto) apoya los pies en la última fila (y=31) de cada
 fotograma y en x=9,5; las vistas
-frontal/trasera se estrechan un 15 %. La arte sale de `dr4co-sid-v2.png`: el
+frontal/trasera se estrechan un 15 %. La arte sale de `agents/sheets/dr4co-sid-v2.png`: el
 script `scripts/build_dr4co_body.py` solo calcula la geometría y GIMP
 (`gimp-console-2.10`, Script-Fu) hace el recorte, el escalado NoHalo, el umbral
 de alfa y la paleta indexada de 32 colores. También en GIMP: en las vistas
 laterales se desplaza 1 px el pie delantero (adelante y elevado / atrás) para
 que también dé el paso, y los bordes claros o rojo vivo de la silueta (punta
 del hocico, cuernos, vientre) reciben un contorno rojo muy oscuro.
+
+Arte de la v0.5.0 (en curso, usable pero sin terminar): misma geometría que la
+v0.4.0, pero sale de una hoja nueva generada por IA
+(`agents/Dr4co sprites/fuente/dr4co_hoja_ia.jpg`). El proceso está en tres
+scripts (Python con Pillow y NumPy, desde la raíz del repositorio):
+
+1. `scripts/dr4co_sprites_grandes.py`: recorta las 8 poses útiles, quita el fondo
+   y el ruido del JPG y las deja en `agents/Dr4co sprites/grandes/` con una
+   paleta compartida de 20 colores (la trasera del otro paso es la misma espejada).
+2. `scripts/dr4co_reducir.py`: reduce las poses a tamaño de juego (k-centroid y
+   cúbica) para comparar; deja las pruebas en `agents/Dr4co sprites/pruebas/`.
+3. `scripts/dr4co_montar_body.py "agents/Dr4co sprites/1"`: monta el `body.png`.
+   El frontal son los tres cuadros reducidos a mano en GIMP de
+   `agents/Dr4co sprites/1/` (27 px de alto); la lateral y la trasera salen con
+   reducción cúbica a la misma escala, contorno coloreado al estilo de Stardew
+   (*sel-out*: cada borde toma un tono oscuro del color vecino en vez de negro) y
+   paleta fija. El resultado queda en `agents/Dr4co sprites/pruebas/montada/` y
+   se copia a `Bodies/Dr4co/body.png`.
+
+Pendiente: el paso frontal y los ojos se retocan a mano; comprobar en el juego
+la alineación con la sombra y que `AgentToolOffset` (ajustado para el dragón de
+26 px de la v0.4.0) siga sacando la herramienta de las garras.
 
 `HideSleeves: true` en las cuatro direcciones evita que, al usar el hacha o el
 pico, el juego dibuje el brazo/manga del granjero sobre el ala del dragón.

@@ -79,6 +79,16 @@ Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documen
     - En `DayStarted`, evaluar `SleepPolicy.Evaluate` para cada `PlayerRecord`, aplicar `WakeUpEnergy` y `MedicalFee` sobre cada `Farmer` (con `useSeparateWallets = true`), congelar la caída de amistad de jugadores `Offline_*` y crear copia de seguridad rotativa del save.
   - **Criterios de Aceptación:** Los cultivos avanzan, se liquidan las `Shipping Bins` personales y los jugadores ausentes varios días seguidos no reciben penalizaciones adicionales.
 
+- [x] **TASK-104: El cambio de día se queda esperando con el host despierto (incidencia E-19, noche del 2026-11-05 al 06)**
+  - **Prioridad:** Crítica
+  - **Síntoma:** a las 02:00 se guardó dos veces (pre-cierre y post-cierre), se cerraron los peers y el log dijo «Cambio de día nativo iniciado», pero el día no cambió. Al reiniciar a las 04:04 se cargó el guardado de las 02:00:11 y volvió a abrirse el mismo día, sin pérdida.
+  - **Causa (código descompilado de 1.6.15):** `Game1.NewDay(0f)` solo pone `Game1.newDay = true`; el cambio de día lo ejecuta `onFadeToBlackComplete` al terminar un fundido a negro, y `NewDay` solo lanza ese fundido si el host está en la cama o desmayado. Desde `9929d65` (2026-11-02) el rollover cierra antes a todos los peers y llama a `NewDay(0f)`; antes usaba `PassOutNewDay()`, que con peers desmayaba al host, pero sin peers (`!IsMultiplayer`) también acaba en `NewDay(0f)`. Con el host despierto y quieto (modo anfitrión agente, y anoche con la sesión del agente caída), nadie lanzaba el fundido; el día habría cambiado al cruzar el host la siguiente puerta.
+  - **Resolución:** `DailyRolloverModule.EnsureNewDayFade()` lanza tras `NewDay(0f)` el mismo fundido que el de la cama (`nonWarpFade` y `fadeScreenToBlack()`), sin desmayar al host ni aplicar penalización, salvo si el host ya está en la cama o hay otro fundido en curso. `WatchNativeDayAdvance()` revisa cada segundo la etapa `AdvancingDay`: si `Game1.newDay` sigue sin consumirse y no hay fundido en curso tras 30 s (`RolloverTiming.ShouldNudgeDayAdvance`), lo vuelve a lanzar, lo registra como error y añade el suceso `rollover.stalled` (con `nudges`, `secondsSinceAdvance`, `hostInBed` y `hostLocation`) para que el anfitrión agente lo vea en `GET events`. Compila y pasan los 928 tests; **pendiente de verificar en partida**.
+  - **Criterios de Aceptación:**
+    1. Con el host despierto fuera de la cama y sin peers, `p4e_rollover_now` termina en «Día iniciado» del día siguiente sin intervención (el log del cambio de día dice «host despierto: fundido lanzado por el mod»).
+    2. Con el host en la cama, el comportamiento no cambia (el log dice «host en la cama: fundido nativo»).
+    3. En una noche normal no aparece ningún `rollover.stalled`.
+
 ---
 
 ### Iteración 2: 4 Huecos de Granja y Puertas en Pelican Town (Épica 2)
@@ -117,6 +127,7 @@ Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documen
     - Parche `Prefix`/`Postfix` en `Farmer.doneEating`: recortar la ganancia instantánea de energía usando `SatietyBudget.AllowedGain` (hasta el 50% de `MaxStamina` por día real), conservando siempre la curación de `Health`, los `Buffs` y los ítems especiales (`Stardrop`).
     - Si se consume un plato cocinado y quedan usos en `MaxDailyWellFedBuffs` (`2`), activar regeneración pasiva (`+1 Energía / 60s reales` durante 60 min).
     - Limitar la regeneración del Spa a `1 punto / 30s reales` con tope diario `SpaDailyCap` (`60`) mediante `SatietyBudget.AllowedSpaGain`.
+  - **Revisión (ADR-0006):** la Saciedad pasa a ser una capacidad que se vacía en 4 h reales; "Bien comido" activa el descanso sentado (`1 punto / 5 s` durante 60 min) en lugar de la regeneración pasiva; el Spa da, una vez al día, un buff de `120` de energía y salud en 2 h tras 30 s quieto en el agua. El cliente comunica su consumo al host (`SatietyReport`).
   - **Criterios de Aceptación:** La comida restaura energía hasta agotar el presupuesto diario de Saciedad; a partir de ahí sigue curando vida y dando buffs sin sumar energía instantánea.
 - [x] **TASK-302: Minas Persistentes por Turnos de 12 Horas (`06:00` y `18:00`)**
   - **Prioridad:** Alta

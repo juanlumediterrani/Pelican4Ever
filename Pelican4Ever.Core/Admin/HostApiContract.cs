@@ -64,7 +64,9 @@ namespace Pelican4Ever.Core.Admin
         public string LastOutcome { get; set; } = string.Empty;
         public int SatietyUsed { get; set; }
         public int WellFedBuffsUsed { get; set; }
-        public int SpaEnergyUsed { get; set; }
+        public bool WellFedActive { get; set; }
+        public int SpaBuffsUsed { get; set; }
+        public bool SpaBuffActive { get; set; }
         public int SatietyGameDay { get; set; } = -1;
         public int PendingMarketGold { get; set; }
         public bool IsClaimed { get; set; }

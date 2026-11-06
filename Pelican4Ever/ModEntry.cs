@@ -48,6 +48,7 @@ namespace Pelican4Ever
                 new ChatChannelModule(),
                 new CommunityMarketModule(),
                 new EconomyModule(),
+                new GroundSitModule(),
                 new WorldLifeModule(),
                 new FestivalMinigameModule(),
                 new FestivalAccessModule(),

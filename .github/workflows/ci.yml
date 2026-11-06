@@ -6,7 +6,7 @@ name: CI
 
 on:
   push:
-    branches: [main, pelican/desarrollo, refactor/residence-entrances]
+    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
