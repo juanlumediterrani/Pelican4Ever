@@ -53,17 +53,16 @@ ni en la instalación de Steam mientras haya campaña.
 ## Cascada automática de ramas
 
 `.github/workflows/ci.yml` compila `Pelican4Ever.Core` y pasa `Pelican4Ever.Tests` con el SDK de
-`global.json` en cada push a `main`, `dev`, `pelican/desarrollo` y `refactor/residence-entrances` y en cada PR. El proyecto del mod no se compila en
+`global.json` en cada push a `main` y `dev` y en cada PR. El proyecto del mod no se compila en
 GitHub (necesita las DLL del juego y de SMAPI): eso sigue siendo local.
 
-`.github/workflows/cascada-ramas.yml` mantiene `main` → `pelican/desarrollo` →
-`refactor/residence-entrances` y, aparte, `main` → `dev`, para que lo que se suba en caliente a
-`main` llegue también a `dev`. Cada cadena va en su propio paso (lógica en
-`.github/scripts/cascada.sh`), así que un conflicto en una no frena la otra. Cuando el CI de un push a `main` o a `pelican/desarrollo` termina en
-verde, fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo entonces la
+`.github/workflows/cascada-ramas.yml` mantiene `main` → `dev`, para que lo que se suba en caliente
+a `main` llegue también a `dev` (`pelican/desarrollo` y `refactor/residence-entrances` se retiraron
+de GitHub el 2026-11-05). La lógica está en `.github/scripts/cascada.sh`. Cuando el CI de un push a
+`main` termina en verde, fusiona `main` en `dev`, pasa los tests sobre la fusión y solo entonces la
 sube. Si la fusión choca o sus tests fallan, no toca la rama de destino: sube
 `cascada/<origen>-a-<destino>` y abre un PR hacia el destino para resolverlo a mano. Por eso
-`refactor/residence-entrances` ya no se rebasa: recibe merges, y un rebase obligaría a forzar el push.
+`dev` no se rebasa: recibe merges, y un rebase obligaría a forzar el push.
 
 El token de la API y `host.env` viven en `~/.config/pelican4ever/preprod/` (modo 0600) y nunca se
 versionan.

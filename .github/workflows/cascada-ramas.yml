@@ -1,8 +1,8 @@
-# Cascada de ramas: main → pelican/desarrollo → refactor/residence-entrances, y main → dev.
+# Cascada de ramas: main → dev, para que lo que se sube en caliente a main llegue a dev.
 #
-# Arranca cuando el CI de un push a main o a pelican/desarrollo termina en verde: una rama rota no
-# se propaga. La lógica está en .github/scripts/cascada.sh; cada cadena va en su propio paso para que
-# un fallo en una no impida la otra (el job termina en rojo si falla cualquiera). Fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo
+# Arranca cuando el CI de un push a main termina en verde: una rama rota no se propaga. La lógica
+# está en .github/scripts/cascada.sh, que admite varios pares <origen> <destino> si vuelve a haber
+# más ramas en cadena. (pelican/desarrollo y refactor/residence-entrances se retiraron el 2026-11-05.) Fusiona la rama superior en la inferior, pasa los tests sobre la fusión y solo
 # entonces la sube. Las dos fusiones van en el mismo job porque un push hecho con GITHUB_TOKEN no
 # dispara otro workflow (ni el CI): por eso los tests de la fusión se pasan aquí.
 #
@@ -15,7 +15,7 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
-    branches: [main, pelican/desarrollo]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -50,9 +50,3 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash "$RUNNER_TEMP/cascada.sh" main dev
-
-      - name: Fusionar main en pelican/desarrollo y en refactor/residence-entrances
-        if: ${{ !cancelled() }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash "$RUNNER_TEMP/cascada.sh" main pelican/desarrollo pelican/desarrollo refactor/residence-entrances
