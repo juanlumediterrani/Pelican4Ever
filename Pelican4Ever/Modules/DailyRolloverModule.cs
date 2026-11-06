@@ -37,6 +37,13 @@ namespace Pelican4Ever.Modules
         public static string LastBackupFileName { get; private set; } = string.Empty;
         public static string LastBackupCreatedUtc { get; private set; } = string.Empty;
 
+        /// <summary>Hay un guardado del rollover en curso o la secuencia diaria no está en reposo.</summary>
+        public static bool IsBusy =>
+            instance != null
+            && (instance.preCloseSave != null
+                || instance.postCloseSave != null
+                || instance.rollover.Stage is not (SafeRolloverStage.Idle or SafeRolloverStage.Failed));
+
         public string Name => "DailyRollover";
 
         public ModuleSide Side => ModuleSide.Both;
@@ -239,6 +246,12 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || !Context.IsMainPlayer || preCloseSave != null || postCloseSave != null)
                 return;
+            // Otro guardado en curso (p. ej. el spike de checkpoint); el disparo programado lo reintenta al segundo siguiente.
+            if (SaveGame.IsProcessing || CheckpointSpikeModule.IsSaving)
+            {
+                context.Monitor.Log("[DailyRolloverModule] Hay otro guardado en curso; el rollover espera a que termine.", LogLevel.Info);
+                return;
+            }
             if (rollover.Begin() != SafeRolloverAction.SaveAndBackup)
                 return;
 
