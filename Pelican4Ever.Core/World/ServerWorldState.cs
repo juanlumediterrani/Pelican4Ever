@@ -75,7 +75,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 3;
+        public const int CurrentSchemaVersion = 4;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -90,6 +90,9 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Ofertas activas e históricas del mercado vecinal asíncrono (TASK-503).</summary>
         public List<MarketListing> MarketListings { get; set; } = new();
+
+        /// <summary>Reservas y devoluciones pendientes de confirmar desde el inventario del cliente propietario.</summary>
+        public Dictionary<string, PendingMarketDelivery> PendingMarketDeliveries { get; set; } = new();
 
         /// <summary>Festivales reprogramados: clave fecha original ("spring13"), valor nueva fecha ("spring16").</summary>
         public Dictionary<string, string> RescheduledFestivals { get; set; } = new();
@@ -287,6 +290,19 @@ namespace Pelican4Ever.Core.World
             {
                 Annexes ??= new Dictionary<string, AnnexAssignment>();
                 SchemaVersion = 3;
+                changed = true;
+            }
+
+            if (SchemaVersion < 4)
+            {
+                PendingMarketDeliveries ??= new Dictionary<string, PendingMarketDelivery>();
+                SchemaVersion = 4;
+                changed = true;
+            }
+
+            if (PendingMarketDeliveries == null)
+            {
+                PendingMarketDeliveries = new Dictionary<string, PendingMarketDelivery>();
                 changed = true;
             }
 

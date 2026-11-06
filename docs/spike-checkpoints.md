@@ -91,7 +91,7 @@ Decisión al cerrar el spike (criterio 2 de TASK-1601): **viable por defecto / v
 
 ### Resultado del 6 de noviembre de 2026
 
-El mecanismo de guardado intradía es **viable con restricciones**; la promoción queda bloqueada por la pérdida de objetos detectada en la prueba del mercado (G10, informe enlazado al final). Se mantiene `CheckpointIntervalMinutes = 0` por defecto.
+El mecanismo de guardado intradía es **viable con restricciones**; la primera promoción quedó bloqueada por la pérdida de objetos detectada en el mercado. El usuario autorizó después publicar los checkpoints; la corrección posterior y la recuperación de entregas pendientes se verifican en [la validación del mercado](market-validation-2026-11-06.md). Se mantiene `CheckpointIntervalMinutes = 0` por defecto.
 
 - SMAPI 4.5.2 no emite `Saving`/`Saved` al llamar a `SaveGame.Save()`. El volcado explícito conserva `ServerWorldState`. SpaceCore 1.28.4 intercepta el enumerador/serializador mediante Harmony; la copia vuelve a cargar con SpaceCore, NITV, FashionSense y Dr4coVoyagerBridge. Esto no acredita compatibilidad con cualquier mod que dependa de esos eventos.
 - Sin clonación se guarda el inventario anterior del farmhand. Con `NetRoot.CloneInto` coinciden los dos jugadores; el checkpoint de producción cancela si no puede clonar a cualquiera de ellos o volcar el estado del mod.

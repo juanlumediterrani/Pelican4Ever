@@ -17,7 +17,7 @@ namespace Pelican4Ever.Modules
     /// Gestiona el Tablón de Mercado Vecinal Asíncrono (TASK-503).
     /// Permite compraventa de productos entre vecinos sin coincidencia horaria.
     /// </summary>
-    public sealed class CommunityMarketModule : IModule
+    public sealed partial class CommunityMarketModule : IModule
     {
         private static ModContext? context;
 
@@ -28,6 +28,7 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
+            RegisterDeliveries(ctx);
 
             ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
             ctx.Helper.Events.GameLoop.GameLaunched += OnGameLaunched;
@@ -383,6 +384,9 @@ namespace Pelican4Ever.Modules
             if (context == null || e.FromModID != context.Manifest.UniqueID)
                 return;
 
+            if (HandleDeliveryMessage(e))
+                return;
+
             if (Context.IsMainPlayer)
             {
                 if (e.Type == MarketMessages.CreateListingRequest)
@@ -413,7 +417,7 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            if (e.Type == MarketMessages.SyncMarketState)
+            if (!Context.IsMainPlayer && Context.IsWorldReady && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID && e.Type == MarketMessages.SyncMarketState)
             {
                 var syncedList = e.ReadAs<List<MarketListing>>();
                 if (syncedList != null)
@@ -450,43 +454,52 @@ namespace Pelican4Ever.Modules
             if (context == null) return;
 
             MarketListing? listing = context.WorldState.MarketListings.FirstOrDefault(l => l.ListingId == listingId);
-            if (listing == null || listing.IsSold)
+            if (listing == null || listing.IsSold || HasPendingDelivery(listingId))
                 return;
 
             Farmer? buyer = Game1.GetPlayer(buyerId);
-            if (buyer == null) return;
+            if (buyer == null || !buyer.isActive()) return;
 
-            var result = CommunityMarketLogic.BuyListing(listing, buyerId, buyer.Name, buyer.Money);
+            var result = CommunityMarketLogic.ValidatePurchase(listing, buyerId, buyer.Money);
             if (result.Status != MarketTransactionStatus.Success)
             {
                 context.Monitor.Log($"[CommunityMarketModule] Compra de {listingId} rechazada: {result.Message}", LogLevel.Warn);
                 return;
             }
 
-            // Aplicar descuento y entrega al comprador
-            DailyRolloverModule.SetFarmerMoney(buyer, result.RemainingBuyerGold);
-            Item itemReceived = ItemRegistry.Create(listing.ItemId, listing.Stack, listing.Quality);
-            buyer.addItemByMenuIfNecessary(itemReceived);
+            bool localBuyer = buyerId == Game1.player.UniqueMultiplayerID;
+            if (localBuyer && !TryDeliverLocalItem(buyer, ItemRegistry.Create(listing.ItemId, listing.Stack, listing.Quality)))
+                return;
 
-            // Acreditar oro al vendedor
+            result = CommunityMarketLogic.BuyListing(listing, buyerId, buyer.Name, buyer.Money);
+            DailyRolloverModule.SetFarmerMoney(buyer, result.RemainingBuyerGold);
+            if (localBuyer)
+                CreditMarketSeller(listing, result.SellerProfit);
+            else
+                QueueDelivery(listing, buyerId, isReturn: false);
+            BroadcastMarketSync();
+        }
+
+        private static void CreditMarketSeller(MarketListing listing, int sellerProfit)
+        {
+            if (context == null) return;
             Farmer? seller = Game1.GetPlayer(listing.SellerId);
             if (seller != null && seller.isActive())
             {
-                DailyRolloverModule.SetFarmerMoney(seller, seller.Money + result.SellerProfit);
+                DailyRolloverModule.SetFarmerMoney(seller, seller.Money + sellerProfit);
                 if (seller.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
                 {
-                    Game1.addHUDMessage(new HUDMessage($"¡Tu oferta de {listing.ItemDisplayName} se vendió por {result.SellerProfit}g!", HUDMessage.newQuest_type));
+                    Game1.addHUDMessage(new HUDMessage($"¡Tu oferta de {listing.ItemDisplayName} se vendió por {sellerProfit}g!", HUDMessage.newQuest_type));
                 }
             }
             else
             {
                 // Vendedor offline: acumular en PendingMarketGold
                 var record = context.WorldState.GetOrCreatePlayer(listing.SellerId, listing.SellerName);
-                record.PendingMarketGold += result.SellerProfit;
-                context.Monitor.Log($"[CommunityMarketModule] Vendedor {listing.SellerId} offline: acumulados {result.SellerProfit}g en PendingMarketGold.", LogLevel.Info);
+                record.PendingMarketGold += sellerProfit;
+                context.Monitor.Log($"[CommunityMarketModule] Vendedor {listing.SellerId} offline: acumulados {sellerProfit}g en PendingMarketGold.", LogLevel.Info);
             }
 
-            BroadcastMarketSync();
         }
 
         private static void HandleCancelListing(long requesterId, string listingId)
@@ -494,26 +507,67 @@ namespace Pelican4Ever.Modules
             if (context == null) return;
 
             MarketListing? listing = context.WorldState.MarketListings.FirstOrDefault(l => l.ListingId == listingId);
-            if (listing == null) return;
+            if (listing == null || HasPendingDelivery(listingId)) return;
 
             var result = CommunityMarketLogic.CancelListing(listing, requesterId);
             if (result.Status != MarketTransactionStatus.Success)
                 return;
 
-            context.WorldState.MarketListings.Remove(listing);
-
             Farmer? seller = Game1.GetPlayer(requesterId);
-            if (seller != null)
+            if (seller == null || !seller.isActive())
+                return;
+
+            if (requesterId != Game1.player.UniqueMultiplayerID)
             {
-                Item returnedItem = ItemRegistry.Create(listing.ItemId, listing.Stack, listing.Quality);
-                seller.addItemByMenuIfNecessary(returnedItem);
-                if (seller.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
-                {
-                    Game1.addHUDMessage(new HUDMessage($"Oferta retirada. Se devolvió {listing.ItemDisplayName}.", HUDMessage.newQuest_type));
-                }
+                QueueDelivery(listing, requesterId, isReturn: true);
+                return;
+            }
+
+            Item returnedItem = ItemRegistry.Create(listing.ItemId, listing.Stack, listing.Quality);
+            if (!TryDeliverLocalItem(seller, returnedItem))
+                return;
+
+            context.WorldState.MarketListings.Remove(listing);
+            if (seller.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
+            {
+                Game1.addHUDMessage(new HUDMessage($"Oferta retirada. Se devolvió {listing.ItemDisplayName}.", HUDMessage.newQuest_type));
             }
 
             BroadcastMarketSync();
+        }
+
+        /// <summary>Entrega en el proceso propietario; restaura el inventario si la operación queda incompleta.</summary>
+        private static bool TryDeliverLocalItem(Farmer farmer, Item item)
+        {
+            if (!farmer.IsLocalPlayer)
+                throw new InvalidOperationException("La entrega debe ejecutarse en el cliente propietario del granjero.");
+            if (!farmer.couldInventoryAcceptThisItem(item))
+            {
+                context?.Monitor.Log($"[CommunityMarketModule] Entrega rechazada para {farmer.Name}: inventario lleno; la oferta y el oro no cambian.", LogLevel.Warn);
+                return false;
+            }
+
+            Item?[] previous = farmer.Items.ToArray();
+            int[] stacks = previous.Select(i => i?.Stack ?? 0).ToArray();
+            try
+            {
+                if (farmer.addItemToInventory(item) == null)
+                    return true;
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[CommunityMarketModule] No se pudo entregar el objeto a {farmer.Name}: {ex}", LogLevel.Error);
+            }
+
+            // No cobrar ni cerrar la oferta si una entrega inesperadamente incompleta alteró varias pilas.
+            for (int i = 0; i < previous.Length; i++)
+            {
+                if (previous[i] is Item original)
+                    original.Stack = stacks[i];
+                farmer.Items[i] = previous[i];
+            }
+            context?.Monitor.Log($"[CommunityMarketModule] Entrega incompleta a {farmer.Name}; inventario restaurado y oferta conservada.", LogLevel.Error);
+            return false;
         }
 
         private static void CheckPendingMarketGold(Farmer player)

@@ -1,5 +1,7 @@
 # Validación local de checkpoints · 2026-11-06
 
+> Actualización posterior: el usuario autorizó la promoción conservando los checkpoints automáticos desactivados. Se publicaron `main` (`280802e`) y `dev` (`c16679a`). Este documento conserva los resultados de la primera validación; la corrección posterior del mercado se documenta en [su informe](market-validation-2026-11-06.md).
+
 ## Entorno y aislamiento
 
 Stardew Valley 1.6.15 (build 24356), SMAPI 4.5.2, .NET SDK 8.0.427, Linux. Un host y hasta dos procesos de cliente en el mismo equipo, en un espacio de nombres de red privado con loopback. Cada proceso utiliza su propio perfil XDG y su propia copia de los mods. La partida es una copia de `Prueba29_453599927`; los Saves originales y los DLL de la instalación de Steam no se despliegan ni se reemplazan.
