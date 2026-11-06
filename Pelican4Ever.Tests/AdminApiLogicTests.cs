@@ -31,11 +31,30 @@ namespace Pelican4Ever.Tests
         public void GetDashboardHtml_ContainsExpectedElements()
         {
             string html = AdminApiLogic.GetDashboardHtml("test_token");
-            Assert.Contains("Pelican 4Ever Dashboard", html);
+            Assert.Contains("Pelican 4Ever — Panel de Control", html);
             Assert.Contains("/api/status", html);
             Assert.Contains("/api/rollover", html);
             Assert.Contains("/api/mines/reset", html);
             Assert.Contains("test_token", html);
+        }
+
+        [Fact]
+        public void GetDashboardHtml_EncodesTokenInTheHtmlAttribute()
+        {
+            string html = AdminApiLogic.GetDashboardHtml("\" onfocus=\"alert(1)\" <&");
+            Assert.Contains("&quot; onfocus=&quot;alert(1)&quot; &lt;&amp;", html);
+            Assert.DoesNotContain("value=\"\" onfocus=", html);
+        }
+
+        [Fact]
+        public void HostEventLog_ReportsCurrentCursorWhenClientCursorBelongsToAnOlderProcess()
+        {
+            var log = new HostEventLog();
+            log.Append(HostEventTypes.HostAnnouncement, 0, 1200, "After restart");
+            HostEventsResponseDto page = log.GetSince(100);
+            Assert.Empty(page.Events);
+            Assert.Equal(1, page.LastEventId);
+            Assert.Single(log.GetSince(0).Events);
         }
 
         // ─────────────────────────── TASK-803 Criterio 1: Seguridad y Token ───────────────────────────

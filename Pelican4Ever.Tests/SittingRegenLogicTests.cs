@@ -11,6 +11,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: false,
                 isInBed: false,
+                isWellFed: true,
                 currentStamina: 100f,
                 maxStamina: 270,
                 currentAccumulator: 14,
@@ -29,6 +30,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: true,
                 isInBed: true,
+                isWellFed: true,
                 currentStamina: 100f,
                 maxStamina: 270,
                 currentAccumulator: 14,
@@ -47,6 +49,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: true,
                 isInBed: false,
+                isWellFed: true,
                 currentStamina: 100f,
                 maxStamina: 270,
                 currentAccumulator: 14,
@@ -65,6 +68,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: true,
                 isInBed: false,
+                isWellFed: true,
                 currentStamina: 100f,
                 maxStamina: 270,
                 currentAccumulator: 5,
@@ -83,6 +87,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: true,
                 isInBed: false,
+                isWellFed: true,
                 currentStamina: 100f,
                 maxStamina: 270,
                 currentAccumulator: 14,
@@ -101,6 +106,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: true,
                 isInBed: false,
+                isWellFed: true,
                 currentStamina: 270f,
                 maxStamina: 270,
                 currentAccumulator: 14,
@@ -119,6 +125,7 @@ namespace Pelican4Ever.Tests
             bool regened = SittingRegenLogic.Tick(
                 isSitting: true,
                 isInBed: false,
+                isWellFed: true,
                 currentStamina: 269.5f,
                 maxStamina: 270,
                 currentAccumulator: 14,
@@ -128,6 +135,25 @@ namespace Pelican4Ever.Tests
 
             Assert.True(regened);
             Assert.Equal(0.5f, gain);
+            Assert.Equal(0, newAcc);
+        }
+
+        [Fact]
+        public void SittingWithoutWellFed_DoesNotRegen()
+        {
+            bool regened = SittingRegenLogic.Tick(
+                isSitting: true,
+                isInBed: false,
+                isWellFed: false,
+                currentStamina: 100f,
+                maxStamina: 270,
+                currentAccumulator: 4,
+                regenSeconds: 5,
+                out float gain,
+                out int newAcc);
+
+            Assert.False(regened);
+            Assert.Equal(0f, gain);
             Assert.Equal(0, newAcc);
         }
     }

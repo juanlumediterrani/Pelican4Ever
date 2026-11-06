@@ -73,28 +73,39 @@ namespace Pelican4Ever.Core.Config
         // ─────────────────────────── Energía y comida ───────────────────────────
 
         /// <summary>
-        /// Presupuesto diario de Saciedad, como fracción de la energía máxima del jugador.
-        /// Es la energía instantánea total que la comida puede devolver en un día real.
+        /// Capacidad máxima de Saciedad, como fracción de la energía máxima del jugador.
         /// </summary>
         public float DailySatietyFraction { get; set; } = 0.5f;
 
-        /// <summary>Máximo de platos cocinados por día que conceden el buff "Bien comido" (regeneración pasiva).</summary>
-        public int MaxDailyWellFedBuffs { get; set; } = 2;
+        /// <summary>Horas reales necesarias para que la Saciedad se vacíe completamente (100% a 0%). Por defecto 4.0h.</summary>
+        public float SatietyDrainHours { get; set; } = 4.0f;
 
-        /// <summary>Energía regenerada por minuto real mientras dura "Bien comido".</summary>
-        public int WellFedRegenPerMinute { get; set; } = 1;
+        /// <summary>Máximo de platos cocinados por día que conceden el buff "Bien comido" (activa el descanso sentado).</summary>
+        public int MaxDailyWellFedBuffs { get; set; } = 2;
 
         /// <summary>Duración de "Bien comido" en minutos reales.</summary>
         public int WellFedDurationMinutes { get; set; } = 60;
 
-        /// <summary>Segundos reales en el Spa para recuperar 1 punto de energía.</summary>
-        public int SpaRegenSeconds { get; set; } = 30;
+        /// <summary>
+        /// Segundos reales sentado en un banco, silla o taberna para recuperar 1 punto de energía mientras dura "Bien comido"
+        /// (sin "Bien comido", sentarse no recupera nada; 0 = desactivado).
+        /// </summary>
+        public int SittingRegenSeconds { get; set; } = 5;
 
-        /// <summary>Energía máxima recuperable en el Spa por día real.</summary>
-        public int SpaDailyCap { get; set; } = 60;
+        /// <summary>
+        /// Tecla para sentarse en el suelo o levantarse (nombre de <c>SButton</c> de SMAPI, p. ej. "OemPeriod" para la tecla punto).
+        /// Sentado en el suelo cuenta como sentado para el descanso de "Bien comido".
+        /// </summary>
+        public string GroundSitKey { get; set; } = "OemPeriod";
 
-        /// <summary>Segundos reales sentado en un banco, silla o taberna para recuperar 1 punto de energía (0 = desactivado).</summary>
-        public int SittingRegenSeconds { get; set; } = 15;
+        /// <summary>Segundos reales quieto dentro del agua del Spa o de la piscina para activar el buff del Spa (una vez al día).</summary>
+        public int SpaStillSeconds { get; set; } = 30;
+
+        /// <summary>Puntos de energía y también de salud que el buff del Spa recupera de forma pasiva durante su duración.</summary>
+        public int SpaBuffTotalPoints { get; set; } = 120;
+
+        /// <summary>Duración del buff del Spa en minutos reales.</summary>
+        public int SpaBuffDurationMinutes { get; set; } = 120;
 
         /// <summary>Horas reales de desconexión para recargar la barra de energía completa al 100% (por defecto 4.0h; 0 = desactivado).</summary>
         public float OfflineRegenFullBarHours { get; set; } = 4.0f;
@@ -192,6 +203,35 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool RestartExitsProcess { get; set; } = false;
 
+        // ─────────────────────── Checkpoints intradía (Épica 11) ───────────────────────
+
+        /// <summary>
+        /// Minutos reales entre checkpoints intradía (guardado nativo sin cambiar de día). 0 (por defecto) los desactiva;
+        /// <c>p4e_checkpoint_now</c> sigue funcionando. Ver la Épica 11 del backlog antes de activarlo.
+        /// </summary>
+        public int CheckpointIntervalMinutes { get; set; } = 0;
+
+        /// <summary>Permite el spike de diagnóstico, que puede eliminar elementos temporales. Solo en partidas de prueba.</summary>
+        public bool CheckpointDebugMode { get; set; } = false;
+
+        /// <summary>Si un checkpoint bloquea el juego más de estos milisegundos, el intervalo se duplica hasta el día siguiente. 0 = sin límite.</summary>
+        public int CheckpointMaxDurationMs { get; set; } = 3000;
+
+        /// <summary>Checkpoints que se conservan en <c>Pelican4Ever_Backups/checkpoints/</c>. 0 = no se borra ninguno.</summary>
+        public int CheckpointRetention { get; set; } = 12;
+
+        /// <summary>Comprime con gzip cada archivo de la copia de un checkpoint.</summary>
+        public bool CheckpointCompress { get; set; } = true;
+
+        /// <summary>
+        /// Copia el estado vivo de los farmhands conectados a la partida antes de guardar (gap G4). Sin esto, con
+        /// farmhands conectados no se hace checkpoint: se guardarían como estaban al conectarse.
+        /// </summary>
+        public bool CheckpointCloneFarmhands { get; set; } = true;
+
+        /// <summary>Días que se conservan las copias diarias del rollover. 0 (por defecto) = no se borra ninguna, como hasta ahora.</summary>
+        public int BackupRetentionDays { get; set; } = 0;
+
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
 
@@ -251,10 +291,18 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(EarlyMorningGraceMinutes)} debe estar entre 0 y 180 minutos.");
             if (DailySatietyFraction < 0)
                 errors.Add($"{nameof(DailySatietyFraction)} no puede ser negativo.");
+            if (SatietyDrainHours <= 0)
+                errors.Add($"{nameof(SatietyDrainHours)} debe ser > 0.");
             if (CropPriceMultiplier <= 0 || ArtisanPriceMultiplier <= 0)
                 errors.Add("Los multiplicadores de precio deben ser > 0.");
-            if (SpaRegenSeconds <= 0)
-                errors.Add($"{nameof(SpaRegenSeconds)} debe ser > 0.");
+            if (WellFedDurationMinutes <= 0)
+                errors.Add($"{nameof(WellFedDurationMinutes)} debe ser > 0.");
+            if (SpaStillSeconds <= 0)
+                errors.Add($"{nameof(SpaStillSeconds)} debe ser > 0.");
+            if (SpaBuffTotalPoints < 0)
+                errors.Add($"{nameof(SpaBuffTotalPoints)} no puede ser negativo.");
+            if (SpaBuffDurationMinutes <= 0)
+                errors.Add($"{nameof(SpaBuffDurationMinutes)} debe ser > 0.");
             if (SittingRegenSeconds < 0)
                 errors.Add($"{nameof(SittingRegenSeconds)} no puede ser negativo.");
             if (OfflineRegenFullBarHours < 0)
@@ -277,6 +325,16 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(TravelingCartClosingTime)} debe situarse entre 0600 y 2600.");
             if (!string.IsNullOrEmpty(AutoHostSaveName) && !AutoHostLogic.IsValidSaveName(AutoHostSaveName))
                 errors.Add($"{nameof(AutoHostSaveName)} debe ser el nombre exacto de una carpeta de Saves/, sin rutas. Valor: '{AutoHostSaveName}'.");
+            if (CheckpointIntervalMinutes is < 0 or > 1440)
+                errors.Add($"{nameof(CheckpointIntervalMinutes)} debe estar entre 0 (desactivado) y 1440. Valor: {CheckpointIntervalMinutes}.");
+            else if (CheckpointIntervalMinutes is > 0 and < 5)
+                errors.Add($"{nameof(CheckpointIntervalMinutes)} debe ser 0 o al menos 5: cada checkpoint congela el juego mientras guarda. Valor: {CheckpointIntervalMinutes}.");
+            if (CheckpointMaxDurationMs < 0)
+                errors.Add($"{nameof(CheckpointMaxDurationMs)} no puede ser negativo.");
+            if (CheckpointRetention < 0)
+                errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
+            if (BackupRetentionDays < 0)
+                errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
                 errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
 

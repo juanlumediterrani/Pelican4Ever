@@ -20,7 +20,7 @@ Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijuga
 
 3. **Sueño Asíncrono y Balance de Energía:**
    - **Descansar y Desconectar:** Cada jugador puede acostarse en su cama y salir al menú principal de forma individual sin pausar ni desconectar a los demás.
-   - **Presupuesto de Saciedad:** Tope diario de recuperación instantánea por comida, bufo de *Bien Comido* para platos elaborados y descanso termal limitado en el Spa.
+   - **Energía por sesiones:** Saciedad que se vacía en 4 h reales y limita la energía instantánea de la comida, buff *Bien Comido* de los platos cocinados que permite recuperar energía sentado, y buff diario del Spa (120 de energía y salud en 2 h).
    - **Minas Persistentes:** Turnos mineros regenerados cada 12 horas (06:00 y 18:00) para repartir recursos equitativamente.
 
 4. **Inmersión y Vida Comunitaria:**
@@ -60,7 +60,7 @@ Pelican4Ever.sln
 ├── Pelican4Ever.Core/      # Lógica de dominio pura (.NET 6, cero dependencias de SMAPI ni MonoGame)
 │   ├── Admin/              # API de anfitrión, cola en hilo principal, eventos y reinicio seguro
 │   ├── Config/             # ServerConfig con validación determinista estricta
-│   ├── Economy/            # Presupuesto de saciedad, spa, multiplicadores y mercado vecinal
+│   ├── Economy/            # Saciedad, descanso, spa, multiplicadores y mercado vecinal
 │   ├── Festivals/          # Tandas de inscripción, ceremonias, puntuaciones y premios
 │   ├── Players/            # PlayerRecord, derivación de SleepState y SleepPolicy
 │   ├── Time/               # GameClock, ServerCalendar, ServerTime y CatchUpPlan

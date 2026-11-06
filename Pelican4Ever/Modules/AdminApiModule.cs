@@ -684,9 +684,11 @@ namespace Pelican4Ever.Modules
                     LastActiveGameDay = p.LastActiveGameDay,
                     RestedOnGameDay = p.RestedOnGameDay,
                     LastOutcome = p.LastOutcome.ToString(),
-                    SatietyUsed = p.SatietyUsed,
+                    SatietyUsed = ProjectedSatietyPoints(p, farmer),
                     WellFedBuffsUsed = p.WellFedBuffsUsed,
-                    SpaEnergyUsed = p.SpaEnergyUsed,
+                    WellFedActive = p.IsWellFed(DateTimeOffset.UtcNow),
+                    SpaBuffsUsed = p.SpaBuffsUsed,
+                    SpaBuffActive = p.IsSpaBuffActive(DateTimeOffset.UtcNow),
                     SatietyGameDay = p.SatietyGameDay,
                     PendingMarketGold = p.PendingMarketGold,
                     IsClaimed = PlayerAuthLogic.IsClaimed(p),
@@ -695,6 +697,26 @@ namespace Pelican4Ever.Modules
             }
 
             return response;
+        }
+
+        /// <summary>
+        /// Saciedad actual del jugador tras el vaciado continuo, calculada sin modificar su registro: una consulta de lectura
+        /// no debe alterar el estado ni depender de quién la haga. Usa la energía máxima real del granjero, conectado o no.
+        /// </summary>
+        private static int ProjectedSatietyPoints(PlayerRecord p, Farmer? farmer)
+        {
+            farmer ??= Game1.getOnlineFarmers().FirstOrDefault(f => f.UniqueMultiplayerID == p.UniqueMultiplayerID);
+            if (farmer == null && Context.IsWorldReady)
+            {
+                if (Game1.MasterPlayer?.UniqueMultiplayerID == p.UniqueMultiplayerID)
+                    farmer = Game1.MasterPlayer;
+                else
+                    Game1.netWorldState?.Value?.farmhandData?.TryGetValue(p.UniqueMultiplayerID, out farmer);
+            }
+
+            int maxStamina = farmer?.MaxStamina ?? 270;
+            float satiety = p.ProjectedSatiety(DateTimeOffset.UtcNow, maxStamina, context!.Config.DailySatietyFraction, context.Config.SatietyDrainHours);
+            return (int)Math.Round(satiety);
         }
 
         private static ServerStatusDto BuildLegacyStatusDto()
@@ -733,7 +755,7 @@ namespace Pelican4Ever.Modules
                     IsOnline = isOnline,
                     SleepState = SleepPolicy.GetState(p, today, isOnline).ToString(),
                     FarmSlotId = p.FarmSlotId ?? "—",
-                    SatietyUsed = p.SatietyUsed,
+                    SatietyUsed = ProjectedSatietyPoints(p, null),
                     PendingMarketGold = p.PendingMarketGold
                 });
             }
@@ -767,12 +789,6 @@ namespace Pelican4Ever.Modules
         // ── /api/v1/host/map ─────────────────────────────────────────────────────────
         // Debe ejecutarse en el hilo del juego (accede a Game1 y xTile).
 
-        private static readonly string[] MapLocationPriority = new[]
-        {
-            "Town", "Farm", "BusStop", "Forest", "Beach", "Mountain",
-            "Mine", "Desert", "Railroad", "Woods", "Sewer", "WitchSwamp"
-        };
-
         private static HostMapDto BuildHostMapDto(string requestedLocation)
         {
             if (!Context.IsWorldReady)
@@ -785,18 +801,19 @@ namespace Pelican4Ever.Modules
                 };
             }
 
-            // Localizaciones disponibles
-            var availableMaps = new List<string>();
-            foreach (var loc in Game1.locations)
+            // Incluir interiores y usar nombres únicos: varias cabañas comparten Name.
+            var locations = new Dictionary<string, GameLocation>(StringComparer.OrdinalIgnoreCase);
+            Utility.ForEachLocation(location =>
             {
-                if (loc?.Name != null)
-                    availableMaps.Add(loc.Name);
-            }
-            availableMaps.Sort();
+                if (!string.IsNullOrWhiteSpace(location.NameOrUniqueName))
+                    locations[location.NameOrUniqueName] = location;
+                return true;
+            }, includeInteriors: true, includeGenerated: false);
+            var availableMaps = locations.Keys.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
 
-            // Resolver la localización pedida
-            GameLocation? target = Game1.getLocationFromName(requestedLocation)
-                ?? Game1.getLocationFromName("Town");
+            // Resolver solo ubicaciones existentes: una consulta GET no debe generar pisos de mina.
+            if (!locations.TryGetValue(requestedLocation, out GameLocation? target))
+                locations.TryGetValue("Town", out target);
 
             if (target == null)
             {
@@ -809,8 +826,9 @@ namespace Pelican4Ever.Modules
             }
 
             var map  = target.Map;
-            int w    = map?.Layers[0]?.LayerWidth  ?? 0;
-            int h    = map?.Layers[0]?.LayerHeight ?? 0;
+            var baseLayer = map?.Layers.FirstOrDefault();
+            int w = baseLayer?.LayerWidth ?? 0;
+            int h = baseLayer?.LayerHeight ?? 0;
             var tiles = new byte[w * h];
 
             if (map != null && w > 0 && h > 0)
@@ -818,7 +836,6 @@ namespace Pelican4Ever.Modules
                 // Capa de colisiones (Back = suelo, Buildings = objetos/muros, Front = decoración)
                 var backLayer     = map.GetLayer("Back");
                 var buildingLayer = map.GetLayer("Buildings");
-                var frontLayer    = map.GetLayer("Front");
 
                 for (int y = 0; y < h; y++)
                 {
@@ -831,8 +848,8 @@ namespace Pelican4Ever.Modules
                         bool isPassable = loc2.isTilePassable(new Vector2(x, y))
                             && !loc2.isObjectAtTile(x, y);
 
-                        var backTile  = backLayer?.Tiles[x, y];
-                        var bldTile   = buildingLayer?.Tiles[x, y];
+                        var backTile = backLayer != null && x < backLayer.LayerWidth && y < backLayer.LayerHeight ? backLayer.Tiles[x, y] : null;
+                        var bldTile = buildingLayer != null && x < buildingLayer.LayerWidth && y < buildingLayer.LayerHeight ? buildingLayer.Tiles[x, y] : null;
 
                         // Water
                         if (loc2.isWaterTile(x, y))
@@ -842,7 +859,7 @@ namespace Pelican4Ever.Modules
                         }
 
                         // Building layer: muros, edificios
-                        if (bldTile != null)
+                        if (bldTile != null || target.getBuildingAt(new Vector2(x, y)) != null)
                         {
                             tiles[idx] = (byte)MapTileKind.Building;
                             continue;
@@ -897,6 +914,8 @@ namespace Pelican4Ever.Modules
                 // Marcar objetos del mundo: árboles
                 foreach (var tree in target.terrainFeatures.Values)
                 {
+                    if (tree is not StardewValley.TerrainFeatures.Tree && tree is not StardewValley.TerrainFeatures.FruitTree)
+                        continue;
                     var pos = tree.Tile;
                     int tx = (int)pos.X, ty = (int)pos.Y;
                     if (tx >= 0 && tx < w && ty >= 0 && ty < h)

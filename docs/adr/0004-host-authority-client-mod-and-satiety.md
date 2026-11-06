@@ -1,6 +1,6 @@
 # ADR-0004: Autoridad en el Host, Mod Obligatorio en Clientes y Presupuesto de Saciedad
 
-* **Estado:** Aceptado
+* **Estado:** Aceptado. El punto 3 (presupuesto diario de Saciedad) está sustituido por [ADR-0006](0006-session-energy-satiety-wellfed-spa.md).
 * **Fecha:** 2026-10-29
 
 ## Contexto

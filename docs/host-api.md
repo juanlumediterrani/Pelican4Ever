@@ -80,7 +80,9 @@ Devuelve los jugadores conectados y registrados, su ubicación y coordenadas act
       "LastOutcome": "Rested",
       "SatietyUsed": 40,
       "WellFedBuffsUsed": 1,
-      "SpaEnergyUsed": 0,
+      "WellFedActive": true,
+      "SpaBuffsUsed": 0,
+      "SpaBuffActive": false,
       "SatietyGameDay": 12,
       "PendingMarketGold": 0,
       "IsClaimed": true,
@@ -114,6 +116,14 @@ Devuelve el estado del festival de hoy, su ventana horaria, ubicación, si dispo
   "RunsCount": 0
 }
 ```
+
+### `GET /api/v1/host/map?location=Town`
+
+Devuelve un `HostMapDto` con `LocationName`, `Width`, `Height`, `Tiles`, `Players`, `Warps`, `AvailableMaps`, `Season` y `GameDay`. Solo consulta ubicaciones existentes, incluidos los interiores de edificios con sus nombres únicos. Si no se encuentra la ubicación solicitada, muestra Town. Sin mundo cargado devuelve dimensiones 0.
+
+`Tiles` es un `byte[]` serializado por System.Text.Json como **base64** (no como un array JSON). Hay que decodificarlo antes de leer el índice `y * Width + x`. Por ejemplo, las celdas `[1, 3, 8, 11]` se reciben como `"AQMICw=="`. Los valores son: 0 desconocido, 1 suelo, 2 bloqueado, 3 agua, 4 edificio, 5 camino, 6 hierba, 7 árbol, 8 salida, 9 mina, 10 NPC y 11 jugador. Es una clasificación de supervisión, no una malla de navegación.
+
+`Players` contiene marcadores con `PlayerId`, `Name`, `TileX`, `TileY`, `IsHost`; `Warps` contiene `TileX`, `TileY`, `TargetMap`, `TargetX`, `TargetY`. Cada consulta del mundo se ejecuta en el hilo principal y exige el mismo token que las demás rutas.
 
 ### `POST /api/v1/host/festival/start`
 
@@ -224,8 +234,8 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
 
 ### `GET /api/v1/host/events?since=N`
 
-Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados.
-Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado y completado (`rollover.started`, `rollover.completed`), copia de seguridad creada (`backup.created`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
+Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados. Si `LastEventId` es menor que el cursor solicitado, el registro se ha reiniciado y el cliente debe volver a consultar desde 0.
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
 
 **Respuesta `200 OK` (`HostEventsResponseDto`):**
 ```json

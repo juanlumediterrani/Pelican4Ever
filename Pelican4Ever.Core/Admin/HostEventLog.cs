@@ -18,7 +18,11 @@ namespace Pelican4Ever.Core.Admin
         public const string FestivalCeremonyStarted = "festival.ceremony.started";
         public const string RolloverStarted = "rollover.started";
         public const string RolloverCompleted = "rollover.completed";
+        public const string RolloverStalled = "rollover.stalled";
         public const string BackupCreated = "backup.created";
+        public const string CheckpointCreated = "checkpoint.created";
+        public const string CheckpointSkipped = "checkpoint.skipped";
+        public const string CheckpointFailed = "checkpoint.failed";
         public const string HostRested = "host.rested";
         public const string HostAnnouncement = "host.announcement";
         public const string RestartScheduled = "host.restart.scheduled";
@@ -143,7 +147,7 @@ namespace Pelican4Ever.Core.Admin
                 return new HostEventsResponseDto
                 {
                     SinceId = sinceId,
-                    LastEventId = result.Count > 0 ? result[^1].Id : Math.Max(sinceId, lastId),
+                    LastEventId = result.Count > 0 ? result[^1].Id : lastId,
                     Events = result
                 };
             }

@@ -16,8 +16,8 @@ using StardewValley.Locations;
 namespace Pelican4Ever.Modules
 {
     /// <summary>
-    /// Gestiona la reforma de comida (presupuesto diario de Saciedad y buff "Bien comido"),
-    /// tope de recuperación en el Spa, persistencia de minas por turnos de 12 horas
+    /// Gestiona la reforma de comida (Saciedad con vaciado continuo y buff "Bien comido", que activa el descanso sentado),
+    /// el buff diario del Spa, persistencia de minas por turnos de 12 horas
     /// y multiplicadores de precios agrícolas y artesanales (TASK-301..304 / ADR-0004).
     /// </summary>
     public sealed class EconomyModule : IModule
@@ -26,14 +26,24 @@ namespace Pelican4Ever.Modules
         private static float preEatStamina = 0f;
         private static bool isCleaningMines = false;
 
-        // Seguimiento local de regeneración pasiva de "Bien comido"
-        private static int wellFedRemainingSeconds = 0;
-        private static int spaSecondAccumulator = 0;
+        // Seguimiento local del Spa (segundos quieto en el agua y fracción de punto pendiente del buff) y del descanso sentado
+        private static int spaStillSeconds = 0;
+        private static double spaRegenCarry = 0;
         private static int sittingSecondAccumulator = 0;
+        private static bool wasSitting = false;
 
         // Seguimiento en el Host de cooldown de desocupación de pisos de minas (GAP-14)
         public static readonly System.Collections.Generic.Dictionary<int, DateTime> MineFloorLastOccupiedUtc = new();
         public static readonly System.Collections.Generic.Dictionary<int, DateTime> VolcanoLevelLastOccupiedUtc = new();
+
+        /// <summary>Mensaje cliente → host con el estado de consumo (Saciedad y contadores diarios) del jugador local.</summary>
+        public const string MsgSatietyReport = "SatietyReport";
+
+        /// <summary>
+        /// En un farmhand, true en cuanto el jugador ha comido o descansado en el Spa en esta sesión: a partir de ahí su copia
+        /// local es la más reciente y la sincronización de residencias del host no debe pisarla (ver <see cref="FarmSlotModule"/>).
+        /// </summary>
+        public static bool HasLocalConsumptionChanges { get; private set; }
 
         public string Name => "Economy";
 
@@ -44,70 +54,89 @@ namespace Pelican4Ever.Modules
             context = ctx;
 
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
+            {
+                HasLocalConsumptionChanges = false;
+                spaStillSeconds = 0;
+                spaRegenCarry = 0;
+                sittingSecondAccumulator = 0;
+                wasSitting = false;
+            };
+            ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
 
             ApplyHarmonyPatches(ctx.Harmony);
         }
 
         private void OnOneSecondUpdateTicked(object? sender, OneSecondUpdateTickedEventArgs e)
         {
-            if (!Context.IsWorldReady || context == null)
+            if (!Context.IsWorldReady || context == null || Game1.player == null)
                 return;
 
-            // 1. Tick de "Bien comido" en el cliente local (+1 Stamina cada 60s si está activo)
-            if (wellFedRemainingSeconds > 0)
-            {
-                wellFedRemainingSeconds--;
-                if (wellFedRemainingSeconds % 60 == 0)
-                {
-                    if (Game1.player.Stamina < Game1.player.MaxStamina)
-                    {
-                        Game1.player.Stamina = Math.Min(Game1.player.MaxStamina, Game1.player.Stamina + context.Config.WellFedRegenPerMinute);
-                    }
-                }
-            }
+            ModContext modCtx = context;
 
-            // 2. Control de Spa en el cliente local si está quieto en la piscina
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+
+            // 0. Actualizar vaciado continuo de Saciedad del jugador local
+            var playerRecord = modCtx.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+            playerRecord.EnsureDailyCounters(Game1.Date.TotalDays);
+            playerRecord.UpdateSatietyDecay(nowUtc, Game1.player.MaxStamina, modCtx.Config.DailySatietyFraction, modCtx.Config.SatietyDrainHours);
+
+            // 1. Spa: quedarse quieto en el agua (Spa o piscina) activa una vez al día el buff de recuperación pasiva
             if (Game1.player.swimming.Value && Game1.player.timerSinceLastMovement > 700)
             {
-                spaSecondAccumulator++;
-                if (spaSecondAccumulator >= context.Config.SpaRegenSeconds)
+                spaStillSeconds++;
+                if (spaStillSeconds == modCtx.Config.SpaStillSeconds)
                 {
-                    spaSecondAccumulator = 0;
-                    var record = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
-                    record.EnsureDailyCounters(Game1.Date.TotalDays);
-
-                    int allowed = SatietyBudget.AllowedSpaGain(1, record.SpaEnergyUsed, context.Config.SpaDailyCap);
-                    if (allowed > 0)
+                    if (playerRecord.TryActivateSpaBuff(nowUtc, TimeSpan.FromMinutes(modCtx.Config.SpaBuffDurationMinutes)))
                     {
-                        record.SpaEnergyUsed += allowed;
-                        if (Game1.player.Stamina < Game1.player.MaxStamina)
-                        {
-                            Game1.player.Stamina = Math.Min(Game1.player.MaxStamina, Game1.player.Stamina + allowed);
-                        }
+                        spaRegenCarry = 0;
+                        ReportConsumptionToHost(playerRecord, nowUtc);
+                        Game1.addHUDMessage(new HUDMessage(
+                            $"Relajado: recuperas {modCtx.Config.SpaBuffTotalPoints} de energía y salud durante {FormatMinutes(modCtx.Config.SpaBuffDurationMinutes)}.",
+                            HUDMessage.newQuest_type));
                     }
-                    else
+                    else if (!playerRecord.IsSpaBuffActive(nowUtc))
                     {
-                        // Límite diario alcanzado
-                        if (spaSecondAccumulator == 0)
-                        {
-                            Game1.showRedMessage("Has alcanzado el límite diario de reposo en las termas.");
-                        }
+                        Game1.showRedMessage("Ya has disfrutado del Spa hoy.");
                     }
                 }
             }
             else
             {
-                spaSecondAccumulator = 0;
+                spaStillSeconds = 0;
             }
 
-            // 3. Control de descanso sentado (GAP-07)
+            // 2. Buff del Spa: reparte la recuperación de energía y salud a lo largo de su duración
+            if (playerRecord.IsSpaBuffActive(nowUtc))
+            {
+                int points = PassiveRegenLogic.TickOneSecond(ref spaRegenCarry, modCtx.Config.SpaBuffTotalPoints, modCtx.Config.SpaBuffDurationMinutes);
+                if (points > 0)
+                {
+                    if (Game1.player.Stamina < Game1.player.MaxStamina)
+                        Game1.player.Stamina = Math.Min(Game1.player.MaxStamina, Game1.player.Stamina + points);
+                    if (Game1.player.health < Game1.player.maxHealth)
+                        Game1.player.health = Math.Min(Game1.player.maxHealth, Game1.player.health + points);
+                }
+            }
+            else
+            {
+                spaRegenCarry = 0;
+            }
+
+            // 3. Descanso sentado (GAP-07), en banco, silla o en el suelo: solo recupera energía mientras dura "Bien comido"
+            bool isSitting = (Game1.player.IsSitting() || GroundSitModule.IsLocalSittingOnGround) && !Game1.player.isInBed.Value;
+            if (isSitting && !wasSitting)
+                ShowSittingRestHint(playerRecord, nowUtc);
+            wasSitting = isSitting;
+
             if (SittingRegenLogic.Tick(
-                Game1.player.IsSitting(),
+                isSitting,
                 Game1.player.isInBed.Value,
+                playerRecord.IsWellFed(nowUtc),
                 Game1.player.Stamina,
                 Game1.player.MaxStamina,
                 sittingSecondAccumulator,
-                context.Config.SittingRegenSeconds,
+                modCtx.Config.SittingRegenSeconds,
                 out float staminaGain,
                 out int newAccumulator))
             {
@@ -336,42 +365,124 @@ namespace Pelican4Ever.Modules
             if (__instance.itemToEat is StardewValley.Object obj && obj.QualifiedItemId == "(O)434")
                 return;
 
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            var record = context.WorldState.GetOrCreatePlayer(__instance.UniqueMultiplayerID, __instance.Name);
+            record.EnsureDailyCounters(Game1.Date.TotalDays);
+            bool changed = false;
+
             float rawGain = __instance.Stamina - preEatStamina;
             if (rawGain > 0)
             {
-                var record = context.WorldState.GetOrCreatePlayer(__instance.UniqueMultiplayerID, __instance.Name);
-                record.EnsureDailyCounters(Game1.Date.TotalDays);
+                record.UpdateSatietyDecay(nowUtc, __instance.MaxStamina, context.Config.DailySatietyFraction, context.Config.SatietyDrainHours);
 
                 int budget = SatietyBudget.DailyBudget(__instance.MaxStamina, context.Config.DailySatietyFraction);
-                int allowedGain = SatietyBudget.AllowedGain((int)Math.Round(rawGain), record.SatietyUsed, budget);
+                int allowedGain = SatietyBudget.AllowedGain((int)Math.Round(rawGain), record.Satiety, budget);
 
-                record.SatietyUsed += allowedGain;
+                record.Satiety = Math.Min(budget, record.Satiety + allowedGain);
+                record.LastSatietyUpdateUtc = nowUtc;
                 __instance.Stamina = preEatStamina + allowedGain;
+                changed = true;
 
-                int remaining = Math.Max(0, budget - record.SatietyUsed);
-                if (remaining > 0)
+                int remaining = Math.Max(0, budget - (int)Math.Floor(record.Satiety));
+                if (allowedGain > 0)
                 {
-                    Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía ({remaining} restante hoy).", HUDMessage.newQuest_type));
+                    if (remaining > 0)
+                    {
+                        Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía ({remaining} de capacidad restante).", HUDMessage.newQuest_type));
+                    }
+                    else
+                    {
+                        Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía (Saciedad al máximo).", HUDMessage.newQuest_type));
+                    }
                 }
                 else
                 {
-                    Game1.showRedMessage("Presupuesto diario de saciedad agotado (solo recuperas salud y buffs).");
+                    Game1.showRedMessage("Saciedad al máximo: no puedes consumir más energía por comida (solo recuperas salud y buffs).");
                 }
             }
 
-            // Comprobar si otorga el buff pasivo "Bien comido"
+            // Un plato cocinado activa "Bien comido": mientras dure, sentarse recupera energía
             if (__instance.itemToEat is StardewValley.Object food && food.Category == StardewValley.Object.CookingCategory)
             {
-                var record = context.WorldState.GetOrCreatePlayer(__instance.UniqueMultiplayerID, __instance.Name);
-                record.EnsureDailyCounters(Game1.Date.TotalDays);
-
-                if (record.WellFedBuffsUsed < context.Config.MaxDailyWellFedBuffs)
+                if (record.TryActivateWellFed(nowUtc, TimeSpan.FromMinutes(context.Config.WellFedDurationMinutes), context.Config.MaxDailyWellFedBuffs))
                 {
-                    record.WellFedBuffsUsed++;
-                    wellFedRemainingSeconds = context.Config.WellFedDurationMinutes * 60;
-                    Game1.addHUDMessage(new HUDMessage("Bien comido: Regeneración pasiva de energía activada (60 min).", HUDMessage.newQuest_type));
+                    changed = true;
+                    Game1.addHUDMessage(new HUDMessage(
+                        $"Bien comido: durante {FormatMinutes(context.Config.WellFedDurationMinutes)}, sentarte (banco, silla o suelo) recupera energía.",
+                        HUDMessage.newQuest_type));
+                }
+                else if (!record.IsWellFed(nowUtc))
+                {
+                    Game1.showRedMessage($"Hoy ya has aprovechado {context.Config.MaxDailyWellFedBuffs} platos \"Bien comido\".");
                 }
             }
+
+            if (changed)
+                ReportConsumptionToHost(record, nowUtc);
+        }
+
+        /// <summary>
+        /// Al sentarse, avisa de si el descanso recupera energía: solo lo hace con "Bien comido", y sin aviso parecería un fallo.
+        /// </summary>
+        private static void ShowSittingRestHint(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (context == null)
+                return;
+
+            if (record.IsWellFed(nowUtc))
+            {
+                int minutesLeft = Math.Max(1, (int)Math.Ceiling((record.WellFedUntilUtc - nowUtc).TotalMinutes));
+                Game1.addHUDMessage(new HUDMessage(
+                    $"Descansando: +1 de energía cada {context.Config.SittingRegenSeconds} s (Bien comido, {FormatMinutes(minutesLeft)}).",
+                    HUDMessage.stamina_type));
+            }
+            else if (Game1.player.Stamina < Game1.player.MaxStamina)
+            {
+                Game1.addHUDMessage(new HUDMessage(
+                    "Sentarte solo recupera energía con \"Bien comido\": come un plato cocinado.",
+                    HUDMessage.error_type));
+            }
+        }
+
+        private static string FormatMinutes(int minutes)
+            => minutes % 60 == 0 ? (minutes == 60 ? "1 h" : $"{minutes / 60} h") : $"{minutes} min";
+
+        /// <summary>
+        /// En un farmhand, envía al host el estado de consumo del jugador local para que lo guarde en la partida maestra
+        /// (fuente de verdad, ADR-0004) y lo conserve al desconectar y reconectar. En el host no hace falta: el registro ya es el suyo.
+        /// </summary>
+        private static void ReportConsumptionToHost(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (context == null || Context.IsMainPlayer || Game1.MasterPlayer == null)
+                return;
+
+            HasLocalConsumptionChanges = true;
+            context.Helper.Multiplayer.SendMessage(
+                record.ToConsumptionReport(nowUtc),
+                MsgSatietyReport,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
+        private static void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
+        {
+            if (context == null || e.FromModID != context.Manifest.UniqueID || e.Type != MsgSatietyReport || !Context.IsMainPlayer)
+                return;
+
+            ConsumptionReport report = e.ReadAs<ConsumptionReport>();
+            Farmer? farmer = Game1.GetPlayer(e.FromPlayerID);
+            if (report == null || farmer == null)
+                return;
+
+            var record = context.WorldState.GetOrCreatePlayer(e.FromPlayerID, farmer.Name);
+            int maxSatiety = SatietyBudget.DailyBudget(farmer.MaxStamina, context.Config.DailySatietyFraction);
+            record.ApplyConsumptionReport(
+                report,
+                Game1.Date.TotalDays,
+                DateTimeOffset.UtcNow,
+                maxSatiety,
+                maxWellFed: TimeSpan.FromMinutes(context.Config.WellFedDurationMinutes),
+                maxSpaBuff: TimeSpan.FromMinutes(context.Config.SpaBuffDurationMinutes));
         }
 
         public static void Prefix_FarmerUpdate(Farmer __instance)
@@ -387,7 +498,7 @@ namespace Pelican4Ever.Modules
             // Para evitar que la piscina recupere energía ilimitada al doble, fijamos swimTimer = 100 si no queremos que sume nativamente.
             if (__instance == Game1.player && __instance.swimming.Value && __instance.timerSinceLastMovement > 700)
             {
-                // Nuestro OnOneSecondUpdateTicked se encarga de la recuperación regulada con tope diario.
+                // La recuperación en el agua la da el buff del Spa (una vez al día) desde OnOneSecondUpdateTicked.
                 __instance.swimTimer = Math.Max(__instance.swimTimer, 50);
             }
         }

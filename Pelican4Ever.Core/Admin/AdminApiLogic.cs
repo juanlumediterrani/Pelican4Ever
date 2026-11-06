@@ -507,7 +507,7 @@ namespace Pelican4Ever.Core.Admin
     <div class=""header-controls"">
       <div class=""ping-dot"" id=""pingDot"" title=""Estado de conexión""></div>
       <small id=""lastUpdate"" style=""color:var(--text-muted); font-size:.78rem"">—</small>
-      <input type=""password"" id=""tokenInput"" placeholder=""Bearer Token"" value=""" + defaultToken + @""" autocomplete=""off"">
+      <input type=""password"" id=""tokenInput"" placeholder=""Bearer Token"" value=""" + System.Net.WebUtility.HtmlEncode(defaultToken) + @""" autocomplete=""off"">
       <button class=""btn btn-ghost btn-sm"" onclick=""refreshAll()"">↻ Actualizar</button>
     </div>
   </header>
@@ -603,7 +603,7 @@ namespace Pelican4Ever.Core.Admin
           <button class=""btn btn-ghost btn-sm"" onclick=""fetchEvents()"">↻</button>
         </div>
         <div class=""event-log-body"" id=""eventLog"">
-          <div class=""event-item""><span class=""ev-time"">—</span><span class=""ev-msg"" style=""color:var(--text-muted)"">Sin eventos cargados</span></div>
+          <div id=""eventLogEmpty"" class=""event-item""><span class=""ev-time"">—</span><span class=""ev-msg"" style=""color:var(--text-muted)"">Sin eventos cargados</span></div>
         </div>
       </div>
     </section>
@@ -626,7 +626,7 @@ namespace Pelican4Ever.Core.Admin
               <th>Residencia</th>
               <th>Descanso</th>
               <th>Saciedad</th>
-              <th>Energía Spa</th>
+              <th>Bonos spa</th>
               <th>Oro Mercado</th>
               <th>Festival</th>
               <th>Reclamado</th>
@@ -810,6 +810,8 @@ namespace Pelican4Ever.Core.Admin
 
       <!-- Rollover / reinicio -->
       <div class=""actions-bar"">
+        <button class=""btn btn-danger"" onclick=""callAction('/api/rollover')"">Forzar cierre del día</button>
+        <button class=""btn btn-ghost"" onclick=""callAction('/api/mines/reset')"">Regenerar minas desocupadas</button>
         <button class=""btn btn-warning"" onclick=""callAction('/api/v1/host/rest')"">😴 Registrar Descanso Anfitrión</button>
         <button class=""btn btn-danger"" onclick=""scheduleRestart()"">🔁 Programar Reinicio</button>
         <button class=""btn btn-ghost"" onclick=""callAction('/api/v1/host/restart', 'POST', {cancel:true})"">✖ Cancelar Reinicio</button>
@@ -844,7 +846,7 @@ namespace Pelican4Ever.Core.Admin
       document.querySelectorAll('.tab-nav button').forEach(b => b.classList.remove('active'));
       document.getElementById(id).classList.add('active');
       btn.classList.add('active');
-      if (id === 'tab-map') loadMap();
+      if (id === 'tab-map') { mapResize(); loadMap(); }
     }
 
     /* ── Helpers ─────────────────────────────────────────── */
@@ -855,7 +857,14 @@ namespace Pelican4Ever.Core.Admin
     }
     function badge(text, cls) { return `<span class=""badge badge-${cls}"">${text}</span>`; }
     function esc(s) {
-      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/""/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    async function readJsonResponse(res) {
+      const json = await res.json();
+      if (!res.ok || json.Ok === false || json.success === false)
+        throw new Error(json.Message || json.message || json.error || 'HTTP ' + res.status);
+      return json;
     }
 
     /* ── Ping dot ────────────────────────────────────────── */
@@ -906,14 +915,14 @@ namespace Pelican4Ever.Core.Admin
       dragOriginX:0,
       dragOriginY:0,
       animFrame:  null,
+      requestId:  0,
     };
     const MIN_ZOOM = 0.25, MAX_ZOOM = 16;
 
     function mapInit() {
       const vp  = document.getElementById('mapViewport');
       const cvs = document.getElementById('mapCanvas');
-      cvs.width  = vp.clientWidth;
-      cvs.height = vp.clientHeight;
+      mapResize();
 
       vp.addEventListener('wheel',     mapOnWheel,     { passive: false });
       vp.addEventListener('mousedown', mapOnMouseDown);
@@ -926,16 +935,24 @@ namespace Pelican4Ever.Core.Admin
       vp.addEventListener('touchmove',  mapOnTouchMove,  { passive: false });
       vp.addEventListener('touchend',   mapOnTouchEnd);
 
-      window.addEventListener('resize', () => {
-        cvs.width  = vp.clientWidth;
-        cvs.height = vp.clientHeight;
-        mapRender();
-      });
+      window.addEventListener('resize', mapResize);
+    }
+
+    function mapResize() {
+      const vp = document.getElementById('mapViewport');
+      const cvs = document.getElementById('mapCanvas');
+      if (!vp.clientWidth || !vp.clientHeight) return;
+      MAP.panX += (vp.clientWidth - cvs.width) / 2;
+      MAP.panY += (vp.clientHeight - cvs.height) / 2;
+      cvs.width = vp.clientWidth;
+      cvs.height = vp.clientHeight;
+      mapRender();
     }
 
     async function loadMap() {
       const sel = document.getElementById('mapLocationSelect');
       const loc = sel?.value || 'Town';
+      const requestId = ++MAP.requestId;
       const overlay = document.getElementById('mapLoadOverlay');
       overlay.style.display = 'flex';
       overlay.innerHTML = '<span style=""font-size:2rem"">⏳</span><span style=""color:var(--text-muted);font-size:.9rem"">Cargando mapa…</span>';
@@ -943,29 +960,37 @@ namespace Pelican4Ever.Core.Admin
       try {
         const res = await fetch(`/api/v1/host/map?location=${encodeURIComponent(loc)}`, { headers: getHeaders() });
         if (!res.ok) throw new Error('HTTP ' + res.status);
-        const dto = await res.json();
+        const dto = await readJsonResponse(res);
+        if (requestId !== MAP.requestId) return;
 
         if (!dto.Width || !dto.Height) {
           overlay.innerHTML = '<span style=""font-size:2rem"">⚠️</span><span style=""color:var(--text-muted);font-size:.9rem"">Mapa no disponible (servidor no activo o sin mundo cargado)</span>';
           return;
         }
 
+        dto.Tiles = typeof dto.Tiles === 'string'
+          ? Uint8Array.from(atob(dto.Tiles), c => c.charCodeAt(0))
+          : Uint8Array.from(dto.Tiles || []);
+        if (dto.Tiles.length !== dto.Width * dto.Height)
+          throw new Error('La respuesta del mapa está incompleta');
+        const locationChanged = !MAP.data || MAP.data.LocationName !== dto.LocationName;
         MAP.data = dto;
+        mapResize();
 
         // Actualizar selector de localizaciones
         if (dto.AvailableMaps?.length) {
-          sel.innerHTML = dto.AvailableMaps
-            .map(m => `<option value=""${esc(m)}"" ${m===dto.LocationName?'selected':''}>${esc(m)}</option>`)
-            .join('');
+          sel.replaceChildren(...dto.AvailableMaps.map(m => new Option(m, m, false, m === dto.LocationName)));
         }
 
         // Dibujar tiles en offscreen
         mapBuildOffscreen(dto);
-        mapResetView();
+        if (locationChanged) mapResetView();
+        else mapRender();
         overlay.style.display = 'none';
         mapUpdatePlayerList(dto);
         setPing(true); setLastUpdate();
       } catch(e) {
+        if (requestId !== MAP.requestId) return;
         overlay.innerHTML = `<span style=""font-size:2rem"">❌</span><span style=""color:var(--danger);font-size:.9rem"">Error: ${esc(e.message)}</span>`;
         setPing(false);
       }
@@ -985,7 +1010,7 @@ namespace Pelican4Ever.Core.Admin
       }
 
       const ctx = cvs.getContext('2d');
-      const tiles = dto.Tiles;  // puede ser array o Uint8Array
+      const tiles = dto.Tiles;  // base64 decodificado al recibir la respuesta
 
       for (let y = 0; y < dto.Height; y++) {
         for (let x = 0; x < dto.Width; x++) {
@@ -1228,7 +1253,7 @@ namespace Pelican4Ever.Core.Admin
       try {
         const res = await fetch('/api/status', { headers: getHeaders() });
         if (!res.ok) throw new Error(res.status);
-        const d = await res.json();
+        const d = await readJsonResponse(res);
         setPing(true); setLastUpdate();
 
         document.getElementById('kpi-online').textContent   = d.OnlinePlayersCount ?? '—';
@@ -1257,7 +1282,7 @@ namespace Pelican4Ever.Core.Admin
       try {
         const res = await fetch('/api/v1/host/clock', { headers: getHeaders() });
         if (!res.ok) return;
-        const c = await res.json();
+        const c = await readJsonResponse(res);
         setPing(true); setLastUpdate();
 
         const seasonLabel = {spring:'Primavera',summer:'Verano',fall:'Otoño',winter:'Invierno'};
@@ -1290,7 +1315,7 @@ namespace Pelican4Ever.Core.Admin
       try {
         const res = await fetch('/api/v1/host/players', { headers: getHeaders() });
         if (!res.ok) throw new Error(res.status);
-        const d = await res.json();
+        const d = await readJsonResponse(res);
         setPing(true);
 
         const pTbody = document.getElementById('playersTable');
@@ -1305,7 +1330,7 @@ namespace Pelican4Ever.Core.Admin
           <td>${esc(p.ResidenceSlotId||'—')}<br><small style=""color:var(--text-muted)"">${esc(p.ResidenceFarmType||'')}</small></td>
           <td>${esc(p.SleepState||'—')}</td>
           <td>${p.SatietyUsed ?? '—'}</td>
-          <td>${p.SpaEnergyUsed ?? '—'}</td>
+          <td>${p.SpaBuffsUsed ?? '—'}</td>
           <td>${p.PendingMarketGold ?? 0}g</td>
           <td>${p.InFestival ? badge('Sí','festival') : '—'}</td>
           <td>${p.IsClaimed ? badge('✔','online') : badge('No','offline')}</td>
@@ -1318,7 +1343,7 @@ namespace Pelican4Ever.Core.Admin
       try {
         const res = await fetch('/api/v1/host/festival', { headers: getHeaders() });
         if (!res.ok) return;
-        const f = await res.json();
+        const f = await readJsonResponse(res);
 
         const banner = document.getElementById('festival-banner');
         const noFest = document.getElementById('fest-no-festival');
@@ -1354,25 +1379,37 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /* ── /api/v1/host/events ─────────────────────────────── */
+    let eventsLoading = false;
     async function fetchEvents() {
+      if (eventsLoading) return;
+      eventsLoading = true;
       try {
         const res = await fetch(`/api/v1/host/events?since=${lastEventCursor}`, { headers: getHeaders() });
         if (!res.ok) return;
-        const evts = await res.json();
-        if (!evts || !evts.length) return;
+        const page = await readJsonResponse(res);
+        const evts = page.Events || [];
+        if (page.LastEventId < lastEventCursor) {
+          lastEventCursor = 0;
+          document.getElementById('eventLog').replaceChildren();
+          return;
+        }
+        lastEventCursor = Math.max(lastEventCursor, page.LastEventId || 0);
+        if (!evts.length) return;
 
         const log  = document.getElementById('eventLog');
+        document.getElementById('eventLogEmpty')?.remove();
         const frag = document.createDocumentFragment();
-        evts.forEach(ev => {
+        evts.slice().reverse().forEach(ev => {
           lastEventCursor = Math.max(lastEventCursor, ev.Id ?? 0);
           const item = document.createElement('div');
           item.className = 'event-item';
-          item.innerHTML = `<span class=""ev-time"">${esc(ev.Time||ev.Timestamp||'—')}</span><span class=""ev-msg"">${esc(ev.Message||ev.Summary||JSON.stringify(ev))}</span>`;
+          item.innerHTML = `<span class=""ev-time"">${esc(ev.TimestampUtc||'—')}</span><span class=""ev-msg"">${esc(ev.Message||ev.Summary||JSON.stringify(ev))}</span>`;
           frag.appendChild(item);
         });
         log.prepend(frag);
         while (log.children.length > 80) log.removeChild(log.lastChild);
-      } catch(e) {}
+      } catch(e) { setPing(false); }
+      finally { eventsLoading = false; }
     }
 
     /* ── Announce ────────────────────────────────────────── */
@@ -1386,7 +1423,7 @@ namespace Pelican4Ever.Core.Admin
           headers: getHeaders({'Content-Type':'application/json'}),
           body: JSON.stringify({ Message: msg, Channel: channel })
         });
-        const json = await res.json();
+        const json = await readJsonResponse(res);
         alert(json.Message || 'Anuncio enviado');
         document.getElementById('announceMsg').value = '';
       } catch(e) { alert('Error: ' + e); }
@@ -1396,22 +1433,34 @@ namespace Pelican4Ever.Core.Admin
     async function scheduleRestart() {
       const reason = document.getElementById('restartReason').value.trim() || 'Reinicio programado';
       const warnStr = document.getElementById('restartWarnMins').value.trim();
-      const warnMins = warnStr ? parseInt(warnStr, 10) : null;
+      const warnMins = warnStr ? Number(warnStr) : null;
+      if (warnMins !== null && (!Number.isInteger(warnMins) || warnMins < 0 || warnMins > 2147483647)) {
+        alert('El aviso debe ser un número entero válido de minutos (0 o más).');
+        return;
+      }
       if (!confirm(`¿Programar reinicio? Motivo: ""${reason}""${warnMins ? ` con aviso de ${warnMins} min` : ''}`)) return;
       try {
         const res = await fetch('/api/v1/host/restart', {
           method: 'POST',
           headers: getHeaders({'Content-Type':'application/json'}),
-          body: JSON.stringify({ Reason: reason, WarningMinutes: warnMins, Immediate: !warnMins })
+          body: JSON.stringify({ Reason: reason, WarningMinutes: warnMins, Immediate: false })
         });
-        const json = await res.json();
+        const json = await readJsonResponse(res);
         alert(json.Message || 'Reinicio programado');
       } catch(e) { alert('Error: ' + e); }
     }
 
     /* ── Generic POST ────────────────────────────────────── */
     async function callAction(url, method, body) {
-      if (!confirm(`¿Confirmar: ${url}?`)) return;
+      const labels = {
+        '/api/rollover': 'Forzar el cierre del día y desconectar a los jugadores',
+        '/api/mines/reset': 'Regenerar las minas desocupadas',
+        '/api/v1/host/rest': 'Registrar el descanso del anfitrión',
+        '/api/v1/host/restart': 'Cancelar el reinicio programado',
+        '/api/v1/host/festival/start': 'Iniciar la siguiente tanda del festival',
+        '/api/v1/host/festival/ceremony': 'Iniciar la ceremonia del festival'
+      };
+      if (!confirm((labels[url] || 'Ejecutar la acción') + '?')) return;
       try {
         const opts = {
           method: method || 'POST',
@@ -1419,7 +1468,7 @@ namespace Pelican4Ever.Core.Admin
         };
         if (body) opts.body = JSON.stringify(body);
         const res  = await fetch(url, opts);
-        const json = await res.json();
+        const json = await readJsonResponse(res);
         alert(json.Message || json.message || 'Ejecutado');
         refreshAll();
       } catch(e) { alert('Error: ' + e); }
@@ -1440,6 +1489,13 @@ namespace Pelican4Ever.Core.Admin
 
     /* ── Init ────────────────────────────────────────────── */
     window.onload = () => {
+      const url = new URL(window.location.href);
+      const token = url.searchParams.get('token');
+      if (token) {
+        document.getElementById('tokenInput').value = token;
+        url.searchParams.delete('token');
+        history.replaceState(null, '', url.pathname + url.search + url.hash);
+      }
       mapInit();
       refreshAll();
     };

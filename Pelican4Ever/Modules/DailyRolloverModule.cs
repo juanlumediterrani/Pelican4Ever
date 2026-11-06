@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Security.Cryptography;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
@@ -29,6 +28,9 @@ namespace Pelican4Ever.Modules
         private bool dayStartCausedByLoad;
         private DateTimeOffset peerCloseDeadlineUtc = DateTimeOffset.MinValue;
         private bool forcedPeerDisconnect;
+        private DateTimeOffset dayAdvanceStartedUtc = DateTimeOffset.MinValue;
+        private DateTimeOffset dayAdvanceLastAttemptUtc = DateTimeOffset.MinValue;
+        private int dayAdvanceNudges;
         private const string RolloverCloseMessageType = "Pelican4Ever.RolloverClose";
         private static readonly TimeSpan PeerGracePeriod = TimeSpan.FromSeconds(20);
         private static readonly TimeSpan ForcedDisconnectGracePeriod = TimeSpan.FromSeconds(10);
@@ -36,6 +38,13 @@ namespace Pelican4Ever.Modules
         public static string LastRolloverOutcomeSummary { get; private set; } = string.Empty;
         public static string LastBackupFileName { get; private set; } = string.Empty;
         public static string LastBackupCreatedUtc { get; private set; } = string.Empty;
+
+        /// <summary>Hay un guardado del rollover en curso o la secuencia diaria no está en reposo.</summary>
+        public static bool IsBusy =>
+            instance != null
+            && (instance.preCloseSave != null
+                || instance.postCloseSave != null
+                || instance.rollover.Stage is not (SafeRolloverStage.Idle or SafeRolloverStage.Failed));
 
         public string Name => "DailyRollover";
 
@@ -81,6 +90,7 @@ namespace Pelican4Ever.Modules
             int newDay = Game1.Date.TotalDays;
             int endedDay = newDay - 1;
             rollover.DayStarted();
+            dayAdvanceNudges = 0;
             postCloseSave?.Dispose();
             postCloseSave = null;
 
@@ -193,6 +203,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             ProcessPeerClose();
+            WatchNativeDayAdvance();
             var cfg = context.Config;
             DateTime now = ServerTime.LocalNow(cfg.TimeZoneId);
             TimeSpan timeOfDay = now.TimeOfDay;
@@ -239,6 +250,12 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || !Context.IsMainPlayer || preCloseSave != null || postCloseSave != null)
                 return;
+            // Otro guardado en curso (p. ej. el spike de checkpoint); el disparo programado lo reintenta al segundo siguiente.
+            if (SaveGame.IsProcessing || CheckpointModule.IsSaving || CheckpointSpikeModule.IsSaving)
+            {
+                context.Monitor.Log("[DailyRolloverModule] Hay otro guardado en curso; el rollover espera a que termine.", LogLevel.Info);
+                return;
+            }
             if (rollover.Begin() != SafeRolloverAction.SaveAndBackup)
                 return;
 
@@ -253,6 +270,7 @@ namespace Pelican4Ever.Modules
                 new Dictionary<string, object?> { ["trigger"] = trigger, ["gameDay"] = Game1.Date.TotalDays });
             try
             {
+                PersistenceModule.FlushToSaveData(context, "rollover pre-cierre");
                 preCloseSave = SaveGame.Save();
                 context.Monitor.Log("[DailyRolloverModule] Guardado nativo pre-cierre iniciado.", LogLevel.Info);
             }
@@ -317,6 +335,7 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                PersistenceModule.FlushToSaveData(context, "rollover post-cierre");
                 postCloseSave = SaveGame.Save();
                 context.Monitor.Log("[DailyRolloverModule] Peers cerrados; guardando su estado final antes de avanzar la fecha.", LogLevel.Info);
             }
@@ -435,13 +454,70 @@ namespace Pelican4Ever.Modules
                 // Game1.NewDay es la transición nativa que ejecuta ReadyCheckDialog al completarse.
                 // Todos los farmhands ya se han guardado y desconectado, así que no queda un peer bloqueando el check.
                 Game1.NewDay(0f);
-                context.Monitor.Log("[DailyRolloverModule] Cambio de día nativo iniciado tras guardar y cerrar todos los peers.", LogLevel.Info);
+                string fade = EnsureNewDayFade();
+                dayAdvanceStartedUtc = dayAdvanceLastAttemptUtc = DateTimeOffset.UtcNow;
+                dayAdvanceNudges = 0;
+                context.Monitor.Log($"[DailyRolloverModule] Cambio de día nativo iniciado tras guardar y cerrar todos los peers ({fade}).", LogLevel.Info);
             }
             catch (Exception ex)
             {
                 rollover.Fail();
                 context.Monitor.Log($"[DailyRolloverModule] Error al iniciar el cambio de día nativo: {ex}", LogLevel.Error);
             }
+        }
+
+        /// <summary>
+        /// <c>Game1.NewDay</c> solo marca el cambio de día; el juego lo ejecuta al terminar un fundido a negro
+        /// (<c>onFadeToBlackComplete</c>), y <c>NewDay</c> solo lanza ese fundido si el host está en la cama o
+        /// desmayado. Con el host despierto (modo anfitrión agente) el día se quedaba esperando hasta la siguiente
+        /// puerta que cruzase. Aquí se lanza el mismo fundido que el de la cama, sin desmayar al host.
+        /// </summary>
+        /// <returns>Descripción para el log de qué fundido lleva el cambio de día.</returns>
+        private static string EnsureNewDayFade()
+        {
+            if (Game1.player.isInBed.Value || Game1.player.passedOut)
+                return "host en la cama: fundido nativo";
+            if (Game1.fadeToBlack || Game1.globalFade)
+                return "fundido ya en curso";
+
+            Game1.nonWarpFade = true;
+            Game1.fadeScreenToBlack();
+            Game1.player.Halt();
+            return "host despierto: fundido lanzado por el mod";
+        }
+
+        /// <summary>
+        /// Vigila que el cambio de día nativo arranque. Si el juego sigue esperando el fundido sin que haya ninguno
+        /// en curso, lo vuelve a lanzar y lo registra como <c>rollover.stalled</c>.
+        /// </summary>
+        private void WatchNativeDayAdvance()
+        {
+            if (rollover.Stage != SafeRolloverStage.AdvancingDay)
+                return;
+
+            bool fadeInProgress = Game1.fadeToBlack || Game1.globalFade;
+            if (!RolloverTiming.ShouldNudgeDayAdvance(Game1.newDay, fadeInProgress, DateTimeOffset.UtcNow - dayAdvanceLastAttemptUtc))
+                return;
+
+            dayAdvanceNudges++;
+            dayAdvanceLastAttemptUtc = DateTimeOffset.UtcNow;
+            int secondsSinceAdvance = (int)(DateTimeOffset.UtcNow - dayAdvanceStartedUtc).TotalSeconds;
+            string fade = EnsureNewDayFade();
+            context.Monitor.Log(
+                $"[DailyRolloverModule] El cambio de día sigue esperando un fundido tras {secondsSinceAdvance} s; se vuelve a lanzar ({fade}, intento {dayAdvanceNudges}).",
+                LogLevel.Error);
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.RolloverStalled,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"El cambio de día no arrancaba; fundido relanzado (intento {dayAdvanceNudges}).",
+                new Dictionary<string, object?>
+                {
+                    ["nudges"] = dayAdvanceNudges,
+                    ["secondsSinceAdvance"] = secondsSinceAdvance,
+                    ["hostInBed"] = Game1.player.isInBed.Value,
+                    ["hostLocation"] = Game1.player.currentLocation?.NameOrUniqueName
+                });
         }
 
         private static void BroadcastHUDMessage(string message, int type)
@@ -508,66 +584,29 @@ namespace Pelican4Ever.Modules
 
         private bool CreateSaveBackup()
         {
-            string? partial = null;
-            try
-            {
-                string? savesPath = Constants.CurrentSavePath;
-                if (string.IsNullOrEmpty(savesPath) || !Directory.Exists(savesPath))
-                    return false;
-
-                string backupDir = Path.Combine(Constants.DataPath, "Pelican4Ever_Backups");
-                Directory.CreateDirectory(backupDir);
-
-                string backupFolderName = $"{Constants.SaveFolderName}_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}";
-                string dest = Path.Combine(backupDir, backupFolderName);
-                partial = dest + ".partial";
-                Directory.CreateDirectory(partial);
-
-                string[] files = Directory.GetFiles(savesPath, "*", SearchOption.TopDirectoryOnly);
-                if (files.Length == 0)
-                    throw new IOException("La carpeta de save no contiene archivos que respaldar.");
-
-                foreach (string file in files)
-                {
-                    string copy = Path.Combine(partial, Path.GetFileName(file));
-                    File.Copy(file, copy, overwrite: false);
-                    using FileStream sourceStream = File.OpenRead(file);
-                    using FileStream backupStream = File.OpenRead(copy);
-                    using SHA256 sha = SHA256.Create();
-                    if (!CryptographicOperations.FixedTimeEquals(sha.ComputeHash(sourceStream), sha.ComputeHash(backupStream)))
-                        throw new IOException($"La verificación SHA-256 falló para {Path.GetFileName(file)}.");
-                }
-
-                Directory.Move(partial, dest);
-                LastBackupFileName = backupFolderName;
-                LastBackupCreatedUtc = DateTimeOffset.UtcNow.ToString("O");
-
-                AdminApiModule.EventLog.Append(
-                    HostEventTypes.BackupCreated,
-                    Game1.Date.TotalDays,
-                    Game1.timeOfDay,
-                    $"Copia de seguridad verificada: {backupFolderName}",
-                    new Dictionary<string, object?>
-                    {
-                        ["backupName"] = backupFolderName,
-                        ["createdAtUtc"] = LastBackupCreatedUtc,
-                        ["fileCount"] = files.Length,
-                        ["verifiedBy"] = "SHA-256"
-                    });
-
-                context.Monitor.Log($"[DailyRolloverModule] Backup pre-cierre verificado en: {dest}", LogLevel.Info);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                if (partial != null && Directory.Exists(partial))
-                {
-                    try { Directory.Delete(partial, recursive: true); }
-                    catch (Exception cleanupError) { context.Monitor.Log($"[DailyRolloverModule] No se pudo retirar el backup parcial {partial}: {cleanupError.Message}", LogLevel.Warn); }
-                }
-                context.Monitor.Log($"[DailyRolloverModule] Error al crear backup de seguridad: {ex}", LogLevel.Warn);
+            SaveBackupResult? backup = SaveBackupService.Create(context.Monitor, BackupKind.Daily, compress: false);
+            if (backup == null)
                 return false;
-            }
+
+            LastBackupFileName = backup.FolderName;
+            LastBackupCreatedUtc = backup.CreatedUtc.ToString("O");
+
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.BackupCreated,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"Copia de seguridad verificada: {backup.FolderName}",
+                new Dictionary<string, object?>
+                {
+                    ["backupName"] = backup.FolderName,
+                    ["createdAtUtc"] = LastBackupCreatedUtc,
+                    ["fileCount"] = backup.FileCount,
+                    ["verifiedBy"] = "SHA-256"
+                });
+
+            context.Monitor.Log($"[DailyRolloverModule] Backup verificado en: {backup.FolderPath}", LogLevel.Info);
+            SaveBackupService.ApplyRetention(context.Monitor, BackupKind.Daily, keepCheckpoints: 0, keepDailyDays: context.Config.BackupRetentionDays);
+            return true;
         }
 
         /// <summary>

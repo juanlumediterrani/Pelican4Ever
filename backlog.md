@@ -79,6 +79,16 @@ Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documen
     - En `DayStarted`, evaluar `SleepPolicy.Evaluate` para cada `PlayerRecord`, aplicar `WakeUpEnergy` y `MedicalFee` sobre cada `Farmer` (con `useSeparateWallets = true`), congelar la caída de amistad de jugadores `Offline_*` y crear copia de seguridad rotativa del save.
   - **Criterios de Aceptación:** Los cultivos avanzan, se liquidan las `Shipping Bins` personales y los jugadores ausentes varios días seguidos no reciben penalizaciones adicionales.
 
+- [x] **TASK-104: El cambio de día se queda esperando con el host despierto (incidencia E-19, noche del 2026-11-05 al 06)**
+  - **Prioridad:** Crítica
+  - **Síntoma:** a las 02:00 se guardó dos veces (pre-cierre y post-cierre), se cerraron los peers y el log dijo «Cambio de día nativo iniciado», pero el día no cambió. Al reiniciar a las 04:04 se cargó el guardado de las 02:00:11 y volvió a abrirse el mismo día, sin pérdida.
+  - **Causa (código descompilado de 1.6.15):** `Game1.NewDay(0f)` solo pone `Game1.newDay = true`; el cambio de día lo ejecuta `onFadeToBlackComplete` al terminar un fundido a negro, y `NewDay` solo lanza ese fundido si el host está en la cama o desmayado. Desde `9929d65` (2026-11-02) el rollover cierra antes a todos los peers y llama a `NewDay(0f)`; antes usaba `PassOutNewDay()`, que con peers desmayaba al host, pero sin peers (`!IsMultiplayer`) también acaba en `NewDay(0f)`. Con el host despierto y quieto (modo anfitrión agente, y anoche con la sesión del agente caída), nadie lanzaba el fundido; el día habría cambiado al cruzar el host la siguiente puerta.
+  - **Resolución:** `DailyRolloverModule.EnsureNewDayFade()` lanza tras `NewDay(0f)` el mismo fundido que el de la cama (`nonWarpFade` y `fadeScreenToBlack()`), sin desmayar al host ni aplicar penalización, salvo si el host ya está en la cama o hay otro fundido en curso. `WatchNativeDayAdvance()` revisa cada segundo la etapa `AdvancingDay`: si `Game1.newDay` sigue sin consumirse y no hay fundido en curso tras 30 s (`RolloverTiming.ShouldNudgeDayAdvance`), lo vuelve a lanzar, lo registra como error y añade el suceso `rollover.stalled` (con `nudges`, `secondsSinceAdvance`, `hostInBed` y `hostLocation`) para que el anfitrión agente lo vea en `GET events`. Compila y pasan los 928 tests; **pendiente de verificar en partida**.
+  - **Criterios de Aceptación:**
+    1. Con el host despierto fuera de la cama y sin peers, `p4e_rollover_now` termina en «Día iniciado» del día siguiente sin intervención (el log del cambio de día dice «host despierto: fundido lanzado por el mod»).
+    2. Con el host en la cama, el comportamiento no cambia (el log dice «host en la cama: fundido nativo»).
+    3. En una noche normal no aparece ningún `rollover.stalled`.
+
 ---
 
 ### Iteración 2: 4 Huecos de Granja y Puertas en Pelican Town (Épica 2)
@@ -117,6 +127,7 @@ Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documen
     - Parche `Prefix`/`Postfix` en `Farmer.doneEating`: recortar la ganancia instantánea de energía usando `SatietyBudget.AllowedGain` (hasta el 50% de `MaxStamina` por día real), conservando siempre la curación de `Health`, los `Buffs` y los ítems especiales (`Stardrop`).
     - Si se consume un plato cocinado y quedan usos en `MaxDailyWellFedBuffs` (`2`), activar regeneración pasiva (`+1 Energía / 60s reales` durante 60 min).
     - Limitar la regeneración del Spa a `1 punto / 30s reales` con tope diario `SpaDailyCap` (`60`) mediante `SatietyBudget.AllowedSpaGain`.
+  - **Revisión (ADR-0006):** la Saciedad pasa a ser una capacidad que se vacía en 4 h reales; "Bien comido" activa el descanso sentado (`1 punto / 5 s` durante 60 min) en lugar de la regeneración pasiva; el Spa da, una vez al día, un buff de `120` de energía y salud en 2 h tras 30 s quieto en el agua. El cliente comunica su consumo al host (`SatietyReport`).
   - **Criterios de Aceptación:** La comida restaura energía hasta agotar el presupuesto diario de Saciedad; a partir de ahí sigue curando vida y dando buffs sin sumar energía instantánea.
 - [x] **TASK-302: Minas Persistentes por Turnos de 12 Horas (`06:00` y `18:00`)**
   - **Prioridad:** Alta
@@ -183,6 +194,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     1. Interacción con el tablón de Pierre abre el menú del "Mercado Vecinal".
     2. Cualquier jugador puede poner a la venta un ítem de su inventario fijando un precio en oro.
     3. Los compradores autorizados pueden adquirir el producto descontando su oro personal y recibiendo el ítem al instante, incluso si el vendedor está desconectado.
+  * **Corrección y validación 2026-11-06:** entrega y devolución ejecutadas en el cliente propietario, reservas y recibos persistentes para reintentos y restauración. Esquema 4 y protocolo 0.2.0 (actualizar host y clientes juntos). Pruebas con dos clientes: compra real, retirada, inventarios llenos, mensajes repetidos y SIGKILL con entrega pendiente. Ver `docs/market-validation-2026-11-06.md`.
 
 ---
 
@@ -987,3 +999,153 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     2. Desde las vagonetas del Pueblo, Minas o Cantera, se puede seleccionar el viaje hacia el Puente de la Plaza.
     3. Funciona limpiamente tanto en partidas locales como en multijugador con clientes conectados.
 
+
+---
+
+### Épica 11: Checkpoints intradía del progreso en RAM (rama `feat/day-checkpoints`)
+> **Objetivo:** Que una caída o un reinicio entre las 06:00 y el rollover de las 02:00 no pierda el día entero. Hoy todo lo que pasa en ese tramo vive solo en RAM; es lo que `ProgressAtRiskDto` llama «progreso en riesgo». Se propone guardar con el pipeline nativo (`SaveGame.Save()`) cada cierto tiempo, sin desconectar a nadie, y copiar el resultado aparte.
+
+**Situación de partida (revisión del 2026-11-05, rama creada desde `main` en `403e2d0`):**
+- `DailyRolloverModule.BeginRollover` ya llama a `SaveGame.Save()` a mitad de día con peers conectados y lo bombea en `UpdateTicked` (`PumpPreCloseSave`). Después repite el guardado con los peers cerrados (`PumpPostCloseSave`) y copia la partida con `CreateSaveBackup()` (SHA-256 por archivo). Es la pieza que se reutiliza.
+- `PersistenceModule` escribe `ServerWorldState` en `GameLoop.Saving` y solo ahí.
+- `CreateSaveBackup()` no rota: hoy se hacen tres copias por día (pre-cierre, post-cierre y `DayStarted`). `Pelican4Ever_Backups` ocupa 295 MB con 10 copias en el equipo de desarrollo; una partida real pesa unos 26 MB de XML.
+- El reinicio controlado (`SafeRestartCoordinator`) espera al siguiente guardado, que hoy solo llega con el rollover (`AdminApiModule.NotifySaveCompleted` desde `OnDayStarted`).
+
+**Cómo funciona el guardado nativo (código descompilado de 1.6.15, `SaveGame.cs`):**
+- `SaveGame.Save()` lanza `getSaveEnumerator()` dentro de un `Task` con `Game1.hooks.StartTask`. SMAPI sustituye ese hook y ejecuta la tarea **de forma síncrona en el hilo del juego** (el log muestra `Synchronizing '<tarea>' task...`). No hay carrera con el resto del juego, pero el tick que serializa queda bloqueado.
+- Antes de serializar, `getSaveEnumerator()` llama a `cleanupBeforeSave()` en todas las ubicaciones (quita `Junimo`, `Tent` y los personajes de `WitchHut`), `UnapplyAllTrinketEffects()` en todos los granjeros y vacía los `globalInventories` sin contenido. Al terminar llama a `resetAllTrinketEffects()`.
+- Los farmhands salen de `Game1.netWorldState.Value.farmhandData.Values`.
+- El archivo anterior pasa a `<partida>_old` y `SaveGameInfo_old`.
+- `SaveGame` no guarda `timeOfDay`: una partida siempre se carga a las 06:00 del día guardado.
+
+#### 11.0 Gaps conocidos y cómo acotarlos
+
+Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo citan su gap (`G1`…`G10`).
+
+- **G1 · ¿Se disparan `Saving`/`Saved` de SMAPI cuando el mod llama a `SaveGame.Save()`?** *(verificado el 2026-11-06: NO en SMAPI 4.5.2)*
+  - **Indicios:** en el código descompilado, `SaveGame.Save()` no toca `Game1.game1.IsSaving`; lo pone `SaveGameMenu.update` justo antes de llamar a `SaveGame.Save()` (y también llama antes a `Game1.multiplayer.saveFarmhands()`, ver G4). Si SMAPI deduce el guardado de ese estado, un guardado lanzado por el mod no avisa a nadie.
+  - **Qué rompe:** `PersistenceModule.OnSaving` no escribiría `ServerWorldState`, y el checkpoint llevaría el estado del mod del último guardado nocturno. SpaceCore también se suscribe a `Saving`/`Saved`. **Afectaría ya a los guardados pre-cierre y post-cierre de las 02:00 y a sus copias.** El guardado de `Game1.NewDay` usa el menú de guardado nativo y no debería verse afectado.
+  - **Acotarlo:** (1) Comprobarlo en el spike (TASK-1601): `p4e_checkpoint_spike` registra si llegaron `Saving` y `Saved`, y en `SMAPI-latest.txt` debe salir `ServerWorldState guardado en la partida maestra (Saving)`. Desde TASK-1602 el mismo mensaje sale también con `(checkpoint spike)` o `(rollover pre-cierre)`; solo el `(Saving)` prueba que el evento se disparó. (2) No depender del evento: volcar `ServerWorldState` explícitamente antes de cada `SaveGame.Save()` del mod (TASK-1602). (3) Si no se dispara, revisar qué hacen los manejadores de SpaceCore y decidir si basta con el volcado del mod o hace falta otra vía. No se finge `IsSaving`: congela el `Update` del juego y no está documentado para este uso.
+
+- **G2 · Bloqueo del hilo del juego mientras se serializa** *(medido el 2026-11-06: unos 3–3,6 s con 25,5 MB y 1–2 clientes)*
+  - **Indicios:** la serialización es síncrona (ver arriba) y la partida pesa unos 26 MB de XML.
+  - **Qué rompe:** todos los jugadores ven el mundo congelado durante el guardado; con un parón largo, los farmhands pueden dar timeout.
+  - **Acotarlo:** (1) Medir con `Stopwatch` alrededor del bombeo en el spike y en cada checkpoint, y publicarlo en el registro de sucesos. (2) Aviso en pantalla unos segundos antes («Guardando el mundo…»). (3) Retroceso: si un checkpoint supera `CheckpointMaxDurationMs`, duplicar el intervalo hasta el día siguiente. (4) Saltar el checkpoint si hay minijuego o evento en curso (G8). No se puede sacar del hilo del juego: el mundo no es seguro entre hilos.
+
+- **G3 · Efectos secundarios de `getSaveEnumerator()` a mitad de día** *(confirmado en código; impacto bajo)*
+  - **Qué rompe:** desaparecen los Junimos del Centro Comunitario (clase `Junimo`; los recolectores de las cabañas son `JunimoHarvester` y no se tocan), las tiendas de campaña (`Tent`) colocadas ese día y los personajes de la cabaña de la bruja. Los compañeros de los trinkets se reinician.
+  - **Acotarlo:** probarlo en el spike con el Centro Comunitario con Junimos, una tienda colocada y un trinket con compañero; el informe los cuenta antes, justo después y 30 s después. Si algo no se recupera solo, saltar el checkpoint mientras exista (`Tent` en alguna ubicación) o aceptarlo y documentarlo. Ninguno toca inventarios ni dinero.
+
+- **G4 · ¿El checkpoint recoge el estado vivo de los farmhands conectados?** *(verificado el 2026-11-06: NO sin clonar; SÍ con CloneInto en 1–2 clientes)*
+  - **Indicios (código descompilado, 2026-11-06):** el guardado serializa `farmhandData.Values`, y esa copia es distinta del jugador vivo (`Game1.otherFarmers.Roots`). El juego solo la refresca en `NetWorldState.SaveFarmhand`, que se llama al desconectarse el jugador (`Multiplayer`), en `Game1._newDayAfterFade` y en `SaveGameMenu` (`saveFarmhands()`). Un `SaveGame.Save()` a mitad de día guarda, pues, al farmhand tal como estaba al conectarse o en la última noche. **Eso explica por qué el rollover necesita el segundo guardado tras cerrar peers:** el pre-cierre de las 02:00 ya lleva farmhands retrasados. El dinero no se ve afectado: vive en `FarmerTeam`, no en la copia del granjero.
+  - **Qué rompe:** si los datos van retrasados, al restaurar el mundo y el host vuelven a las HH:MM pero el farmhand no. Eso permite duplicar objetos (lo dejó en un cofre, el cofre se guardó, su inventario no).
+  - **Lo que no sirve:** `Game1.multiplayer.saveFarmhands()`. Además de copiar, llama a `ResetFarmhandState` sobre el jugador vivo: `resetState()`, lo devuelve a la cama si `lastSleepLocation` es su casa y, si su casa no es una `Cabin`, le borra `userID` y `homeLocation` y lo quita de `otherFarmers`.
+  - **Acotarlo:** copiar solo el estado con `NetRoot<Farmer>.CloneInto(farmhandData.FieldDict[id])`, que es la mitad de copia de `SaveFarmhand`. El spike lo prueba con `p4e_checkpoint_spike clonar` y `scripts/checkpoint_spike_compare.py` dice si el XML lleva el estado vivo o el retrasado. Hay que vigilar que el clon se envía a todos los clientes (tráfico) y que no altera al jugador vivo. La clonación se verificó contra el XML y tras restaurar la copia gzip (2026-11-06, base `80cc24e`). Se mantiene desactivado por defecto por las restricciones de G3/G5 y los límites de compatibilidad del guardado.
+
+- **G5 · Qué pasa al cargar un checkpoint de mitad de día** *(parcialmente cubierto)*
+  - **Ya cubierto:** `RolloverDayGuard` evita repetir penalizaciones y contadores en el `DayStarted` provocado por la carga, y `RealTimeClockModule` vuelve a poner la hora real (`startupSyncPending`). Al cargar no se ejecuta `DayUpdate`, así que no crecen cultivos ni aparece forraje dos veces.
+  - **Qué rompe:** se repiten los `DayStarted` de otros módulos y mods: `WorldLifeModule` reinicia el tope de rayos, `FestivalParticipationModule.ResetState`, NITV, FashionSense y Dr4coVoyagerBridge. Los jugadores aparecen en casa, no donde estaban. Los NPC recalculan su horario desde las 06:00.
+  - **Acotarlo:** (1) Guardar metadatos del checkpoint en `ServerWorldState` (`LastCheckpoint`: día, hora de juego y UTC) para que la carga sepa que restaura un punto intermedio y lo anuncie. (2) Revisar que cada `DayStarted` propio sea idempotente y tratar los no idempotentes. (3) Usar `ScheduleCatchUp` para los NPC. (4) Probar los mods de terceros en el spike (TASK-1601) y apuntar cuál no es idempotente.
+
+- **G6 · Estado del mod que solo vive en RAM, fuera de `ServerWorldState`** *(confirmado; impacto bajo)*
+  - **Qué hay:** `FestivalParticipationModule.knownParticipants`, `EconomyModule.MineFloorLastOccupiedUtc` y `VolcanoLevelLastOccupiedUtc`, y `WorldLifeModule.NpcAnchors` y los contadores de rayos.
+  - **Acotarlo:** clasificar cada uno como «se recalcula» o «hay que persistir». Con los checkpoints prohibidos durante festivales (G8), ninguno parece necesitar persistencia. Revisarlo si cambia.
+
+- **G7 · Disco: `_old` y retención de copias** *(confirmado)*
+  - **Qué rompe:** tras un checkpoint, el `_old` del juego es el checkpoint anterior y no la noche anterior. Con un checkpoint cada 30 minutos salen unas 40 copias diarias de ~30 MB (≈1,2 GB/día) sin rotación, y hoy ya no se rota nada.
+  - **Acotarlo:** carpeta propia `Pelican4Ever_Backups/checkpoints/`, conservar los últimos `CheckpointRetention` y comprimir (el XML se comprime bien con gzip). Rotar también las copias diarias (`BackupRetentionDays`) con una política pura en Core. El backup diario sigue siendo la referencia de «la noche anterior».
+
+- **G8 · Cuándo no se debe hacer un checkpoint** *(diseño)*
+  - **Casos:** guardado en curso (`SaveGame.IsProcessing`, `preCloseSave`/`postCloseSave`), rollover fuera de `Idle`, aviso de los 10 minutos previos al rollover, festival o evento (`Game1.isFestival()`, `Game1.eventUp`), y ningún jugador conectado y sin cambios desde el último.
+  - **Acotarlo:** decisión pura `CheckpointPolicy.Decide(...)` en Core, con tests por caso (TASK-1603).
+
+- **G9 · Encaje con el reinicio controlado** *(diseño)*
+  - **Oportunidad:** `--immediate` acepta hoy perder el día. Con checkpoints puede guardar primero y perder solo lo que haya fallado. El modo seguro podría reiniciar tras el siguiente checkpoint en vez de esperar a las 02:00.
+  - **Acotarlo:** activarlo solo con G5 validado y detrás de su propia opción (`RestartAfterCheckpoint`).
+
+- **G10 · Rollback y duplicación entre jugadores** *(validado el 2026-11-06 en compra, rechazo, reintentos y recuperación de entrega pendiente)*
+  - **Qué rompe:** tras una caída, todos vuelven al último checkpoint. Si el checkpoint es una foto coherente (mundo, host, farmhands y `ServerWorldState`), el rollback es justo para todos. Si no lo es, pueden duplicarse objetos o dinero en intercambios y en el mercado.
+  - **Acotarlo:** queda acotado si G1 y G4 se resuelven (foto única del mismo tick). Comprobar en el spike una venta del mercado comunitario hecha justo antes del checkpoint.
+  - **Resultado local (2026-11-06):** la compraventa falla antes del checkpoint: se cobran 100g y se cierra la oferta, pero el comprador remoto no recibe las 17 maderas. `HandleBuyListing` llama desde el host a `Farmer.addItemByMenuIfNecessary`, que retorna para jugadores no locales. El informe inicial dejó G10 bloqueado.
+  - **Corrección posterior (2026-11-06):** el propietario aplica la entrega y persiste un recibo; el host guarda la reserva pendiente y paga al vendedor al observar el recibo junto con el inventario. Se verifican dos clientes, rechazo por falta de espacio, reintentos y restauración gzip tras SIGKILL. El comprador recibe una sola vez y el vendedor cobra una sola vez. Ver [validación del mercado](docs/market-validation-2026-11-06.md).
+
+#### 11.1 Tareas
+
+- [x] **TASK-1601: Spike de verificación del guardado intradía (G1, G2, G3, G4, G5, G10)**
+  * **Análisis Técnico:** Comando temporal `p4e_checkpoint_spike [clonar] [forzar]` (`CheckpointSpikeModule`) que llama a `SaveGame.Save()`, agota su enumerador en la misma llamada que la clonación, mide la duración con `Stopwatch` y deja en `Pelican4Ever_Backups/spike/` una copia de la partida y un `report.json`. `scripts/checkpoint_spike_compare.py` compara ese informe con el XML guardado. Guía paso a paso y tabla de resultados en `docs/spike-checkpoints.md`. Mientras el spike guarda, `DailyRolloverModule.BeginRollover` espera (`SaveGame.IsProcessing` o `CheckpointSpikeModule.IsSaving`).
+  * **Pasos:**
+    1. Log en `TRACE`: ¿aparece `ServerWorldState guardado en la partida maestra (Saving)` tras el de `(rollover pre-cierre)`, y algún `Saving` de SpaceCore? (G1)
+    2. Medir la duración del bloqueo con 1 y con 2 farmhands, y ver si algún cliente da timeout. (G2)
+    3. Con una cabaña Junimo activa, una tienda de campaña y un trinket equipado: ver qué desaparece y qué vuelve. (G3)
+    4. El farmhand cambia de inventario y dinero, deja un objeto en un cofre y vende en el mercado comunitario; checkpoint; comparar el XML con lo que se ve en partida. (G4, G10)
+    5. Matar el proceso, recargar la partida y anotar: hora, posición de los jugadores, NPC, mods de terceros con `DayStarted` y contadores de Pelican. (G5)
+  * **Prioridad:** Alta (decide el alcance del resto).
+  * **Criterios de Aceptación:**
+    1. Resultados apuntados en esta épica, en cada gap, con la fecha y el commit de la prueba.
+    2. Decisión explícita: los checkpoints son viables por defecto, viables con restricciones o no viables.
+    3. El comando del spike se retira o queda tras `DebugMode`.
+  * **Validación 2026-11-06:** resultados de G1–G5 y restauración con 1–2 clientes en `docs/spike-checkpoints.md`; `CheckpointDebugMode` protege el comando. El mecanismo es viable con restricciones. El defecto del mercado que bloqueó la primera prueba se corrige y valida posteriormente con reintentos y restauración de una reserva pendiente (`docs/market-validation-2026-11-06.md`). Informe inicial en `docs/checkpoint-validation-2026-11-06.md`; la automatización sigue desactivada por defecto.
+
+- [x] **TASK-1602: Volcado explícito de `ServerWorldState` antes de cada guardado del mod (G1)**
+  * **Análisis Técnico:** Extraer de `PersistenceModule.OnSaving` un método `FlushToSaveData()` (marca `LastSeenUtc` del host y llama a `WriteSaveData`) y llamarlo justo antes de cada `SaveGame.Save()` lanzado por el mod (`BeginRollover`, `StartPostCloseSave` y el futuro checkpoint). `OnSaving` sigue llamándolo para el guardado nativo.
+  * **Prioridad:** Alta (independiente del resultado del spike; corrige también el guardado pre-cierre).
+  * **Criterios de Aceptación:**
+    1. Un cambio en `ServerWorldState` hecho justo antes de `p4e_rollover_now` aparece en la copia pre-cierre.
+    2. El guardado nocturno nativo no cambia.
+  * **Resolución:** `PersistenceModule.FlushToSaveData(context, reason)` reúne lo que hacía `OnSaving` (marca `LastSeenUtc` y el ancla de energía del host y llama a `WriteSaveData`), captura los errores y devuelve `false` si falla: el guardado sigue con el último estado volcado, como antes, y no se bloquea el rollover. `OnSaving` lo llama con `"Saving"` y `DailyRolloverModule` justo antes de los dos `SaveGame.Save()` (`"rollover pre-cierre"` y `"rollover post-cierre"`). Si SMAPI también dispara `Saving`, el segundo volcado es inocuo. Compila y pasan los 927 tests; **el criterio 1 está pendiente de comprobar en partida** dentro de TASK-1601.
+
+- [x] **TASK-1603: Política pura de checkpoint en Core (G8)**
+  * **Análisis Técnico:** `Pelican4Ever.Core/Admin/CheckpointPolicy.cs` con `Decide(CheckpointInputs)` → `Run` o `Skip(motivo)`. Entradas: hora real, próximo rollover, intervalo, último checkpoint, etapa del rollover, guardado en curso, festival o evento, jugadores conectados, si hubo cambios, duración del último checkpoint y `CheckpointMaxDurationMs` (retroceso de G2).
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Un test por cada caso de G8 y por el retroceso de G2.
+    2. Con `CheckpointIntervalMinutes = 0`, nunca devuelve `Run` salvo petición manual.
+  * **Resolución:** `CheckpointPolicy.Decide(CheckpointInputs)` devuelve `CheckpointDecision(Run, Reason, Due, EffectiveInterval)`. Las razones de seguridad (`SaveInProgress`, `RolloverActive`, `NearRollover`, `FestivalOrEvent`, `DestructiveSaveCleanup` y `FarmhandsWithoutClone`, que impide guardar farmhands retrasados si no se clonan, G4) bloquean también las peticiones manuales; `Disabled`, `NotDue` y `NoActivity` solo las automáticas. `Due` indica si tocaba por tiempo, para registrar solo los saltos que importan. Retroceso: `EffectiveInterval` duplica el intervalo por cada checkpoint lento del día, hasta 8 veces; `IsSlow` compara el tick más largo con `CheckpointMaxDurationMs`. Tests en `CheckpointPolicyTests`.
+
+- [x] **TASK-1604: `CheckpointModule` en el host**
+  * **Análisis Técnico:**
+    - Opciones en `ServerConfig`: `CheckpointIntervalMinutes` (0 = desactivado, **por defecto 0** hasta cerrar G4), `CheckpointMaxDurationMs`, `CheckpointRetention` y `CheckpointCompress`.
+    - En `OneSecondUpdateTicked` consulta `CheckpointPolicy`; si toca, avisa en pantalla, llama a `FlushToSaveData()` (TASK-1602) y a `SaveGame.Save()`, agota el enumerador sin intercalar ticks desde la clonación y al terminar copia a `checkpoints/` (TASK-1605).
+    - Comparte con `DailyRolloverModule` un único «guardado en curso» para que nunca se solapen.
+    - Sucesos nuevos en `HostEventLog`: `checkpoint.created` (duración, tamaño, nombre), `checkpoint.skipped` (motivo) y `checkpoint.failed`.
+    - Comando `p4e_checkpoint_now`.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1601, TASK-1602, TASK-1603, TASK-1605.
+  * **Criterios de Aceptación:**
+    1. Con el intervalo a 0, el servidor se comporta como hoy.
+    2. Con intervalo, aparece un `checkpoint.created` por intervalo y ninguno durante festivales ni en la ventana previa al rollover.
+    3. Un checkpoint nunca coincide con el guardado del rollover (test de la política y prueba en partida).
+  * **Resolución:** `CheckpointModule` (host) con las opciones `CheckpointIntervalMinutes` (0 por defecto), `CheckpointMaxDurationMs` (3000), `CheckpointRetention` (12), `CheckpointCompress` (sí) y `CheckpointCloneFarmhands` (sí), validadas en `ServerConfig`. Cada segundo consulta la política; si toca, avisa en pantalla al host y, con un mensaje de mod, a los farmhands, y a los 3 s vuelve a decidir y guarda. Con farmhands conectados, antes copia su estado vivo a `farmhandData` con `NetRoot.CloneInto` (G4), luego `FlushToSaveData` y `SaveGame.Save()`, agotado en una única llamada del hilo del juego para no intercalar cambios del mundo/red. Se mide el tramo síncrono completo. Al terminar copia a `checkpoints/` con `SaveBackupService` y rota. Sucesos `checkpoint.created`, `checkpoint.skipped` (solo cuando tocaba y una vez por motivo) y `checkpoint.failed`; comando `p4e_checkpoint_now`. `DailyRolloverModule.BeginRollover` y el spike esperan mientras `CheckpointModule.IsSaving`. Además de G8, tampoco guarda si algún jugador está en una ubicación temporal (festivales, cinemáticas). La prueba local del 2026-11-06 verifica clonación, restauración y rechazo durante eventos, cerca del rollover o si hay tiendas/Junimos; el guardado se cancela si falla la clonación o el volcado del mod. Los checkpoints se publicaron por autorización del usuario y el defecto de G10 se corrige en la validación posterior del mercado; el intervalo sigue a 0 por defecto.
+
+- [x] **TASK-1605: Servicio de copias con retención y compresión (G7)**
+  * **Análisis Técnico:** Sacar `CreateSaveBackup()` de `DailyRolloverModule` a un servicio común (`SaveBackupService`) con destino (`daily` o `checkpoints`) y compresión opcional (gzip por archivo, verificando el SHA-256 del contenido sin comprimir). La rotación la decide una política pura en Core (`BackupRetentionPolicy`: últimos N checkpoints, últimos D días de copias diarias, nunca borrar la única copia válida).
+  * **Prioridad:** Media (Alta si se activan los checkpoints)
+  * **Criterios de Aceptación:**
+    1. Tests de `BackupRetentionPolicy`: rota por número y por días y no borra la última copia verificada.
+    2. Las copias diarias existentes se siguen leyendo y restaurando igual.
+    3. Guía de restauración desde un checkpoint en `docs/servidor-persistente.md`.
+  * **Resolución:** `Framework/SaveBackupService` (`Create` y `ApplyRetention`) sustituye a `DailyRolloverModule.CreateSaveBackup()`. Copia a `<destino>.partial` y renombra al final, verifica cada archivo con SHA-256 sobre el contenido sin comprimir y, con compresión, escribe `<archivo>.gz`. La rotación solo mira carpetas `<partida>_<yyyyMMdd_HHmmss_fff>` de la partida cargada, así que no toca otras partidas, copias parciales, `spike/` ni `checkpoints/` desde las diarias. `BackupRetentionPolicy` (Core): últimos N checkpoints, últimos D días de diarias y nunca la más reciente de cada tipo. `BackupRetentionDays` es 0 por defecto, así que las copias diarias siguen sin borrarse como hasta ahora hasta que se configure. Las copias diarias mantienen nombre y formato. Tests en `BackupRetentionPolicyTests`; guía de restauración en `docs/servidor-persistente.md`.
+
+- [ ] **TASK-1606: Carga desde un checkpoint de mitad de día (G5, G6)**
+  * **Análisis Técnico:** `ServerWorldState.LastCheckpoint` (día, hora de juego y UTC, con migración de esquema). En `SaveLoaded`, si el día guardado es el actual y hay `LastCheckpoint`, registrar «restaurado al checkpoint de las HH:MM» en el registro de sucesos y avisar a los jugadores al conectarse. Revisar la idempotencia de los `DayStarted` propios (`WorldLifeModule`, `FestivalParticipationModule`, `FarmSlotModule`) y lanzar `ScheduleCatchUp` para los NPC.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1601.
+  * **Criterios de Aceptación:**
+    1. Tras matar el proceso y recargar, el día y la hora real son correctos y no se aplica ninguna penalización ni contador dos veces.
+    2. Los gaps de mods de terceros detectados en el spike quedan corregidos o documentados aquí.
+
+- [ ] **TASK-1607: Checkpoints en la API de anfitrión y en el panel web**
+  * **Análisis Técnico:** `POST /api/v1/host/checkpoint` (ejecuta en el hilo del juego con `MainThreadActionQueue` y responde con el resultado o el motivo de no hacerlo) y, en `GET clock`, el último checkpoint (nombre, hora y duración). Botón en el panel y entrada en `HostApiContract` y `docs/host-api.md`.
+  * **Prioridad:** Baja
+  * **Dependencias:** TASK-1604.
+  * **Criterios de Aceptación:**
+    1. Test de contrato de la ruta nueva.
+    2. Sin token responde 401, como el resto.
+
+- [ ] **TASK-1608: Reinicio controlado apoyado en checkpoints (G9)**
+  * **Análisis Técnico:** `--immediate` hace primero un checkpoint y reinicia al terminarlo (o igualmente si falla, dejándolo registrado). Con `RestartAfterCheckpoint`, el modo seguro reinicia tras el siguiente checkpoint en vez de esperar al rollover (`NotifySaveCompleted` también desde `CheckpointModule`). `ProgressAtRiskDto` pasa a contar desde el último checkpoint.
+  * **Prioridad:** Baja
+  * **Dependencias:** TASK-1604, TASK-1606.
+  * **Criterios de Aceptación:**
+    1. Sin `RestartAfterCheckpoint`, el reinicio seguro se comporta como hoy.
+    2. `ProgressAtRiskDto.Summary` indica la hora del último checkpoint.

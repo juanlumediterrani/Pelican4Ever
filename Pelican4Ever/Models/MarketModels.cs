@@ -6,6 +6,9 @@ namespace Pelican4Ever.Models
         public const string BuyListingRequest = "BuyListingRequest";
         public const string CancelListingRequest = "CancelListingRequest";
         public const string SyncMarketState = "SyncMarketState";
+        public const string Delivery = "MarketDelivery";
+        public const string DeliveryAcknowledgement = "MarketDeliveryAcknowledgement";
+        public const string RequestDeliveries = "MarketRequestDeliveries";
     }
 
     public class CreateListingPayload
@@ -25,5 +28,11 @@ namespace Pelican4Ever.Models
     public class CancelListingPayload
     {
         public string ListingId { get; set; } = string.Empty;
+    }
+
+    public class MarketDeliveryAcknowledgement
+    {
+        public string DeliveryId { get; set; } = string.Empty;
+        public bool Accepted { get; set; }
     }
 }
