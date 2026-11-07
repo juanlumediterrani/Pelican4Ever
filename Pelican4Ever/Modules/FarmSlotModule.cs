@@ -2541,6 +2541,13 @@ namespace Pelican4Ever.Modules
         /// Si no está presente (por ej. partidas guardadas previas, creación dinámica o fallos de CreateOnLoad),
         /// la crea de inmediato con su plantilla asignada, propiedades de mapa, cueva, bodega e invernadero.
         /// </summary>
+        /// <summary>Indica si el hueco tiene dueño registrado (residencia fundada).</summary>
+        public static bool IsResidenceFounded(string slotId)
+        {
+            return context != null && context.WorldState.Doors.Values.Any(d =>
+                string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase) && d.OwnerId != 0);
+        }
+
         public static Farm? EnsureFarmSlotExists(string slotId)
         {
             if (string.IsNullOrWhiteSpace(slotId))
@@ -2701,49 +2708,17 @@ namespace Pelican4Ever.Modules
                 {
                     var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
                     var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height, assignment?.FarmType);
-                    switch (annex.Side)
+                    var warpTiles = ResidenceAnnexAccessLogic.WarpTiles(assignment?.FarmType, annex.Side);
+                    // Quitar warps al anexo que ya no tocan (p. ej. los de otro tipo de residencia antes del cambio)
+                    for (int i = farm.warps.Count - 1; i >= 0; i--)
                     {
-                        case AnnexSide.North:
-                            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
-                            {
-                                UpdateOrCreateWarp(farm, 63, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 64, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            }
-                            else
-                            {
-                                UpdateOrCreateWarp(farm, 39, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 40, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 41, 0, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            }
-                            break;
-                        case AnnexSide.East:
-                            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
-                            {
-                                UpdateOrCreateWarp(farm, 99, 21, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 99, 22, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 99, 23, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            }
-                            else
-                            {
-                                UpdateOrCreateWarp(farm, 79, 15, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 79, 16, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 79, 17, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            }
-                            break;
-                        case AnnexSide.South:
-                            if (FarmGrassLogic.IsMeadowlands(assignment?.FarmType))
-                            {
-                                UpdateOrCreateWarp(farm, 52, 74, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 53, 74, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            }
-                            else
-                            {
-                                UpdateOrCreateWarp(farm, 39, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 40, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                                UpdateOrCreateWarp(farm, 41, 64, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
-                            }
-                            break;
+                        Warp w = farm.warps[i];
+                        if (string.Equals(w.TargetName, annex.AnnexId, StringComparison.OrdinalIgnoreCase)
+                            && !warpTiles.Contains(new TilePoint(w.X, w.Y)))
+                            farm.warps.RemoveAt(i);
                     }
+                    foreach (TilePoint warpTile in warpTiles)
+                        UpdateOrCreateWarp(farm, warpTile.X, warpTile.Y, annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y);
                 }
             }
 
@@ -3550,26 +3525,7 @@ namespace Pelican4Ever.Modules
                 {
                     var freeSides = ResidenceExits.FreeSides(residenceDoor.Edge);
                     string? farmType = context?.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == curLoc)?.FarmType;
-                    bool isMeadowlands = FarmGrassLogic.IsMeadowlands(farmType);
-                    AnnexSide? clickedSide = null;
-                    if (isMeadowlands)
-                    {
-                        if (targetTile.Y <= 2 && (int)targetTile.X >= 60 && (int)targetTile.X <= 67)
-                            clickedSide = AnnexSide.North;
-                        else if (targetTile.X >= 97 && (int)targetTile.Y >= 20 && (int)targetTile.Y <= 24)
-                            clickedSide = AnnexSide.East;
-                        else if (targetTile.Y >= 72 && (int)targetTile.X >= 50 && (int)targetTile.X <= 55)
-                            clickedSide = AnnexSide.South;
-                    }
-                    else
-                    {
-                        if (targetTile.Y <= 2 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
-                            clickedSide = AnnexSide.North;
-                        else if (targetTile.X >= 77 && (int)targetTile.Y >= 12 && (int)targetTile.Y <= 19)
-                            clickedSide = AnnexSide.East;
-                        else if (targetTile.Y >= 63 && (int)targetTile.X >= 36 && (int)targetTile.X <= 44)
-                            clickedSide = AnnexSide.South;
-                    }
+                    AnnexSide? clickedSide = ResidenceAnnexAccessLogic.SideAt(farmType, (int)targetTile.X, (int)targetTile.Y);
 
                     if (clickedSide.HasValue && freeSides.Contains(clickedSide.Value))
                     {

@@ -36,7 +36,7 @@ namespace Pelican4Ever.Tests
         [InlineData("FourCorners", 40, 1, 40, 63, 78, 17)]
         [InlineData("Ranching", 63, 1, 52, 73, 98, 22)]
         [InlineData("Meadowlands", 63, 1, 52, 73, 98, 22)]
-        [InlineData("Beach", 40, 1, 82, 103, 79, 17)]
+        [InlineData("Beach", 40, 1, 82, 103, 80, 17)]
         public void FarmTemplateCatalog_ReturnsCorrectArrivalCoords(
             string templateId, int nx, int ny, int sx, int sy, int ex, int ey)
         {

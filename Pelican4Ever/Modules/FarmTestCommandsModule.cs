@@ -530,6 +530,12 @@ namespace Pelican4Ever.Modules
             }
             else
             {
+                // Solo residencias fundadas: EnsureFarmSlotExists crearía una granja vacía para cualquier hueco
+                if (!FarmSlotModule.IsResidenceFounded(target.ResidenceSlotId!))
+                {
+                    error = $"{target.LocationName} no está fundada; usa p4e_farm_found.";
+                    return false;
+                }
                 farm = FarmSlotModule.EnsureFarmSlotExists(target.ResidenceSlotId!);
             }
 
