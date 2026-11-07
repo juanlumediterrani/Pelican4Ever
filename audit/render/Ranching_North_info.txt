@@ -1,7 +1,7 @@
 Template: Ranching
 Side: North
 Dimensions: 40x32
-Border blocked count: 136
+Border blocked count: 140
 Corridor tiles: 14
 Opening border tiles: (19, 31) (20, 31)
 Entrance exit tile: 20,31
