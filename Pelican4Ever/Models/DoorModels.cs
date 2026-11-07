@@ -61,6 +61,9 @@ namespace Pelican4Ever.Models
     {
         public string FarmSlotId { get; set; } = string.Empty;
         public string Policy { get; set; } = string.Empty;
+
+        /// <summary>Nuevo permiso de edición de las visitas; null lo deja como está.</summary>
+        public bool? VisitorsCanEdit { get; set; }
     }
 
     public class SyncDoorsPayload
@@ -68,5 +71,8 @@ namespace Pelican4Ever.Models
         public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
         public Dictionary<string, AnnexAssignment> Annexes { get; set; } = new();
         public Dictionary<long, PlayerRecord> Players { get; set; } = new();
+
+        /// <summary>FarmSlotCount del host, para que el catálogo de los clientes muestre los mismos huecos.</summary>
+        public int FarmSlotCount { get; set; }
     }
 }

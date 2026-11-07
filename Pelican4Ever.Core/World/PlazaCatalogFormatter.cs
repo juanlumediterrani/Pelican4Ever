@@ -112,6 +112,29 @@ namespace Pelican4Ever.Core.World
             return $"[Ocupada] {entry.DoorId} ({owner}): {entry.LocationDisplayName} ({entry.TileX},{entry.TileY})";
         }
 
+        /// <summary>
+        /// Líneas de /residencias en el chat, que no tiene scroll: solo las ocupadas y un resumen de las libres.
+        /// </summary>
+        public static IReadOnlyList<string> FormatChatSummary(IReadOnlyList<CatalogEntry> entries)
+        {
+            var lines = new List<string> { "=== RESIDENCIAS DE LA PLAZA ===" };
+            foreach (CatalogEntry entry in entries.Where(e => e.IsClaimed))
+            {
+                string owner = !string.IsNullOrWhiteSpace(entry.OwnerName) ? entry.OwnerName : "Vecino";
+                string type = string.IsNullOrWhiteSpace(entry.FarmType) ? string.Empty : $", {entry.FarmType}";
+                lines.Add($"{entry.DoorId}: {owner}{type} - {entry.LocationDisplayName}");
+            }
+
+            int claimed = entries.Count(e => e.IsClaimed);
+            int free = entries.Count - claimed;
+            if (claimed == 0)
+                lines.Add("Ninguna ocupada todavía.");
+            lines.Add(free > 0
+                ? $"{claimed} ocupadas, {free} libres. Camina hacia un portal libre de la plaza para fundar la tuya."
+                : $"{claimed} ocupadas, ninguna libre.");
+            return lines;
+        }
+
         public static string FormatConsoleLine(CatalogEntry entry)
         {
             string status = entry.IsClaimed

@@ -201,6 +201,7 @@ namespace Pelican4Ever.Core.World
                     FarmType = oldAssignment.FarmType,
                     OwnerId = oldAssignment.OwnerId,
                     Policy = oldAssignment.Policy,
+                    VisitorsCanEdit = oldAssignment.VisitorsCanEdit,
                     Friends = new HashSet<long>(oldAssignment.Friends)
                 };
 

@@ -16,7 +16,7 @@ namespace Pelican4Ever.Core.World
         /// <summary>Jugadores incluidos en la lista de amigos del propietario.</summary>
         Friends,
 
-        /// <summary>Cualquier jugador puede entrar (sin herramientas destructivas ni cofres).</summary>
+        /// <summary>Cualquier jugador puede entrar. Lo que puede tocar lo decide <see cref="DoorAssignment.VisitorsCanEdit"/>.</summary>
         Public
     }
 
@@ -32,6 +32,9 @@ namespace Pelican4Ever.Core.World
         public long OwnerId { get; set; }
 
         public AccessPolicy Policy { get; set; } = AccessPolicy.Locked;
+
+        /// <summary>Si los visitantes pueden usar herramientas, colocar, cosechar, abrir cofres y usar máquinas.</summary>
+        public bool VisitorsCanEdit { get; set; }
 
         public HashSet<long> Friends { get; set; } = new();
     }

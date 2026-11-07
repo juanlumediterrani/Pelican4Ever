@@ -2910,14 +2910,8 @@ namespace Pelican4Ever.Modules
                 return (isClaimed, owner, farmType, dModel?.Description);
             });
 
-            chat.addInfoMessage("=== PARCELAS RESIDENCIALES EN LA PLAZA CENTRAL ===");
-            int freeCount = 0;
-            foreach (var entry in entries)
-            {
-                if (!entry.IsClaimed) freeCount++;
-                chat.addInfoMessage(PlazaCatalogFormatter.FormatChatLine(entry));
-            }
-            chat.addInfoMessage($"Total: {freeCount} de {entries.Count} parcelas libres. Camina hacia el portal o escribe /residencias para fundar tu granja.");
+            foreach (string line in PlazaCatalogFormatter.FormatChatSummary(entries))
+                chat.addInfoMessage(line);
         }
 
         private void OnConsoleDoors(string command, string[] args)
@@ -3091,7 +3085,7 @@ namespace Pelican4Ever.Modules
                 var payload = e.ReadAs<ChangePolicyPayload>();
                 if (payload != null)
                 {
-                    HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy);
+                    HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy, payload.VisitorsCanEdit);
                 }
             }
             else if (e.Type == ModMessages.BuyAnnexRequest && Context.IsMainPlayer)
@@ -3123,6 +3117,9 @@ namespace Pelican4Ever.Modules
                 var payload = e.ReadAs<SyncDoorsPayload>();
                 if (payload != null)
                 {
+                    if (payload.FarmSlotCount > 0 && !Context.IsMainPlayer)
+                        context.Config.FarmSlotCount = payload.FarmSlotCount;
+
                     context.WorldState.Doors.Clear();
                     foreach (var kvp in payload.Doors)
                     {
@@ -3189,7 +3186,8 @@ namespace Pelican4Ever.Modules
             {
                 Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
                 Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
-                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players)
+                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
+                FarmSlotCount = context.Config.FarmSlotCount
             };
 
             context.Helper.Multiplayer.SendMessage(
@@ -3207,7 +3205,8 @@ namespace Pelican4Ever.Modules
             {
                 Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
                 Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
-                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players)
+                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
+                FarmSlotCount = context.Config.FarmSlotCount
             };
 
             context.Helper.Multiplayer.SendMessage(
@@ -3336,7 +3335,7 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
-        private static void HandleChangePolicy(long playerId, string farmSlotId, string policyStr)
+        private static void HandleChangePolicy(long playerId, string farmSlotId, string policyStr, bool? visitorsCanEdit = null)
         {
             if (context == null) return;
             var worldState = context.WorldState;
@@ -3344,7 +3343,11 @@ namespace Pelican4Ever.Modules
             var doorEntry = worldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId && d.OwnerId == playerId);
             if (doorEntry == null) return;
 
-            if (Enum.TryParse(policyStr, ignoreCase: true, out AccessPolicy newPolicy))
+            if (visitorsCanEdit.HasValue)
+                doorEntry.VisitorsCanEdit = visitorsCanEdit.Value;
+
+            AccessPolicy newPolicy = doorEntry.Policy;
+            if (string.IsNullOrWhiteSpace(policyStr) || Enum.TryParse(policyStr, ignoreCase: true, out newPolicy))
             {
                 doorEntry.Policy = newPolicy;
                 GameLocation? loc = Game1.getLocationFromName(farmSlotId);
@@ -3370,7 +3373,7 @@ namespace Pelican4Ever.Modules
                 GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(farmSlotId));
                 ghLoc?.PublishOwnership(playerId, newPolicy);
 
-                context.Monitor.Log($"[FarmSlotModule] Política de {farmSlotId} cambiada a {newPolicy} por propietario {playerId}.", LogLevel.Info);
+                context.Monitor.Log($"[FarmSlotModule] Política de {farmSlotId} cambiada a {newPolicy} (visitas editan: {doorEntry.VisitorsCanEdit}) por propietario {playerId}.", LogLevel.Info);
 
                 // Sincronizar inmediatamente a todos los peones
                 BroadcastDoorsSync();
@@ -3650,7 +3653,7 @@ namespace Pelican4Ever.Modules
                 Response[] choices = new[]
                 {
                     new Response("Enter", "Entrar a mi granja"),
-                    new Response("Policy", $"Cambiar acceso (Actual: {assignment.Policy})"),
+                    new Response("Policy", $"Cambiar acceso (ahora: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)})"),
                     new Response("Cancel", "Cancelar")
                 };
 
@@ -3684,7 +3687,7 @@ namespace Pelican4Ever.Modules
                 };
 
                 QuestionDialog.Ask(
-                    $"Residencia de {ownerName}. Tipo: {assignment.FarmType}. Estado: {assignment.Policy}.",
+                    $"Residencia de {ownerName}. Tipo: {assignment.FarmType}. Acceso: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)}.",
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -3708,35 +3711,44 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || Game1.currentLocation == null) return;
 
+            bool canEdit = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId)?.VisitorsCanEdit ?? false;
             Response[] choices = new[]
             {
-                new Response("Locked", "Cerrado con llave (Locked)"),
-                new Response("Friends", "Solo Amigos (Friends)"),
-                new Response("Public", "Público para visitas (Public)"),
+                new Response("Locked", "Cerrada: solo yo"),
+                new Response("Friends", "Solo amigos"),
+                new Response("Public", "Abierta a todas las visitas"),
+                new Response("ToggleEdit", canEdit ? "Visitas pueden editar: Sí (cambiar a No)" : "Visitas pueden editar: No (cambiar a Sí)"),
                 new Response("Cancel", "Cancelar")
             };
 
             QuestionDialog.Ask(
-                "Selecciona la política de acceso para tu granja:",
+                "Quién entra y si las visitas pueden usar herramientas, colocar, cosechar, abrir cofres y usar máquinas:",
                 choices,
                 (who, whichAnswer) =>
                 {
-                    if (whichAnswer is "Locked" or "Friends" or "Public")
+                    string? policy = whichAnswer is "Locked" or "Friends" or "Public" ? whichAnswer : null;
+                    bool? newCanEdit = whichAnswer == "ToggleEdit" ? !canEdit : null;
+                    if (policy == null && newCanEdit == null)
+                        return;
+
+                    if (Context.IsMainPlayer)
+                    {
+                        HandleChangePolicy(Game1.player.UniqueMultiplayerID, farmSlotId, policy ?? string.Empty, newCanEdit);
+                    }
+                    else
                     {
                         context.Helper.Multiplayer.SendMessage(
-                            new ChangePolicyPayload { FarmSlotId = farmSlotId, Policy = whichAnswer },
+                            new ChangePolicyPayload { FarmSlotId = farmSlotId, Policy = policy ?? string.Empty, VisitorsCanEdit = newCanEdit },
                             ModMessages.ChangePolicyRequest,
                             new[] { context.Manifest.UniqueID },
                             new[] { Game1.MasterPlayer.UniqueMultiplayerID }
                         );
-
-                        if (Context.IsMainPlayer)
-                        {
-                            HandleChangePolicy(Game1.player.UniqueMultiplayerID, farmSlotId, whichAnswer);
-                        }
-
-                        Game1.addHUDMessage(new HUDMessage($"Acceso actualizado a: {whichAnswer}", HUDMessage.newQuest_type));
                     }
+
+                    string hud = newCanEdit.HasValue
+                        ? (newCanEdit.Value ? "Las visitas ya pueden editar tu residencia." : "Las visitas ya solo pueden mirar.")
+                        : $"Acceso actualizado: {VisitorPermissionLogic.Describe(Enum.Parse<AccessPolicy>(policy!), canEdit)}";
+                    Game1.addHUDMessage(new HUDMessage(hud, HUDMessage.newQuest_type));
                 }
             );
         }

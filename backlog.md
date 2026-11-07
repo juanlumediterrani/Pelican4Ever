@@ -293,8 +293,9 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - *Corregido — `p4e_farm_tp`, `inspect`, `spawn` y `lightning` sobre un hueco sin fundar:* creaban una granja vacía con `EnsureFarmSlotExists`; ahora responden que no está fundada.
       - *Revisar:* algunas cajas sueltan 3 y 5 objetos a la vez; comprobar contra `BreakableContainer.releaseContents` si es vanilla.
       - *Minimapa (anexo):* sirve como provisional; todos iguales, sin bordes delimitados y con algún fallo gráfico. Se deja así.
-      - *Pedido — `/residencias`:* mostrar solo las ocupadas y el número de libres; el chat no tiene scroll.
-      - *Pedido — permiso de edición para visitantes:* además del acceso público, otra opción para decidir si el visitante puede editar (colocar, recoger, usar herramientas). El usuario indica además que la información mostrada no corresponde con el estado real; concretar en la siguiente prueba.
+      - *Hecho — `/residencias`:* en el chat solo salen las ocupadas (dueño, tipo y lugar) y el número de libres (`PlazaCatalogFormatter.FormatChatSummary`). `p4e_doors` en consola sigue listando todas. El host envía su `FarmSlotCount` en `SyncDoorsState` para que los clientes cuenten los mismos huecos.
+      - *Hecho — permiso de edición para visitantes:* `DoorAssignment.VisitorsCanEdit` (por defecto no), que se cambia en el diálogo de acceso de la puerta o el buzón. `VisitorGuardModule` corre en cada juego y bloquea a quien no es el dueño, en la residencia, su cueva, sótano, invernadero, casa y anexos: herramientas de trabajo y guadaña, colocar y sembrar, cosechar a mano, árboles frutales, cofres y máquinas. Armas, honda y caña siguen permitidas. Los diálogos muestran el acceso en texto («abierta, visitas solo miran»). Antes la descripción de `Public` decía que bloqueaba herramientas y cofres, pero nada lo hacía.
+      - *Pendiente:* `Friends` funciona como `Public`, porque no hay forma de añadir amigos ni se comprueba la lista al entrar. Tampoco se bloquea recoger forraje.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Una residencia de playa carga `Farm_Island`, genera forraje y cajas y sus aspersores no riegan la arena.

@@ -190,7 +190,7 @@ namespace Pelican4Ever.Modules
                 {
                     new Response("Enter", "🏠 Entrar a mi granja"),
                     new Response("Mailbox", Game1.mailbox.Count > 0 ? $"📬 Revisar correo ({Game1.mailbox.Count} sin leer)" : "📬 Revisar correo (vacío)"),
-                    new Response("Policy", $"🔒 Configurar acceso (Actual: {assignment?.Policy})"),
+                    new Response("Policy", $"🔒 Configurar acceso (ahora: {VisitorPermissionLogic.Describe(assignment?.Policy ?? AccessPolicy.Locked, assignment?.VisitorsCanEdit ?? false)})"),
                     new Response("Cancel", "Cancelar")
                 };
 
@@ -229,7 +229,7 @@ namespace Pelican4Ever.Modules
                     };
 
                     QuestionDialog.Ask(
-                        $"{door.Description}.\nPropiedad de {ownerName}. Estado: {assignment.Policy}.",
+                        $"{door.Description}.\nPropiedad de {ownerName}. Acceso: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)}.",
                         choices,
                         (who, whichAnswer) =>
                         {
