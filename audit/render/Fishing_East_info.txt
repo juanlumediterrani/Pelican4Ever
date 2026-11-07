@@ -1,7 +1,7 @@
 Template: Fishing
 Side: East
 Dimensions: 40x32
-Border blocked count: 112
+Border blocked count: 140
 Corridor tiles: 14
 Opening border tiles: (0, 16) (0, 17)
 Entrance exit tile: 0,16

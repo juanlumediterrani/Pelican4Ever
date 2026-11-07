@@ -1,7 +1,7 @@
 Template: Mining
 Side: North
 Dimensions: 40x32
-Border blocked count: 110
+Border blocked count: 4
 Corridor tiles: 14
 Opening border tiles: (19, 31) (20, 31)
 Entrance exit tile: 20,31
