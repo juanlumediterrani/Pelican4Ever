@@ -705,7 +705,17 @@ namespace Pelican4Ever.Framework
             // Marcar e identificar de forma claramente visible la puerta/umbral de entrada y flanquearla con postes
             if (mainSheet != null)
             {
-                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles);
+                bool corridorHasWater = false;
+                foreach (var (cx, cy) in corridorTiles)
+                {
+                    if (backLayer.Tiles[cx, cy] != null && HasWaterProperty(backLayer.Tiles[cx, cy]))
+                    {
+                        corridorHasWater = true;
+                        break;
+                    }
+                }
+
+                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles, corridorHasWater);
             }
 
             // 8. Zonas de bonificación válidas y diseño meticuloso de cada minimapa (TASK-902)
@@ -745,11 +755,34 @@ namespace Pelican4Ever.Framework
             Layer bldLayer,
             Layer frontLayer,
             TileSheet mainSheet,
-            HashSet<(int X, int Y)> openingBorderTiles)
+            HashSet<(int X, int Y)> openingBorderTiles,
+            bool corridorHasWater)
         {
             AnnexWarpPoints pts = AnnexEntrance.For(side, width, height);
             int ex = pts.ReturnExitTile.X;
             int ey = pts.ReturnExitTile.Y;
+
+            if (corridorHasWater)
+            {
+                // Entrada sobre agua: el umbral completo se convierte en puente de madera
+                // (tablones + vigas transitables) y NO se colocan vallas, que quedarían flotando
+                // sobre el agua. Barandilla visible solo en la viga exterior del borde.
+                foreach (var (ox, oy) in openingBorderTiles)
+                {
+                    var plank = new StaticTile(backLayer, mainSheet, BlendMode.Alpha, 1244);
+                    plank.Properties["Type"] = "Wood";
+                    backLayer.Tiles[ox, oy] = plank;
+
+                    int bIndex = (ox % 2 == 0) ? 184 : 211;
+                    var beam = new StaticTile(bldLayer, mainSheet, BlendMode.Alpha, bIndex);
+                    beam.Properties["Passable"] = "T";
+                    bldLayer.Tiles[ox, oy] = beam;
+
+                    frontLayer.Tiles[ox, oy] = null;
+                }
+
+                return;
+            }
 
             switch (side)
             {
