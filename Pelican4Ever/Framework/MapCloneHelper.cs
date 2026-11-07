@@ -700,7 +700,7 @@ namespace Pelican4Ever.Framework
                     // Sendas de entrada uniformes: el corredor no acuático se convierte por
                     // completo en tierra limpia (587) para evitar pieles vegetales heredadas
                     // del recorte que se leen como pegotes en el pasaje.
-                    TileSheet sheetForDirt = mainSheet ?? GetOutdoorsTileSheet(target) ?? target.TileSheets.FirstOrDefault();
+                    TileSheet? sheetForDirt = mainSheet ?? GetOutdoorsTileSheet(target) ?? target.TileSheets.FirstOrDefault();
                     if (sheetForDirt != null)
                     {
                         var dirtTile = new StaticTile(backLayer, sheetForDirt, BlendMode.Alpha, 587);
