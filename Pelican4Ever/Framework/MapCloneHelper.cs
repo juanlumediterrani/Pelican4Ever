@@ -722,7 +722,7 @@ namespace Pelican4Ever.Framework
                     }
                 }
 
-                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles, corridorHasWater);
+                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles, corridorHasWater, AnnexMapDesignLogic.EntranceStyleFor(template));
             }
 
             // 8. Zonas de bonificación válidas y diseño meticuloso de cada minimapa (TASK-902)
@@ -763,11 +763,15 @@ namespace Pelican4Ever.Framework
             Layer frontLayer,
             TileSheet mainSheet,
             HashSet<(int X, int Y)> openingBorderTiles,
-            bool corridorHasWater)
+            bool corridorHasWater,
+            AnnexEntranceStyle styleHint)
         {
             AnnexWarpPoints pts = AnnexEntrance.For(side, width, height);
             int ex = pts.ReturnExitTile.X;
             int ey = pts.ReturnExitTile.Y;
+
+            int doorBackTile = styleHint == AnnexEntranceStyle.SandShorePath ? 1269 : 736;
+            string doorBackType = styleHint == AnnexEntranceStyle.SandShorePath ? "Dirt" : "Stone";
 
             if (corridorHasWater)
             {
@@ -799,10 +803,10 @@ namespace Pelican4Ever.Framework
                     {
                         if (x >= 0 && x < width && backLayer.Tiles[x, southY] != null && !HasWaterProperty(backLayer.Tiles[x, southY]))
                         {
-                            if (IsRoadConvertableBack(backLayer.Tiles[x, southY]))
+                            if (backLayer.Tiles[x, southY] != null)
                             {
-                                SetTileIfValid(backLayer, mainSheet, x, southY, 736);
-                                backLayer.Tiles[x, southY].Properties["Type"] = "Stone";
+                                SetTileIfValid(backLayer, mainSheet, x, southY, doorBackTile);
+                                backLayer.Tiles[x, southY].Properties["Type"] = doorBackType;
                             }
                         }
                     }
@@ -831,10 +835,10 @@ namespace Pelican4Ever.Framework
                     {
                         if (x >= 0 && x < width && backLayer.Tiles[x, 0] != null && !HasWaterProperty(backLayer.Tiles[x, 0]))
                         {
-                            if (IsRoadConvertableBack(backLayer.Tiles[x, 0]))
+                            if (backLayer.Tiles[x, 0] != null)
                             {
-                                SetTileIfValid(backLayer, mainSheet, x, 0, 736);
-                                backLayer.Tiles[x, 0].Properties["Type"] = "Stone";
+                                SetTileIfValid(backLayer, mainSheet, x, 0, doorBackTile);
+                                backLayer.Tiles[x, 0].Properties["Type"] = doorBackType;
                             }
                         }
                     }
@@ -855,10 +859,10 @@ namespace Pelican4Ever.Framework
                     {
                         if (y >= 0 && y < height && backLayer.Tiles[0, y] != null && !HasWaterProperty(backLayer.Tiles[0, y]))
                         {
-                            if (IsRoadConvertableBack(backLayer.Tiles[0, y]))
+                            if (backLayer.Tiles[0, y] != null)
                             {
-                                SetTileIfValid(backLayer, mainSheet, 0, y, 736);
-                                backLayer.Tiles[0, y].Properties["Type"] = "Stone";
+                                SetTileIfValid(backLayer, mainSheet, 0, y, doorBackTile);
+                                backLayer.Tiles[0, y].Properties["Type"] = doorBackType;
                             }
                         }
                     }
@@ -1268,19 +1272,6 @@ namespace Pelican4Ever.Framework
             }
         }
 
-        /// <summary>
-        /// ¿El Back es un terreno salvaje convertible a camino de piedra en el umbral de la entrada?
-        /// </summary>
-        private static bool IsRoadConvertableBack(Tile back)
-        {
-            if (back == null)
-                return false;
-
-            if (back.TileIndex == 587 || back.TileIndex == 175)
-                return true;
-
-            return TerrainTileClassifier.IsGrassTileIndex(back.TileIndex);
-        }
 
         private static bool HasWaterProperty(Tile tile)
         {
