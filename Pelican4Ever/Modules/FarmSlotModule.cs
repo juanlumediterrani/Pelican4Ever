@@ -3594,6 +3594,7 @@ namespace Pelican4Ever.Modules
                     new Response("Foraging", "Granja Forestal (Recolección y madera)"),
                     new Response("Fishing", "Granja Fluvial (Pesca e islas)"),
                     new Response("Mining", "Granja Minera (Colinas y minerales)"),
+                    new Response("Combat", "Granja Salvaje (Monstruos de noche)"),
                     new Response("FourCorners", "Granja Cuatro Esquinas (Parcelas)"),
                     new Response("Ranching", "Granja Pradera (Ganadería y pasto azul)"),
                     new Response("Beach", "Granja de la Playa (Arena y forraje marino)"),
