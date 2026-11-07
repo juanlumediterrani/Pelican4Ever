@@ -621,6 +621,12 @@ namespace Pelican4Ever.Framework
                 bldLayer.Tiles[cx, cy] = null;
                 frontLayer.Tiles[cx, cy] = null;
                 alwaysFrontLayer.Tiles[cx, cy] = null;
+                Layer? corridorBld2 = target.GetLayer("Buildings2");
+                if (corridorBld2 != null) corridorBld2.Tiles[cx, cy] = null;
+                Layer? corridorAF2 = target.GetLayer("AlwaysFront2");
+                if (corridorAF2 != null) corridorAF2.Tiles[cx, cy] = null;
+                Layer? corridorAF3 = target.GetLayer("AlwaysFront3");
+                if (corridorAF3 != null) corridorAF3.Tiles[cx, cy] = null;
 
                 bool wasWater = backLayer.Tiles[cx, cy] != null && HasWaterProperty(backLayer.Tiles[cx, cy]);
 
@@ -670,8 +676,11 @@ namespace Pelican4Ever.Framework
             rimSkipTiles.UnionWith(corridorTiles);
             if (mainSheet != null)
             {
+                Layer? bld2Layer = target.GetLayer("Buildings2");
+                Layer? alwaysFront2Layer = target.GetLayer("AlwaysFront2");
+                Layer? alwaysFront3Layer = target.GetLayer("AlwaysFront3");
                 AnnexBorderArtist.BuildRim(
-                    template, side, width, height, source, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet, rimSkipTiles);
+                    template, side, width, height, backLayer, bldLayer, frontLayer, alwaysFrontLayer, bld2Layer, alwaysFront2Layer, alwaysFront3Layer, mainSheet, rimSkipTiles);
                 AnnexBorderArtist.PaintTemplateInteriors(template, side, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
                 AnnexBorderArtist.ApplyEntranceStyle(template, side, width, height, corridorTiles, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
             }

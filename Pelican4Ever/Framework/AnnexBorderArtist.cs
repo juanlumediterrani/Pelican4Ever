@@ -2,48 +2,25 @@ using System;
 using System.Collections.Generic;
 using Pelican4Ever.Core.World;
 using xTile;
-using xTile.Dimensions;
 using xTile.Layers;
-using xTile.ObjectModel;
 using xTile.Tiles;
 
 namespace Pelican4Ever.Framework
 {
     /// <summary>
-    /// Paleta de índices de tiles vanilla usada por el pintor de márgenes de minimapas.
-    /// Los índices de terreno (agua, arena) se aprenden del mapa vanilla de origen en tiempo
-    /// de ejecución para garantizar que el margen usa exactamente el arte del propio tipo de
-    /// granja; el resto son índices canónicos de <c>spring_outdoorsTileSheet</c> validados
-    /// contra el spritesheet real durante las rondas de auditoría visual (TASK-902).
+    /// Paleta de índices de tiles vanilla (<c>spring_outdoorsTileSheet</c>) del pintor de
+    /// márgenes de minimapas, calibrada contra el spritesheet real (auditoría visual TASK-902).
     /// </summary>
     public static class AnnexRimPalette
     {
-        /// <summary>Suelo firme transitable (tierra labrada limpia).</summary>
-        public const int DirtGround = 587;
-
-        /// <summary>Agua del propio mapa fluvial si el origen no aporta índice mejor.</summary>
-        public const int WaterFallback = 1230;
-
-        /// <summary>Arena del propio mapa costero si el origen no aporta índice mejor.</summary>
-        public const int SandFallback = 1269;
-
+        public const int WaterTile = 1230;
+        public const int SandTile = 1269;
         public const int WoodPlank = 1244;
         public const int BridgeBeamEven = 184;
         public const int BridgeBeamOdd = 211;
-        public const int RailNorthSouth = 194;
-        public const int RailWest = 195;
-        public const int RailEast = 193;
 
-        public const int FenceLeftBase = VerticalMultiTileClassifier.FenceLeftBaseTileIndex;
-        public const int FenceLeftTop = VerticalMultiTileClassifier.FenceLeftTopTileIndex;
-        public const int FenceMidBase = VerticalMultiTileClassifier.FenceMidBaseTileIndex;
-        public const int FenceMidTop = VerticalMultiTileClassifier.FenceMidTopTileIndex;
-        public const int FenceRightBase = VerticalMultiTileClassifier.FenceRightBaseTileIndex;
-        public const int FenceRightTop = VerticalMultiTileClassifier.FenceRightTopTileIndex;
-
-        /// <summary>Arbusto bloqueante clásico del borde de granja (Buildings, con remate 326 en Front).</summary>
+        /// <summary>Arbusto bloqueante clásico del borde de granja (Buildings).</summary>
         public const int Bush = 351;
-        public const int BushTop = 326;
 
         /// <summary>Seto 2×2 completo: base 113..114 (Buildings) + copa 88..89 (Front).</summary>
         public const int HedgeBaseLeft = 113;
@@ -51,133 +28,93 @@ namespace Pelican4Ever.Framework
         public const int HedgeCopaLeft = 88;
         public const int HedgeCopaRight = 89;
 
-        /// <summary>Arbolillo 2×2 completo: base 168..169 + copa 143..144 (Front).</summary>
-        public const int HedgeTreeBaseLeft = 168;
-        public const int HedgeTreeBaseRight = 169;
-        public const int HedgeTreeCopaLeft = 143;
-        public const int HedgeTreeCopaRight = 144;
+        /// <summary>Valla vertical completa: base 436 (Buildings) y remate 361 (Front).</summary>
+        public const int FenceVerticalBase = VerticalMultiTileClassifier.FenceVerticalBaseTileIndex;
+        public const int FenceVerticalTop = VerticalMultiTileClassifier.FenceVerticalTopTileIndex;
+
+        /// <summary>Valla horizontal completa: bases 383/384/385 + remates 358/359/360.</summary>
+        public const int FenceLeftBase = VerticalMultiTileClassifier.FenceLeftBaseTileIndex;
+        public const int FenceLeftTop = VerticalMultiTileClassifier.FenceLeftTopTileIndex;
+        public const int FenceMidBase = VerticalMultiTileClassifier.FenceMidBaseTileIndex;
+        public const int FenceMidTop = VerticalMultiTileClassifier.FenceMidTopTileIndex;
+        public const int FenceRightBase = VerticalMultiTileClassifier.FenceRightBaseTileIndex;
+        public const int FenceRightTop = VerticalMultiTileClassifier.FenceRightTopTileIndex;
 
         /// <summary>Talud de colina: base 441/444 (Buildings) + remate 416/419 (Front).</summary>
         public const int CliffBaseLeft = 441;
         public const int CliffBaseRight = 444;
         public const int CliffTopLeft = 416;
         public const int CliffTopRight = 419;
+
+        /// <summary>Remates del dosel arbóreo (AlwaysFront, bosque).</summary>
+        public const int CanopyLow = 968;
+        public const int CanopyHigh = 1043;
     }
 
     /// <summary>
     /// Pintor de márgenes decorativos inalcanzables y entradas por tipo de granja para los
-    /// minimapas temáticos 40×32 (TASK-902). Reemplaza el sellado perimetral invisible: cada
-    /// borde presenta una franja propia del tipo (setos, acantilado, agua, bosque, cerca,
-    /// arena) apoyada en decoración vanilla completa y visible, sin cortes de mapa. La abertura
-    /// de entrada interrumpe el margen, con un estilo de entrada coherente con el tipo.
+    /// minimapas temáticos 40×32 (TASK-902). Cada borde presenta una franja propia del tipo,
+    /// con composiciones vanilla completas y sin cortes de mapa. La abertura de entrada
+    /// interrumpe el margen, con estilo de entrada coherente con el tipo de granja.
     /// </summary>
     public static class AnnexBorderArtist
     {
-        /// <summary>
-        /// Descubre la paleta de terreno (agua, arena) escaneando el Back del mapa vanilla de
-        /// origen: primer tile con propiedad de hoja "Water"="T" y primer tile con
-        /// "NoSprinklers"="T" sin agua. Aplica fallbacks canónicos si no aparecen.
-        /// </summary>
-        public static (int WaterIndex, int SandIndex) DiscoverTerrainPalette(Map? source)
-        {
-            int? water = null;
-            int? sand = null;
-
-            if (source?.GetLayer("Back") is { } back)
-            {
-                for (int y = 0; y < back.LayerHeight && (water == null || sand == null); y++)
-                {
-                    for (int x = 0; x < back.LayerWidth && (water == null || sand == null); x++)
-                    {
-                        Tile? t = back.Tiles[x, y];
-                        if (t == null)
-                            continue;
-
-                        if (water == null && SheetFlag(t, "Water"))
-                            water = t.TileIndex;
-                        if (sand == null && SheetFlag(t, "NoSprinklers") && !SheetFlag(t, "Water"))
-                            sand = t.TileIndex;
-                    }
-                }
-            }
-
-            return (water ?? AnnexRimPalette.WaterFallback, sand ?? AnnexRimPalette.SandFallback);
-        }
-
-        private static bool SheetFlag(Tile tile, string flag)
-        {
-            if (tile.TileIndexProperties.TryGetValue(flag, out var raw) && raw.ToString()?.Equals("T", StringComparison.OrdinalIgnoreCase) == true)
-                return true;
-            return tile.Properties.TryGetValue(flag, out var raw2) && raw2.ToString()?.Equals("T", StringComparison.OrdinalIgnoreCase) == true;
-        }
+        private const int RimDepth = 2;
 
         /// <summary>
-        /// Construye el margen decorativo perimetral (2 casillas de profundidad) en Back/
-        /// Buildings/Front/AlwaysFront según el estilo declarado por tipo de granja. La
-        /// decoración de cada casilla pertenece a composiciones completas (arbustos 2×2 con
-        /// copa, taludes con remate, agua, cercas con travesaño), nunca a elementos cortados.
-        /// <paramref name="skipTiles"/> son las casillas de la abertura de entrada y del corredor.
+        /// Construye el margen perimetral del minimapa según el estilo declarado por tipo de
+        /// granja. <paramref name="skipTiles"/> contiene la abertura de entrada y su corredor.
+        /// Todos los tiles del margen (salvo la abertura) quedan no transitables.
         /// </summary>
         public static void BuildRim(
             AnnexTemplate template,
             AnnexSide side,
             int width,
             int height,
-            Map? sourceMap,
             Layer backLayer,
             Layer bldLayer,
             Layer frontLayer,
             Layer? alwaysFrontLayer,
+            Layer? bld2Layer,
+            Layer? alwaysFront2Layer,
+            Layer? alwaysFront3Layer,
             TileSheet mainSheet,
             HashSet<(int X, int Y)> skipTiles)
         {
-            const int depth = 2;
             var styles = AnnexMapDesignLogic.RimStyles(template.Behavior, template.Id);
 
-            // Limpieza previa de toda la banda perimetral (restos del recorte vanilla truncados).
-            foreach ((int x, int y) in AnnexMapDesignLogic.EnumerateRimTiles(width, height, depth))
+            // 1. Limpieza de TODAS las bandas perimetrales (restos del recorte vanilla truncados).
+            foreach ((int x, int y) in AnnexMapDesignLogic.EnumerateRimTiles(width, height, RimDepth))
             {
                 if (skipTiles.Contains((x, y)))
                     continue;
 
                 bldLayer.Tiles[x, y] = null;
                 frontLayer.Tiles[x, y] = null;
-                if (alwaysFrontLayer != null) alwaysFrontLayer.Tiles[x, y] = null;
                 backLayer.Tiles[x, y] = null;
+                if (alwaysFrontLayer != null) alwaysFrontLayer.Tiles[x, y] = null;
+                if (bld2Layer != null) bld2Layer.Tiles[x, y] = null;
+                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
             }
 
-            // Bordes horizontales: N (y = 0..depth-1) y S (y = height-depth..height-1).
+            // 2. Bordes horizontales (N y S): franjas de anchura completa.
             for (int x = 0; x < width; x++)
             {
-                for (int band = 0; band < depth; band++)
-                {
-                    if (!skipTiles.Contains((x, band)))
-                        PaintStyledCell(styles.North, x, band, band, backLayer, bldLayer, frontLayer, mainSheet);
-
-                    int sy = height - 1 - band;
-                    if (!skipTiles.Contains((x, sy)))
-                        PaintStyledCell(styles.South, x, band, sy, backLayer, bldLayer, frontLayer, mainSheet);
-                }
+                PaintHorizontalStrip(styles.North, width, height, topMost: true, skipTiles, x, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
+                PaintHorizontalStrip(styles.South, width, height, topMost: false, skipTiles, x, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
             }
 
-            // Bordes verticales: O (x = 0..depth-1) y E (x = width-depth..width-1); las esquinas
-            // ya pintadas por N/S se respetan (coherencia de los remates).
-            for (int y = depth; y < height - depth; y++)
+            // 3. Bordes verticales (O y E) entre las franjas ya pintadas.
+            for (int y = RimDepth; y < height - RimDepth; y++)
             {
-                for (int band = 0; band < depth; band++)
-                {
-                    if (!skipTiles.Contains((band, y)))
-                        PaintStyledCell(styles.West, band, band, y, backLayer, bldLayer, frontLayer, mainSheet);
-
-                    int ex = width - 1 - band;
-                    if (!skipTiles.Contains((ex, y)))
-                        PaintStyledCell(styles.East, band, band, y, backLayer, bldLayer, frontLayer, mainSheet);
-                }
+                PaintVerticalStrip(styles.West, width, height, leftMost: true, skipTiles, y, backLayer, bldLayer, frontLayer, mainSheet);
+                PaintVerticalStrip(styles.East, width, height, leftMost: false, skipTiles, y, backLayer, bldLayer, frontLayer, mainSheet);
             }
 
-            // Asegurar inalcanzabilidad: cada casilla del margen no abierta queda bloqueada,
-            // respaldada por la decoración pintada (no barreras invisibles huérfanas).
-            foreach ((int x, int y) in AnnexMapDesignLogic.EnumerateRimTiles(width, height, depth))
+            // 4. Sellado explícito del margen: cada casilla reservada queda no transitable,
+            //    respaldada por la decoración pintada (sin barreras invisibles).
+            foreach ((int x, int y) in AnnexMapDesignLogic.EnumerateRimTiles(width, height, RimDepth))
             {
                 if (skipTiles.Contains((x, y)))
                     continue;
@@ -190,175 +127,232 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Pinta una casilla del margen con el estilo correspondiente. band = 0 es la
-        /// fila/columna del borde (la más externa), band = 1 la más interna del margen;
-        /// index = posición a lo largo del borde (para variar regularmente el patrón).
+        /// Pinta la franja de un borde horizontal completada con sus dos bandas para la
+        /// columna <paramref name="x"/>. outerRow = 0 (Norte) o height-1 (Sur);
+        /// innerRow = 1 o height-2. En composiciones híbridas (base+copa), la base se sitúa en
+        /// la fila exterior y la copa superpone hacia dentro.
         /// </summary>
-        private static void PaintStyledCell(
+        private static void PaintHorizontalStrip(
             AnnexRimStyle style,
-            int index,
-            int band,
-            int y,
-            Layer backLayer,
-            Layer bldLayer,
-            Layer frontLayer,
-            TileSheet mainSheet)
+            int width,
+            int height,
+            bool topMost,
+            HashSet<(int X, int Y)> skipTiles,
+            int x,
+            Layer back,
+            Layer bld,
+            Layer front,
+            Layer? alwaysFront,
+            TileSheet sheet)
         {
+            int outerRow = topMost ? 0 : height - 1;
+            int innerRow = topMost ? 1 : height - 2;
+
             switch (style)
             {
-                case AnnexRimStyle.RiverBank:
-                    PaintRiverCell(index, band, y, backLayer, bldLayer, mainSheet);
+                case AnnexRimStyle.RiverBank or AnnexRimStyle.OceanShore:
+                    // Banda exterior: agua total. Banda interior: orilla (hierba o arena).
+                    if (!skipTiles.Contains((x, outerRow)))
+                        PutWater(back, sheet, x, outerRow);
+                    if (!skipTiles.Contains((x, innerRow)))
+                        PaintShoreCell(x, innerRow, back, bld, sheet, style == AnnexRimStyle.OceanShore);
                     break;
-                case AnnexRimStyle.OceanShore:
-                    PaintOceanCell(index, band, y, backLayer, bldLayer, mainSheet);
-                    break;
+
                 case AnnexRimStyle.RockyCanyon:
-                    PaintCliffCell(index, band, y, backLayer, bldLayer, frontLayer, mainSheet);
+                    // Banda exterior: masa de taludes completos (base + remate Front).
+                    if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
+                    {
+                        PlaceWildBack(back, sheet, x, innerRow);
+                        PlaceCliffPair(bld, front, sheet, x, outerRow);
+                    }
                     break;
-                case AnnexRimStyle.ForestEdge:
-                    PaintForestCell(index, band, y, backLayer, bldLayer, frontLayer, mainSheet);
-                    break;
-                case AnnexRimStyle.WildThorns:
-                    PaintThornCell(index, band, y, backLayer, bldLayer, mainSheet);
-                    break;
+
                 case AnnexRimStyle.RanchFence:
-                    PaintRanchCell(index, band, y, backLayer, bldLayer, frontLayer, mainSheet);
+                    // Banda interior: valla horizontal continua; banda exterior: pasto con arbustos.
+                    if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
+                    {
+                        PlaceWildBack(back, sheet, x, outerRow);
+                        if (x % 4 == 1)
+                            SetTile(bld, sheet, AnnexRimPalette.Bush, x, outerRow);
+                        PlaceFencePair(bld, front, sheet, x, innerRow);
+                    }
                     break;
-                case AnnexRimStyle.HedgeAndTrees:
+
                 default:
-                    PaintHedgeCell(index, band, y, backLayer, bldLayer, frontLayer, mainSheet);
+                    // Setos/bosque/espinos: masa continua base+copa en la banda exterior, hierba brillante en la interior.
+                    if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
+                    {
+                        PlaceWildBack(back, sheet, x, innerRow);
+                        PaintHedgeColumn(baseRow: outerRow, copaRow: innerRow, x, back, bld, front, sheet, style);
+                    }
                     break;
             }
+
+            _ = width;
+            _ = alwaysFront;
+        }
+
+        /// <summary>
+        /// Pinta la franja de un borde vertical para la fila <paramref name="y"/>. outerCol =
+        /// 0 (Oeste) o width-1 (Este); innerCol = 1 o width-2. Las composiciones verticales
+        /// usan base en la columna exterior y copa en Front de la misma columna (fila - 1).
+        /// </summary>
+        private static void PaintVerticalStrip(
+            AnnexRimStyle style,
+            int width,
+            int height,
+            bool leftMost,
+            HashSet<(int X, int Y)> skipTiles,
+            int y,
+            Layer back,
+            Layer bld,
+            Layer front,
+            TileSheet sheet)
+        {
+            int outerCol = leftMost ? 0 : width - 1;
+            int innerCol = leftMost ? 1 : width - 2;
+
+            switch (style)
+            {
+                case AnnexRimStyle.RiverBank or AnnexRimStyle.OceanShore:
+                    if (!skipTiles.Contains((outerCol, y)))
+                        PutWater(back, sheet, outerCol, y);
+                    if (!skipTiles.Contains((innerCol, y)))
+                        PaintShoreCell(innerCol, y, back, bld, sheet, style == AnnexRimStyle.OceanShore);
+                    break;
+
+                case AnnexRimStyle.RockyCanyon:
+                    if (!skipTiles.Contains((outerCol, y)) && !skipTiles.Contains((innerCol, y)))
+                    {
+                        PlaceWildBack(back, sheet, innerCol, y);
+                        PlaceCliffVerticalPair(bld, front, sheet, outerCol, y);
+                    }
+                    break;
+
+                case AnnexRimStyle.RanchFence:
+                    if (!skipTiles.Contains((outerCol, y)) && !skipTiles.Contains((innerCol, y)))
+                    {
+                        PlaceWildBack(back, sheet, innerCol, y);
+                        PlaceWildBack(back, sheet, outerCol, y);
+                        if (y % 3 != 0)
+                            PlaceVerticalFencePair(bld, front, sheet, outerCol, y);
+                    }
+                    break;
+
+                default:
+                    if (!skipTiles.Contains((outerCol, y)) && !skipTiles.Contains((innerCol, y)))
+                    {
+                        PlaceWildBack(back, sheet, innerCol, y);
+                        PlaceWildBack(back, sheet, outerCol, y);
+                        int mod = style == AnnexRimStyle.WildThorns ? 3 : 4;
+                        if (y % mod != 0)
+                            SetTile(bld, sheet, AnnexRimPalette.Bush, outerCol, y);
+                    }
+                    break;
+            }
+
+            _ = height;
         }
 
         // ------------------------------------------------------------------
-        // Pintores por estilo. Cada uno compone una franja coherente y completa:
-        // band 0 = borde exterior, band 1 = banda interior del margen.
+        // Composiciones (todas completas: ninguna cruzará el límite del mapa)
         // ------------------------------------------------------------------
 
-        private static void PaintHedgeCell(int index, int band, int y, Layer back, Layer bld, Layer front, TileSheet sheet)
+        /// <summary>Hilera híbrida continuada en un borde horizontal: seto 2×2 en múltiplos de 4
+        /// y arbusto de un casillo en el resto; Back salvaje en la fila de base entre remates.</summary>
+        private static void PaintHedgeColumn(int baseRow, int copaRow, int x, Layer back, Layer bld, Layer front, TileSheet sheet, AnnexRimStyle style)
         {
-            if (band == 0)
+            bool forest = style == AnnexRimStyle.ForestEdge;
+            bool thorns = style == AnnexRimStyle.WildThorns;
+            int mod = thorns ? 3 : 4;
+
+            PlaceWildBack(back, sheet, x, baseRow);
+            if (x % mod == 0)
             {
-                PlaceWildBack(back, sheet, index, y);
-                if (index % 4 == 0)
-                {
-                    SetTile(bld, sheet, index % 8 < 4 ? AnnexRimPalette.HedgeBaseLeft : AnnexRimPalette.HedgeBaseRight, index, y);
-                    SetTile(front, sheet, index % 8 < 4 ? AnnexRimPalette.HedgeCopaLeft : AnnexRimPalette.HedgeCopaRight, index, y - 1);
-                }
-                else if (index % 4 == 2)
-                {
-                    SetTile(bld, sheet, AnnexRimPalette.Bush, index, y);
-                }
+                // Seto 2×2 completo: base (Buildings) en la fila de base, copa (Front) en la copaRow.
+                bool left = x % 8 < mod / 2;
+                SetTile(bld, sheet, left ? AnnexRimPalette.HedgeBaseLeft : AnnexRimPalette.HedgeBaseRight, x, baseRow);
+                SetTile(front, sheet, left ? AnnexRimPalette.HedgeCopaLeft : AnnexRimPalette.HedgeCopaRight, x, copaRow);
             }
             else
             {
-                PlaceWildBack(back, sheet, index, y);
+                SetTile(bld, sheet, AnnexRimPalette.Bush, x, baseRow);
             }
+
+            // Bosque: tramos de dosel extras proyectados sobre la banda exterior.
+            if (forest && x % 5 == 2)
+                SetTile(bld, sheet, AnnexRimPalette.Bush, x, copaRow);
         }
 
-        private static void PaintForestCell(int index, int band, int y, Layer back, Layer bld, Layer front, TileSheet sheet)
+        /// <summary>Talud doble horizontal en la fila exterior: base en Buildings y remate en Front.</summary>
+        private static void PlaceCliffPair(Layer bld, Layer front, TileSheet sheet, int x, int baseRow)
         {
-            if (band == 0)
+            bool leftTile = x % 2 == 0;
+            SetTile(bld, sheet, leftTile ? AnnexRimPalette.CliffBaseLeft : AnnexRimPalette.CliffBaseRight, x, baseRow);
+            SetTile(front, sheet, leftTile ? AnnexRimPalette.CliffTopLeft : AnnexRimPalette.CliffTopRight, x, baseRow - 1);
+        }
+
+        /// <summary>Talud vertical en la columna exterior: base en Buildings y remate en Front (y - 1).</summary>
+        private static void PlaceCliffVerticalPair(Layer bld, Layer front, TileSheet sheet, int x, int y)
+        {
+            bool upper = (y / 2) % 2 == 0;
+            SetTile(bld, sheet, upper ? AnnexRimPalette.CliffBaseLeft : AnnexRimPalette.CliffBaseRight, x, y);
+            SetTile(front, sheet, upper ? AnnexRimPalette.CliffTopLeft : AnnexRimPalette.CliffTopRight, x, y - 1);
+        }
+
+        /// <summary>Valla horizontal: base 383/384/385 en la fila indicada + remate en Front fila - 1.</summary>
+        private static void PlaceFencePair(Layer bld, Layer front, TileSheet sheet, int x, int baseRow)
+        {
+            int baseIdx;
+            int topIdx;
+            if (x % 7 == 0)
             {
-                PlaceWildBack(back, sheet, index, y);
-                if (index % 5 < 3)
-                {
-                    SetTile(bld, sheet, index % 2 == 0 ? AnnexRimPalette.HedgeTreeBaseLeft : AnnexRimPalette.HedgeTreeBaseRight, index, y);
-                    SetTile(front, sheet, index % 2 == 0 ? AnnexRimPalette.HedgeTreeCopaLeft : AnnexRimPalette.HedgeTreeCopaRight, index, y - 1);
-                }
-                else
-                {
-                    SetTile(bld, sheet, AnnexRimPalette.Bush, index, y);
-                }
+                baseIdx = AnnexRimPalette.FenceLeftBase;
+                topIdx = AnnexRimPalette.FenceLeftTop;
+            }
+            else if (x % 7 == 6)
+            {
+                baseIdx = AnnexRimPalette.FenceRightBase;
+                topIdx = AnnexRimPalette.FenceRightTop;
             }
             else
             {
-                PlaceWildBack(back, sheet, index, y);
+                baseIdx = AnnexRimPalette.FenceMidBase;
+                topIdx = AnnexRimPalette.FenceMidTop;
             }
+
+            SetTile(bld, sheet, baseIdx, x, baseRow);
+            SetTile(front, sheet, topIdx, x, baseRow - 1);
         }
 
-        private static void PaintRiverCell(int index, int band, int y, Layer back, Layer bld, TileSheet sheet)
+        /// <summary>Valla vertical: base 436 en la fila indicada + remate 361 en Front (y - 1).</summary>
+        private static void PlaceVerticalFencePair(Layer bld, Layer front, TileSheet sheet, int x, int y)
         {
-            if (band == 0)
-            {
-                var tile = new StaticTile(back, sheet, BlendMode.Alpha, AnnexRimPalette.WaterFallback);
-                tile.Properties["Type"] = "Water";
-                back.Tiles[index, y] = tile;
-            }
-            else
-            {
-                PlaceWildBack(back, sheet, index, y);
-                if (index % 5 == 4)
-                    SetTile(bld, sheet, AnnexRimPalette.Bush, index, y);
-            }
+            SetTile(bld, sheet, AnnexRimPalette.FenceVerticalBase, x, y);
+            SetTile(front, sheet, AnnexRimPalette.FenceVerticalTop, x, y - 1);
         }
 
-        private static void PaintOceanCell(int index, int band, int y, Layer back, Layer bld, TileSheet sheet)
+        /// <summary>Orilla de una banda de agua: hierba salvaje (río) o arena con rocas (playa).</summary>
+        private static void PaintShoreCell(int x, int y, Layer back, Layer bld, TileSheet sheet, bool ocean)
         {
-            if (band == 0)
-            {
-                var tile = new StaticTile(back, sheet, BlendMode.Alpha, AnnexRimPalette.WaterFallback);
-                tile.Properties["Type"] = "Water";
-                back.Tiles[index, y] = tile;
-            }
-            else
-            {
-                var tile = new StaticTile(back, sheet, BlendMode.Alpha, AnnexRimPalette.SandFallback);
-                tile.Properties["Type"] = "Dirt";
-                back.Tiles[index, y] = tile;
-                if (index % 6 == 3)
-                    SetTile(bld, sheet, AnnexRimPalette.Bush, index, y);
-            }
+            var (wildIdx, wildType) = TerrainTileClassifier.GetWildTerrainTile(x, y);
+            var tile = new StaticTile(back, sheet, BlendMode.Alpha, ocean ? AnnexRimPalette.SandTile : wildIdx);
+            tile.Properties["Type"] = ocean ? "Dirt" : wildType;
+            back.Tiles[x, y] = tile;
+
+            if (x % 5 == 4)
+                SetTile(bld, sheet, AnnexRimPalette.Bush, x, y);
         }
 
-        private static void PaintCliffCell(int index, int band, int y, Layer back, Layer bld, Layer front, TileSheet sheet)
-        {
-            PlaceWildBack(back, sheet, index, y);
-            if (band == 0)
-            {
-                SetTile(bld, sheet, index % 2 == 0 ? AnnexRimPalette.CliffBaseLeft : AnnexRimPalette.CliffBaseRight, index, y);
-                SetTile(front, sheet, index % 2 == 0 ? AnnexRimPalette.CliffTopLeft : AnnexRimPalette.CliffTopRight, index, y - 1);
-            }
-        }
+        // ------------------------------------------------------------------
+        // Utiles
+        // ------------------------------------------------------------------
 
-        private static void PaintThornCell(int index, int band, int y, Layer back, Layer bld, TileSheet sheet)
+        private static void PutWater(Layer back, TileSheet sheet, int x, int y)
         {
-            PlaceWildBack(back, sheet, index, y);
-            if (band == 0 && index % 3 != 2)
-                SetTile(bld, sheet, AnnexRimPalette.Bush, index, y);
-        }
-
-        private static void PaintRanchCell(int index, int band, int y, Layer back, Layer bld, Layer front, TileSheet sheet)
-        {
-            PlaceWildBack(back, sheet, index, y);
-            if (band == 1)
-            {
-                int baseIdx;
-                int topIdx;
-                if (index % 7 == 0)
-                {
-                    baseIdx = AnnexRimPalette.FenceLeftBase;
-                    topIdx = AnnexRimPalette.FenceLeftTop;
-                }
-                else if (index % 7 == 6)
-                {
-                    baseIdx = AnnexRimPalette.FenceRightBase;
-                    topIdx = AnnexRimPalette.FenceRightTop;
-                }
-                else
-                {
-                    baseIdx = AnnexRimPalette.FenceMidBase;
-                    topIdx = AnnexRimPalette.FenceMidTop;
-                }
-
-                SetTile(bld, sheet, baseIdx, index, y);
-                SetTile(front, sheet, topIdx, index, y - 1);
-            }
-            else if (index % 4 == 1)
-            {
-                SetTile(bld, sheet, AnnexRimPalette.Bush, index, y);
-            }
+            var tile = new StaticTile(back, sheet, BlendMode.Alpha, AnnexRimPalette.WaterTile);
+            tile.Properties["Type"] = "Water";
+            back.Tiles[x, y] = tile;
         }
 
         private static void PlaceWildBack(Layer back, TileSheet sheet, int x, int y)
@@ -393,30 +387,27 @@ namespace Pelican4Ever.Framework
         {
             if (string.Equals(template.Id, "Fishing", StringComparison.OrdinalIgnoreCase))
             {
-                // Muelle oeste (y = 19..20): tablones de madera sobre el agua con la punta
-                // rematada por barandilla no transitable.
+                // Muelle oeste (y = 19): tablones de madera sobre el agua con la punta rematada
+                // por valla vertical completa no transitable.
                 SetTileIfValid(backLayer, mainSheet, 1, 19, AnnexRimPalette.WoodPlank);
                 SetTileWithPassable(bldLayer, mainSheet, 1, 19, AnnexRimPalette.BridgeBeamOdd, "T");
 
                 SetTileIfValid(backLayer, mainSheet, 0, 19, AnnexRimPalette.WoodPlank);
-                SetTileWithPassable(bldLayer, mainSheet, 0, 19, AnnexRimPalette.RailWest, "F");
-
-                SetTileIfValid(backLayer, mainSheet, 0, 20, 1230);
-                SetTileIfValid(backLayer, mainSheet, 1, 20, 1230);
+                SetTileWithPassable(bldLayer, mainSheet, 0, 19, AnnexRimPalette.FenceVerticalBase, "F");
+                SetTileIfValid(frontLayer, mainSheet, 0, 18, AnnexRimPalette.FenceVerticalTop);
 
                 if (side == AnnexSide.East)
                 {
                     // Pasarela de madera hacia la entrada oeste (corredor sobre agua).
                     SetTileIfValid(backLayer, mainSheet, 0, 16, AnnexRimPalette.WoodPlank);
                     SetTileWithPassable(bldLayer, mainSheet, 0, 16, AnnexRimPalette.BridgeBeamEven, "T");
-
                     SetTileIfValid(backLayer, mainSheet, 0, 17, AnnexRimPalette.WoodPlank);
                     SetTileWithPassable(bldLayer, mainSheet, 0, 17, AnnexRimPalette.BridgeBeamOdd, "T");
                 }
             }
             else if (string.Equals(template.Id, "FourCorners", StringComparison.OrdinalIgnoreCase))
             {
-                // Cerezo en flor del cuadrante y rampa noroeste.
+                // Cerezo en flor del cuadrante mixto y rampa noroeste.
                 if (alwaysFrontLayer != null)
                 {
                     SetTileIfValid(alwaysFrontLayer, mainSheet, 19, 25, 45);
@@ -443,9 +434,17 @@ namespace Pelican4Ever.Framework
             SetTileWithPassable(bldLayer, mainSheet, x, y, tileIndex, "F");
         }
 
+        private static void SetTileIfValid(Layer layer, TileSheet sheet, int x, int y, int tileIndex)
+        {
+            if (layer == null || x < 0 || x >= layer.LayerWidth || y < 0 || y >= layer.LayerHeight)
+                return;
+
+            layer.Tiles[x, y] = new StaticTile(layer, sheet, BlendMode.Alpha, tileIndex);
+        }
+
         private static void SetTileWithPassable(Layer layer, TileSheet sheet, int x, int y, int tileIndex, string passable)
         {
-            if (x < 0 || x >= layer.LayerWidth || y < 0 || y >= layer.LayerHeight)
+            if (layer == null || x < 0 || x >= layer.LayerWidth || y < 0 || y >= layer.LayerHeight)
                 return;
 
             var tile = new StaticTile(layer, sheet, BlendMode.Alpha, tileIndex);
@@ -453,22 +452,14 @@ namespace Pelican4Ever.Framework
             layer.Tiles[x, y] = tile;
         }
 
-        private static void SetTileIfValid(Layer layer, TileSheet sheet, int x, int y, int tileIndex)
-        {
-            if (x < 0 || x >= layer.LayerWidth || y < 0 || y >= layer.LayerHeight)
-                return;
-
-            layer.Tiles[x, y] = new StaticTile(layer, sheet, BlendMode.Alpha, tileIndex);
-        }
-
         // ----------------------------------------------------------------------
         // Estilos de entrada por tipo de granja
         // ----------------------------------------------------------------------
 
         /// <summary>
-        /// Completa la entrada del minimapa con el detalle de su tipo: puente de madera con
-        /// barandillas si el corredor de acceso cruza agua; túnel arbóreo para las forestales;
-        /// desfiladero de roca para las de colina; etc. (TASK-902).
+        /// Completa la entrada del minimapa con el detalle de su tipo: puente de madera si el
+        /// corredor de acceso cruza agua; túnel arbóreo para las forestales; desfiladero de
+        /// roca para las de colina; etc. (TASK-902).
         /// </summary>
         public static void ApplyEntranceStyle(
             AnnexTemplate template,
@@ -491,10 +482,6 @@ namespace Pelican4Ever.Framework
 
             switch (style)
             {
-                case AnnexEntranceStyle.WoodBridge:
-                    PaintWoodBridgeEntrance(side, width, height, corridorTiles, backLayer, bldLayer, mainSheet);
-                    break;
-
                 case AnnexEntranceStyle.ForestTunnel:
                     PaintForestTunnelEntrance(side, corridorTiles, backLayer, alwaysFrontLayer, mainSheet);
                     break;
@@ -503,9 +490,10 @@ namespace Pelican4Ever.Framework
                     PaintRockCanyonEntrance(side, corridorTiles, backLayer, bldLayer, frontLayer, mainSheet);
                     break;
 
-                // DirtGate / WildGrove / RanchGate / SandShorePath: el umbral y sus flancos
-                // (vallas del MarkAndDecorate o el propio margen temático) ya delimitan la
-                // entrada con su estilo; no se necesita extra.
+                // WoodBridge: el corredor ya cruza con tablones+vigas y el margen de agua enmarca
+                // la abertura; con vueltas-a-puertas de río no se añade más para evitar ornamentos
+                // extraños. DirtGate/WildGrove/RanchGate/SandShorePath quedan delimitados por el
+                // propio margen temático y el umbral del MarkAndDecorateEntranceDoorway.
                 default:
                     break;
             }
@@ -524,58 +512,8 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Barandillas flanqueando el pasaje de madera sobre agua, estilo puente canónico:
-        /// en Norte/Sur a ambos lados del corredor vertical; en Este, a ambos lados del horizontal.
-        /// </summary>
-        private static void PaintWoodBridgeEntrance(
-            AnnexSide side,
-            int width,
-            int height,
-            HashSet<(int X, int Y)> corridorTiles,
-            Layer backLayer,
-            Layer bldLayer,
-            TileSheet mainSheet)
-        {
-            AnnexWarpPoints pts = AnnexEntrance.For(side, width, height);
-            int railIndex = side == AnnexSide.East ? AnnexRimPalette.RailEast : AnnexRimPalette.RailNorthSouth;
-
-            if (side == AnnexSide.East)
-            {
-                int ey = pts.ReturnExitTile.Y;
-                foreach ((int x, int _) in corridorTiles)
-                {
-                    SetRailIfWater(bldLayer, mainSheet, x, ey - 1, backLayer, railIndex);
-                    SetRailIfWater(bldLayer, mainSheet, x, ey + 2, backLayer, railIndex);
-                }
-            }
-            else
-            {
-                int ex = pts.ReturnExitTile.X;
-                foreach ((int _, int y) in corridorTiles)
-                {
-                    SetRailIfWater(bldLayer, mainSheet, ex - 2, y, backLayer, railIndex);
-                    SetRailIfWater(bldLayer, mainSheet, ex + 1, y, backLayer, railIndex);
-                }
-            }
-        }
-
-        private static void SetRailIfWater(Layer bldLayer, TileSheet mainSheet, int x, int y, Layer backLayer, int railIndex)
-        {
-            if (x < 0 || x >= bldLayer.LayerWidth || y < 0 || y >= bldLayer.LayerHeight)
-                return;
-
-            Tile? back = backLayer.Tiles[x, y];
-            if (back == null || (!(back.Properties.ContainsKey("Water") || back.TileIndexProperties.ContainsKey("Water")) && back.TileIndex != 1230))
-                return;
-
-            var rail = new StaticTile(bldLayer, mainSheet, BlendMode.Alpha, railIndex);
-            rail.Properties["Passable"] = "F";
-            bldLayer.Tiles[x, y] = rail;
-        }
-
-        /// <summary>
-        /// Túnel de bosque: copas continuas (AlwaysFront) encima y debajo del corredor y fondo
-        /// de hierba del mapa forestal dentro del pasaje.
+        /// Túnel de bosque: copas continuas (AlwaysFront) en las filas/columnas flanqueando el
+        /// corredor y fondo de hierba del mapa forestal dentro del pasaje.
         /// </summary>
         private static void PaintForestTunnelEntrance(
             AnnexSide side,
@@ -587,9 +525,6 @@ namespace Pelican4Ever.Framework
             if (alwaysFrontLayer == null)
                 return;
 
-            const int CopaIndex = 968;
-            const int CopaUpperIndex = 1043;
-
             foreach ((int x, int y) in corridorTiles)
             {
                 // Hierba del mapa forestal bajo el pasaje.
@@ -599,14 +534,14 @@ namespace Pelican4Ever.Framework
                 if (side == AnnexSide.East)
                 {
                     // Corredor horizontal: copas en las filas adyacentes.
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x, y - 1, CopaIndex);
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x, y + 2, CopaUpperIndex);
+                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x, y - 1, AnnexRimPalette.CanopyLow);
+                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x, y + 2, AnnexRimPalette.CanopyHigh);
                 }
                 else
                 {
                     // Corredor vertical: copas en las columnas adyacentes.
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x - 2, y, CopaIndex);
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x + 1, y, CopaUpperIndex);
+                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x - 2, y, AnnexRimPalette.CanopyLow);
+                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x + 1, y, AnnexRimPalette.CanopyHigh);
                 }
             }
         }
