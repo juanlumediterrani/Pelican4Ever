@@ -535,6 +535,25 @@ namespace Pelican4Ever.Framework
             SetTileIfValid(bldLayer, outdoorsSheet, 2, 26, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
             SetTileIfValid(frontLayer, outdoorsSheet, 2, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
             SetTileIfValid(frontLayer, outdoorsSheet, 32, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
+
+            // 6. Copas huérfanas en la fila 0 del borde norte: cualquier remate de Front/AlwaysFront
+            // sin base en Buildings[x, 1] es un fragmento truncado por el recorte (se dibuja con su
+            // mitad superior fuera del mapa). Se elimina para dejar el borde limpio.
+            for (int x = 0; x <= 34; x++)
+            {
+                if (bldLayer.Tiles[x, 1] != null)
+                    continue;
+
+                bool orphanFront = frontLayer.Tiles[x, 0] != null || alwaysFrontLayer.Tiles[x, 0] != null
+                    || (alwaysFront2Layer != null) || (alwaysFront3Layer != null);
+                if (!orphanFront)
+                    continue;
+
+                frontLayer.Tiles[x, 0] = null;
+                alwaysFrontLayer.Tiles[x, 0] = null;
+                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, 0] = null;
+                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, 0] = null;
+            }
         }
 
         /// <summary>
