@@ -649,7 +649,22 @@ namespace Pelican4Ever.Framework
                 frontLayer.Tiles[cx, cy] = null;
                 alwaysFrontLayer.Tiles[cx, cy] = null;
 
-                if (backLayer.Tiles[cx, cy] != null)
+                bool wasWater = backLayer.Tiles[cx, cy] != null && HasWaterProperty(backLayer.Tiles[cx, cy]);
+
+                if (wasWater && mainSheet != null)
+                {
+                    // Si el corredor o entrada cruza agua, construir un puente de madera canónico de Stardew Valley
+                    var bridgePlank = new StaticTile(backLayer, mainSheet, BlendMode.Alpha, 1244);
+                    backLayer.Tiles[cx, cy] = bridgePlank;
+                    ClearBlockingAndWaterProperties(bridgePlank);
+                    bridgePlank.Properties["Type"] = "Wood";
+
+                    int bIndex = (cx % 2 == 0) ? 184 : 211;
+                    var bridgeBeam = new StaticTile(bldLayer, mainSheet, BlendMode.Alpha, bIndex);
+                    bridgeBeam.Properties["Passable"] = "T";
+                    bldLayer.Tiles[cx, cy] = bridgeBeam;
+                }
+                else if (backLayer.Tiles[cx, cy] != null)
                 {
                     ClearBlockingAndWaterProperties(backLayer.Tiles[cx, cy]);
                     if (!backLayer.Tiles[cx, cy].Properties.ContainsKey("Type"))
@@ -665,11 +680,130 @@ namespace Pelican4Ever.Framework
                 }
             }
 
+            // Marcar e identificar de forma claramente visible la puerta/umbral de entrada y flanquearla con postes
+            if (mainSheet != null)
+            {
+                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles);
+            }
+
             // 8. Garantizar zonas de bonificación válidas y diseño meticuloso de cada minimapa (TASK-902)
             EnsureAnnexBonusZones(template, width, height, backLayer, bldLayer, frontLayer, pathsLayer, mainSheet, corridorTiles);
             SmoothThematicAnnexBordersAndEntrances(template, side, width, height, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet, openingBorderTiles);
 
+            // 9. Remediación exhaustiva de glitches gráficos y alineación de capas en todo el minimapa
+            if (mainSheet != null)
+            {
+                SanitizeMapGraphicGlitches(target, mainSheet);
+            }
+
             return target;
+        }
+
+        private static void MarkAndDecorateEntranceDoorway(
+            AnnexSide side,
+            int width,
+            int height,
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            TileSheet mainSheet,
+            HashSet<(int X, int Y)> openingBorderTiles)
+        {
+            AnnexWarpPoints pts = AnnexEntrance.For(side, width, height);
+            int ex = pts.ReturnExitTile.X;
+            int ey = pts.ReturnExitTile.Y;
+
+            switch (side)
+            {
+                case AnnexSide.North:
+                    int southY = height - 1;
+                    for (int x = ex - 1; x <= ex; x++)
+                    {
+                        if (x >= 0 && x < width && backLayer.Tiles[x, southY] != null && !HasWaterProperty(backLayer.Tiles[x, southY]))
+                        {
+                            if (backLayer.Tiles[x, southY].TileIndex == 587 || backLayer.Tiles[x, southY].TileIndex == 175)
+                            {
+                                SetTileIfValid(backLayer, mainSheet, x, southY, 736);
+                                backLayer.Tiles[x, southY].Properties["Type"] = "Stone";
+                            }
+                        }
+                    }
+                    if (ex - 2 >= 0)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, ex - 2, southY, VerticalMultiTileClassifier.FenceLeftBaseTileIndex);
+                        SetPassableIfValid(bldLayer, ex - 2, southY, false);
+                        if (southY > 0 && frontLayer != null)
+                        {
+                            SetTileIfValid(frontLayer, mainSheet, ex - 2, southY - 1, VerticalMultiTileClassifier.FenceLeftTopTileIndex);
+                        }
+                    }
+                    if (ex + 1 < width)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, ex + 1, southY, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
+                        SetPassableIfValid(bldLayer, ex + 1, southY, false);
+                        if (southY > 0 && frontLayer != null)
+                        {
+                            SetTileIfValid(frontLayer, mainSheet, ex + 1, southY - 1, VerticalMultiTileClassifier.FenceRightTopTileIndex);
+                        }
+                    }
+                    break;
+
+                case AnnexSide.South:
+                    for (int x = ex - 1; x <= ex; x++)
+                    {
+                        if (x >= 0 && x < width && backLayer.Tiles[x, 0] != null && !HasWaterProperty(backLayer.Tiles[x, 0]))
+                        {
+                            if (backLayer.Tiles[x, 0].TileIndex == 587 || backLayer.Tiles[x, 0].TileIndex == 175)
+                            {
+                                SetTileIfValid(backLayer, mainSheet, x, 0, 736);
+                                backLayer.Tiles[x, 0].Properties["Type"] = "Stone";
+                            }
+                        }
+                    }
+                    if (ex - 2 >= 0)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, ex - 2, 0, VerticalMultiTileClassifier.FenceLeftBaseTileIndex);
+                        SetPassableIfValid(bldLayer, ex - 2, 0, false);
+                    }
+                    if (ex + 1 < width)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, ex + 1, 0, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
+                        SetPassableIfValid(bldLayer, ex + 1, 0, false);
+                    }
+                    break;
+
+                case AnnexSide.East:
+                    for (int y = ey; y <= ey + 1; y++)
+                    {
+                        if (y >= 0 && y < height && backLayer.Tiles[0, y] != null && !HasWaterProperty(backLayer.Tiles[0, y]))
+                        {
+                            if (backLayer.Tiles[0, y].TileIndex == 587 || backLayer.Tiles[0, y].TileIndex == 175)
+                            {
+                                SetTileIfValid(backLayer, mainSheet, 0, y, 736);
+                                backLayer.Tiles[0, y].Properties["Type"] = "Stone";
+                            }
+                        }
+                    }
+                    if (ey - 1 >= 0)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, 0, ey - 1, VerticalMultiTileClassifier.FenceVerticalUpperMidTileIndex);
+                        SetPassableIfValid(bldLayer, 0, ey - 1, false);
+                        if (ey - 2 >= 0 && frontLayer != null)
+                        {
+                            SetTileIfValid(frontLayer, mainSheet, 0, ey - 2, VerticalMultiTileClassifier.FenceVerticalTopTileIndex);
+                        }
+                    }
+                    if (ey + 2 < height)
+                    {
+                        SetTileIfValid(bldLayer, mainSheet, 0, ey + 2, VerticalMultiTileClassifier.FenceVerticalBaseTileIndex);
+                        SetPassableIfValid(bldLayer, 0, ey + 2, false);
+                        if (frontLayer != null)
+                        {
+                            SetTileIfValid(frontLayer, mainSheet, 0, ey + 1, VerticalMultiTileClassifier.FenceVerticalUpperMidTileIndex);
+                        }
+                    }
+                    break;
+            }
         }
 
         public static void GetEntranceOpeningAndCorridor(
@@ -828,17 +962,12 @@ namespace Pelican4Ever.Framework
                     }
                 }
             }
-
-            // D) Remanso Fluvial: la plantilla fluvial vanilla de Farm_Fishing (recorte 16, 18) ya cuenta
-            // de forma natural con 346 casillas de agua de río y 247 casillas de orilla pescable limpia alrededor
-            // de la isla. No se recorta ningún hueco artificial en medio de la tierra, preservando íntegros los
-            // acantilados, la vegetación y la costa orgánica de Stardew Valley.
         }
 
         /// <summary>
         /// Aplica un diseño meticuloso y acabado artesanal para los bordes, orillas y corredores de entrada
-        /// de cada minimapa temático (40×32), asegurando continuidad visual, eliminación de muñones de puentes
-        /// y remates orgánicos según la naturaleza de cada granja.
+        /// de cada minimapa temático (40×32), asegurando que los límites estén respaldados por decoración explícita
+        /// canónica de Stardew Valley (desnivel/colina no alcanzable con árboles o agua) y sin glitches gráficos.
         /// </summary>
         private static void SmoothThematicAnnexBordersAndEntrances(
             AnnexTemplate template,
@@ -861,7 +990,6 @@ namespace Pelican4Ever.Framework
             // Donde un puente o pasarela de madera llega a un borde sin ser la entrada, se remata con una barandilla
             // de madera canónica de Stardew Valley (194 en Norte/Sur, 195 en Oeste, 193 en Este) con colisión visible,
             // convirtiéndolo en un muelle o mirador acabado sin muros invisibles.
-            // Donde un camino abierto de tierra/empedrado llega al borde, se remata con una valla o poste rústico.
             for (int x = 0; x < width; x++)
             {
                 // Borde Norte (y = 0)
@@ -876,8 +1004,6 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        // En y = 0 no se puede colocar la base de una valla horizontal de 2 tiles (requeriría y = -1 en Front).
-                        // Se remata con la barandilla rústica canónica de 1 casilla (194), cerrando limpiamente el camino sin decapitaciones.
                         SetTileIfValid(bldLayer, mainSheet, x, 0, 194);
                         SetPassableIfValid(bldLayer, x, 0, false);
                     }
@@ -896,7 +1022,6 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        // Rematar con barandilla rústica de madera (194) en el límite sur para un cierre limpio y homogéneo
                         SetTileIfValid(bldLayer, mainSheet, x, southY, 194);
                         SetPassableIfValid(bldLayer, x, southY, false);
                     }
@@ -917,7 +1042,6 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        // En la columna vertical x = 0, usar la barandilla rústica vertical oeste (195) en lugar de fragmentos horizontales
                         SetTileIfValid(bldLayer, mainSheet, 0, y, 195);
                         SetPassableIfValid(bldLayer, 0, y, false);
                     }
@@ -936,22 +1060,39 @@ namespace Pelican4Ever.Framework
                     }
                     else if (bldIdx == null && backIdx.HasValue && OpenPathBackTileIndices.Contains(backIdx.Value))
                     {
-                        // En la columna vertical x = eastX, usar la barandilla rústica vertical este (193) en lugar de fragmentos horizontales
                         SetTileIfValid(bldLayer, mainSheet, eastX, y, 193);
                         SetPassableIfValid(bldLayer, eastX, y, false);
                     }
                 }
             }
 
-            // 2. Acabados específicos por plantilla temática
-            if (string.Equals(id, "Fishing", StringComparison.OrdinalIgnoreCase))
+            // 2. Acabados específicos por plantilla temática (Vanilla Stardew Valley Style)
+            if (string.Equals(id, "Standard", StringComparison.OrdinalIgnoreCase))
             {
-                // Prolongar puente oeste hacia el borde en x=1
+                // Huerto de Cultivo Estándar: Borde Norte con colina de acantilado y copas de árboles
+                for (int x = 0; x < width; x++)
+                {
+                    if (!openingBorderTiles.Contains((x, 0)))
+                    {
+                        if (bldLayer.Tiles[x, 0] == null)
+                        {
+                            SetTileIfValid(bldLayer, mainSheet, x, 0, 351);
+                            SetPassableIfValid(bldLayer, x, 0, false);
+                        }
+                        if (frontLayer != null && frontLayer.Tiles[x, 0] == null && (x % 3 == 0))
+                        {
+                            SetTileIfValid(frontLayer, mainSheet, x, 0, 118);
+                        }
+                    }
+                }
+            }
+            else if (string.Equals(id, "Fishing", StringComparison.OrdinalIgnoreCase))
+            {
+                // Remanso Fluvial: Muelle oeste y canales de agua
                 SetTileIfValid(backLayer, mainSheet, 1, 19, 1244);
                 SetTileIfValid(bldLayer, mainSheet, 1, 19, 211);
                 SetPassableIfValid(bldLayer, 1, 19, true);
 
-                // Rematar el muelle oeste con barandilla canónica en el límite del mapa
                 SetTileIfValid(backLayer, mainSheet, 0, 19, 1244);
                 SetTileIfValid(bldLayer, mainSheet, 0, 19, 195);
                 SetPassableIfValid(bldLayer, 0, 19, false);
@@ -959,7 +1100,6 @@ namespace Pelican4Ever.Framework
                 SetTileIfValid(backLayer, mainSheet, 0, 20, 1269);
                 SetTileIfValid(backLayer, mainSheet, 1, 20, 1269);
 
-                // Entrada Oeste (si el anexo se accede desde el Este de la residencia, x=0..1, y=16..17)
                 if (side == AnnexSide.East)
                 {
                     SetTileIfValid(backLayer, mainSheet, 0, 16, 1244);
@@ -971,16 +1111,62 @@ namespace Pelican4Ever.Framework
                     SetPassableIfValid(bldLayer, 0, 17, true);
                 }
 
-                // Embarcadero Sur (x=20, y=30..31): si es la entrada, asegurar transito
                 if (openingBorderTiles.Contains((20, 31)))
                 {
                     SetPassableIfValid(bldLayer, 20, 31, true);
                 }
             }
+            else if (string.Equals(id, "Foraging", StringComparison.OrdinalIgnoreCase))
+            {
+                // Franja Forestal: Túnel arbóreo y dosel en entrada oeste
+                if (frontLayer != null)
+                {
+                    for (int x = 0; x <= 2; x++)
+                    {
+                        if (x < frontLayer.LayerWidth)
+                        {
+                            if (16 < frontLayer.LayerHeight) frontLayer.Tiles[x, 16] = null;
+                            if (17 < frontLayer.LayerHeight) frontLayer.Tiles[x, 17] = null;
+                        }
+                    }
+                }
+
+                if (side == AnnexSide.East)
+                {
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 0, 15, 968);
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 1, 15, 968);
+                    if (alwaysFrontLayer != null && (alwaysFrontLayer.Tiles[2, 15]?.TileIndex == 946 || alwaysFrontLayer.Tiles[2, 15] == null))
+                    {
+                        SetTileIfValid(alwaysFrontLayer, mainSheet, 2, 15, 968);
+                    }
+
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 0, 18, 1043);
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 1, 18, 1043);
+                    if (alwaysFrontLayer != null && (alwaysFrontLayer.Tiles[2, 18]?.TileIndex == 946 || alwaysFrontLayer.Tiles[2, 18] == null))
+                    {
+                        SetTileIfValid(alwaysFrontLayer, mainSheet, 2, 18, 1043);
+                    }
+
+                    for (int x = 0; x <= 1; x++)
+                    {
+                        for (int y = 16; y <= 17; y++)
+                        {
+                            int? curBack = backLayer.Tiles[x, y]?.TileIndex;
+                            if (curBack == 227 || curBack == 228 || curBack == 587)
+                            {
+                                SetTileIfValid(backLayer, mainSheet, x, y, 175);
+                                if (backLayer.Tiles[x, y] != null)
+                                {
+                                    backLayer.Tiles[x, y].Properties["Type"] = "Grass";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             else if (string.Equals(id, "Mining", StringComparison.OrdinalIgnoreCase))
             {
-                // Cantera de Minerales: desfiladero oeste (x=0..2, y=16..17)
-                // Limpiar tiles frontales residuales para evitar fragmentos de copa o risco flotantes en la embocadura
+                // Cantera de Minerales: Desfiladero de acantilados de roca
                 if (frontLayer != null)
                 {
                     for (int x = 0; x <= 2; x++)
@@ -993,39 +1179,21 @@ namespace Pelican4Ever.Framework
                     }
                 }
             }
-            else if (string.Equals(id, "Ranching", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(id, "Combat", StringComparison.OrdinalIgnoreCase))
             {
-                // Pasto de Pradera Azul: Si el corredor de entrada cruza agua, dotarlo de pasarela de madera transitable
-                if (side == AnnexSide.North)
+                // Coto Salvaje: Riscos y matorrales impenetrables
+                for (int x = 0; x < width; x++)
                 {
-                    // Entrada Sur (y = 31)
-                    if (backLayer.Tiles[19, 31] != null && HasWaterProperty(backLayer.Tiles[19, 31]))
+                    if (!openingBorderTiles.Contains((x, 0)) && bldLayer.Tiles[x, 0] == null)
                     {
-                        SetTileIfValid(backLayer, mainSheet, 19, 31, 1244);
-                        SetTileIfValid(bldLayer, mainSheet, 19, 31, 184);
-                        SetPassableIfValid(bldLayer, 19, 31, true);
-                    }
-                    if (backLayer.Tiles[20, 31] != null && HasWaterProperty(backLayer.Tiles[20, 31]))
-                    {
-                        SetTileIfValid(backLayer, mainSheet, 20, 31, 1244);
-                        SetTileIfValid(bldLayer, mainSheet, 20, 31, 211);
-                        SetPassableIfValid(bldLayer, 20, 31, true);
-                    }
-                }
-                else if (side == AnnexSide.South)
-                {
-                    // Entrada Norte (y = 0)
-                    if (backLayer.Tiles[19, 0] != null && HasWaterProperty(backLayer.Tiles[19, 0]))
-                    {
-                        SetTileIfValid(backLayer, mainSheet, 19, 0, 1244);
-                        SetTileIfValid(bldLayer, mainSheet, 19, 0, 184);
-                        SetPassableIfValid(bldLayer, 19, 0, true);
+                        SetTileIfValid(bldLayer, mainSheet, x, 0, 351);
+                        SetPassableIfValid(bldLayer, x, 0, false);
                     }
                 }
             }
             else if (string.Equals(id, "FourCorners", StringComparison.OrdinalIgnoreCase))
             {
-                // Cuadrante Mixto: Paso oeste entre desniveles en y=16..17
+                // Cuadrante Mixto: Cerezo en flor y rampa noroeste
                 if (frontLayer != null)
                 {
                     for (int x = 0; x <= 2; x++)
@@ -1038,15 +1206,9 @@ namespace Pelican4Ever.Framework
                     }
                 }
 
-                // 1. Restaurar el dosel del cerezo en flor en AlwaysFront en el puente central (x=19..20, y=25):
-                // Los tiles 45 y 46 completan la copa circular sobre el risco, evitando que el risco en Front
-                // recorte indebidamente las flores rosadas y permitiendo pasar bajo el follaje orgánicamente.
                 SetTileIfValid(alwaysFrontLayer, mainSheet, 19, 25, 45);
                 SetTileIfValid(alwaysFrontLayer, mainSheet, 20, 25, 46);
 
-                // 2. Arreglo de superposición de capas en el desfiladero/rampa noroeste (x=10..13, y=4..5):
-                // Mover los bordes de risco (416, 441 a la derecha; 419, 444 a la izquierda) de Front a Buildings con Passable="F".
-                // Esto previene que cualquier risco en Front recorte indebidamente la copa de árboles colindantes.
                 if (frontLayer != null)
                 {
                     if (frontLayer.Tiles[13, 4]?.TileIndex == 416)
@@ -1075,58 +1237,142 @@ namespace Pelican4Ever.Framework
                     }
                 }
             }
-            else if (string.Equals(id, "Foraging", StringComparison.OrdinalIgnoreCase))
+            else if (string.Equals(id, "Ranching", StringComparison.OrdinalIgnoreCase))
             {
-                // Franja Forestal: Limpiar restos en Front sobre el pasillo oeste de entrada
-                if (frontLayer != null)
+                // Pasto de Pradera Azul: Pasarelas en agua de corredores
+                if (side == AnnexSide.North)
                 {
-                    for (int x = 0; x <= 2; x++)
+                    if (backLayer.Tiles[19, 31] != null && HasWaterProperty(backLayer.Tiles[19, 31]))
                     {
-                        if (x < frontLayer.LayerWidth)
-                        {
-                            if (16 < frontLayer.LayerHeight) frontLayer.Tiles[x, 16] = null;
-                            if (17 < frontLayer.LayerHeight) frontLayer.Tiles[x, 17] = null;
-                        }
+                        SetTileIfValid(backLayer, mainSheet, 19, 31, 1244);
+                        SetTileIfValid(bldLayer, mainSheet, 19, 31, 184);
+                        SetPassableIfValid(bldLayer, 19, 31, true);
+                    }
+                    if (backLayer.Tiles[20, 31] != null && HasWaterProperty(backLayer.Tiles[20, 31]))
+                    {
+                        SetTileIfValid(backLayer, mainSheet, 20, 31, 1244);
+                        SetTileIfValid(bldLayer, mainSheet, 20, 31, 211);
+                        SetPassableIfValid(bldLayer, 20, 31, true);
                     }
                 }
-
-                // Componer los bordes del camino entre los árboles en la entrada oeste (side == East):
-                // En lugar de un corte lineal y abrupto a través del muro vegetal, se esculpen los contornos
-                // del dosel arbóreo en AlwaysFront con franjas colgantes naturales (968) en el dintel superior (y=15),
-                // copas redondeadas (1043) en el límite inferior (y=18) y acabado suave hacia el interior.
-                // Asimismo, en Back se sustituyen los cortes de tierra amarilla artificial en el borde (227, 228)
-                // por hierba de bosque frondosa (175) para que el sendero se integre armónicamente.
-                if (side == AnnexSide.East)
+                else if (side == AnnexSide.South)
                 {
-                    // Dintel superior del túnel arbóreo en y=15 (AlwaysFront): hojas colgantes naturales
-                    SetTileIfValid(alwaysFrontLayer, mainSheet, 0, 15, 968);
-                    SetTileIfValid(alwaysFrontLayer, mainSheet, 1, 15, 968);
-                    if (alwaysFrontLayer != null && (alwaysFrontLayer.Tiles[2, 15]?.TileIndex == 946 || alwaysFrontLayer.Tiles[2, 15] == null))
+                    if (backLayer.Tiles[19, 0] != null && HasWaterProperty(backLayer.Tiles[19, 0]))
                     {
-                        SetTileIfValid(alwaysFrontLayer, mainSheet, 2, 15, 968);
+                        SetTileIfValid(backLayer, mainSheet, 19, 0, 1244);
+                        SetTileIfValid(bldLayer, mainSheet, 19, 0, 184);
+                        SetPassableIfValid(bldLayer, 19, 0, true);
                     }
-
-                    // Base inferior del túnel arbóreo en y=18 (AlwaysFront): copas redondeadas naturales
-                    SetTileIfValid(alwaysFrontLayer, mainSheet, 0, 18, 1043);
-                    SetTileIfValid(alwaysFrontLayer, mainSheet, 1, 18, 1043);
-                    if (alwaysFrontLayer != null && (alwaysFrontLayer.Tiles[2, 18]?.TileIndex == 946 || alwaysFrontLayer.Tiles[2, 18] == null))
+                }
+            }
+            else if (string.Equals(id, "Beach", StringComparison.OrdinalIgnoreCase))
+            {
+                // Costa Tropical: Barandillas y rocas de orilla marina
+                for (int x = 0; x < width; x++)
+                {
+                    if (!openingBorderTiles.Contains((x, 0)) && bldLayer.Tiles[x, 0] == null)
                     {
-                        SetTileIfValid(alwaysFrontLayer, mainSheet, 2, 18, 1043);
+                        SetTileIfValid(bldLayer, mainSheet, x, 0, 194);
+                        SetPassableIfValid(bldLayer, x, 0, false);
                     }
+                }
+            }
+        }
 
-                    // Suelo orgánico en Back: reemplazar tierra amarilla en x=0..1 por hierba de bosque auténtica (175)
-                    for (int x = 0; x <= 1; x++)
+        /// <summary>
+        /// Escanea exhaustivamente todas las capas del mapa recortado para reparar cualquier glitch gráfico
+        /// de multi-casilla (copas huérfanas sin tronco, troncos decapitados sin copa en y - 1, riscos cortados
+        /// sin remate superior, vallas horizontales/verticales sin remate top en Front o sin vecinos válidos).
+        /// </summary>
+        private static void SanitizeMapGraphicGlitches(Map map, TileSheet outdoorsSheet)
+        {
+            Layer? backLayer = map.GetLayer("Back");
+            Layer? bldLayer = map.GetLayer("Buildings");
+            Layer? frontLayer = map.GetLayer("Front");
+            Layer? alwaysFrontLayer = map.GetLayer("AlwaysFront");
+
+            if (backLayer == null || bldLayer == null)
+                return;
+
+            int width = backLayer.LayerWidth;
+            int height = backLayer.LayerHeight;
+
+            for (int x = 0; x < width; x++)
+            {
+                for (int y = 0; y < height; y++)
+                {
+                    // 1. Descapitados en y = 0: Si Buildings[x, 0] tiene base de árbol u objeto multi-casilla que requiere y - 1
+                    if (y == 0 && bldLayer.Tiles[x, 0] != null)
                     {
-                        for (int y = 16; y <= 17; y++)
+                        int bIndex = bldLayer.Tiles[x, 0].TileIndex;
+                        if (VerticalMultiTileClassifier.ClassifyOutdoorsBaseTile(bIndex) == VerticalMultiTileKind.TreeTrunk)
                         {
-                            int? curBack = backLayer.Tiles[x, y]?.TileIndex;
-                            if (curBack == 227 || curBack == 228 || curBack == 587)
+                            bldLayer.Tiles[x, 0] = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 351);
+                            bldLayer.Tiles[x, 0].Properties["Passable"] = "F";
+                        }
+                    }
+
+                    // 2. Remate de vallas horizontales en Buildings[x, y]
+                    if (bldLayer.Tiles[x, y] != null)
+                    {
+                        int bIndex = bldLayer.Tiles[x, y].TileIndex;
+                        if (bIndex is 383 or 384 or 385 or 434)
+                        {
+                            int expectedTop = bIndex switch
                             {
-                                SetTileIfValid(backLayer, mainSheet, x, y, 175);
-                                if (backLayer.Tiles[x, y] != null)
+                                383 => 358,
+                                384 => 359,
+                                434 => 409,
+                                385 => 360,
+                                _ => 359
+                            };
+                            if (y > 0 && frontLayer != null)
+                            {
+                                if (frontLayer.Tiles[x, y - 1] == null)
                                 {
-                                    backLayer.Tiles[x, y].Properties["Type"] = "Grass";
+                                    frontLayer.Tiles[x, y - 1] = new StaticTile(frontLayer, outdoorsSheet, BlendMode.Alpha, expectedTop);
                                 }
+                            }
+                            else if (y == 0)
+                            {
+                                bldLayer.Tiles[x, 0] = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 194);
+                                bldLayer.Tiles[x, 0].Properties["Passable"] = "F";
+                            }
+                        }
+                    }
+
+                    // 3. Remate de desniveles/acantilados en Buildings[x, y] (441..444, 164..166)
+                    if (bldLayer.Tiles[x, y] != null)
+                    {
+                        int bIndex = bldLayer.Tiles[x, y].TileIndex;
+                        if (bIndex is >= 441 and <= 444 or >= 164 and <= 166)
+                        {
+                            if (y > 0 && frontLayer != null && frontLayer.Tiles[x, y - 1] == null)
+                            {
+                                int topLedge = bIndex switch
+                                {
+                                    441 => 416,
+                                    444 => 419,
+                                    164 => 139,
+                                    166 => 141,
+                                    _ => 417
+                                };
+                                frontLayer.Tiles[x, y - 1] = new StaticTile(frontLayer, outdoorsSheet, BlendMode.Alpha, topLedge);
+                            }
+                        }
+                    }
+
+                    // 4. Copas de árbol u objetos superiores huérfanos en Front / AlwaysFront
+                    if (frontLayer != null && frontLayer.Tiles[x, y] != null)
+                    {
+                        int fIndex = frontLayer.Tiles[x, y].TileIndex;
+                        if (fIndex is 143 or 144 or 118 or 119 or 104 or 107 or 108 or 111)
+                        {
+                            bool hasBaseBelow = (y + 1 < height) && bldLayer.Tiles[x, y + 1] != null;
+                            bool isBorder = (y == 0 || y == height - 1 || x == 0 || x == width - 1);
+                            if (!hasBaseBelow && !isBorder)
+                            {
+                                frontLayer.Tiles[x, y] = null;
                             }
                         }
                     }
