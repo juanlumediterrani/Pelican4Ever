@@ -184,13 +184,19 @@ namespace Pelican4Ever.Framework
                     // pares adyacentes y arbustos entre restos) + hierba salvaje en la interior.
                     // En el borde norte la base se asienta en la fila 1 y su copa (Front) en la
                     // MISMA fila: el sprite 16×32 cubre las filas 0..1 sin cortarse en y=0.
+                    // La fila 0 se rellena igualmente con Back salvaje (suelo bajo el seto,
+                    // nunca transparente).
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
-                        PlaceWildBack(back, sheet, x, innerRow);
                         if (topMost)
+                        {
+                            PlaceWildBack(back, sheet, x, outerRow);
                             PaintHedgeColumn(1, 1, x, back, bld, front, sheet, style);
+                        }
                         else
+                        {
                             PaintHedgeColumn(outerRow, innerRow, x, back, bld, front, sheet, style);
+                        }
                     }
                     break;
             }
