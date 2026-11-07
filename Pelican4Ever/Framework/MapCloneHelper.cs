@@ -839,6 +839,8 @@ namespace Pelican4Ever.Framework
             {
                 case AnnexSide.North:
                     int southY = height - 1;
+                    EnsureFlankGround(backLayer, mainSheet, ex - 2, southY, doorBackTile, doorBackType);
+                    EnsureFlankGround(backLayer, mainSheet, ex + 1, southY, doorBackTile, doorBackType);
                     for (int x = ex - 1; x <= ex; x++)
                     {
                         if (x >= 0 && x < width && backLayer.Tiles[x, southY] != null && !HasWaterProperty(backLayer.Tiles[x, southY]))
@@ -884,13 +886,17 @@ namespace Pelican4Ever.Framework
                     }
                     if (ex - 2 >= 0)
                     {
-                        SetTileIfValid(bldLayer, mainSheet, ex - 2, 0, VerticalMultiTileClassifier.FenceLeftBaseTileIndex);
-                        SetPassableIfValid(bldLayer, ex - 2, 0, false);
+                        EnsureFlankGround(backLayer, mainSheet, ex - 2, 1, doorBackTile, doorBackType);
+                        SetTileIfValid(bldLayer, mainSheet, ex - 2, 1, VerticalMultiTileClassifier.FenceLeftBaseTileIndex);
+                        SetPassableIfValid(bldLayer, ex - 2, 1, false);
+                        SetTileIfValid(frontLayer, mainSheet, ex - 2, 0, VerticalMultiTileClassifier.FenceLeftTopTileIndex);
                     }
                     if (ex + 1 < width)
                     {
-                        SetTileIfValid(bldLayer, mainSheet, ex + 1, 0, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
-                        SetPassableIfValid(bldLayer, ex + 1, 0, false);
+                        EnsureFlankGround(backLayer, mainSheet, ex + 1, 1, doorBackTile, doorBackType);
+                        SetTileIfValid(bldLayer, mainSheet, ex + 1, 1, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
+                        SetPassableIfValid(bldLayer, ex + 1, 1, false);
+                        SetTileIfValid(frontLayer, mainSheet, ex + 1, 0, VerticalMultiTileClassifier.FenceRightTopTileIndex);
                     }
                     break;
 
@@ -908,6 +914,7 @@ namespace Pelican4Ever.Framework
                     }
                     if (ey - 1 >= 0)
                     {
+                        EnsureFlankGround(backLayer, mainSheet, 0, ey - 1, doorBackTile, doorBackType);
                         SetTileIfValid(bldLayer, mainSheet, 0, ey - 1, VerticalMultiTileClassifier.FenceVerticalUpperMidTileIndex);
                         SetPassableIfValid(bldLayer, 0, ey - 1, false);
                         if (ey - 2 >= 0 && frontLayer != null)
@@ -917,6 +924,7 @@ namespace Pelican4Ever.Framework
                     }
                     if (ey + 2 < height)
                     {
+                        EnsureFlankGround(backLayer, mainSheet, 0, ey + 2, doorBackTile, doorBackType);
                         SetTileIfValid(bldLayer, mainSheet, 0, ey + 2, VerticalMultiTileClassifier.FenceVerticalBaseTileIndex);
                         SetPassableIfValid(bldLayer, 0, ey + 2, false);
                         if (frontLayer != null)
@@ -926,6 +934,26 @@ namespace Pelican4Ever.Framework
                     }
                     break;
             }
+        }
+
+        /// <summary>
+        /// Garantiza suelo firme bajo los postes de la puerta: si el Back es agua o nulo (el
+        /// margen pintó agua) se sustituye por tierra/arena sólida, para que la valla no
+        /// flote sobre el borde.
+        /// </summary>
+        private static void EnsureFlankGround(Layer backLayer, TileSheet mainSheet, int x, int y, int groundTile, string groundType)
+        {
+            if (x < 0 || x >= backLayer.LayerWidth || y < 0 || y >= backLayer.LayerHeight)
+                return;
+
+            Tile? back = backLayer.Tiles[x, y];
+            bool needsGround = back == null || (back.Properties.ContainsKey("Water") || back.TileIndexProperties.ContainsKey("Water"));
+            if (!needsGround)
+                return;
+
+            var tile = new StaticTile(backLayer, mainSheet, BlendMode.Alpha, groundTile);
+            tile.Properties["Type"] = groundType;
+            backLayer.Tiles[x, y] = tile;
         }
 
         public static void GetEntranceOpeningAndCorridor(
