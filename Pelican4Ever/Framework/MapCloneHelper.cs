@@ -557,15 +557,22 @@ namespace Pelican4Ever.Framework
 
             // 7. Bases truncadas en la fila 0 del borde norte (troncos/coronas cuya fila superior
             // quedaría fuera del mapa y se dibujan cortadas): se sustituyen por arbusto completo
-            // 351 no transitable y se limpian los restos superpuestos de Front/AlwaysFront.
+            // 351 no transitable y se limpian los restos superpuestos de Front/AlwaysFront. Los
+            // portales norte (x = 8..9 y 25..26) deben quedar COMPLETAMENTE abiertos: sin ninguna
+            // base ni have del recorte en fila 0, para que los warps a las plazas funcionen y se vean limpios.
             bool IsNorthPortalColumn(int x) => x is 8 or 9 or 25 or 26;
-            foreach (int x in new[] { 24, 26, 27, 29, 30, 31, 32 })
+            foreach (int x in new[] { 8, 9, 24, 25, 26, 27, 29, 30, 31, 32 })
             {
                 if (IsNorthPortalColumn(x))
-                    continue;
+                {
+                    bldLayer.Tiles[x, 0] = null;
+                }
+                else
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
+                    SetPassableIfValid(bldLayer, x, 0, false);
+                }
 
-                SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
-                SetPassableIfValid(bldLayer, x, 0, false);
                 frontLayer.Tiles[x, 0] = null;
                 alwaysFrontLayer.Tiles[x, 0] = null;
                 if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, 0] = null;

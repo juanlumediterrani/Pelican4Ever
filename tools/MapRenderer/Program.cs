@@ -103,7 +103,7 @@ public static class Program
         try
         {
             var bus = LoadTmxMap("Maps/BusStop");
-            var loc = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 5);
+            var loc = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16);
             if (loc != null)
             {
                 var bridge = MapCloneHelper.CreateBridgeMap(bus, loc);
