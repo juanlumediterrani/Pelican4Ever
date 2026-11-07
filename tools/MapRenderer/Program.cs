@@ -63,6 +63,16 @@ public static class Program
                 Console.WriteLine($"-- columna x={x} rows 0..7: " +
                     string.Join(' ', Enumerable.Range(0, 8).Select(y => layer.Tiles[x, y] == null ? "----" : layer.Tiles[x, y].TileIndex.ToString("D4"))));
             }
+
+            if (layer.Id == "Buildings")
+            {
+                for (int x = 0; x < layer.LayerWidth; x++)
+                {
+                    var t = layer.Tiles[x, 0];
+                    string pp = t==null ? "null" : $"idx={t.TileIndex}";
+                    Console.WriteLine($"DBG x={x} y=0: {pp}");
+                }
+            }
         }
     }
 

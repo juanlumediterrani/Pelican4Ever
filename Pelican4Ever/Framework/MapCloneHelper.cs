@@ -357,6 +357,16 @@ namespace Pelican4Ever.Framework
                 }
             }
 
+            // 7c. Limpiar remates Front/AlwaysFront huérfanos sobre las columnas de borde de los
+            // pasos activos (copas recortadas por el Crop de BusStop ensucian el corredor).
+            if (outdoorsSheet != null)
+            {
+                if (bridgeLoc.West is { } westPassage)
+                    ClearPassageEdgeCanopies(width, bridgeLoc, westPassage.FirstRow, westPassage.RowCount, leftMost: true, frontLayer, alwaysFrontLayer, alwaysFront2Layer, alwaysFront3Layer);
+                if (bridgeLoc.East is { } eastPassage)
+                    ClearPassageEdgeCanopies(width, bridgeLoc, eastPassage.FirstRow, eastPassage.RowCount, leftMost: false, frontLayer, alwaysFrontLayer, alwaysFront2Layer, alwaysFront3Layer);
+            }
+
             // 8. Escribir map.Properties["Warp"] con los pasos declarativos (TASK-1202 / TASK-1401)
             string passageWarps = PlazaTopologyVerifier.BuildPassageWarpString(bridgeLoc);
             if (!string.IsNullOrEmpty(passageWarps))
@@ -365,6 +375,39 @@ namespace Pelican4Ever.Framework
             }
 
             return target;
+        }
+
+        /// <summary>
+        /// Limpia las copas/remates de Front y AlwaysFront sin base en las columnas de borde de
+        /// un paso activo del puente (objetos multi-casilla recortados por el Crop de BusStop).
+        /// </summary>
+        private static void ClearPassageEdgeCanopies(
+            int width,
+            PlazaLocation bridgeLoc,
+            int firstRow,
+            int rowCount,
+            bool leftMost,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            Layer? alwaysFront2Layer,
+            Layer? alwaysFront3Layer)
+        {
+            int col0 = leftMost ? 0 : width - 2;
+            int col1 = leftMost ? 1 : width - 1;
+
+            for (int x = col0; x <= col1; x++)
+            {
+                for (int y = firstRow - 1; y < firstRow + rowCount + 1; y++)
+                {
+                    if (y < 0 || y >= bridgeLoc.Height)
+                        continue;
+
+                    frontLayer.Tiles[x, y] = null;
+                    alwaysFrontLayer.Tiles[x, y] = null;
+                    if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                    if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
+                }
+            }
         }
 
         /// <summary>
@@ -716,7 +759,7 @@ namespace Pelican4Ever.Framework
                     {
                         if (x >= 0 && x < width && backLayer.Tiles[x, southY] != null && !HasWaterProperty(backLayer.Tiles[x, southY]))
                         {
-                            if (backLayer.Tiles[x, southY].TileIndex == 587 || backLayer.Tiles[x, southY].TileIndex == 175)
+                            if (IsRoadConvertableBack(backLayer.Tiles[x, southY]))
                             {
                                 SetTileIfValid(backLayer, mainSheet, x, southY, 736);
                                 backLayer.Tiles[x, southY].Properties["Type"] = "Stone";
@@ -748,7 +791,7 @@ namespace Pelican4Ever.Framework
                     {
                         if (x >= 0 && x < width && backLayer.Tiles[x, 0] != null && !HasWaterProperty(backLayer.Tiles[x, 0]))
                         {
-                            if (backLayer.Tiles[x, 0].TileIndex == 587 || backLayer.Tiles[x, 0].TileIndex == 175)
+                            if (IsRoadConvertableBack(backLayer.Tiles[x, 0]))
                             {
                                 SetTileIfValid(backLayer, mainSheet, x, 0, 736);
                                 backLayer.Tiles[x, 0].Properties["Type"] = "Stone";
@@ -772,7 +815,7 @@ namespace Pelican4Ever.Framework
                     {
                         if (y >= 0 && y < height && backLayer.Tiles[0, y] != null && !HasWaterProperty(backLayer.Tiles[0, y]))
                         {
-                            if (backLayer.Tiles[0, y].TileIndex == 587 || backLayer.Tiles[0, y].TileIndex == 175)
+                            if (IsRoadConvertableBack(backLayer.Tiles[0, y]))
                             {
                                 SetTileIfValid(backLayer, mainSheet, 0, y, 736);
                                 backLayer.Tiles[0, y].Properties["Type"] = "Stone";
@@ -1183,6 +1226,20 @@ namespace Pelican4Ever.Framework
                     tile.Properties.Remove("Action");
                 }
             }
+        }
+
+        /// <summary>
+        /// ¿El Back es un terreno salvaje convertible a camino de piedra en el umbral de la entrada?
+        /// </summary>
+        private static bool IsRoadConvertableBack(Tile back)
+        {
+            if (back == null)
+                return false;
+
+            if (back.TileIndex == 587 || back.TileIndex == 175)
+                return true;
+
+            return TerrainTileClassifier.IsGrassTileIndex(back.TileIndex);
         }
 
         private static bool HasWaterProperty(Tile tile)

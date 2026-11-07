@@ -22,7 +22,7 @@ namespace Pelican4Ever.Framework
         /// <summary>Arbusto bloqueante clásico del borde de granja (Buildings).</summary>
         public const int Bush = 351;
 
-        /// <summary>Seto 2×2 completo: base 113..114 (Buildings) + copa 88..89 (Front).</summary>
+        /// <summary>Seto 2×2 completo: base 113+114 (Buildings) con copa 88+89 (Front) encima.</summary>
         public const int HedgeBaseLeft = 113;
         public const int HedgeBaseRight = 114;
         public const int HedgeCopaLeft = 88;
@@ -95,21 +95,21 @@ namespace Pelican4Ever.Framework
                 if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
             }
 
-            // 2. Bordes horizontales (N y S): franjas de anchura completa.
+            // 2. Bordes horizontales (N y S): franja de anchura completa por columna.
             for (int x = 0; x < width; x++)
             {
-                PaintHorizontalStrip(styles.North, width, height, topMost: true, skipTiles, x, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
-                PaintHorizontalStrip(styles.South, width, height, topMost: false, skipTiles, x, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
+                PaintHorizontalStrip(styles.North, topMost: true, skipTiles, x, backLayer, bldLayer, frontLayer, mainSheet);
+                PaintHorizontalStrip(styles.South, topMost: false, skipTiles, x, backLayer, bldLayer, frontLayer, mainSheet);
             }
 
             // 3. Bordes verticales (O y E) entre las franjas ya pintadas.
             for (int y = RimDepth; y < height - RimDepth; y++)
             {
-                PaintVerticalStrip(styles.West, width, height, leftMost: true, skipTiles, y, backLayer, bldLayer, frontLayer, mainSheet);
-                PaintVerticalStrip(styles.East, width, height, leftMost: false, skipTiles, y, backLayer, bldLayer, frontLayer, mainSheet);
+                PaintVerticalStrip(styles.West, width, leftMost: true, skipTiles, y, backLayer, bldLayer, frontLayer, mainSheet);
+                PaintVerticalStrip(styles.East, width, leftMost: false, skipTiles, y, backLayer, bldLayer, frontLayer, mainSheet);
             }
 
-            // 4. Sellado explícito del margen: cada casilla reservada queda no transitable,
+            // 4. Sellado explícito del margen: cada casilla reservada no transitable,
             //    respaldada por la decoración pintada (sin barreras invisibles).
             foreach ((int x, int y) in AnnexMapDesignLogic.EnumerateRimTiles(width, height, RimDepth))
             {
@@ -124,26 +124,21 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Pinta la franja de un borde horizontal completada con sus dos bandas para la
-        /// columna <paramref name="x"/>. outerRow = 0 (Norte) o height-1 (Sur);
-        /// innerRow = 1 o height-2. En composiciones híbridas (base+copa), la base se sitúa en
-        /// la fila exterior y la copa superpone hacia dentro.
+        /// Franja de un borde horizontal para la columna <paramref name="x"/>: banda exterior
+        /// (fila del borde) + banda interior (fila contigua del margen).
         /// </summary>
         private static void PaintHorizontalStrip(
             AnnexRimStyle style,
-            int width,
-            int height,
             bool topMost,
             HashSet<(int X, int Y)> skipTiles,
             int x,
             Layer back,
             Layer bld,
             Layer front,
-            Layer? alwaysFront,
             TileSheet sheet)
         {
-            int outerRow = topMost ? 0 : height - 1;
-            int innerRow = topMost ? 1 : height - 2;
+            int outerRow = topMost ? 0 : 31;
+            int innerRow = topMost ? 1 : 30;
 
             switch (style)
             {
@@ -156,16 +151,17 @@ namespace Pelican4Ever.Framework
                     break;
 
                 case AnnexRimStyle.RockyCanyon:
-                    // Banda exterior: masa de taludes completos (base + remate Front).
+                    // Banda exterior: muro de roca continuo con suelo bajo él; banda interior: hierba salvaje.
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
                         PlaceWildBack(back, sheet, x, innerRow);
-                        PlaceCliffPair(bld, front, sheet, x, outerRow);
+                        PlaceWildBack(back, sheet, x, outerRow);
+                        PlaceRockWall(bld, sheet, x, outerRow);
                     }
                     break;
 
                 case AnnexRimStyle.RanchFence:
-                    // Banda interior: valla horizontal continua; banda exterior: pasto con arbustos.
+                    // Banda interior: valla horizontal continua; banda exterior: pasto con arbustos sueltos.
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
                         PlaceWildBack(back, sheet, x, outerRow);
@@ -176,28 +172,24 @@ namespace Pelican4Ever.Framework
                     break;
 
                 default:
-                    // Setos/bosque/espinos: masa continua base+copa en la banda exterior, hierba brillante en la interior.
+                    // Setos/bosque/espinos: masa continua en la banda exterior (setos 2×2 con
+                    // pares adyacentes y arbustos entre restos) + hierba salvaje en la interior.
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
                         PlaceWildBack(back, sheet, x, innerRow);
-                        PaintHedgeColumn(baseRow: outerRow, copaRow: innerRow, x, back, bld, front, sheet, style);
+                        PaintHedgeColumn(outerRow, innerRow, x, back, bld, front, sheet, style);
                     }
                     break;
             }
-
-            _ = width;
-            _ = alwaysFront;
         }
 
         /// <summary>
-        /// Pinta la franja de un borde vertical para la fila <paramref name="y"/>. outerCol =
-        /// 0 (Oeste) o width-1 (Este); innerCol = 1 o width-2. Las composiciones verticales
-        /// usan base en la columna exterior y copa en Front de la misma columna (fila - 1).
+        /// Franja de un borde vertical para la fila <paramref name="y"/>: banda exterior
+        /// (columna del borde) + banda interior (columna contigua del margen).
         /// </summary>
         private static void PaintVerticalStrip(
             AnnexRimStyle style,
             int width,
-            int height,
             bool leftMost,
             HashSet<(int X, int Y)> skipTiles,
             int y,
@@ -222,7 +214,8 @@ namespace Pelican4Ever.Framework
                     if (!skipTiles.Contains((outerCol, y)) && !skipTiles.Contains((innerCol, y)))
                     {
                         PlaceWildBack(back, sheet, innerCol, y);
-                        PlaceCliffVerticalPair(bld, front, sheet, outerCol, y);
+                        PlaceWildBack(back, sheet, outerCol, y);
+                        PlaceRockWall(bld, sheet, outerCol, y);
                     }
                     break;
 
@@ -231,73 +224,75 @@ namespace Pelican4Ever.Framework
                     {
                         PlaceWildBack(back, sheet, innerCol, y);
                         PlaceWildBack(back, sheet, outerCol, y);
-                        if (y % 3 != 0)
-                            PlaceVerticalFencePair(bld, front, sheet, outerCol, y);
+                        PlaceVerticalFencePair(bld, front, sheet, outerCol, y);
                     }
                     break;
 
                 default:
+                    // Bordes verticales: masa continua de arbustos sin calvas, con seto 2×2
+                    // (dos columnas: interior+exterior) cada 4 filas.
                     if (!skipTiles.Contains((outerCol, y)) && !skipTiles.Contains((innerCol, y)))
                     {
                         PlaceWildBack(back, sheet, innerCol, y);
                         PlaceWildBack(back, sheet, outerCol, y);
-                        int mod = style == AnnexRimStyle.WildThorns ? 3 : 4;
-                        if (y % mod != 0)
+                        if (y % 4 == 0)
+                        {
+                            // Seto 2×2 completo de dos columnas (interior y exterior) en esta fila.
+                            SetTile(bld, sheet, AnnexRimPalette.HedgeBaseLeft, innerCol, y);
+                            SetTile(bld, sheet, AnnexRimPalette.HedgeBaseRight, outerCol, y);
+                            SetTile(front, sheet, AnnexRimPalette.HedgeCopaLeft, innerCol, y - 1);
+                            SetTile(front, sheet, AnnexRimPalette.HedgeCopaRight, outerCol, y - 1);
+                        }
+                        else
+                        {
                             SetTile(bld, sheet, AnnexRimPalette.Bush, outerCol, y);
+                            SetTile(bld, sheet, AnnexRimPalette.Bush, innerCol, y);
+                        }
                     }
                     break;
             }
-
-            _ = height;
         }
 
         // ------------------------------------------------------------------
-        // Composiciones (todas completas: ninguna cruzará el límite del mapa)
+        // Composiciones (todas completas: ningún sprite cruza el límite del mapa)
         // ------------------------------------------------------------------
 
-        /// <summary>Hilera híbrida continuada en un borde horizontal: seto 2×2 en múltiplos de 4
-        /// y arbusto de un casillo en el resto; Back salvaje en la fila de base entre remates.</summary>
+        /// <summary>
+        /// Columna del seto en un borde horizontal: seto 2×2 completo (par de bases y par de
+        /// copas en columnas adyacentes) en múltiplos de 4, y arbusto clásico el resto.
+        /// </summary>
         private static void PaintHedgeColumn(int baseRow, int copaRow, int x, Layer back, Layer bld, Layer front, TileSheet sheet, AnnexRimStyle style)
         {
-            bool forest = style == AnnexRimStyle.ForestEdge;
             bool thorns = style == AnnexRimStyle.WildThorns;
             int mod = thorns ? 3 : 4;
 
             PlaceWildBack(back, sheet, x, baseRow);
             if (x % mod == 0)
             {
-                // Seto 2×2 completo: base (Buildings) en la fila de base, copa (Front) en la copaRow.
-                bool left = x % 8 < mod / 2;
-                SetTile(bld, sheet, left ? AnnexRimPalette.HedgeBaseLeft : AnnexRimPalette.HedgeBaseRight, x, baseRow);
-                SetTile(front, sheet, left ? AnnexRimPalette.HedgeCopaLeft : AnnexRimPalette.HedgeCopaRight, x, copaRow);
+                // Mitad IZQUIERDA del seto 2×2 (la fila múltiplo abre el par).
+                SetTile(bld, sheet, AnnexRimPalette.HedgeBaseLeft, x, baseRow);
+                SetTile(front, sheet, AnnexRimPalette.HedgeCopaLeft, x, copaRow);
+            }
+            else if (x % mod == 1)
+            {
+                // Mitad DERECHA del seto: cierra el par iniciado en x - 1.
+                SetTile(bld, sheet, AnnexRimPalette.HedgeBaseRight, x, baseRow);
+                SetTile(front, sheet, AnnexRimPalette.HedgeCopaRight, x, copaRow);
             }
             else
             {
                 SetTile(bld, sheet, AnnexRimPalette.Bush, x, baseRow);
             }
-
-            // Bosque: tramos de dosel extras proyectados sobre la banda exterior.
-            if (forest && x % 5 == 2)
-                SetTile(bld, sheet, AnnexRimPalette.Bush, x, copaRow);
         }
 
-        /// <summary>Talud doble horizontal en la fila exterior: base en Buildings y remate en Front.</summary>
-        private static void PlaceCliffPair(Layer bld, Layer front, TileSheet sheet, int x, int baseRow)
+        /// <summary>Muro de roca: mezcla determinista de la masa de piedras del sheet.</summary>
+        private static void PlaceRockWall(Layer bld, TileSheet sheet, int x, int y)
         {
-            bool leftTile = x % 2 == 0;
-            SetTile(bld, sheet, leftTile ? AnnexRimPalette.CliffBaseLeft : AnnexRimPalette.CliffBaseRight, x, baseRow);
-            SetTile(front, sheet, leftTile ? AnnexRimPalette.CliffTopLeft : AnnexRimPalette.CliffTopRight, x, baseRow - 1);
+            int idx = AnnexRimPalette.RockWallTiles[((x * 7 + y * 13) & 0x7FFFFFFF) % AnnexRimPalette.RockWallTiles.Length];
+            SetTile(bld, sheet, idx, x, y);
         }
 
-        /// <summary>Talud vertical en la columna exterior: base en Buildings y remate en Front (y - 1).</summary>
-        private static void PlaceCliffVerticalPair(Layer bld, Layer front, TileSheet sheet, int x, int y)
-        {
-            bool upper = (y / 2) % 2 == 0;
-            SetTile(bld, sheet, upper ? AnnexRimPalette.CliffBaseLeft : AnnexRimPalette.CliffBaseRight, x, y);
-            SetTile(front, sheet, upper ? AnnexRimPalette.CliffTopLeft : AnnexRimPalette.CliffTopRight, x, y - 1);
-        }
-
-        /// <summary>Valla horizontal: base 383/384/385 en la fila indicada + remate en Front fila - 1.</summary>
+        /// <summary>Valla horizontal: base 383/384/385 en la fila indicada + remate 358/359/360 en Front (fila − 1).</summary>
         private static void PlaceFencePair(Layer bld, Layer front, TileSheet sheet, int x, int baseRow)
         {
             int baseIdx;
@@ -322,7 +317,7 @@ namespace Pelican4Ever.Framework
             SetTile(front, sheet, topIdx, x, baseRow - 1);
         }
 
-        /// <summary>Valla vertical: base 436 en la fila indicada + remate 361 en Front (y - 1).</summary>
+        /// <summary>Valla vertical: base 436 en la fila indicada + remate 361 en Front (fila − 1).</summary>
         private static void PlaceVerticalFencePair(Layer bld, Layer front, TileSheet sheet, int x, int y)
         {
             SetTile(bld, sheet, AnnexRimPalette.FenceVerticalBase, x, y);
@@ -342,7 +337,7 @@ namespace Pelican4Ever.Framework
         }
 
         // ------------------------------------------------------------------
-        // Utiles
+        // Útiles
         // ------------------------------------------------------------------
 
         private static void PutWater(Layer back, TileSheet sheet, int x, int y)
@@ -369,8 +364,8 @@ namespace Pelican4Ever.Framework
         }
 
         // ----------------------------------------------------------------------
-        // Decoraciones de interior propias de cada tipo de granja (TASK-902):
-        // muelle de pesca y cerezo de Cuatro Esquinas.
+        // Decoraciones de interior propias de cada tipo (TASK-902): muelle de pesca
+        // y cerezo de Cuatro Esquinas.
         // ----------------------------------------------------------------------
 
         public static void PaintTemplateInteriors(
@@ -404,7 +399,7 @@ namespace Pelican4Ever.Framework
             }
             else if (string.Equals(template.Id, "FourCorners", StringComparison.OrdinalIgnoreCase))
             {
-                // Cerezo en flor del cuadrante mixto y rampa noroeste.
+                // Cerezo en flor del cuadrante mixto y taludes del recorte movidos a colisión.
                 if (alwaysFrontLayer != null)
                 {
                     SetTileIfValid(alwaysFrontLayer, mainSheet, 19, 25, 45);
@@ -455,8 +450,8 @@ namespace Pelican4Ever.Framework
 
         /// <summary>
         /// Completa la entrada del minimapa con el detalle de su tipo: puente de madera si el
-        /// corredor de acceso cruza agua; túnel arbóreo para las forestales; desfiladero de
-        /// roca para las de colina; etc. (TASK-902).
+        /// corredor cruza agua; túnel arbóreo para las forestales; desfiladero de roca para las
+        /// de colina; etc. (TASK-902).
         /// </summary>
         public static void ApplyEntranceStyle(
             AnnexTemplate template,
@@ -484,12 +479,11 @@ namespace Pelican4Ever.Framework
                     break;
 
                 case AnnexEntranceStyle.RockCanyon:
-                    PaintRockCanyonEntrance(side, corridorTiles, backLayer, bldLayer, frontLayer, mainSheet);
+                    PaintRockCanyonEntrance(side, corridorTiles, backLayer, bldLayer, mainSheet);
                     break;
 
-                // WoodBridge: el corredor ya cruza con tablones+vigas y el margen de agua enmarca
-                // la abertura; con vueltas-a-puertas de río no se añade más para evitar ornamentos
-                // extraños. DirtGate/WildGrove/RanchGate/SandShorePath quedan delimitados por el
+                // WoodBridge: el corredor ya dispone de tablones+vigas y el margen de agua enmarca
+                // la abertura. DirtGate/WildGrove/RanchGate/SandShorePath quedan delimitados por el
                 // propio margen temático y el umbral del MarkAndDecorateEntranceDoorway.
                 default:
                     break;
@@ -552,48 +546,59 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Desfiladero de roca en la entrada: muros rocosos flanqueando el pasaje con remate
-        /// superior en Front (talud completo).
+        /// Desfiladero de roca en la entrada: muros rocosos flanqueando el pasaje (Buildings,
+        /// no transitables) en las columnas/filas contiguas al corredor, sin pisarlo.
         /// </summary>
         private static void PaintRockCanyonEntrance(
             AnnexSide side,
             HashSet<(int X, int Y)> corridorTiles,
             Layer backLayer,
             Layer bldLayer,
-            Layer frontLayer,
             TileSheet mainSheet)
         {
-            foreach ((int x, int y) in corridorTiles)
-            {
-                if (side == AnnexSide.East)
-                {
-                    PlaceCliffWall(bldLayer, frontLayer, mainSheet, x, y - 1, AnnexRimPalette.CliffBaseLeft);
-                    PlaceCliffWall(bldLayer, frontLayer, mainSheet, x, y + 2, AnnexRimPalette.CliffBaseRight);
-                }
-                else
-                {
-                    PlaceCliffWall(bldLayer, frontLayer, mainSheet, x - 2, y, AnnexRimPalette.CliffBaseLeft);
-                    PlaceCliffWall(bldLayer, frontLayer, mainSheet, x + 1, y, AnnexRimPalette.CliffBaseRight);
-                }
-
-                if (backLayer.Tiles[x, y] != null && !backLayer.Tiles[x, y].Properties.ContainsKey("Water"))
-                    backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
-            }
-        }
-
-        private static void PlaceCliffWall(Layer bldLayer, Layer frontLayer, TileSheet mainSheet, int x, int y, int baseIndex)
-        {
-            if (x < 0 || x >= bldLayer.LayerWidth || y < 0 || y >= bldLayer.LayerHeight)
+            if (corridorTiles.Count == 0)
                 return;
 
-            var cliff = new StaticTile(bldLayer, mainSheet, BlendMode.Alpha, baseIndex);
-            cliff.Properties["Passable"] = "F";
-            bldLayer.Tiles[x, y] = cliff;
-
-            if (y - 1 >= 0 && frontLayer != null)
+            int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+            foreach ((int x, int y) in corridorTiles)
             {
-                int topIndex = baseIndex == AnnexRimPalette.CliffBaseLeft ? AnnexRimPalette.CliffTopLeft : AnnexRimPalette.CliffTopRight;
-                frontLayer.Tiles[x, y - 1] = new StaticTile(frontLayer, mainSheet, BlendMode.Alpha, topIndex);
+                minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+                minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
+            }
+
+            void Wall(int wx, int wy)
+            {
+                if (wx < 0 || wx >= bldLayer.LayerWidth || wy < 0 || wy >= bldLayer.LayerHeight)
+                    return;
+
+                bool inCorridor = corridorTiles.Contains((wx, wy));
+                if (inCorridor)
+                    return;
+
+                PlaceRockWall(bldLayer, mainSheet, wx, wy);
+            }
+
+            if (side == AnnexSide.East)
+            {
+                for (int x = minX; x <= maxX; x++)
+                {
+                    Wall(x, minY - 1);
+                    Wall(x, maxY + 1);
+                }
+            }
+            else
+            {
+                for (int y = minY; y <= maxY; y++)
+                {
+                    Wall(minX - 1, y);
+                    Wall(maxX + 1, y);
+                }
+            }
+
+            foreach ((int x, int y) in corridorTiles)
+            {
+                if (backLayer.Tiles[x, y] != null && !backLayer.Tiles[x, y].Properties.ContainsKey("Water"))
+                    backLayer.Tiles[x, y].Properties["Type"] = "Dirt";
             }
         }
     }
