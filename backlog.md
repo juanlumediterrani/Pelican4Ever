@@ -287,6 +287,14 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - *Cueva individual:* el evento de Demetrius guarda la elección en `Game1.MasterPlayer.caveChoice` y `FarmCave` lee solo ese valor (murciélagos con fruta en `DayUpdate`). Hay que guardar la elección en el jugador que ve el evento, que la cueva de cada residencia lea la de su dueño y comprobar que el evento se dispara para los farmhands en su residencia (no se llama `Farm`). Requiere prueba en partida.
       - *Traslado del invernadero y de la casa:* verificar que Robin y la Torre del Mago pueden mover el invernadero de una residencia, y qué pasa si se mueve su casa (1.6 lo permite): la puerta, el buzón, la cueva y los warps de la residencia dependen de su posición.
       - *Anexo de Pradera:* evaluar establo/vallas o hierba azul optimizada para 40×32.
+    - **Pruebas en vivo (2026-11-07, playa):** checkpoint; la sesión se cortó porque el servidor entró en mantenimiento.
+      - *Funciona:* comandos de prueba, cajas de suministros (café, hamburguesa, geodas, tierra con retención de agua, semillas…), forraje de playa (salen cajas), aspersores (no se colocan en arena, sí en tierra fértil).
+      - *Bug — warp este del anexo de playa:* al volver del anexo comprado por la salida este, el jugador aparece encima del warp de la residencia y vuelve al anexo sin poder salir. Por la salida norte no pasa. Revisar la llegada de vuelta del lado este (79,17) para que caiga fuera del warp.
+      - *Bug — `p4e_farm_found` crea residencias de relleno al fallar:* debe denegar con un mensaje y no tocar el hueco.
+      - *Revisar:* algunas cajas sueltan 3 y 5 objetos a la vez; comprobar contra `BreakableContainer.releaseContents` si es vanilla.
+      - *Minimapa (anexo):* sirve como provisional; todos iguales, sin bordes delimitados y con algún fallo gráfico. Se deja así.
+      - *Pedido — `/residencias`:* mostrar solo las ocupadas y el número de libres; el chat no tiene scroll.
+      - *Pedido — permiso de edición para visitantes:* además del acceso público, otra opción para decidir si el visitante puede editar (colocar, recoger, usar herramientas). El usuario indica además que la información mostrada no corresponde con el estado real; concretar en la siguiente prueba.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Una residencia de playa carga `Farm_Island`, genera forraje y cajas y sus aspersores no riegan la arena.
