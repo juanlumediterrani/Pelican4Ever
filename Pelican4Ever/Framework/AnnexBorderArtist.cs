@@ -167,10 +167,11 @@ namespace Pelican4Ever.Framework
                     break;
 
                 case AnnexRimStyle.RanchFence:
-                    // Banda interior: valla horizontal continua; banda exterior: pasto con arbustos sueltos.
+                    // Banda interior: valla horizontal continua con pasto detrás; banda exterior: pasto con arbustos sueltos.
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
                         PlaceWildBack(back, sheet, x, outerRow);
+                        PlaceWildBack(back, sheet, x, innerRow);
                         if (x % 4 == 1)
                             SetTile(bld, sheet, AnnexRimPalette.Bush, x, outerRow);
                         PlaceFencePair(bld, front, sheet, x, innerRow);
@@ -405,11 +406,12 @@ namespace Pelican4Ever.Framework
             }
             else if (string.Equals(template.Id, "FourCorners", StringComparison.OrdinalIgnoreCase))
             {
-                // Cerezo en flor del cuadrante mixto y taludes del recorte movidos a colisión.
+                // Cerezo en flor del cuadrante mixto: copas flanqueando el corredor (18/21) para
+                // no ensuciar el pasaje de entrada.
                 if (alwaysFrontLayer != null)
                 {
-                    SetTileIfValid(alwaysFrontLayer, mainSheet, 19, 25, 45);
-                    SetTileIfValid(alwaysFrontLayer, mainSheet, 20, 25, 46);
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 18, 25, 45);
+                    SetTileIfValid(alwaysFrontLayer, mainSheet, 21, 25, 46);
                 }
 
                 if (frontLayer != null)
