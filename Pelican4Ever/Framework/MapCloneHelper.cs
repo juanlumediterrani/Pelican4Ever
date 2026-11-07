@@ -664,12 +664,19 @@ namespace Pelican4Ever.Framework
                 bldLayer.Tiles[cx, cy] = null;
                 frontLayer.Tiles[cx, cy] = null;
                 alwaysFrontLayer.Tiles[cx, cy] = null;
-                Layer? corridorBld2 = target.GetLayer("Buildings2");
-                if (corridorBld2 != null) corridorBld2.Tiles[cx, cy] = null;
-                Layer? corridorAF2 = target.GetLayer("AlwaysFront2");
-                if (corridorAF2 != null) corridorAF2.Tiles[cx, cy] = null;
-                Layer? corridorAF3 = target.GetLayer("AlwaysFront3");
-                if (corridorAF3 != null) corridorAF3.Tiles[cx, cy] = null;
+
+                // Barrido por TODAS las capas del recorte: el vanilla puede llevar Content2/Front2/
+                // AlwaysFront2..3 y restos sobre el corredor quedarían como pegotes flotantes.
+                foreach (var layer in target.Layers)
+                {
+                    if (string.Equals(layer.Id, "Back", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(layer.Id, "Paths", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    layer.Tiles[cx, cy] = null;
+                }
 
                 bool wasWater = backLayer.Tiles[cx, cy] != null && HasWaterProperty(backLayer.Tiles[cx, cy]);
 

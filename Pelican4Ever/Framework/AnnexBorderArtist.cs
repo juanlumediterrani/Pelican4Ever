@@ -80,19 +80,25 @@ namespace Pelican4Ever.Framework
         {
             var styles = AnnexMapDesignLogic.RimStyles(template.Behavior, template.Id);
 
-            // 1. Limpieza de TODAS las bandas perimetrales (restos del recorte vanilla truncados).
+            // 1. Limpieza de TODAS las bandas perimetrales y de TODAS las capas del recorte
+            //    (el vanilla puede llevar Front2/Buildings2/AlwaysFront2..3/Back2 con restos truncados).
             foreach ((int x, int y) in AnnexMapDesignLogic.EnumerateRimTiles(width, height, RimDepth))
             {
                 if (skipTiles.Contains((x, y)))
                     continue;
 
-                bldLayer.Tiles[x, y] = null;
-                frontLayer.Tiles[x, y] = null;
+                foreach (var layer in backLayer.Map.Layers)
+                {
+                    if (string.Equals(layer.Id, "Back", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(layer.Id, "Paths", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    layer.Tiles[x, y] = null;
+                }
+
                 backLayer.Tiles[x, y] = null;
-                if (alwaysFrontLayer != null) alwaysFrontLayer.Tiles[x, y] = null;
-                if (bld2Layer != null) bld2Layer.Tiles[x, y] = null;
-                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
-                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
             }
 
             // 2. Bordes horizontales (N y S): franja de anchura completa por columna.
