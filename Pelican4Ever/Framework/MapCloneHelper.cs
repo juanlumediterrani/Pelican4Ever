@@ -554,6 +554,23 @@ namespace Pelican4Ever.Framework
                 if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, 0] = null;
                 if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, 0] = null;
             }
+
+            // 7. Bases truncadas en la fila 0 del borde norte (troncos/coronas cuya fila superior
+            // quedaría fuera del mapa y se dibujan cortadas): se sustituyen por arbusto completo
+            // 351 no transitable y se limpian los restos superpuestos de Front/AlwaysFront.
+            bool IsNorthPortalColumn(int x) => x is 8 or 9 or 25 or 26;
+            foreach (int x in new[] { 24, 26, 27, 29, 30, 31, 32 })
+            {
+                if (IsNorthPortalColumn(x))
+                    continue;
+
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
+                SetPassableIfValid(bldLayer, x, 0, false);
+                frontLayer.Tiles[x, 0] = null;
+                alwaysFrontLayer.Tiles[x, 0] = null;
+                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, 0] = null;
+                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, 0] = null;
+            }
         }
 
         /// <summary>
