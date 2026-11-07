@@ -182,10 +182,15 @@ namespace Pelican4Ever.Framework
                 default:
                     // Setos/bosque/espinos: masa continua en la banda exterior (setos 2×2 con
                     // pares adyacentes y arbustos entre restos) + hierba salvaje en la interior.
+                    // En el borde norte la base se asienta en la fila 1 y su copa (Front) en la
+                    // MISMA fila: el sprite 16×32 cubre las filas 0..1 sin cortarse en y=0.
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
                         PlaceWildBack(back, sheet, x, innerRow);
-                        PaintHedgeColumn(outerRow, innerRow, x, back, bld, front, sheet, style);
+                        if (topMost)
+                            PaintHedgeColumn(1, 1, x, back, bld, front, sheet, style);
+                        else
+                            PaintHedgeColumn(outerRow, innerRow, x, back, bld, front, sheet, style);
                     }
                     break;
             }
@@ -522,8 +527,8 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Túnel de bosque: copas continuas (AlwaysFront) en las filas/columnas flanqueando el
-        /// corredor y fondo de hierba del mapa forestal dentro del pasaje.
+        /// Túnel de bosque: copas (AlwaysFront) flanqueando el corredor por su exterior
+        /// (columnas o filas contiguas, NUNCA dentro del pasaje) y fondo de hierba dentro.
         /// </summary>
         private static void PaintForestTunnelEntrance(
             AnnexSide side,
@@ -532,26 +537,48 @@ namespace Pelican4Ever.Framework
             Layer? alwaysFrontLayer,
             TileSheet mainSheet)
         {
-            if (alwaysFrontLayer == null)
+            if (alwaysFrontLayer == null || corridorTiles.Count == 0)
                 return;
+
+            int minX = int.MaxValue, maxX = int.MinValue, minY = int.MaxValue, maxY = int.MinValue;
+            foreach ((int x, int y) in corridorTiles)
+            {
+                minX = Math.Min(minX, x); maxX = Math.Max(maxX, x);
+                minY = Math.Min(minY, y); maxY = Math.Max(maxY, y);
+            }
 
             foreach ((int x, int y) in corridorTiles)
             {
                 // Hierba del mapa forestal bajo el pasaje.
                 if (backLayer.Tiles[x, y] != null && !backLayer.Tiles[x, y].Properties.ContainsKey("Water"))
                     backLayer.Tiles[x, y].Properties["Type"] = "Grass";
+            }
 
-                if (side == AnnexSide.East)
+            void Canopy(int cx, int cy)
+            {
+                if (cx < 0 || cx >= alwaysFrontLayer.LayerWidth || cy < 0 || cy >= alwaysFrontLayer.LayerHeight || corridorTiles.Contains((cx, cy)))
+                    return;
+
+                if (alwaysFrontLayer.Tiles[cx, cy] == null)
+                    alwaysFrontLayer.Tiles[cx, cy] = new StaticTile(alwaysFrontLayer, mainSheet, BlendMode.Alpha, AnnexRimPalette.CanopyLow);
+            }
+
+            if (side == AnnexSide.East)
+            {
+                // Corredor horizontal: copas en las filas contiguas por fuera (N y S del pasaje).
+                for (int x = minX; x <= maxX; x++)
                 {
-                    // Corredor horizontal: copas en las filas adyacentes.
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x, y - 1, AnnexRimPalette.CanopyLow);
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x, y + 2, AnnexRimPalette.CanopyHigh);
+                    Canopy(x, minY - 1);
+                    Canopy(x, maxY + 1);
                 }
-                else
+            }
+            else
+            {
+                // Corredor vertical: copas en las columnas contiguas por fuera (W y E del pasaje).
+                for (int y = minY; y <= maxY; y++)
                 {
-                    // Corredor vertical: copas en las columnas adyacentes.
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x - 2, y, AnnexRimPalette.CanopyLow);
-                    SetCanopyIfEmpty(alwaysFrontLayer, mainSheet, x + 1, y, AnnexRimPalette.CanopyHigh);
+                    Canopy(minX - 1, y);
+                    Canopy(maxX + 1, y);
                 }
             }
         }

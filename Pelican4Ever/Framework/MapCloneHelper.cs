@@ -792,12 +792,22 @@ namespace Pelican4Ever.Framework
                     plank.Properties["Type"] = "Wood";
                     backLayer.Tiles[ox, oy] = plank;
 
-                    int bIndex = (ox % 2 == 0) ? 184 : 211;
+                    // Las vigas son sprites 16×32 anclados por su borde inferior: en el borde
+                    // NORTE (fila 0) se instalarían con la mitad superior fuera del mapa y
+                    // quedarían cortadas; se instalan en la fila contigua interior.
+                    int beamY = oy == 0 ? oy + 1 : oy;
+                    int beamX = ox;
+
+                    int bIndex = (beamX % 2 == 0) ? 184 : 211;
                     var beam = new StaticTile(bldLayer, mainSheet, BlendMode.Alpha, bIndex);
                     beam.Properties["Passable"] = "T";
-                    bldLayer.Tiles[ox, oy] = beam;
+                    bldLayer.Tiles[beamX, beamY] = beam;
 
                     frontLayer.Tiles[ox, oy] = null;
+                    if (oy == 0 && oy + 1 < height)
+                    {
+                        frontLayer.Tiles[ox, oy + 1] = null;
+                    }
                 }
 
                 return;
