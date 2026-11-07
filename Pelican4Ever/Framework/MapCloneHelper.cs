@@ -778,8 +778,10 @@ namespace Pelican4Ever.Framework
             int ex = pts.ReturnExitTile.X;
             int ey = pts.ReturnExitTile.Y;
 
-            int doorBackTile = styleHint == AnnexEntranceStyle.SandShorePath ? 1269 : 736;
-            string doorBackType = styleHint == AnnexEntranceStyle.SandShorePath ? "Dirt" : "Stone";
+            // Umbral en tierra sólida (587) o arena para la playa: aveso sin transparencias
+            // del tilesheet de piedra, y coherente con un corredor también de tierra.
+            int doorBackTile = styleHint == AnnexEntranceStyle.SandShorePath ? 1269 : 587;
+            string doorBackType = "Dirt";
 
             if (corridorHasWater)
             {
