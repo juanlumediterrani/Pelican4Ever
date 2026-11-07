@@ -377,40 +377,6 @@ namespace Pelican4Ever.Framework
             return target;
         }
 
-        /// <summary>
-        /// Añade al conjunto de exclusión del margen las casillas ocupadas por los postes que
-        /// flanquean la puerta (mismas posiciones que pinta MarkAndDecorateEntranceDoorway),
-        /// para que el rim decorativo no sobrescriba el enmarcado de la entrada.
-        /// </summary>
-        private static void AddDoorwayFlanksToRimSkip(AnnexSide side, int width, int height, HashSet<(int X, int Y)> skipTiles)
-        {
-            AnnexWarpPoints pts = AnnexEntrance.For(side, width, height);
-            int ex = pts.ReturnExitTile.X;
-            int ey = pts.ReturnExitTile.Y;
-
-            switch (side)
-            {
-                case AnnexSide.North:
-                    int southY = height - 1;
-                    skipTiles.Add((ex - 2, southY));
-                    skipTiles.Add((ex - 2, southY - 1));
-                    skipTiles.Add((ex + 1, southY));
-                    skipTiles.Add((ex + 1, southY - 1));
-                    break;
-
-                case AnnexSide.South:
-                    skipTiles.Add((ex - 2, 0));
-                    skipTiles.Add((ex + 1, 0));
-                    break;
-
-                case AnnexSide.East:
-                    skipTiles.Add((0, ey - 2));
-                    skipTiles.Add((0, ey - 1));
-                    skipTiles.Add((0, ey + 1));
-                    skipTiles.Add((0, ey + 2));
-                    break;
-            }
-        }
 
         /// <summary>
         /// Limpia las copas/remates de Front y AlwaysFront sin base en las columnas de borde de
@@ -752,21 +718,6 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // Marcar e identificar de forma claramente visible la puerta/umbral de entrada y flanquearla con postes
-            if (mainSheet != null)
-            {
-                bool corridorHasWater = false;
-                foreach (var (cx, cy) in corridorTiles)
-                {
-                    if (backLayer.Tiles[cx, cy] != null && HasWaterProperty(backLayer.Tiles[cx, cy]))
-                    {
-                        corridorHasWater = true;
-                        break;
-                    }
-                }
-
-                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles, corridorHasWater, AnnexMapDesignLogic.EntranceStyleFor(template));
-            }
 
             // 8. Zonas de bonificación válidas y diseño meticuloso de cada minimapa (TASK-902)
             EnsureAnnexBonusZones(template, width, height, backLayer, bldLayer, frontLayer, pathsLayer, mainSheet, corridorTiles);
@@ -778,10 +729,6 @@ namespace Pelican4Ever.Framework
             var rimSkipTiles = new HashSet<(int X, int Y)>(openingBorderTiles);
             rimSkipTiles.UnionWith(corridorTiles);
 
-            // Las casillas de los postes que flanquean la puerta deben sobrevivir al margen:
-            // se marcan como no pintables por el rim para que el enmarcado de la puerta quede.
-            AddDoorwayFlanksToRimSkip(side, width, height, rimSkipTiles);
-
             if (mainSheet != null)
             {
                 Layer? bld2Layer = target.GetLayer("Buildings2");
@@ -789,7 +736,21 @@ namespace Pelican4Ever.Framework
                 Layer? alwaysFront3Layer = target.GetLayer("AlwaysFront3");
                 AnnexBorderArtist.BuildRim(
                     template, side, width, height, backLayer, bldLayer, frontLayer, alwaysFrontLayer, bld2Layer, alwaysFront2Layer, alwaysFront3Layer, mainSheet, rimSkipTiles);
+
+                // Marcar la puerta tras el margen: el enmarcado (postes + umbral) sobrescribe
+                // lo pintado por el rim en las casillas de puerta y de sus flancos.
+                bool corridorHasWater = false;
+                foreach (var (cx, cy) in corridorTiles)
+                {
+                    if (backLayer.Tiles[cx, cy] != null && HasWaterProperty(backLayer.Tiles[cx, cy]))
+                    {
+                        corridorHasWater = true;
+                        break;
+                    }
+                }
+
                 AnnexBorderArtist.PaintTemplateInteriors(template, side, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
+                MarkAndDecorateEntranceDoorway(side, width, height, backLayer, bldLayer, frontLayer, mainSheet, openingBorderTiles, corridorHasWater, AnnexMapDesignLogic.EntranceStyleFor(template));
                 AnnexBorderArtist.ApplyEntranceStyle(template, side, width, height, corridorTiles, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet);
             }
 
