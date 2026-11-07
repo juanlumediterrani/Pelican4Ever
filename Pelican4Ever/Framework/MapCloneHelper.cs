@@ -696,9 +696,17 @@ namespace Pelican4Ever.Framework
                 else if (backLayer.Tiles[cx, cy] != null)
                 {
                     ClearBlockingAndWaterProperties(backLayer.Tiles[cx, cy]);
-                    if (!backLayer.Tiles[cx, cy].Properties.ContainsKey("Type"))
+
+                    // Sendas de entrada uniformes: el corredor no acuático se convierte por
+                    // completo en tierra limpia (587) para evitar pieles vegetales heredadas
+                    // del recorte que se leen como pegotes en el pasaje.
+                    TileSheet sheetForDirt = mainSheet ?? GetOutdoorsTileSheet(target) ?? target.TileSheets.FirstOrDefault();
+                    if (sheetForDirt != null)
                     {
-                        backLayer.Tiles[cx, cy].Properties["Type"] = "Dirt";
+                        var dirtTile = new StaticTile(backLayer, sheetForDirt, BlendMode.Alpha, 587);
+                        dirtTile.Properties["Type"] = "Dirt";
+                        dirtTile.Properties["Diggable"] = "T";
+                        backLayer.Tiles[cx, cy] = dirtTile;
                     }
                 }
                 else if (mainSheet != null)
