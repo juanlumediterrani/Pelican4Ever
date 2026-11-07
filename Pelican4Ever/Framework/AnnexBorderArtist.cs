@@ -195,6 +195,7 @@ namespace Pelican4Ever.Framework
                         }
                         else
                         {
+                            PlaceWildBack(back, sheet, x, innerRow);
                             PaintHedgeColumn(outerRow, innerRow, x, back, bld, front, sheet, style);
                         }
                     }

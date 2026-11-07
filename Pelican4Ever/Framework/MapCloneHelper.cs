@@ -378,6 +378,41 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
+        /// Añade al conjunto de exclusión del margen las casillas ocupadas por los postes que
+        /// flanquean la puerta (mismas posiciones que pinta MarkAndDecorateEntranceDoorway),
+        /// para que el rim decorativo no sobrescriba el enmarcado de la entrada.
+        /// </summary>
+        private static void AddDoorwayFlanksToRimSkip(AnnexSide side, int width, int height, HashSet<(int X, int Y)> skipTiles)
+        {
+            AnnexWarpPoints pts = AnnexEntrance.For(side, width, height);
+            int ex = pts.ReturnExitTile.X;
+            int ey = pts.ReturnExitTile.Y;
+
+            switch (side)
+            {
+                case AnnexSide.North:
+                    int southY = height - 1;
+                    skipTiles.Add((ex - 2, southY));
+                    skipTiles.Add((ex - 2, southY - 1));
+                    skipTiles.Add((ex + 1, southY));
+                    skipTiles.Add((ex + 1, southY - 1));
+                    break;
+
+                case AnnexSide.South:
+                    skipTiles.Add((ex - 2, 0));
+                    skipTiles.Add((ex + 1, 0));
+                    break;
+
+                case AnnexSide.East:
+                    skipTiles.Add((0, ey - 2));
+                    skipTiles.Add((0, ey - 1));
+                    skipTiles.Add((0, ey + 1));
+                    skipTiles.Add((0, ey + 2));
+                    break;
+            }
+        }
+
+        /// <summary>
         /// Limpia las copas/remates de Front y AlwaysFront sin base en las columnas de borde de
         /// un paso activo del puente (objetos multi-casilla recortados por el Crop de BusStop).
         /// </summary>
@@ -742,6 +777,11 @@ namespace Pelican4Ever.Framework
             //    agua, bosque, cerca, arena) y la entrada se remata según su tipo de granja.
             var rimSkipTiles = new HashSet<(int X, int Y)>(openingBorderTiles);
             rimSkipTiles.UnionWith(corridorTiles);
+
+            // Las casillas de los postes que flanquean la puerta deben sobrevivir al margen:
+            // se marcan como no pintables por el rim para que el enmarcado de la puerta quede.
+            AddDoorwayFlanksToRimSkip(side, width, height, rimSkipTiles);
+
             if (mainSheet != null)
             {
                 Layer? bld2Layer = target.GetLayer("Buildings2");
