@@ -167,11 +167,12 @@ namespace Pelican4Ever.Framework
                     break;
 
                 case AnnexRimStyle.RanchFence:
-                    // Banda interior: valla horizontal continua con pasto detrás; banda exterior: pasto con arbustos sueltos.
+                    // Banda interior: valla horizontal continua con pasto opaco detrás
+                    // (175, sin flores translúcidas); banda exterior: pasto con arbustos sueltos.
                     if (!skipTiles.Contains((x, outerRow)) && !skipTiles.Contains((x, innerRow)))
                     {
-                        PlaceWildBack(back, sheet, x, outerRow);
-                        PlaceWildBack(back, sheet, x, innerRow);
+                        PlaceOpaqueGrass(back, sheet, x, outerRow);
+                        PlaceOpaqueGrass(back, sheet, x, innerRow);
                         if (x % 4 == 1)
                             SetTile(bld, sheet, AnnexRimPalette.Bush, x, outerRow);
                         PlaceFencePair(bld, front, sheet, x, innerRow);
@@ -229,8 +230,8 @@ namespace Pelican4Ever.Framework
                 case AnnexRimStyle.RanchFence:
                     if (!skipTiles.Contains((outerCol, y)) && !skipTiles.Contains((innerCol, y)))
                     {
-                        PlaceWildBack(back, sheet, innerCol, y);
-                        PlaceWildBack(back, sheet, outerCol, y);
+                        PlaceOpaqueGrass(back, sheet, innerCol, y);
+                        PlaceOpaqueGrass(back, sheet, outerCol, y);
                         PlaceVerticalFencePair(bld, front, sheet, outerCol, y);
                     }
                     break;
@@ -351,6 +352,14 @@ namespace Pelican4Ever.Framework
         {
             var tile = new StaticTile(back, sheet, BlendMode.Alpha, AnnexRimPalette.WaterTile);
             tile.Properties["Type"] = "Water";
+            back.Tiles[x, y] = tile;
+        }
+
+        /// <summary>Pasto opaco estándar (175) para bandas bajo vallas: sin flores translúcidas.</summary>
+        private static void PlaceOpaqueGrass(Layer back, TileSheet sheet, int x, int y)
+        {
+            var tile = new StaticTile(back, sheet, BlendMode.Alpha, 175);
+            tile.Properties["Type"] = "Grass";
             back.Tiles[x, y] = tile;
         }
 
