@@ -473,6 +473,7 @@ namespace Pelican4Ever.Framework
         {
             AnnexEntranceStyle style = AnnexMapDesignLogic.EntranceStyleFor(template);
             bool corridorHasWater = CorridorHasWater(corridorTiles, backLayer);
+            bool rockTemplate = style == AnnexEntranceStyle.RockCanyon;
 
             // Regla universal: si el pasaje pisa agua, la entrada es de puente de madera.
             if (corridorHasWater)
@@ -484,16 +485,17 @@ namespace Pelican4Ever.Framework
                     PaintForestTunnelEntrance(side, corridorTiles, backLayer, alwaysFrontLayer, mainSheet);
                     break;
 
-                case AnnexEntranceStyle.RockCanyon:
-                    PaintRockCanyonEntrance(side, corridorTiles, backLayer, bldLayer, mainSheet);
-                    break;
-
-                // WoodBridge: el corredor ya dispone de tablones+vigas y el margen de agua enmarca
-                // la abertura. DirtGate/WildGrove/RanchGate/SandShorePath quedan delimitados por el
-                // propio margen temático y el umbral del MarkAndDecorateEntranceDoorway.
+                // WoodBridge / DirtGate / WildGrove / RanchGate / SandShorePath: el corredor ya
+                // dispone de tablones+vigas sobre agua o del umbral del
+                // MarkAndDecorateEntranceDoorway; el resto lo aporta el margen temático.
                 default:
                     break;
             }
+
+            // Desfiladero de colinas: muros rocosos flanqueantes aunque el corredor cruce
+            // agua (pasarela de madera sobre la charca con orillas de cantera).
+            if (rockTemplate)
+                PaintRockCanyonEntrance(side, corridorTiles, backLayer, bldLayer, mainSheet);
         }
 
         private static bool CorridorHasWater(HashSet<(int X, int Y)> corridorTiles, Layer backLayer)
