@@ -1,0 +1,9 @@
+Template: FourCorners
+Side: East
+Dimensions: 40x32
+Border blocked count: 110
+Corridor tiles: 14
+Opening border tiles: (0, 16) (0, 17)
+Entrance exit tile: 0,16
+Entrance style: DirtGate
+Layers: Back, Buildings, Paths, Front, AlwaysFront, AlwaysFront2

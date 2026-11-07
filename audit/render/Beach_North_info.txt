@@ -1,0 +1,9 @@
+Template: Beach
+Side: North
+Dimensions: 40x32
+Border blocked count: 110
+Corridor tiles: 14
+Opening border tiles: (19, 31) (20, 31)
+Entrance exit tile: 20,31
+Entrance style: SandShorePath
+Layers: Back, Back2, Buildings, Buildings2, Front, AlwaysFront, AlwaysFront2, AlwaysFront3, Paths

@@ -1,0 +1,9 @@
+Template: Fishing
+Side: North
+Dimensions: 40x32
+Border blocked count: 111
+Corridor tiles: 14
+Opening border tiles: (19, 31) (20, 31)
+Entrance exit tile: 20,31
+Entrance style: WoodBridge
+Layers: Back, Buildings, Buildings2, Paths, Front, AlwaysFront, AlwaysFront2

@@ -1,0 +1,9 @@
+Template: Standard
+Side: North
+Dimensions: 40x32
+Border blocked count: 110
+Corridor tiles: 14
+Opening border tiles: (19, 31) (20, 31)
+Entrance exit tile: 20,31
+Entrance style: DirtGate
+Layers: Back, Buildings, Paths, Front, AlwaysFront, AlwaysFront2

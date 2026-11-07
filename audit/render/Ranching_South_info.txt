@@ -1,0 +1,9 @@
+Template: Ranching
+Side: South
+Dimensions: 40x32
+Border blocked count: 111
+Corridor tiles: 14
+Opening border tiles: (19, 0) (20, 0)
+Entrance exit tile: 20,0
+Entrance style: DirtGate
+Layers: Back, Back2, Buildings, Buildings2, Paths, Front, AlwaysFront, AlwaysFront2
