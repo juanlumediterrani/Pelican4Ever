@@ -40,11 +40,8 @@ namespace Pelican4Ever.Framework
         public const int FenceRightBase = VerticalMultiTileClassifier.FenceRightBaseTileIndex;
         public const int FenceRightTop = VerticalMultiTileClassifier.FenceRightTopTileIndex;
 
-        /// <summary>Talud de colina: base 441/444 (Buildings) + remate 416/419 (Front).</summary>
-        public const int CliffBaseLeft = 441;
-        public const int CliffBaseRight = 444;
-        public const int CliffTopLeft = 416;
-        public const int CliffTopRight = 419;
+        /// <summary>Tiles de masa rocosa del sheet (desfiladero de colinas), mezclados para el muro.</summary>
+        public static readonly int[] RockWallTiles = { 450, 451, 475, 476, 500, 501, 525, 526, 550, 551, 575, 576 };
 
         /// <summary>Remates del dosel arbóreo (AlwaysFront, bosque).</summary>
         public const int CanopyLow = 968;
