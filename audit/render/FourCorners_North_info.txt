@@ -1,7 +1,7 @@
 Template: FourCorners
 Side: North
 Dimensions: 40x32
-Border blocked count: 100
+Border blocked count: 138
 Corridor tiles: 14
 Opening border tiles: (19, 31) (20, 31)
 Entrance exit tile: 20,31
