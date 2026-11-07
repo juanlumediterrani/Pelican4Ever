@@ -3085,7 +3085,10 @@ namespace Pelican4Ever.Modules
                 var payload = e.ReadAs<ChangePolicyPayload>();
                 if (payload != null)
                 {
-                    HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy, payload.VisitorsCanEdit);
+                    if (payload.FriendId.HasValue)
+                        HandleChangeFriend(e.FromPlayerID, payload.FarmSlotId, payload.FriendId.Value, payload.FriendAdd);
+                    else
+                        HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy, payload.VisitorsCanEdit);
                 }
             }
             else if (e.Type == ModMessages.BuyAnnexRequest && Context.IsMainPlayer)
@@ -3333,6 +3336,20 @@ namespace Pelican4Ever.Modules
             // Sincronizar inmediatamente a todos los peones
             BroadcastDoorsSync();
             return true;
+        }
+
+        private static void HandleChangeFriend(long playerId, string farmSlotId, long friendId, bool add)
+        {
+            if (context == null || friendId == playerId) return;
+
+            var doorEntry = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId && d.OwnerId == playerId);
+            if (doorEntry == null) return;
+
+            bool changed = add ? doorEntry.Friends.Add(friendId) : doorEntry.Friends.Remove(friendId);
+            if (!changed) return;
+
+            context.Monitor.Log($"[FarmSlotModule] {friendId} {(add ? "añadido a" : "quitado de")} los amigos de {farmSlotId} por {playerId}.", LogLevel.Info);
+            BroadcastDoorsSync();
         }
 
         private static void HandleChangePolicy(long playerId, string farmSlotId, string policyStr, bool? visitorsCanEdit = null)
@@ -3693,9 +3710,11 @@ namespace Pelican4Ever.Modules
                     {
                         if (whichAnswer == "Visit")
                         {
-                            if (assignment.Policy == AccessPolicy.Locked)
+                            if (!VisitorPermissionLogic.CanEnter(assignment, Game1.player.UniqueMultiplayerID))
                             {
-                                Game1.drawObjectDialogue("La puerta está cerrada con llave.");
+                                Game1.drawObjectDialogue(assignment.Policy == AccessPolicy.Friends
+                                    ? $"Solo los amigos de {ownerName} pueden entrar."
+                                    : "La puerta está cerrada con llave.");
                             }
                             else
                             {
@@ -3718,6 +3737,7 @@ namespace Pelican4Ever.Modules
                 new Response("Friends", "Solo amigos"),
                 new Response("Public", "Abierta a todas las visitas"),
                 new Response("ToggleEdit", canEdit ? "Visitas pueden editar: Sí (cambiar a No)" : "Visitas pueden editar: No (cambiar a Sí)"),
+                new Response("Friends_Manage", "Gestionar amigos"),
                 new Response("Cancel", "Cancelar")
             };
 
@@ -3726,6 +3746,13 @@ namespace Pelican4Ever.Modules
                 choices,
                 (who, whichAnswer) =>
                 {
+                    if (whichAnswer == "Friends_Manage")
+                    {
+                        // Esperar a que se cierre este diálogo antes de abrir el siguiente
+                        DelayedAction.functionAfterDelay(() => ShowFriendsDialog(farmSlotId), 100);
+                        return;
+                    }
+
                     string? policy = whichAnswer is "Locked" or "Friends" or "Public" ? whichAnswer : null;
                     bool? newCanEdit = whichAnswer == "ToggleEdit" ? !canEdit : null;
                     if (policy == null && newCanEdit == null)
@@ -3751,6 +3778,64 @@ namespace Pelican4Ever.Modules
                     Game1.addHUDMessage(new HUDMessage(hud, HUDMessage.newQuest_type));
                 }
             );
+        }
+
+        /// <summary>
+        /// Lista de amigos de la residencia: añadir a los jugadores conectados y quitar a cualquiera de la lista.
+        /// </summary>
+        public static void ShowFriendsDialog(string farmSlotId)
+        {
+            if (context == null) return;
+
+            long myId = Game1.player.UniqueMultiplayerID;
+            ServerWorldState worldState = context.WorldState;
+            DoorAssignment? door = worldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId && d.OwnerId == myId);
+            if (door == null) return;
+
+            string NameOf(long id) =>
+                Game1.GetPlayer(id)?.Name is { Length: > 0 } online ? online
+                : worldState.Players.TryGetValue(id, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName) ? rec.PlayerName
+                : id.ToString();
+
+            var choices = new List<Response>();
+            foreach (long friend in door.Friends.OrderBy(NameOf))
+                choices.Add(new Response($"Remove_{friend}", $"Quitar a {NameOf(friend)}"));
+            foreach (Farmer online in Game1.getOnlineFarmers().Where(f => f.UniqueMultiplayerID != myId && !door.Friends.Contains(f.UniqueMultiplayerID)).OrderBy(f => f.Name))
+                choices.Add(new Response($"Add_{online.UniqueMultiplayerID}", $"Añadir a {online.Name}"));
+
+            // El cuadro de preguntas no tiene scroll
+            if (choices.Count > 8)
+                choices = choices.Take(8).ToList();
+            choices.Add(new Response("Cancel", "Cancelar"));
+
+            string question = door.Friends.Count == 0
+                ? "Aún no tienes amigos en la lista. Añade a un jugador conectado:"
+                : $"Amigos de tu residencia ({door.Friends.Count}). Con «Solo amigos», solo ellos pueden entrar.";
+
+            QuestionDialog.Ask(question, choices.ToArray(), (who, whichAnswer) =>
+            {
+                bool add;
+                string idText;
+                if (whichAnswer.StartsWith("Add_", StringComparison.Ordinal)) { add = true; idText = whichAnswer.Substring(4); }
+                else if (whichAnswer.StartsWith("Remove_", StringComparison.Ordinal)) { add = false; idText = whichAnswer.Substring(7); }
+                else return;
+                if (!long.TryParse(idText, out long friendId)) return;
+
+                if (Context.IsMainPlayer)
+                {
+                    HandleChangeFriend(myId, farmSlotId, friendId, add);
+                }
+                else
+                {
+                    context.Helper.Multiplayer.SendMessage(
+                        new ChangePolicyPayload { FarmSlotId = farmSlotId, FriendId = friendId, FriendAdd = add },
+                        ModMessages.ChangePolicyRequest,
+                        new[] { context.Manifest.UniqueID },
+                        new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                    );
+                }
+                Game1.addHUDMessage(new HUDMessage(add ? $"{NameOf(friendId)} ya es tu amigo." : $"{NameOf(friendId)} ya no está en tu lista.", HUDMessage.newQuest_type));
+            });
         }
 
         /// <summary>
@@ -4564,9 +4649,11 @@ namespace Pelican4Ever.Modules
                 if (assignment != null)
                 {
                     long myId = Game1.player.UniqueMultiplayerID;
-                    if (assignment.OwnerId != myId && assignment.Policy == AccessPolicy.Locked)
+                    if (!VisitorPermissionLogic.CanEnter(assignment, myId))
                     {
-                        Game1.showRedMessage("Esta parcela es privada y está cerrada con llave.");
+                        Game1.showRedMessage(assignment.Policy == AccessPolicy.Friends
+                            ? "Esta parcela es solo para los amigos de su dueño."
+                            : "Esta parcela es privada y está cerrada con llave.");
                         // Detener al jugador tanto en la Granja Host como en los mapas puente de la plaza
                         if (Game1.currentLocation != null && (Game1.currentLocation is Farm || HostPlazaLayout.IsPlazaLocation(Game1.currentLocation.NameOrUniqueName)))
                         {
@@ -4613,10 +4700,12 @@ namespace Pelican4Ever.Modules
                     : null;
 
                 long? ownerId = parentDoor?.OwnerId ?? annex?.OwnerId;
-                AccessPolicy policy = parentDoor?.Policy ?? AccessPolicy.Locked;
                 long myId = Game1.player.UniqueMultiplayerID;
+                bool canEnter = parentDoor != null
+                    ? VisitorPermissionLogic.CanEnter(parentDoor, myId)
+                    : !ownerId.HasValue || ownerId.Value == myId;
 
-                if (ownerId.HasValue && ownerId.Value != myId && policy == AccessPolicy.Locked)
+                if (!canEnter)
                 {
                     Game1.showRedMessage("Este anexo es privado y está cerrado con llave.");
                     Game1.player.Halt();

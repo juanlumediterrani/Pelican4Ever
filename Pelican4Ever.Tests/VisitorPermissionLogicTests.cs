@@ -32,6 +32,22 @@ namespace Pelican4Ever.Tests
             Assert.True(VisitorPermissionLogic.CanEdit(door, 20));
         }
 
+        [Theory]
+        [InlineData(AccessPolicy.Locked, false, false)]
+        [InlineData(AccessPolicy.Locked, true, false)]
+        [InlineData(AccessPolicy.Friends, false, false)]
+        [InlineData(AccessPolicy.Friends, true, true)]
+        [InlineData(AccessPolicy.Public, false, true)]
+        public void CanEnter_DependsOnPolicyAndFriendList(AccessPolicy policy, bool isFriend, bool expected)
+        {
+            var door = new DoorAssignment { OwnerId = 10, Policy = policy };
+            if (isFriend)
+                door.Friends.Add(20);
+
+            Assert.Equal(expected, VisitorPermissionLogic.CanEnter(door, 20));
+            Assert.True(VisitorPermissionLogic.CanEnter(door, 10));
+        }
+
         [Fact]
         public void CanEdit_WithoutOwner_IsAllowed()
         {

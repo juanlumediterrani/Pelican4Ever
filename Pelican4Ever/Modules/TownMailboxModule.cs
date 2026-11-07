@@ -220,7 +220,7 @@ namespace Pelican4Ever.Modules
             }
             else
             {
-                if (assignment != null && assignment.Policy != AccessPolicy.Locked)
+                if (assignment != null && VisitorPermissionLogic.CanEnter(assignment, Game1.player.UniqueMultiplayerID))
                 {
                     Response[] choices = new[]
                     {

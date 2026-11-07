@@ -64,6 +64,12 @@ namespace Pelican4Ever.Models
 
         /// <summary>Nuevo permiso de edición de las visitas; null lo deja como está.</summary>
         public bool? VisitorsCanEdit { get; set; }
+
+        /// <summary>Jugador que se añade o quita de la lista de amigos; null no la cambia.</summary>
+        public long? FriendId { get; set; }
+
+        /// <summary>true añade a <see cref="FriendId"/>, false lo quita.</summary>
+        public bool FriendAdd { get; set; }
     }
 
     public class SyncDoorsPayload
