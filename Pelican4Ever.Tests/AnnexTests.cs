@@ -604,6 +604,29 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexTemplates_Foraging_ConfiguresAuthenticForestLayouts()
+        {
+            var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
+            Assert.Equal("Maps/Farm_Foraging", foraging.SourceVanillaMap);
+
+            var northLayout = foraging.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(18, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.NotNull(northLayout.RenewableStumpTiles);
+            Assert.Contains(new TilePoint(8, 22), northLayout.RenewableStumpTiles);
+
+            var eastLayout = foraging.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(16, eastLayout.EntranceTile.Y);
+            Assert.NotNull(eastLayout.RenewableStumpTiles);
+
+            var southLayout = foraging.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(18, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.NotNull(southLayout.RenewableStumpTiles);
+        }
+
+        [Fact]
         public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
         {
             const int w = 40;

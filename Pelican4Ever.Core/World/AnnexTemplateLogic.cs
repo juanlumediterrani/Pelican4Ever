@@ -113,13 +113,13 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Forest",
                 "Maps/Farm_Foraging",
-                10, 8,
+                0, 0,
                 FarmTypeBehavior.None with { ForestForage = true, ForestStumps = true },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(10, 8, new TilePoint(20, 30), RenewableStumpTiles: new[] { new TilePoint(4, 17), new TilePoint(4, 21), new TilePoint(27, 11), new TilePoint(26, 24) }),
-                    [AnnexSide.East] = new(10, 8, new TilePoint(1, 15), RenewableStumpTiles: new[] { new TilePoint(4, 17), new TilePoint(4, 21), new TilePoint(27, 11), new TilePoint(26, 24) }),
-                    [AnnexSide.South] = new(10, 8, new TilePoint(20, 1), RenewableStumpTiles: new[] { new TilePoint(4, 17), new TilePoint(4, 21), new TilePoint(27, 11), new TilePoint(26, 24) })
+                    [AnnexSide.North] = new(0, 0, new TilePoint(18, 30), RenewableStumpTiles: new[] { new TilePoint(8, 22), new TilePoint(12, 9), new TilePoint(24, 9), new TilePoint(33, 22) }),
+                    [AnnexSide.East] = new(0, 0, new TilePoint(1, 16), RenewableStumpTiles: new[] { new TilePoint(8, 22), new TilePoint(12, 9), new TilePoint(24, 9), new TilePoint(33, 22) }),
+                    [AnnexSide.South] = new(0, 0, new TilePoint(18, 1), RenewableStumpTiles: new[] { new TilePoint(8, 22), new TilePoint(12, 9), new TilePoint(24, 9), new TilePoint(33, 22) })
                 }
             ),
             ["Mining"] = new AnnexTemplate(
