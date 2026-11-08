@@ -627,6 +627,30 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexTemplates_Mining_ConfiguresAuthenticHilltopLayouts()
+        {
+            var mining = AnnexTemplateCatalog.GetTemplate("Mining");
+            Assert.Equal("Maps/Farm_Mining", mining.SourceVanillaMap);
+
+            var northLayout = mining.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(19, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.NotNull(northLayout.MountainOreArea);
+            Assert.Equal(2, northLayout.MountainOreArea.Value.X);
+            Assert.Equal(12, northLayout.MountainOreArea.Value.Y);
+
+            var eastLayout = mining.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(15, eastLayout.EntranceTile.Y);
+            Assert.NotNull(eastLayout.MountainOreArea);
+
+            var southLayout = mining.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(29, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.NotNull(southLayout.MountainOreArea);
+        }
+
+        [Fact]
         public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
         {
             const int w = 40;

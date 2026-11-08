@@ -131,13 +131,13 @@ namespace Pelican4Ever.Core.World
                 35000,
                 "Farm_Hilltop",
                 "Maps/Farm_Mining",
-                3, 25,
+                0, 0,
                 FarmTypeBehavior.None with { MountainOreArea = new TileArea(2, 12, 22, 8), InitialMountainOreDays = 14 },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(3, 25, new TilePoint(20, 30), MountainOreArea: new TileArea(2, 12, 22, 8)),
-                    [AnnexSide.East] = new(3, 25, new TilePoint(1, 15), MountainOreArea: new TileArea(2, 12, 22, 8)),
-                    [AnnexSide.South] = new(3, 25, new TilePoint(17, 1), MountainOreArea: new TileArea(2, 12, 22, 8))
+                    [AnnexSide.North] = new(0, 0, new TilePoint(19, 30), MountainOreArea: new TileArea(2, 12, 22, 8)),
+                    [AnnexSide.East] = new(0, 0, new TilePoint(1, 15), MountainOreArea: new TileArea(2, 12, 22, 8)),
+                    [AnnexSide.South] = new(0, 0, new TilePoint(29, 1), MountainOreArea: new TileArea(2, 12, 22, 8))
                 }
             ),
             ["Combat"] = new AnnexTemplate(
