@@ -157,6 +157,42 @@ public class SatietyBudgetTests
     }
 
     [Fact]
+    public void WellFedThreshold_IsQuarterOfMaxSatietyByDefault()
+    {
+        float threshold = SatietyBudget.WellFedThreshold(135, 0.25f);
+        Assert.Equal(33.75f, threshold);
+    }
+
+    [Theory]
+    [InlineData(135f, 135, 0.25f, true)]
+    [InlineData(50f, 135, 0.25f, true)]
+    [InlineData(33.75f, 135, 0.25f, true)]
+    [InlineData(33.74f, 135, 0.25f, false)]
+    [InlineData(20f, 135, 0.25f, false)]
+    [InlineData(0f, 135, 0.25f, false)]
+    public void IsWellFed_EvaluatesAgainstThreshold(float satiety, int maxSatiety, float fraction, bool expected)
+    {
+        Assert.Equal(expected, SatietyBudget.IsWellFed(satiety, maxSatiety, fraction));
+    }
+
+    [Fact]
+    public void RemainingWellFedMinutes_CalculatesCorrectDrainTime()
+    {
+        // 135 max, 4h drain. Threshold = 33.75.
+        // A 135 de saciedad, le quedan (135 - 33.75) / 135 * 240 = 180 min (3 horas)
+        Assert.Equal(180, SatietyBudget.RemainingWellFedMinutes(135f, 135, 4.0f, 0.25f));
+
+        // A 67.5 de saciedad (mitad), le quedan (67.5 - 33.75) / 135 * 240 = 60 min (1 hora)
+        Assert.Equal(60, SatietyBudget.RemainingWellFedMinutes(67.5f, 135, 4.0f, 0.25f));
+
+        // En el umbral exacto, queda 1 min
+        Assert.Equal(1, SatietyBudget.RemainingWellFedMinutes(33.75f, 135, 4.0f, 0.25f));
+
+        // Por debajo del umbral, 0 min
+        Assert.Equal(0, SatietyBudget.RemainingWellFedMinutes(20f, 135, 4.0f, 0.25f));
+    }
+
+    [Fact]
     public void DailyCounters_ResetOnNewDay_PreservesSatiety()
     {
         var p = new PlayerRecord { SatietyGameDay = 3, Satiety = 100f, WellFedBuffsUsed = 2, SpaBuffsUsed = 1 };
@@ -289,6 +325,46 @@ public class SatietyBudgetTests
 
         p.EnsureDailyCounters(6);
         Assert.True(p.TryActivateWellFed(t.AddHours(24), TimeSpan.FromMinutes(60), maxDailyBuffs: 2));
+    }
+
+    [Fact]
+    public void PlayerRecord_IsWellFed_WorksWithSatietyAndDecay()
+    {
+        DateTimeOffset t = new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
+        var p = new PlayerRecord
+        {
+            Satiety = 135f, // Lleno al máximo (ej. por comer peces)
+            LastSatietyUpdateUtc = t
+        };
+
+        // Al comer hasta el máximo, está Bien Comido
+        Assert.True(p.IsWellFed(t, maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+        Assert.Equal(180, p.RemainingWellFedMinutes(t, maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+
+        // Tras 2 horas de vaciado continuo (satiety = 67.5 > 33.75), sigue Bien Comido
+        Assert.True(p.IsWellFed(t.AddHours(2), maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+        Assert.Equal(60, p.RemainingWellFedMinutes(t.AddHours(2), maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+
+        // Exactamente a las 3 horas (satiety = 33.75 = 1/4), sigue Bien Comido
+        Assert.True(p.IsWellFed(t.AddHours(3), maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+
+        // A las 3 horas y 1 minuto (satiety < 33.75), deja de estar Bien Comido
+        Assert.False(p.IsWellFed(t.AddHours(3).AddMinutes(1), maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+        Assert.Equal(0, p.RemainingWellFedMinutes(t.AddHours(3).AddMinutes(1), maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+    }
+
+    [Fact]
+    public void PlayerRecord_IsWellFed_ReturnsTrueIfTimerBuffActiveEvenWithZeroSatiety()
+    {
+        DateTimeOffset t = new DateTimeOffset(2026, 11, 2, 12, 0, 0, TimeSpan.Zero);
+        var p = new PlayerRecord
+        {
+            Satiety = 0f,
+            WellFedUntilUtc = t.AddMinutes(45)
+        };
+
+        Assert.True(p.IsWellFed(t, maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
+        Assert.Equal(45, p.RemainingWellFedMinutes(t, maxStamina: 270, dailyFraction: 0.5f, drainHours: 4.0f, thresholdFraction: 0.25f));
     }
 
     [Fact]

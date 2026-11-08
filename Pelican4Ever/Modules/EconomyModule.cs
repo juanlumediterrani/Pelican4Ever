@@ -23,6 +23,7 @@ namespace Pelican4Ever.Modules
     public sealed class EconomyModule : IModule
     {
         private static ModContext? context;
+        private static StardewValley.Object? preEatFoodItem = null;
         private static float preEatStamina = 0f;
         private static bool isCleaningMines = false;
 
@@ -129,10 +130,17 @@ namespace Pelican4Ever.Modules
                 ShowSittingRestHint(playerRecord, nowUtc);
             wasSitting = isSitting;
 
+            bool isWellFed = playerRecord.IsWellFed(
+                nowUtc,
+                Game1.player.MaxStamina,
+                modCtx.Config.DailySatietyFraction,
+                modCtx.Config.SatietyDrainHours,
+                modCtx.Config.WellFedSatietyThresholdFraction);
+
             if (SittingRegenLogic.Tick(
                 isSitting,
                 Game1.player.isInBed.Value,
-                playerRecord.IsWellFed(nowUtc),
+                isWellFed,
                 Game1.player.Stamina,
                 Game1.player.MaxStamina,
                 sittingSecondAccumulator,
@@ -353,6 +361,7 @@ namespace Pelican4Ever.Modules
             if (__instance == Game1.player)
             {
                 preEatStamina = __instance.Stamina;
+                preEatFoodItem = __instance.itemToEat as StardewValley.Object;
             }
         }
 
@@ -361,8 +370,11 @@ namespace Pelican4Ever.Modules
             if (__instance != Game1.player || context == null)
                 return;
 
+            StardewValley.Object? foodItem = preEatFoodItem ?? (__instance.itemToEat as StardewValley.Object);
+            preEatFoodItem = null;
+
             // Stardrop (O)434 no consume saciedad
-            if (__instance.itemToEat is StardewValley.Object obj && obj.QualifiedItemId == "(O)434")
+            if (foodItem != null && foodItem.QualifiedItemId == "(O)434")
                 return;
 
             DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
@@ -370,17 +382,29 @@ namespace Pelican4Ever.Modules
             record.EnsureDailyCounters(Game1.Date.TotalDays);
             bool changed = false;
 
+            int budget = SatietyBudget.DailyBudget(__instance.MaxStamina, context.Config.DailySatietyFraction);
+            float threshold = SatietyBudget.WellFedThreshold(budget, context.Config.WellFedSatietyThresholdFraction);
+
+            // Determinar ganancia de estamina de la comida consumida
             float rawGain = __instance.Stamina - preEatStamina;
+            if (rawGain <= 0 && preEatStamina >= __instance.MaxStamina && foodItem != null)
+            {
+                rawGain = Math.Max(0, foodItem.staminaRecoveredOnConsumption());
+            }
+
             if (rawGain > 0)
             {
                 record.UpdateSatietyDecay(nowUtc, __instance.MaxStamina, context.Config.DailySatietyFraction, context.Config.SatietyDrainHours);
 
-                int budget = SatietyBudget.DailyBudget(__instance.MaxStamina, context.Config.DailySatietyFraction);
                 int allowedGain = SatietyBudget.AllowedGain((int)Math.Round(rawGain), record.Satiety, budget);
+                float oldSatiety = record.Satiety;
 
                 record.Satiety = Math.Min(budget, record.Satiety + allowedGain);
                 record.LastSatietyUpdateUtc = nowUtc;
-                __instance.Stamina = preEatStamina + allowedGain;
+                if (preEatStamina < __instance.MaxStamina)
+                {
+                    __instance.Stamina = Math.Min(__instance.MaxStamina, preEatStamina + allowedGain);
+                }
                 changed = true;
 
                 int remaining = Math.Max(0, budget - (int)Math.Floor(record.Satiety));
@@ -394,6 +418,14 @@ namespace Pelican4Ever.Modules
                     {
                         Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía (Saciedad al máximo).", HUDMessage.newQuest_type));
                     }
+
+                    // Notificar si se alcanza el umbral de "Bien comido" (al menos 1/4 de saciedad)
+                    if (oldSatiety < threshold && record.Satiety >= threshold)
+                    {
+                        Game1.addHUDMessage(new HUDMessage(
+                            "Bien comido: tienes suficiente saciedad para que descansar sentado recupere energía.",
+                            HUDMessage.newQuest_type));
+                    }
                 }
                 else
                 {
@@ -401,19 +433,15 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // Un plato cocinado activa "Bien comido": mientras dure, sentarse recupera energía
-            if (__instance.itemToEat is StardewValley.Object food && food.Category == StardewValley.Object.CookingCategory)
+            // Los platos cocinados siguen pudiendo activar una ventana garantizada de descanso si quedan usos
+            if (foodItem != null && foodItem.Category == StardewValley.Object.CookingCategory)
             {
                 if (record.TryActivateWellFed(nowUtc, TimeSpan.FromMinutes(context.Config.WellFedDurationMinutes), context.Config.MaxDailyWellFedBuffs))
                 {
                     changed = true;
                     Game1.addHUDMessage(new HUDMessage(
-                        $"Bien comido: durante {FormatMinutes(context.Config.WellFedDurationMinutes)}, sentarte (banco, silla o suelo) recupera energía.",
+                        $"Plato cocinado: disfrutas de {FormatMinutes(context.Config.WellFedDurationMinutes)} garantizados de descanso sentado.",
                         HUDMessage.newQuest_type));
-                }
-                else if (!record.IsWellFed(nowUtc))
-                {
-                    Game1.showRedMessage($"Hoy ya has aprovechado {context.Config.MaxDailyWellFedBuffs} platos \"Bien comido\".");
                 }
             }
 
@@ -422,24 +450,39 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Al sentarse, avisa de si el descanso recupera energía: solo lo hace con "Bien comido", y sin aviso parecería un fallo.
+        /// Al sentarse, avisa de si el descanso recupera energía: solo lo hace con "Bien comido" (al menos 1/4 de saciedad).
         /// </summary>
         private static void ShowSittingRestHint(PlayerRecord record, DateTimeOffset nowUtc)
         {
             if (context == null)
                 return;
 
-            if (record.IsWellFed(nowUtc))
+            int maxStamina = Game1.player.MaxStamina;
+            bool isWellFed = record.IsWellFed(
+                nowUtc,
+                maxStamina,
+                context.Config.DailySatietyFraction,
+                context.Config.SatietyDrainHours,
+                context.Config.WellFedSatietyThresholdFraction);
+
+            if (isWellFed)
             {
-                int minutesLeft = Math.Max(1, (int)Math.Ceiling((record.WellFedUntilUtc - nowUtc).TotalMinutes));
+                int minutesLeft = record.RemainingWellFedMinutes(
+                    nowUtc,
+                    maxStamina,
+                    context.Config.DailySatietyFraction,
+                    context.Config.SatietyDrainHours,
+                    context.Config.WellFedSatietyThresholdFraction);
+
+                string durationStr = minutesLeft > 0 ? $", {FormatMinutes(minutesLeft)}" : string.Empty;
                 Game1.addHUDMessage(new HUDMessage(
-                    $"Descansando: +1 de energía cada {context.Config.SittingRegenSeconds} s (Bien comido, {FormatMinutes(minutesLeft)}).",
+                    $"Descansando: +1 de energía cada {context.Config.SittingRegenSeconds} s (Bien comido{durationStr}).",
                     HUDMessage.stamina_type));
             }
-            else if (Game1.player.Stamina < Game1.player.MaxStamina)
+            else if (Game1.player.Stamina < maxStamina)
             {
                 Game1.addHUDMessage(new HUDMessage(
-                    "Sentarte solo recupera energía con \"Bien comido\": come un plato cocinado.",
+                    "Sentarte solo recupera energía con \"Bien comido\": come hasta llenar al menos 1/4 de saciedad.",
                     HUDMessage.error_type));
             }
         }

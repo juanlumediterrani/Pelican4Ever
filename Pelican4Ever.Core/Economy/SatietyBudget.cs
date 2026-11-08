@@ -32,5 +32,41 @@ namespace Pelican4Ever.Core.Economy
 
         public static int AllowedGain(int requestedGain, int currentSatiety, int maxSatiety)
             => AllowedGain(requestedGain, (float)currentSatiety, maxSatiety);
+
+        /// <summary>
+        /// Determina el umbral de Saciedad necesario para activar el efecto "Bien comido" (por defecto 1/4 = 25% de la capacidad).
+        /// </summary>
+        public static float WellFedThreshold(int maxSatiety, float thresholdFraction = 0.25f)
+        {
+            return Math.Max(0f, maxSatiety * thresholdFraction);
+        }
+
+        /// <summary>
+        /// Evalúa si el nivel de Saciedad actual otorga el efecto "Bien comido" (al menos 1/4 de la barra de saciedad).
+        /// </summary>
+        public static bool IsWellFed(float currentSatiety, int maxSatiety, float thresholdFraction = 0.25f)
+        {
+            if (maxSatiety <= 0)
+                return false;
+
+            return currentSatiety >= WellFedThreshold(maxSatiety, thresholdFraction);
+        }
+
+        /// <summary>
+        /// Calcula los minutos restantes que le quedan al efecto "Bien comido" antes de que la Saciedad
+        /// caiga por debajo del umbral de 1/4 por el vaciado continuo.
+        /// </summary>
+        public static int RemainingWellFedMinutes(float currentSatiety, int maxSatiety, float drainHours, float thresholdFraction = 0.25f)
+        {
+            if (maxSatiety <= 0 || drainHours <= 0)
+                return 0;
+
+            float threshold = WellFedThreshold(maxSatiety, thresholdFraction);
+            if (currentSatiety < threshold)
+                return 0;
+
+            double minutes = ((currentSatiety - threshold) / maxSatiety) * (drainHours * 60.0);
+            return Math.Max(1, (int)Math.Ceiling(minutes));
+        }
     }
 }
