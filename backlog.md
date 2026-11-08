@@ -541,6 +541,131 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Un anexo de Colinas genera mineral a diario dentro de su zona.
     3. Un anexo salvaje tiene monstruos nocturnos y la residencia estándar a la que pertenece no.
 
+### Épica 9.1: Minimapas de anexo con acabado vanilla (rama `minimaps_improvements`)
+> **Objetivo:** Que los 8 anexos (40×32) parezcan mapas del juego y no recortes: bordes decorados al estilo vanilla (acantilados, linde de árboles, agua, vallas), sin cortes bruscos ni muros invisibles y sin fallos gráficos. Además, que cada salida hacia un anexo y su vuelta se vean como camino y funcionen en todos los tipos de residencia y lados.
+
+**Situación de partida (revisión del 2026-11-08, `4eeb66f`):**
+- `MapCloneHelper.CreateAnnexMap` genera cada anexo en tiempo de carga: recorta 40×32 del mapa vanilla del tipo (`SourceCropX/Y`), sella el perímetro con `Passable=F` invisible y abre una entrada de 2 casillas con postes de valla. Después lo corrige con parches procedurales: puentes de tablas sobre el agua del corredor, barandillas donde un puente toca el borde, suavizado de orillas y `SanitizeMapGraphicGlitches`. Son unas 1000 líneas de reglas por índice de tile.
+- En partida (prueba del 2026-11-07), todos los anexos se ven parecidos, no hay borde visible y queda algún fallo gráfico. Casi todo viene de recortar: los tiles multicasilla (árboles, casas, acantilados, orillas) quedan partidos en el borde, y el límite es una pared invisible en mitad del terreno.
+- El lado de entrada cambia con la residencia: con acceso norte se entra por el borde sur del anexo, con acceso este por el oeste y con acceso sur por el norte. El asset es `Maps/Pelican4Ever_Annex_<Tipo>_<Lado>`.
+- Warps de la residencia al anexo: `ResidenceAnnexAccessLogic` (por tipo de mapa). Vuelta: warps en la apertura del anexo hacia `FarmTemplate.<Lado>ArrivalTile`. Aviso visual: solo el letrero flotante a menos de 3,5 casillas (`🌲 … (Caminar para entrar)` / `Adquirir Anexo`).
+- **Fallos de warps encontrados al revisar los mapas vanilla** (casillas comprobadas con colisión de `Buildings` en cada `Maps/Farm_*`):
+  - *Fluvial, salida sur:* la llegada (40,63) y las casillas de warp (39–41,64) son colisión. Un anexo sur de una residencia fluvial no es alcanzable. Una residencia fluvial con portal en el borde norte de la plaza (se entra por el sur) dejaría al jugador dentro de la colisión. **Prioritario**.
+  - *Colinas, salida este:* el warp (79,15) es colisión. Quedan (79,16) y (79,17), así que funciona, pero hay que alinearlo.
+  - *Estándar, Forestal, Salvaje y Cuatro Esquinas:* la casilla de warp (39,0) es colisión (el paso es x 40–41). (39,64) también, salvo en Fluvial, donde lo es toda la fila. Funcionan, pero conviene usar el ancho real de cada paso.
+  - *Pradera y Playa:* sin problemas (la Playa se corrigió en `d3e329b`).
+
+**Decisión propuesta (TASK-908):** sustituir la generación procedural por mapas dibujados en Tiled (`assets/maps/annex_<Tipo>.tmx`) sobre las hojas de tiles vanilla. Las tres entradas posibles vienen ya dibujadas en cada mapa, cerradas con decoración, y se abre la que toque con un parche pequeño (`IAssetDataForMap.PatchMap`). Es la forma en que el juego y Content Patcher hacen sus mapas: los bordes quedan con el acabado vanilla y desaparece la clase de fallos del recorte.
+
+**Orden recomendado:** TASK-907 (herramientas) → TASK-913 (warps, por el fallo de la Fluvial sur) → TASK-908 → TASK-909 → TASK-910 y TASK-911 (en paralelo, un mapa por persona) → TASK-912 → TASK-914 → TASK-915.
+
+- [ ] **TASK-907: Herramientas para revisar los anexos**
+  * **Análisis Técnico:** Antes de redibujar, ver los 24 casos (8 tipos × 3 lados) sin comprar anexos ni esperar días:
+    - `p4e_annex_preview <tipo> <north|east|south>`: crea una ubicación temporal `Pelican4Ever_AnnexPreview` con ese mapa y lleva al host a su entrada. No toca `ServerWorldState`.
+    - `p4e_annex_screenshot [tipo|all]`: exporta una captura de mapa completo (`Game1.game1.takeMapScreenshot`) de cada caso a la carpeta de capturas, para revisarlos de un vistazo y comparar antes y después.
+    - `p4e_annex_validate [tipo|all]`: comprobaciones automáticas por caso, que se informan por consola:
+      - tamaño 40×32 y ninguna casilla `Back` nula;
+      - una sola apertura en el borde y, sin ella, ningún borde transitable;
+      - desde la casilla de entrada se llega a todo el suelo transitable (recorrido en anchura) y a las zonas de bonificación (`SpawnMountainFarmOreRect`, forraje, agua pescable);
+      - ningún tile apunta a una hoja de tiles que no exista;
+      - no queda ningún `Warp`, `TouchAction` ni `Action` vanilla.
+    - Con `EnableTestCommands`, como los comandos de `FarmTestCommandsModule`. La lógica que no depende del juego (recorrido en anchura sobre una rejilla de transitabilidad, reglas del borde) va en Core con tests.
+  * **Prioridad:** Alta (sin esto no se puede comprobar el resto)
+  * **Criterios de Aceptación:**
+    1. Hay capturas de los 24 casos actuales, que sirven de referencia «antes».
+    2. `p4e_annex_validate all` lista los fallos de los mapas actuales y sale limpio con los nuevos.
+    3. Ver un caso no compra nada ni deja ubicaciones en el guardado.
+
+- [ ] **TASK-908: ADR — mapas dibujados en vez de recortes procedurales**
+  * **Análisis Técnico:** `docs/adr/0006-annex-authored-maps.md`. Comparar:
+    - (a) seguir con el recorte y más reglas por índice de tile;
+    - (b) mapas `.tmx` dibujados, uno por tipo, con las tres entradas cerradas y un parche de apertura por lado;
+    - (c) un `.tmx` por tipo y lado (24 mapas).
+    Recomendado (b): 8 mapas que mantener, la entrada siempre en el centro del lado (como espera `AnnexEntrance`) y parches de apertura de unas 4×3 casillas. Recoger también:
+    - las hojas de tiles se referencian por nombre de asset vanilla (`Maps/spring_outdoorsTileSheet`, etc.), así el juego cambia de estación solo;
+    - licencias: solo se usan las hojas vanilla, no se copian sus PNG en el mod;
+    - qué pasa con los anexos ya comprados al cambiar el mapa (TASK-912).
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. ADR aceptada con la opción elegida y su motivo.
+    2. Probado con un mapa: un `.tmx` mínimo con una hoja vanilla carga desde el mod, cambia de estación y se le aplica `PatchMap`.
+
+- [ ] **TASK-909: Guía de estilo y kit de bordes y entradas**
+  * **Análisis Técnico:** `docs/anexos-guia-de-mapas.md` y un `.tmx` de kit con las piezas que copian todos los mapas:
+    - **Bordes (2–4 casillas, nunca una pared invisible):** acantilado con su base y su sombra, linde de bosque con copas en `Front`/`AlwaysFront`, agua profunda con orilla, valla de madera o piedra, y las esquinas de cada uno. Se toman del perímetro de `Maps/Farm` y `Maps/Farm_*` para que se vean igual que en una granja.
+    - **Entrada:** camino de 2–3 casillas de ancho desde el centro del lado, con flanco decorado (postes, arbustos o rocas, como los pasos de `Farm`). La versión cerrada del mismo hueco sigue el borde para que no se note.
+    - **Reglas:** ningún tile multicasilla partido; `Passable` solo en tiles que se ven sólidos; tiles de `Front` encima de lo que se puede pisar por detrás; capa `Paths` solo con marcadores que el juego lee (árboles, hierba, 19/20/21 de la cantera).
+    - Tamaño útil y zonas de bonificación por tipo en coordenadas fijas, que pasan a ser datos de `AnnexTemplate` y no las calcula `EnsureAnnexBonusZones`.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. El kit tiene las piezas de borde y entrada para las tres orientaciones.
+    2. Un mapa de prueba hecho solo con el kit pasa `p4e_annex_validate` y en la captura no se ven costuras.
+
+- [ ] **TASK-910: Dibujar los anexos Estándar, Fluvial, Forestal y Colinas**
+  * **Análisis Técnico:** Un `.tmx` por tipo con la guía de TASK-909 y una identidad propia (que no sean todos iguales):
+    - *Estándar:* campo de cultivo amplio con algún árbol y borde de bosque y acantilado.
+    - *Fluvial:* río o estanque pescable con puente dibujado, orillas y algo de tierra cultivable. Mantener `FarmFishLocationOverride` y la tabla `Farm_Riverland`.
+    - *Forestal:* bosque con claros, tocones renovables (`Paths` 21) y forraje forestal en hierba.
+    - *Colinas:* cantera con tierra (`Type=Dirt`) en `SpawnMountainFarmOreRect`, acantilados y escaleras.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Cada mapa pasa `p4e_annex_validate` en sus tres lados.
+    2. Sus bonificaciones funcionan como en TASK-906 (pesca, forraje, tocones y minerales).
+    3. Revisión visual de las capturas en las cuatro estaciones, sin costuras ni tiles partidos.
+
+- [ ] **TASK-911: Dibujar los anexos Salvaje, Cuatro Esquinas, Pradera y Playa**
+  * **Análisis Técnico:**
+    - *Salvaje:* terreno abrupto con acantilados y zona abierta para los monstruos nocturnos.
+    - *Cuatro Esquinas:* cuatro cuartos con identidad (cultivo, agua, bosque y cantera) a escala 40×32.
+    - *Pradera:* pasto azul con vallas y sitio para un establo o gallinero (cierra el pendiente «Anexo de Pradera» de TASK-607).
+    - *Playa:* arena con orilla y agua salada pescable, rectángulo fértil, `SpawnBeachFarmForage`, casillas `BeachSpawn` para las cajas y `NoSprinklers` en la arena.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:** los tres de TASK-910 para estos cuatro tipos.
+
+- [ ] **TASK-912: Cargar los mapas dibujados y retirar el recorte**
+  * **Análisis Técnico:**
+    - En `FarmSlotModule.OnAssetRequested`, para `Maps/Pelican4Ever_Annex_<Tipo>_<Lado>`: cargar `assets/maps/annex_<Tipo>.tmx` con `Helper.ModContent.Load<Map>` y aplicar el parche de apertura de ese lado. Las propiedades de mapa (`SpawnMountainFarmOreRect`, `SpawnForestFarmForage`, `SpawnBeachFarmForage`, `FarmFishLocationOverride`) van en el `.tmx` o las sigue poniendo `FarmTypeModule.ApplyAnnexMapProperties`, una sola fuente.
+    - Retirar de `MapCloneHelper` lo que solo sirve al recorte: `CreateAnnexMap`, `MarkAndDecorateEntranceDoorway`, `EnsureAnnexBonusZones`, `SmoothThematicAnnexBordersAndEntrances` y `SanitizeMapGraphicGlitches`. `CloneMap` y los puentes de la plaza (`CreateBridgeMap`) se quedan. `GetEntranceOpeningAndCorridor` pasa a Core y lee la apertura del mapa.
+    - `AnnexTemplate`: quitar `SourceVanillaMap` y `SourceCropX/Y` y añadir la ruta del `.tmx` y las zonas de bonificación (actualizar `AnnexTests`).
+    - **Anexos ya comprados:** al cargar con el mapa nuevo, los objetos, cultivos, árboles y edificios que queden sobre colisión o fuera del suelo útil se mueven a un cofre junto a la entrada (o se devuelven al dueño por correo). Se informa en la consola y en el registro de sucesos. Es una sola vez, marcada en `AnnexAssignment` (versión de mapa).
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Los 24 casos cargan desde `.tmx` y pasan `p4e_annex_validate`.
+    2. Un guardado con anexos comprados con el mapa viejo carga sin perder objetos: los que no caben acaban en el cofre.
+    3. `MapCloneHelper` ya no tiene código específico de anexos y la suite de tests pasa.
+
+- [ ] **TASK-913: Warps de los anexos correctos en todos los tipos y lados**
+  * **Análisis Técnico:**
+    - **Fluvial sur** (prioritario, también fuera de los anexos): localizar en `Maps/Farm_Fishing` el paso real hacia el sur o abrir uno con un parche de mapa en la residencia (camino o puente de 2–3 casillas hasta el borde). Mientras tanto, no ofrecer el anexo sur ni usar la llegada sur en una residencia fluvial. Comprobar a qué portales de `doors.json` afecta.
+    - Ajustar `ResidenceAnnexAccessLogic` y las llegadas de `FarmTemplate` al ancho real de cada paso (Colinas este sin (79,15); norte y sur en x 40–41 en vez de 39–41).
+    - `p4e_annex_validate` (TASK-907) amplía la revisión a las residencias: en cada tipo y lado, las casillas de llegada y de warp son transitables, se llega de la llegada al warp y la llegada no es un warp (ya cubierto con tests).
+    - Dentro del anexo: los warps de vuelta cubren todo el ancho de la apertura dibujada, y la casilla de entrada queda dentro y no encima de un warp.
+    - Fijar en tests de Core una tabla con los pasos de salida de cada mapa vanilla, tomada de los propios mapas, para que un cambio de coordenadas no rompa un tipo sin avisar.
+  * **Prioridad:** Alta
+  * **Criterios de Aceptación:**
+    1. Para los 8 tipos × 3 lados: se entra al anexo andando, se vuelve a la residencia y se puede volver a salir sin quedar atrapado.
+    2. Ninguna llegada a una residencia (desde la plaza o desde un anexo) cae en colisión.
+    3. Los tests de Core cubren la tabla de pasos y las reglas de llegada y warp.
+
+- [ ] **TASK-914: Señalizar las salidas hacia los anexos**
+  * **Análisis Técnico:** Que se vea hacia dónde lleva cada salida sin acercarse a 3,5 casillas:
+    - En la residencia, cada salida libre lleva un camino dibujado hasta el borde y un letrero (objeto de letrero vanilla o tile de cartel) con el estado: «Anexo: Remanso Fluvial» si está comprado o «Terreno en venta» si no. Lo coloca el host al fundar y al comprar, y se repone si se rompe.
+    - Al pasar el cursor por el letrero o la salida, el texto actual del letrero flotante (`🌲 … (Caminar para entrar)` / `Adquirir Anexo`).
+    - En el anexo, la apertura de vuelta con camino y un letrero «Volver a la residencia».
+    - La salida que vuelve a la plaza se distingue de las de anexo.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Desde la casa de la residencia se ven las salidas y se sabe cuál es cada una.
+    2. Al comprar un anexo, su letrero cambia sin reiniciar.
+    3. Los letreros no se pueden romper ni recoger como objeto normal.
+
+- [ ] **TASK-915: Pruebas en vivo de los minimapas**
+  * **Análisis Técnico:** Ampliar `docs/pruebas-residencias.md` con una lista de comprobación de los 24 casos: entrar y salir, bordes sin costuras ni paredes invisibles, bonificación del tipo y las cuatro estaciones (`p4e_time`). Añadir también un guardado con anexos del mapa viejo (TASK-912) y un cliente farmhand además del host.
+  * **Prioridad:** Media
+  * **Criterios de Aceptación:**
+    1. Los 24 casos marcados como correctos en host y cliente.
+    2. Las capturas finales de TASK-907 quedan en `docs/` o enlazadas como referencia.
+
 ---
 
 ### Épica 10: Plaza Central en la Granja Host y Mapas Puente (rama `refactor/residence-entrances`)
