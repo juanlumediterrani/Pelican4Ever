@@ -28,6 +28,29 @@ public class ServerConfigTests
         Assert.NotEmpty(config.Validate());
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(10)]
+    [InlineData(30)]
+    [InlineData(120)]
+    public void FrameCap_ZeroOrInRange_IsAccepted(int fps)
+    {
+        var config = new ServerConfig { MaxFramesPerSecond = fps };
+
+        Assert.Empty(config.Validate());
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(9)]
+    [InlineData(121)]
+    public void FrameCap_OutOfRange_IsRejected(int fps)
+    {
+        var config = new ServerConfig { MaxFramesPerSecond = fps };
+
+        Assert.Contains(config.Validate(), e => e.Contains(nameof(ServerConfig.MaxFramesPerSecond)));
+    }
+
     [Fact]
     public void CalendarCutoffOtherThanTwo_IsRejected()
     {

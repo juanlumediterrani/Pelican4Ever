@@ -59,7 +59,8 @@ namespace Pelican4Ever
                 new FestivalParticipationModule(),
                 new AgentCosmeticsModule(),
                 new AdminApiModule(),
-                new AutoHostModule()
+                new AutoHostModule(),
+                new FrameRateLimitModule()
             );
 
             Monitor.Log($"Cargado (cambio de fecha {config.CalendarDayChangeTime}, inicio de reloj/horarios {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);

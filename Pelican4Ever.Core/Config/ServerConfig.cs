@@ -104,6 +104,12 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public string GroundSitKey { get; set; } = "OemPeriod";
 
+        /// <summary>
+        /// Tope de fotogramas por segundo del juego en el host (0 = sin tope). Sin GPU real (Xvfb con llvmpipe) el juego
+        /// dibuja sin límite y consume todos los núcleos aunque no haya nadie conectado.
+        /// </summary>
+        public int MaxFramesPerSecond { get; set; } = 30;
+
         /// <summary>Segundos reales quieto dentro del agua del Spa o de la piscina para activar el buff del Spa (una vez al día).</summary>
         public int SpaStillSeconds { get; set; } = 30;
 
@@ -277,6 +283,9 @@ namespace Pelican4Ever.Core.Config
 
             if (MaintenanceWindowMinutes < 0 || MaintenanceWindowMinutes > Pelican4Ever.Core.Time.MaintenanceWindow.MaxMinutes)
                 errors.Add($"{nameof(MaintenanceWindowMinutes)} debe estar entre 0 y {Pelican4Ever.Core.Time.MaintenanceWindow.MaxMinutes}. Valor: {MaintenanceWindowMinutes}.");
+
+            if (MaxFramesPerSecond != 0 && (MaxFramesPerSecond < 10 || MaxFramesPerSecond > 120))
+                errors.Add($"{nameof(MaxFramesPerSecond)} debe ser 0 (sin tope) o estar entre 10 y 120. Valor: {MaxFramesPerSecond}.");
 
             if (ParsedNightHoldStart < TimeSpan.Zero || ParsedNightHoldStart > new TimeSpan(1, 50, 0))
                 errors.Add($"{nameof(NightHoldStartTime)} debe estar entre 00:00 y 01:50 (equivale a 2400–2550). Valor: '{NightHoldStartTime}'.");
