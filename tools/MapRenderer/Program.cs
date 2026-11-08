@@ -25,9 +25,9 @@ public static class Program
 
     public static void Main(string[] args)
     {
-        if (args.Length >= 2 && args[0] == "dump")
+        if (args.Length >= 1 && args[0] == "dumpbridge")
         {
-            DumpTiles(args[1], args.Length > 2 ? args[2] : "North");
+            DumpBridge();
             return;
         }
 
@@ -74,6 +74,62 @@ public static class Program
                 }
             }
         }
+    }
+
+    private static void DumpBridge()
+    {
+        var bus = LoadTmxMap("Maps/BusStop");
+        var loc = HostPlazaLayout.Find("Pelican4Ever_Bridge_1", 16);
+        if (loc == null) { Console.WriteLine("loc null"); return; }
+        var bridge = MapCloneHelper.CreateBridgeMap(bus, loc);
+
+        foreach (Layer layer in bridge.Layers)
+        {
+            Console.WriteLine($"===== LAYER {layer.Id} {layer.LayerWidth}x{layer.LayerHeight} =====");
+            Console.WriteLine($"y=0: " + string.Join(' ', Enumerable.Range(0, layer.LayerWidth).Select(x => layer.Tiles[x,0]==null?"----":layer.Tiles[x,0].TileIndex.ToString("D4"))));
+            for (int y=1;y<=3;y++)
+                Console.WriteLine($"y={y,2}: " + string.Join(' ', Enumerable.Range(0, layer.LayerWidth).Select(x => layer.Tiles[x,y]==null?"----":layer.Tiles[x,y].TileIndex.ToString("D4"))));
+            for (int y=20;y<layer.LayerHeight;y++)
+                Console.WriteLine($"y={y,2}: " + string.Join(' ', Enumerable.Range(0, layer.LayerWidth).Select(x => layer.Tiles[x,y]==null?"----":layer.Tiles[x,y].TileIndex.ToString("D4"))));
+        }
+
+        Console.WriteLine("== PROPS row0 all layers ==");
+        foreach (Layer layer in bridge.Layers)
+        {
+            Console.WriteLine($"-- {layer.Id} row0 props --");
+            for (int x=0;x<layer.LayerWidth;x++){
+                var t=layer.Tiles[x,0];
+                if(t==null) continue;
+                var props=string.Join(",", t.Properties.Select(kv=>$"{kv.Key}={kv.Value}"));
+                Console.WriteLine($"  x={x,2} idx={t.TileIndex:D4} {props}");
+            }
+        }
+
+        Console.WriteLine("== PROPS rows22-25 border cols ==");
+        foreach (Layer layer in bridge.Layers)
+        {
+            Console.WriteLine($"-- {layer.Id} --");
+            for (int y=22;y<=25;y++)
+            for (int x=0;x<6;x++)
+            {
+                var t=layer.Tiles[x,y];
+                if(t==null) continue;
+                var props=string.Join(",", t.Properties.Select(kv=>$"{kv.Key}={kv.Value}"));
+                Console.WriteLine($"  W x={x,2} y={y} idx={t.TileIndex:D4} {props}");
+            }
+            for (int y=22;y<=25;y++)
+            for (int x=layer.LayerWidth-6;x<layer.LayerWidth;x++)
+            {
+                var t=layer.Tiles[x,y];
+                if(t==null) continue;
+                var props=string.Join(",", t.Properties.Select(kv=>$"{kv.Key}={kv.Value}"));
+                Console.WriteLine($"  E x={x,2} y={y} idx={t.TileIndex:D4} {props}");
+            }
+        }
+
+        Console.WriteLine("== MAP PROPS ==");
+        foreach (var kv in bridge.Properties)
+            Console.WriteLine($"{kv.Key} = {kv.Value}");
     }
 
     private static void Run()
