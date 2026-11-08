@@ -80,6 +80,12 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Horas reales necesarias para que la Saciedad se vacíe completamente (100% a 0%). Por defecto 4.0h.</summary>
         public float SatietyDrainHours { get; set; } = 4.0f;
 
+        /// <summary>
+        /// Fracción de la capacidad máxima de Saciedad necesaria para tener activo el efecto "Bien comido" (por defecto 0.25 = 1/4).
+        /// Al tener al menos 1/4 de la barra de saciedad llena (o al vaciarse hasta 1/4), sentarse recupera energía.
+        /// </summary>
+        public float WellFedSatietyThresholdFraction { get; set; } = 0.25f;
+
         /// <summary>Máximo de platos cocinados por día que conceden el buff "Bien comido" (activa el descanso sentado).</summary>
         public int MaxDailyWellFedBuffs { get; set; } = 2;
 

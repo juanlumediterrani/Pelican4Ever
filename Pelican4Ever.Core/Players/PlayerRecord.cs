@@ -116,8 +116,51 @@ namespace Pelican4Ever.Core.Players
             SpaBuffsUsed = 0;
         }
 
-        /// <summary>True si el buff "Bien comido" sigue activo en <paramref name="nowUtc"/>.</summary>
+        /// <summary>Compatibilidad: true si el buff temporal "Bien comido" sigue activo en <paramref name="nowUtc"/>.</summary>
         public bool IsWellFed(DateTimeOffset nowUtc) => nowUtc < WellFedUntilUtc;
+
+        /// <summary>
+        /// True si el jugador tiene activo el efecto "Bien comido":
+        /// - Por nivel de Saciedad (al menos 1/4 de la barra de saciedad según <paramref name="thresholdFraction"/>).
+        /// - O por buff temporal activo (<see cref="WellFedUntilUtc"/>).
+        /// </summary>
+        public bool IsWellFed(DateTimeOffset nowUtc, int maxStamina, float dailyFraction, float drainHours, float thresholdFraction = 0.25f)
+        {
+            if (nowUtc < WellFedUntilUtc)
+                return true;
+
+            int maxSatiety = Economy.SatietyBudget.DailyBudget(maxStamina, dailyFraction);
+            if (maxSatiety <= 0)
+                return false;
+
+            float projectedSatiety = ProjectedSatiety(nowUtc, maxStamina, dailyFraction, drainHours);
+            return Economy.SatietyBudget.IsWellFed(projectedSatiety, maxSatiety, thresholdFraction);
+        }
+
+        /// <summary>
+        /// True si la Saciedad actual es suficiente para considerar al jugador "Bien comido" (al menos 1/4 de la capacidad).
+        /// </summary>
+        public bool IsWellFed(int maxStamina, float dailyFraction, float thresholdFraction = 0.25f)
+        {
+            int maxSatiety = Economy.SatietyBudget.DailyBudget(maxStamina, dailyFraction);
+            return Economy.SatietyBudget.IsWellFed(Satiety, maxSatiety, thresholdFraction);
+        }
+
+        /// <summary>
+        /// Minutos restantes del efecto "Bien comido" (el mayor entre el temporizador de plato cocinado y el vaciado de saciedad hasta 1/4).
+        /// </summary>
+        public int RemainingWellFedMinutes(DateTimeOffset nowUtc, int maxStamina, float dailyFraction, float drainHours, float thresholdFraction = 0.25f)
+        {
+            int minutesFromTimer = WellFedUntilUtc > nowUtc
+                ? (int)Math.Ceiling((WellFedUntilUtc - nowUtc).TotalMinutes)
+                : 0;
+
+            int maxSatiety = Economy.SatietyBudget.DailyBudget(maxStamina, dailyFraction);
+            float projectedSatiety = ProjectedSatiety(nowUtc, maxStamina, dailyFraction, drainHours);
+            int minutesFromSatiety = Economy.SatietyBudget.RemainingWellFedMinutes(projectedSatiety, maxSatiety, drainHours, thresholdFraction);
+
+            return Math.Max(minutesFromTimer, minutesFromSatiety);
+        }
 
         /// <summary>True si el buff del Spa sigue activo en <paramref name="nowUtc"/>.</summary>
         public bool IsSpaBuffActive(DateTimeOffset nowUtc) => nowUtc < SpaBuffUntilUtc;

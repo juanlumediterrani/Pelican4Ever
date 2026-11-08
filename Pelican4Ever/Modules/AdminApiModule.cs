@@ -686,7 +686,7 @@ namespace Pelican4Ever.Modules
                     LastOutcome = p.LastOutcome.ToString(),
                     SatietyUsed = ProjectedSatietyPoints(p, farmer),
                     WellFedBuffsUsed = p.WellFedBuffsUsed,
-                    WellFedActive = p.IsWellFed(DateTimeOffset.UtcNow),
+                    WellFedActive = p.IsWellFed(DateTimeOffset.UtcNow, farmer?.MaxStamina ?? 270, context!.Config.DailySatietyFraction, context.Config.SatietyDrainHours, context.Config.WellFedSatietyThresholdFraction),
                     SpaBuffsUsed = p.SpaBuffsUsed,
                     SpaBuffActive = p.IsSpaBuffActive(DateTimeOffset.UtcNow),
                     SatietyGameDay = p.SatietyGameDay,
