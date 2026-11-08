@@ -219,7 +219,11 @@ namespace Pelican4Ever.Core.World
                 {
                     if (cx >= 0 && cx < w && cy >= 0 && cy < h)
                     {
-                        if (!data.IsPassable[cx, cy])
+                        bool isDirectCorridor = openingTiles.Any(ot =>
+                            (data.Side == AnnexSide.East && cy == ot.Y) ||
+                            ((data.Side == AnnexSide.North || data.Side == AnnexSide.South) && cx == ot.X));
+
+                        if (!data.IsPassable[cx, cy] && isDirectCorridor)
                         {
                             issues.Add(new ValidationIssue(
                                 ValidationSeverity.Error,
@@ -227,12 +231,12 @@ namespace Pelican4Ever.Core.World
                                 $"Casilla de despeje interior ({cx}, {cy}) frente a la entrada es colisión.",
                                 new TilePoint(cx, cy)));
                         }
-                        if (data.IsWater[cx, cy])
+                        if (data.IsWater[cx, cy] && !data.IsPassable[cx, cy] && isDirectCorridor)
                         {
                             issues.Add(new ValidationIssue(
                                 ValidationSeverity.Error,
                                 "CLEARANCE_WATER",
-                                $"Casilla de despeje interior ({cx}, {cy}) contiene agua.",
+                                $"Casilla de despeje interior ({cx}, {cy}) contiene agua intransitable.",
                                 new TilePoint(cx, cy)));
                         }
                     }

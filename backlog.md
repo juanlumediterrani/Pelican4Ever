@@ -559,15 +559,15 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
    - **Obstáculos de runtime en la llegada:** La ventana elegida aterrizaba junto a árboles (`Tree`), rocas y ramas spawneados por el juego porque no se garantizó ni despejó un área interior de seguridad de **3×4 casillas** (como sí se hizo en los Mapas Puente).
    - **Ausencia de validación visual previa:** Se cerró y desplegó confiando únicamente en `dotnet test` sin haber renderizado ni inspeccionado las imágenes `.png` 1:1 en `MapStudio`.
 
-#### 9.1.1 El Flujo de Trabajo «Mapas Puente» aplicado a los Anexos ([ADR-0007](docs/adr/0007-annex-vanilla-composition.md))
+#### 9.1.1 El Flujo de Trabajo «Mapas Puente» + Miniatura por Variante de Entrada Única ([ADR-0007](docs/adr/0007-annex-vanilla-composition.md))
 
 | Pilar en Mapas Puente (Épica 10) | Aplicación directa en Anexos (Épica 9.1) |
 | --- | --- |
-| **1. Atlas `.xnb` y Renderizador `MapStudio`** (`unpack_xnb.py` + `render_sim.py`) | Extraer las hojas `.xnb` reales (`spring_outdoorsTileSheet`, etc.) y renderizar cada anexo (`Back`, `Buildings`, `Front`, `AlwaysFront`) a `.png` 1:1 con rejilla y colisiones antes de tocar el juego. **Cero cambios a ciegas.** |
-| **2. Un único recorte base coherente por mapa** (`BusStop` 35×30 en `(10, 0)`, sin pegar tiras encima) | Cada uno de los 8 tipos (`Standard`, `Fishing`, `Foraging`, `Mining`, `Combat`, `FourCorners`, `Ranching`, `Beach`) usa **un único recorte canónico 40×32** elegido visualmente en `MapStudio` que preserve su topología (islas completas con sus puentes en `Fishing`, claro limpio en `Standard`, etc.). **Se retira `VanillaBlockCatalog` (`EdgeStrip`)** para eliminar de raíz las costuras interiores. |
-| **3. Clasificadores canónicos verificados en atlas** (`TerrainTileClassifier` + `VerticalMultiTileClassifier`) | Prohibido inventar índices a ciegas: se usan exclusivamente los índices verificados en el atlas real (`175, 150..152, 256` pradera soleada; `587` tierra con bordes `225, 228, 201, 251`; vallas `383..385`/`358..360` y `361, 386, 411, 436`; arbustos 3×3 `63..65`/`38..40`/`13..15`; puentes sobre agua) y se limpian árboles por su caja completa (`3×4` / `6×4`) sin dejar medios árboles ni bases decapitadas en `y=0`. |
-| **4. Apertura limpia + Área de despeje interior 3×4** (`GetInteriorClearanceTiles`) | En la entrada (2 casillas) y su margen interior de **3×4 casillas**: quitar `Passable` en `Back` (`Properties.Remove("Passable")`, jamás `"T"`), poner suelo limpio sin `TileIndexProperties["Passable"]` ni `"Water"`, y despejar en runtime `objects`, `terrainFeatures` (`Tree`, `Bush`) y `resourceClumps`. |
-| **5. Verificación BFS fiel al motor sobre `.xnb` reales** (`TASK-1403`) | `IsTilePassableSDV` replica exactamente `GameLocation.isTilePassable`. Test automatizado carga los `.xnb` reales y verifica por BFS los 24 casos (8 tipos × 3 lados): entrada + despeje 3×4 + zonas de bonificación en una única componente conexa. |
+| **1. Atlas `.xnb`, Renderizador `MapStudio` y Agente Adversarial** (`unpack_xnb.py` + `render_sim.py` + `adversarial-vanilla-critic`) | Extraer las hojas `.xnb` reales (`spring_outdoorsTileSheet`, `v16_Outdoors2`, etc.), renderizar cada anexo (`Back`, `Buildings`, `Front`, `AlwaysFront`) a `.png` 1:1 y auditarlo en bucle con un agente crítico adversarial contra el mapa vanilla completo inspiracional. **Cero cambios a ciegas.** |
+| **2. Miniatura fiel al mapa inspiracional (prohibido usar vallas «placeholder»)** | Cada minimapa debe ser **una miniatura auténtica de su granja vanilla inspiracional**, enmarcando sus 4 lados cardinales con los activos perimetrales reales del mapa original (en `Standard`: acantilado de roca y terraza forestal norte `sy=0..8`, talud herboso oeste con cerezos `sx=0..3`, valla y franja boscosa este `sx=76..79` y arboleda sur `sy=60..64`; en `Fishing`: islas redondeadas sobre el río en `(22, 25)`). Queda prohibido resolver bordes con simples vallas de 1 casilla pegadas al muro de colisión. |
+| **3. Tres variantes por tipo según su única entrada/salida activa (0 salidas muertas)** | Un minimapa anexo solo tiene **1 entrada/salida** hacia su residencia (`Sur` cuando `AnnexSide.North`, `Oeste` cuando `AnnexSide.East`, `Norte` cuando `AnnexSide.South`). Cada plantilla genera **3 variantes** donde solo se abre el paso activo (camino tallado en el acantilado norte, paso entre acantilado y talud al oeste, o salida entre cerezos al sur en `Standard`; puente sur, península oeste o puente norte en `Fishing`) y **se cierran orgánicamente los otros 3 lados** (0 caminos ni puentes muertos hacia muros invisibles). |
+| **4. Clasificadores canónicos verificados en atlas** (`TerrainTileClassifier` + `VerticalMultiTileClassifier`) | Prohibido inventar índices a ciegas: se usan exclusivamente los índices verificados en el atlas real alineando paridad de acantilados (`467/468`, `394/419`), bordes de hierba (`413/414`, `326`, `351`, `355`) y doseles completos en `AlwaysFront` sin dejar medios árboles ni bases decapitadas. |
+| **5. Apertura limpia + Área de despeje interior 3×4 + Verificación BFS** (`GetInteriorClearanceTiles` / `TASK-1403`) | En la entrada activa (2 casillas) y su margen interior de **3×4 casillas**: quitar `Passable` en `Back` (`Properties.Remove("Passable")`, jamás `"T"`), garantizar paso libre (incluyendo puentes sobre agua con `Buildings.Passable = "T"`), despejar en runtime `objects`/`terrainFeatures` y verificar por BFS sobre `.xnb` reales los 24 casos. |
 
 **Orden de trabajo refactorizado:**
 ```text
@@ -621,26 +621,26 @@ Fase A (Herramientas y Base: TASK-907, TASK-908, TASK-913)
     1. `VanillaBlockCatalog` y `AnnexWindowScoringLogic` eliminados del código de producción.
     2. `TerrainTileClassifier` y `VerticalMultiTileClassifier` exponen los métodos puros de terreno, vallas, arbustos y limpieza de cajas multi-casilla cubiertos con tests unitarios en `Pelican4Ever.Tests`.
 
-- [x] **TASK-910: Selección y verificación visual en `MapStudio` de los 8 recortes base (40×32) y sus 3 entradas**
-  * **Estado:** Completada. Fijados y documentados en `docs/anexos-ventanas-recorte.md` los 8 recortes canónicos 40×32 y sus 3 entradas simétricas sin edificios vanilla ni costuras:
-    - `Standard`: `(15, 33)` (1020 casillas agrícolas limpias, salida sur vanilla al bosque `x=40..41`).
-    - `Fishing`: `(20, 33)` (853 casillas en red de islas conectadas con sus 4 puentes vanilla intactos y paso sur oficial).
+- [x] **TASK-910: Selección y verificación visual en `MapStudio` de los 8 recortes base (40×32) y sus 3 variantes de entrada única**
+  * **Estado:** Completada. Fijados y documentados en `docs/anexos-ventanas-recorte.md` los 8 recortes canónicos 40×32 y sus 3 variantes por orientación (`North`, `East`, `South`) sin edificios vanilla, sin costuras interiores y sin salidas muertas:
+    - `Standard`: `(15, 33)` compuesto como miniatura auténtica de `Maps/Farm` con sus 4 bordes originales (acantilado de roca y terraza forestal norte `sy=0..8`, talud herboso oeste con cerezos `sx=0..3`, valla y franja boscosa este `sx=76..79` y arboleda sur `sy=60..64`), abriendo únicamente la entrada activa (`North: (25, 30)`, `East: (1, 18)`, `South: (22, 1)`).
+    - `Fishing`: `(22, 25)` con islas centrales redondeadas sobre el río y una única entrada activa por variante (`North`: puente sur en `(25, 30)`; `East`: península oeste en `(1, 8)`; `South`: puente norte en `(4, 1)`), eliminando puentes muertos y sellando sus acantilados.
     - `Foraging`: `(10, 8)` (4 tocones renovables en claro despejado).
     - `Mining`: `(3, 25)` (cantera completa en `(2, 12, 22, 8)`, entrada sur en `x=17` directa a 829 casillas de llanura).
     - `Combat`: `(24, 10)`, `FourCorners`: `(32, 8)`, `Ranching`: `(48, 14)`, `Beach`: `(38, 16)`.
   * **Prioridad:** Crítica
   * **Dependencias:** TASK-907, TASK-909.
   * **Criterios de Aceptación:**
-    1. Tabla de los 8 recortes canónicos 40×32 y sus 3 entradas documentada en `docs/anexos-ventanas-recorte.md`.
-    2. Renders `.png` de `MapStudio` generados y revisados para los 8 tipos, confirmando que `Standard` y `Fishing` lucen limpios y coherentes.
+    1. Tabla de los 8 recortes canónicos 40×32 y sus 3 variantes de entrada única documentada en `docs/anexos-ventanas-recorte.md`.
+    2. Renders `.png` de `MapStudio` auditados y aprobados por el agente adversarial (`adversarial-vanilla-critic`), confirmando que `Standard` y `Fishing` en sus 3 orientaciones son miniaturas fieles a sus mapas vanilla inspiracionales.
 
 ---
 
 #### Fase C — Montaje Quirúrgico estilo «Mapa Puente», Despeje 3×4 en Runtime y Señalización
 
-- [x] **TASK-911: Reescribir `MapCloneHelper.CreateAnnexMap` con el patrón de `CreateBridgeMap` y despeje 3×4 en `FarmSlotModule`**
+- [x] **TASK-911: Reescribir `MapCloneHelper.CreateAnnexMap` con composición de miniatura por variante (0 salidas muertas) y despeje 3×4 en `FarmSlotModule`**
   * **Estado:** Completada.
-    - `MapCloneHelper.CreateAnnexMap` reescrito con el patrón de Mapas Puente: un solo recorte canónico 40×32, sellado perimetral con `Passable = "F"`, tallado limpio de apertura (2 casillas) y área interior 3×4 con `ClearBlockingAndWaterProperties` (`Properties.Remove("Passable")`, nunca `"T"`), sustitución de sombras o agua por tierra `587` o pradera `175`, postes de valla canónicos flanqueando la puerta y saneado de objetos multi-casilla decapitados en `y=0`.
+    - `MapCloneHelper.CreateAnnexMap` actualizado con composición específica por variante cardinal (`ApplyStandardFarmEnclosure` injertando los 4 bordes reales de `Maps/Farm` y `ApplyRiverlandFarmEnclosure` redondeando islas y gestionando el único puente/península activa de `Maps/Farm_Fishing`), sellado perimetral con `Passable = "F"`, área interior 3×4 con `Properties.Remove("Passable")` en `Back` y soporte para puentes transitables sobre agua (`Buildings.Passable = "T"`).
     - En `FarmSlotModule.EnsureAnnexLocation`: despeje en runtime en el área 3×4 de maleza, ramas, rocas, árboles y tocones.
   * **Prioridad:** Crítica
   * **Dependencias:** TASK-909, TASK-910.

@@ -81,8 +81,8 @@ namespace Pelican4Ever.Core.World
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
                     [AnnexSide.North] = new(15, 33, new TilePoint(25, 30)),
-                    [AnnexSide.East] = new(15, 33, new TilePoint(1, 15)),
-                    [AnnexSide.South] = new(15, 33, new TilePoint(20, 1))
+                    [AnnexSide.East] = new(15, 33, new TilePoint(1, 18)),
+                    [AnnexSide.South] = new(15, 33, new TilePoint(22, 1))
                 }
             ),
             ["Fishing"] = new AnnexTemplate(
@@ -94,14 +94,14 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Riverland",
                 "Maps/Farm_Fishing",
-                20, 33,
+                22, 25,
                 FarmTypeBehavior.None with { RiverFishSplashes = true },
                 "Town 0.7",
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(20, 33, new TilePoint(20, 30)),
-                    [AnnexSide.East] = new(20, 33, new TilePoint(1, 15)),
-                    [AnnexSide.South] = new(20, 33, new TilePoint(20, 1))
+                    [AnnexSide.North] = new(22, 25, new TilePoint(25, 30)),
+                    [AnnexSide.East] = new(22, 25, new TilePoint(1, 8)),
+                    [AnnexSide.South] = new(22, 25, new TilePoint(4, 1))
                 }
             ),
             ["Foraging"] = new AnnexTemplate(

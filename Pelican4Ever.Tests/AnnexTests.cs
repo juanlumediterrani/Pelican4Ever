@@ -542,8 +542,8 @@ namespace Pelican4Ever.Tests
             // Validación específica de la plantilla Fluvial (Fishing)
             var fishing = templates["Fishing"];
             Assert.Equal("Maps/Farm_Fishing", fishing.SourceVanillaMap);
-            Assert.Equal(20, fishing.SourceCropX);
-            Assert.Equal(33, fishing.SourceCropY);
+            Assert.Equal(22, fishing.SourceCropX);
+            Assert.Equal(25, fishing.SourceCropY);
             Assert.True(fishing.Behavior.RiverFishSplashes);
             Assert.Equal("Farm_Riverland", fishing.LocationDataKey);
         }
@@ -581,6 +581,86 @@ namespace Pelican4Ever.Tests
             Assert.True(foraging.Behavior.ForestStumps);
             Assert.Equal(40, foraging.Width);
             Assert.Equal(32, foraging.Height);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Fishing_ConfiguresAuthenticCentralIslandBridgeEntrances()
+        {
+            var fishing = AnnexTemplateCatalog.GetTemplate("Fishing");
+            Assert.Equal(22, fishing.SourceCropX);
+            Assert.Equal(25, fishing.SourceCropY);
+
+            var northLayout = fishing.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(25, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+
+            var eastLayout = fishing.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(8, eastLayout.EntranceTile.Y);
+
+            var southLayout = fishing.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(4, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+        }
+
+        [Fact]
+        public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
+        {
+            const int w = 40;
+            const int h = 32;
+            var back = new bool[w, h];
+            var passable = new bool[w, h];
+            var water = new bool[w, h];
+
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    back[x, y] = true;
+                    bool isBorder = x == 0 || x == w - 1 || y == 0 || y == h - 1;
+                    passable[x, y] = !isBorder;
+                }
+            }
+
+            // Simulamos el puente norte de Riverland (x = 2..3, y = 0..4) sobre canal de agua
+            // El canal de agua abarca y = 0..3
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y <= 3; y++)
+                {
+                    water[x, y] = true;
+                    // El agua fuera del puente es intransitable
+                    if (x < 2 || x > 3)
+                    {
+                        passable[x, y] = false;
+                    }
+                }
+            }
+
+            // Apertura de entrada por el norte en x=2..3, y=0 (borde)
+            passable[2, 0] = true;
+            passable[3, 0] = true;
+            // Pasarela de puente transitable sobre el agua
+            passable[2, 1] = true;
+            passable[3, 1] = true;
+            passable[2, 2] = true;
+            passable[3, 2] = true;
+
+            var data = new AnnexMapInspectionData(
+                TemplateId: "Fishing",
+                Side: AnnexSide.South,
+                Width: w,
+                Height: h,
+                EntryTile: new TilePoint(2, 1),
+                BackTilePresent: back,
+                IsPassable: passable,
+                IsWater: water
+            );
+
+            var report = AnnexValidationLogic.ValidateAnnex(data);
+            Assert.True(report.IsValid);
+            Assert.DoesNotContain(report.Issues, i => i.Code == "CLEARANCE_WATER");
+            Assert.DoesNotContain(report.Issues, i => i.Code == "CLEARANCE_BLOCKED");
         }
     }
 }
