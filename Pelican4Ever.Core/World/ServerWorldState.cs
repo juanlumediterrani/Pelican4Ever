@@ -39,9 +39,11 @@ namespace Pelican4Ever.Core.World
         public HashSet<long> Friends { get; set; } = new();
     }
 
-    /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901).</summary>
+    /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901 / TASK-912).</summary>
     public class AnnexAssignment
     {
+        public const int CurrentMapVersion = 2;
+
         public string AnnexId { get; set; } = string.Empty;
 
         public string ResidenceSlotId { get; set; } = string.Empty;
@@ -53,6 +55,9 @@ namespace Pelican4Ever.Core.World
         public long OwnerId { get; set; }
 
         public DateTimeOffset AcquiredAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+        /// <summary>Versión del algoritmo de mapa con el que se generó este anexo (TASK-912: v2 composición vanilla).</summary>
+        public int MapVersion { get; set; } = 1;
     }
 
     /// <summary>Motivo por el que el host rechaza el reclamo de una puerta.</summary>

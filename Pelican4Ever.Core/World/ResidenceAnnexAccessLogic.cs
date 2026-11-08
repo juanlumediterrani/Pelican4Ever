@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Pelican4Ever.Core.World
@@ -16,12 +17,26 @@ namespace Pelican4Ever.Core.World
             (int MinX, int MinY, int MaxY) EastZone,
             (int MinX, int MaxX, int MinY) SouthZone);
 
+        // Mapas estándar (Farm, Fishing, Foraging, Combat, FourCorners):
+        // - Paso Norte en x 40-41 (x 39 es colisión de árbol/roca en vanilla).
+        // - Paso Este en y 15-18 en x 79 (llegada en 78, 17).
+        // - Paso Sur en x 40-41 (x 39 es poste/árbol en colisión; en Fluvial es el puente de tablas 809/859).
         private static readonly AccessLayout Standard = new(
-            North: new[] { new TilePoint(39, 0), new TilePoint(40, 0), new TilePoint(41, 0) },
-            East: new[] { new TilePoint(79, 15), new TilePoint(79, 16), new TilePoint(79, 17) },
-            South: new[] { new TilePoint(39, 64), new TilePoint(40, 64), new TilePoint(41, 64) },
+            North: new[] { new TilePoint(40, 0), new TilePoint(41, 0) },
+            East: new[] { new TilePoint(79, 15), new TilePoint(79, 16), new TilePoint(79, 17), new TilePoint(79, 18) },
+            South: new[] { new TilePoint(40, 64), new TilePoint(41, 64) },
             NorthZone: (36, 44, 2),
             EastZone: (77, 12, 19),
+            SouthZone: (36, 44, 63));
+
+        // Farm_Hilltop (Mining): la casilla (79, 15) es acantilado/colisión en vanilla.
+        // El paso transitable hacia el este va en y 16-18.
+        private static readonly AccessLayout Mining = new(
+            North: new[] { new TilePoint(40, 0), new TilePoint(41, 0) },
+            East: new[] { new TilePoint(79, 16), new TilePoint(79, 17), new TilePoint(79, 18) },
+            South: new[] { new TilePoint(40, 64), new TilePoint(41, 64) },
+            NorthZone: (36, 44, 2),
+            EastZone: (77, 14, 20),
             SouthZone: (36, 44, 63));
 
         private static readonly AccessLayout Meadowlands = new(
@@ -46,8 +61,11 @@ namespace Pelican4Ever.Core.World
         {
             if (FarmGrassLogic.IsMeadowlands(farmType))
                 return Meadowlands;
-            if (string.Equals(farmType, "Beach", System.StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(farmType, "Beach", StringComparison.OrdinalIgnoreCase))
                 return Beach;
+            if (string.Equals(farmType, "Mining", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(farmType, "Hilltop", StringComparison.OrdinalIgnoreCase))
+                return Mining;
             return Standard;
         }
 

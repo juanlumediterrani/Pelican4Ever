@@ -8,6 +8,23 @@ namespace Pelican4Ever.Core.World
     {
         /// <summary>Formato de las propiedades de mapa de Stardew ("x y ancho alto").</summary>
         public string ToMapProperty() => $"{X} {Y} {Width} {Height}";
+
+        public static bool TryParse(string? text, out TileArea area)
+        {
+            area = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            string[] parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 4 &&
+                int.TryParse(parts[0], out int x) &&
+                int.TryParse(parts[1], out int y) &&
+                int.TryParse(parts[2], out int w) &&
+                int.TryParse(parts[3], out int h))
+            {
+                area = new TileArea(x, y, w, h);
+                return true;
+            }
+            return false;
+        }
     }
 
     /// <summary>

@@ -450,7 +450,7 @@ namespace Pelican4Ever.Modules
                         return new xTile.Map($"Pelican4Ever_Annex_{annexTemplate.Id}_{annexSide}");
                     }
 
-                    return MapCloneHelper.CreateAnnexMap(baseMap, annexTemplate, annexSide);
+                    return MapCloneHelper.CreateAnnexMap(baseMap, annexTemplate, annexSide, asset => context?.Helper.GameContent.Load<xTile.Map>(asset));
                 }, AssetLoadPriority.Medium);
             }
             else if (e.NameWithoutLocale.IsEquivalentTo("Maps/Pelican4Ever_HostFarm"))
@@ -1907,8 +1907,15 @@ namespace Pelican4Ever.Modules
                 FarmTypeModule.SpawnInitialOres(annexFarm, template.Id);
             }
 
+            // TASK-912: Migración única de anexos con mapas previos hacia composición vanilla v2
+            if (annex.MapVersion < AnnexAssignment.CurrentMapVersion && !newlyCreated)
+            {
+                MigrateAnnexToV2(annexFarm, annex, template);
+            }
+
             // Despejar siempre el corredor de la única entrada para que no haya rocas, maleza ni tocones bloqueando el paso
-            MapCloneHelper.GetEntranceOpeningAndCorridor(annex.Side, template.Width, template.Height, out var openingBorderTiles, out var corridorTiles);
+            AnnexWindowLayout layout = template.GetWindowLayoutForSide(annex.Side);
+            MapCloneHelper.GetEntranceOpeningAndCorridor(annex.Side, template.Width, template.Height, out var openingBorderTiles, out var corridorTiles, layout.EntranceTile);
             foreach (var (cx, cy) in corridorTiles)
             {
                 annexFarm.removeEverythingFromThisTile(cx, cy);
@@ -1922,7 +1929,7 @@ namespace Pelican4Ever.Modules
             // Sincronizar warps de retorno hacia la residencia madre en la apertura del anexo (TASK-904)
             DoorAssignment? parentResidence = context.WorldState.Doors.Values
                 .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase));
-            var warpPoints = AnnexEntrance.For(annex.Side, template.Width, template.Height, parentResidence?.FarmType);
+            var warpPoints = AnnexEntrance.For(template, annex.Side, parentResidence?.FarmType);
             foreach (var (bx, by) in openingBorderTiles)
             {
                 UpdateOrCreateWarp(annexFarm, bx, by, annex.ResidenceSlotId, warpPoints.ResidenceReturnTile.X, warpPoints.ResidenceReturnTile.Y);
@@ -1932,8 +1939,202 @@ namespace Pelican4Ever.Modules
             long ownerId = parentResidence?.OwnerId ?? annex.OwnerId;
             annex.OwnerId = ownerId;
 
+            // Colocar o actualizar letrero de vuelta interior en el anexo (TASK-914)
+            UpdateAnnexReturnSign(annexFarm, annex, template);
+
             annexFarm.PublishOwnership(ownerId, policy);
             return annexFarm;
+        }
+
+        private static void MigrateAnnexToV2(Farm annexFarm, AnnexAssignment annex, AnnexTemplate template)
+        {
+            try
+            {
+                var warpPoints = AnnexEntrance.For(template, annex.Side);
+                TilePoint entry = warpPoints.EntryTile;
+
+                List<KeyValuePair<Vector2, StardewValley.Object>> displacedObjects = new();
+                foreach (var pair in annexFarm.objects.Pairs)
+                {
+                    int tx = (int)pair.Key.X;
+                    int ty = (int)pair.Key.Y;
+                    if (AnnexMigrationLogic.IsTileDisplaced(template.Width, template.Height, tx, ty, (x, y) => annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport) && !annexFarm.isWaterTile(x, y)))
+                    {
+                        displacedObjects.Add(pair);
+                    }
+                }
+
+                List<Vector2> displacedTf = new();
+                List<Item> rescuedItems = new();
+
+                foreach (var kvp in displacedObjects)
+                {
+                    annexFarm.objects.Remove(kvp.Key);
+                    rescuedItems.Add(kvp.Value);
+                }
+
+                foreach (var pair in annexFarm.terrainFeatures.Pairs)
+                {
+                    int tx = (int)pair.Key.X;
+                    int ty = (int)pair.Key.Y;
+                    if (AnnexMigrationLogic.IsTileDisplaced(template.Width, template.Height, tx, ty, (x, y) => annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport)))
+                    {
+                        displacedTf.Add(pair.Key);
+                        if (pair.Value is HoeDirt dirt && dirt.crop != null)
+                        {
+                            Item? cropItem = ItemRegistry.Create(dirt.crop.indexOfHarvest.Value);
+                            if (cropItem != null)
+                                rescuedItems.Add(cropItem);
+                        }
+                    }
+                }
+
+                foreach (var pos in displacedTf)
+                {
+                    annexFarm.terrainFeatures.Remove(pos);
+                }
+
+                if (rescuedItems.Count > 0)
+                {
+                    TilePoint chestTile = AnnexMigrationLogic.FindRescueChestPlacement(
+                        template.Width,
+                        template.Height,
+                        entry,
+                        (x, y) => annexFarm.isTileLocationOpen(new xTile.Dimensions.Location(x, y))
+                               && annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport)
+                               && !annexFarm.objects.ContainsKey(new Vector2(x, y)));
+
+                    Vector2 chestPos = new Vector2(chestTile.X, chestTile.Y);
+                    var rescueChest = new StardewValley.Objects.Chest(true, chestPos, "130")
+                    {
+                        Name = "Cofre de resguardo"
+                    };
+                    foreach (var item in rescuedItems)
+                    {
+                        rescueChest.addItem(item);
+                    }
+
+                    annexFarm.setObject(chestPos, rescueChest);
+
+                    context?.Monitor.Log($"[AnnexMigration] Anexo '{annex.AnnexId}' migrado a v{AnnexAssignment.CurrentMapVersion}. Rescatados {rescuedItems.Count} objetos/cultivos en cofre de resguardo en ({chestTile.X}, {chestTile.Y}).", LogLevel.Info);
+                    AdminApiModule.EventLog.Append(
+                        HostEventTypes.AnnexMigrated,
+                        Game1.Date.TotalDays,
+                        Game1.timeOfDay,
+                        $"Anexo {annex.AnnexId} migrado a v{AnnexAssignment.CurrentMapVersion}: {rescuedItems.Count} objetos rescatados en ({chestTile.X}, {chestTile.Y})");
+                }
+                else
+                {
+                    context?.Monitor.Log($"[AnnexMigration] Anexo '{annex.AnnexId}' migrado a v{AnnexAssignment.CurrentMapVersion} sin objetos desplazados.", LogLevel.Trace);
+                }
+
+                annex.MapVersion = AnnexAssignment.CurrentMapVersion;
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[AnnexMigration] Error migrando anexo '{annex.AnnexId}': {ex.Message}", LogLevel.Error);
+                annex.MapVersion = AnnexAssignment.CurrentMapVersion;
+            }
+        }
+
+        public static void UpdateResidenceAnnexSigns(Farm residenceFarm, string residenceSlotId, string? farmType)
+        {
+            if (!Context.IsMainPlayer || residenceFarm == null || context == null)
+                return;
+
+            DoorModel? doorModel = RegisteredDoors.FirstOrDefault(d => d.DefaultSlotId == residenceSlotId);
+            var freeSides = doorModel != null
+                ? ResidenceExits.FreeSides(doorModel.Edge)
+                : (IReadOnlyCollection<AnnexSide>)Array.Empty<AnnexSide>();
+
+            foreach (AnnexSide side in freeSides)
+            {
+                var annex = context.WorldState.FindAnnex(residenceSlotId, side);
+                string desiredText = ResidenceAnnexSignLogic.GetResidenceSignText(annex);
+
+                Sign? existingSign = null;
+                foreach (var pair in residenceFarm.objects.Pairs)
+                {
+                    if (pair.Value is Sign s
+                        && s.modData.TryGetValue(ResidenceAnnexSignLogic.ModDataKey, out string? sideStr)
+                        && string.Equals(sideStr, side.ToString(), StringComparison.OrdinalIgnoreCase))
+                    {
+                        existingSign = s;
+                        break;
+                    }
+                }
+
+                if (existingSign != null)
+                {
+                    existingSign.signText.Value = desiredText;
+                }
+                else
+                {
+                    var candidates = ResidenceAnnexSignLogic.GetResidenceCandidateTiles(farmType, side);
+                    TilePoint? freeTile = ResidenceAnnexSignLogic.ChooseFreeSignTile(
+                        candidates,
+                        (x, y) => residenceFarm.isTileLocationOpen(new xTile.Dimensions.Location(x, y))
+                               && !residenceFarm.objects.ContainsKey(new Vector2(x, y)));
+
+                    if (freeTile.HasValue)
+                    {
+                        Vector2 pos = new Vector2(freeTile.Value.X, freeTile.Value.Y);
+                        Sign newSign = new Sign(pos, "37")
+                        {
+                            Name = "Letrero de Anexo"
+                        };
+                        newSign.signText.Value = desiredText;
+                        newSign.CanBeGrabbed = false;
+                        newSign.Fragility = 2;
+                        newSign.modData[ResidenceAnnexSignLogic.ModDataKey] = side.ToString();
+                        residenceFarm.setObject(pos, newSign);
+                    }
+                }
+            }
+        }
+
+        private static void UpdateAnnexReturnSign(Farm annexFarm, AnnexAssignment annex, AnnexTemplate template)
+        {
+            if (!Context.IsMainPlayer || annexFarm == null)
+                return;
+
+            Sign? existingSign = null;
+            foreach (var pair in annexFarm.objects.Pairs)
+            {
+                if (pair.Value is Sign s && s.modData.ContainsKey(ResidenceAnnexSignLogic.ReturnSignModDataKey))
+                {
+                    existingSign = s;
+                    break;
+                }
+            }
+
+            if (existingSign != null)
+            {
+                existingSign.signText.Value = ResidenceAnnexSignLogic.ReturnText;
+            }
+            else
+            {
+                AnnexWindowLayout layout = template.GetWindowLayoutForSide(annex.Side);
+                var candidates = ResidenceAnnexSignLogic.GetAnnexReturnCandidateTiles(annex.Side, layout.EntranceTile, template.Width, template.Height);
+                TilePoint? freeTile = ResidenceAnnexSignLogic.ChooseFreeSignTile(
+                    candidates,
+                    (x, y) => annexFarm.isTileLocationOpen(new xTile.Dimensions.Location(x, y))
+                           && !annexFarm.objects.ContainsKey(new Vector2(x, y)));
+
+                if (freeTile.HasValue)
+                {
+                    Vector2 pos = new Vector2(freeTile.Value.X, freeTile.Value.Y);
+                    Sign newSign = new Sign(pos, "37")
+                    {
+                        Name = "Letrero de Vuelta"
+                    };
+                    newSign.signText.Value = ResidenceAnnexSignLogic.ReturnText;
+                    newSign.CanBeGrabbed = false;
+                    newSign.Fragility = 2;
+                    newSign.modData[ResidenceAnnexSignLogic.ReturnSignModDataKey] = "true";
+                    annexFarm.setObject(pos, newSign);
+                }
+            }
         }
 
         private void OnPlayerWarped(object? sender, WarpedEventArgs e)
@@ -2707,7 +2908,7 @@ namespace Pelican4Ever.Modules
                 foreach (var annex in annexes)
                 {
                     var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height, assignment?.FarmType);
+                    var pts = AnnexEntrance.For(template, annex.Side, assignment?.FarmType);
                     var warpTiles = ResidenceAnnexAccessLogic.WarpTiles(assignment?.FarmType, annex.Side);
                     // Quitar warps al anexo que ya no tocan (p. ej. los de otro tipo de residencia antes del cambio)
                     for (int i = farm.warps.Count - 1; i >= 0; i--)
@@ -2851,6 +3052,9 @@ namespace Pelican4Ever.Modules
                 greenhouseBuilding.updateInteriorWarps(ghLoc);
                 UpdateOrCreateWarp(ghLoc, 10, 24, farm.NameOrUniqueName, doorX, doorY + 1);
             }
+
+            // 8. Señalizar las salidas hacia los anexos (TASK-914)
+            UpdateResidenceAnnexSigns(farm, farm.NameOrUniqueName, assignment?.FarmType);
         }
 
         private static void RegisterChatCommands()
@@ -3558,7 +3762,7 @@ namespace Pelican4Ever.Modules
                         else
                         {
                             var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                            var pts = AnnexEntrance.For(clickedSide.Value, template.Width, template.Height, farmType);
+                            var pts = AnnexEntrance.For(template, clickedSide.Value, farmType);
                             Game1.warpFarmer(annex.AnnexId, pts.EntryTile.X, pts.EntryTile.Y, pts.FacingDirection);
                             return;
                         }
@@ -3985,6 +4189,12 @@ namespace Pelican4Ever.Modules
                 harmony.Patch(
                     original: AccessTools.Method(typeof(StardewValley.Objects.Chest), nameof(StardewValley.Objects.Chest.checkForAction)),
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ChestCheckForAction))
+                );
+
+                // TASK-914: Protección e interacción de los letreros de anexo
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Sign), nameof(Sign.checkForAction)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SignCheckForAction))
                 );
 
                 // Parche de Culling dinámico de red para 16 granjas (TASK-603)
@@ -4822,7 +5032,7 @@ namespace Pelican4Ever.Modules
                         if (annex != null)
                         {
                             var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                            var pts = AnnexEntrance.For(side.Value, template.Width, template.Height);
+                            var pts = AnnexEntrance.For(template, side.Value);
                             locationRequest = Game1.getLocationRequest(annex.AnnexId);
                             tileX = pts.EntryTile.X;
                             tileY = pts.EntryTile.Y;
@@ -4858,7 +5068,7 @@ namespace Pelican4Ever.Modules
                     string? residenceFarmType = context?.WorldState.Doors.Values
                         .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))?.FarmType;
                     var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                    var pts = AnnexEntrance.For(annex.Side, template.Width, template.Height, residenceFarmType);
+                    var pts = AnnexEntrance.For(template, annex.Side, residenceFarmType);
                     locationRequest = Game1.getLocationRequest(annex.ResidenceSlotId);
                     tileX = pts.ResidenceReturnTile.X;
                     tileY = pts.ResidenceReturnTile.Y;
@@ -5304,7 +5514,9 @@ namespace Pelican4Ever.Modules
                         };
 
                         float dist = Vector2.Distance(playerTile, new Vector2(sideTile.X, sideTile.Y));
-                        if (dist > 3.5f) continue;
+                        Vector2 cursorTile = Game1.currentCursorTile;
+                        bool isHovered = Vector2.Distance(cursorTile, new Vector2(sideTile.X, sideTile.Y)) <= 2.0f;
+                        if (dist > 3.5f && !isHovered) continue;
 
                         var annex = context.WorldState.FindAnnex(curLoc, side);
                         string badgeText;
@@ -5332,6 +5544,29 @@ namespace Pelican4Ever.Modules
                         float centerY = sideTile.Y * 64f - 24f + bounce;
                         Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(centerX, centerY));
                         DrawDoorBadge(e.SpriteBatch, badgeText, screenPos, badgeColor);
+                    }
+                }
+            }
+
+            // TASK-914: Indicador sobre salida de retorno en el anexo hacia la residencia madre
+            if (curLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var annex = context.WorldState.FindAnnexById(curLoc);
+                if (annex != null)
+                {
+                    var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
+                    var pts = AnnexEntrance.For(template, annex.Side);
+                    TilePoint retTile = pts.ReturnExitTile;
+                    float dist = Vector2.Distance(playerTile, new Vector2(retTile.X, retTile.Y));
+                    Vector2 cursorTile = Game1.currentCursorTile;
+                    bool isHovered = Vector2.Distance(cursorTile, new Vector2(retTile.X, retTile.Y)) <= 2.0f;
+                    if (dist <= 3.5f || isHovered)
+                    {
+                        float bounce = (float)Math.Sin(Game1.currentGameTime.TotalGameTime.TotalMilliseconds / 200.0) * 3f;
+                        float centerX = retTile.X * 64f + 32f;
+                        float centerY = retTile.Y * 64f - 24f + bounce;
+                        Vector2 screenPos = Game1.GlobalToLocal(Game1.viewport, new Vector2(centerX, centerY));
+                        DrawDoorBadge(e.SpriteBatch, "🏠 Volver a la residencia (Caminar para salir)", screenPos, Color.Gold);
                     }
                 }
             }
@@ -5420,6 +5655,28 @@ namespace Pelican4Ever.Modules
                     __result = false;
                     return false;
                 }
+            }
+            return true;
+        }
+
+        public static bool Prefix_SignCheckForAction(Sign __instance, Farmer who, bool justCheckingForActivity, ref bool __result)
+        {
+            if (__instance != null
+                && (__instance.modData.ContainsKey(ResidenceAnnexSignLogic.ModDataKey)
+                    || __instance.modData.ContainsKey(ResidenceAnnexSignLogic.ReturnSignModDataKey)))
+            {
+                if (justCheckingForActivity)
+                {
+                    __result = true;
+                    return false;
+                }
+
+                if (!string.IsNullOrWhiteSpace(__instance.signText.Value))
+                {
+                    Game1.drawObjectDialogue(__instance.signText.Value);
+                }
+                __result = true;
+                return false;
             }
             return true;
         }

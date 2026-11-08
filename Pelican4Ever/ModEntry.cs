@@ -39,6 +39,7 @@ namespace Pelican4Ever
                 new StatusCommandModule(),
                 new DebugGiveModule(),
                 new FarmTestCommandsModule(),
+                new AnnexReviewModule(),
                 new RealTimeClockModule(),
                 new BedLogoutModule(),
                 new DailyRolloverModule(),

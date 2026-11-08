@@ -145,7 +145,8 @@ namespace Pelican4Ever.Core.World
                 Side = side,
                 TemplateId = template.Id,
                 OwnerId = playerId,
-                AcquiredAtUtc = DateTimeOffset.UtcNow
+                AcquiredAtUtc = DateTimeOffset.UtcNow,
+                MapVersion = AnnexAssignment.CurrentMapVersion
             };
 
             return new AnnexPurchaseResult(
