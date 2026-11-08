@@ -1,50 +1,45 @@
-# ADR-0007: Composición de Anexos solo con Piezas Vanilla
+# ADR-0007: Generación de Anexos con el Flujo «Mapas Puente» (`MapStudio` + Recorte Canónico + Clasificadores Verificados)
 
-* **Estado:** Aceptado
+* **Estado:** Aceptado (Revisado tras post-mortem en vivo del 2026-11-08)
 * **Fecha:** 2026-11-08
 
-## Contexto
+## Contexto y Post-Mortem de Intentos Previos
 
-Los minimapas de anexo de residencia (40×32 casillas) permitían ampliar el terreno privado pero presentaban problemas de acabado estético y coherencia espacial:
+Los minimapas de anexo de residencia (40×32 casillas) requieren un acabado visual idéntico al de Stardew Valley vanilla y una transitabilidad sin bloqueos en las 3 orientaciones (`North`, `East`, `South`) de los 8 tipos de granja. Antes de esta revisión se probaron tres enfoques que fracasaron por razones opuestas:
 
-1. **Repintado procedural frágil:** `MapCloneHelper.CreateAnnexMap` recortaba un cuadrante fijo del mapa vanilla, sellaba el perímetro con `Passable=F` invisible y aplicaba unas 1000 líneas de reglas procedurales por índice de tile (puentes de tablas, suavizado de orillas, barandillas, descarte de glitches). El resultado dejaba paredes invisibles en mitad del campo, árboles partidos por la mitad y un aspecto artificial.
-2. **Intento fallido de mapas dibujados por agente (commit `c06b40c`, descartado):** Se probó generar mapas `.tbin` dibujados casilla a casilla por un modelo de lenguaje. El resultado fue inadmisible: un modelo de texto carece de percepción espacial y sentido estético para ensamblar tilesets complejos de Stardew Valley.
+1. **Repintado procedural empírico sin atlas (`4eeb66f`):** Unas 1000 líneas de reglas ad-hoc con índices elegidos sin verificar contra el atlas `.xnb` (p. ej. usar `1244` creyendo que era madera cuando en `spring_outdoorsTileSheet` es borde de río, o mezclar sombra de bosque `351` con pradera soleada `175`).
+2. **Mapas `.tbin` dibujados desde cero por un agente (`c06b40c`, descartado):** Un modelo de lenguaje no puede diseñar un mapa entero casilla a casilla sin referencia visual.
+3. **24 ventanas por puntuación matemática + pegado de tiras de catálogo + prohibición absoluta de `StaticTile` (`d3def1a`, descartado tras prueba en vivo):**
+   - **Bloqueo total en las entradas:** Se escribió `backLayer.Tiles[cx, cy].Properties["Passable"] = "T"`. En `GameLocation.isTilePassable` de Stardew Valley 1.6, cualquier propiedad `Passable` no nula en `Back` (incluso `"T"`) hace la casilla **intransitable** (`return passable == null`). Además, al vaciar `Buildings`/`Front` sin cambiar el tile de `Back`, quedaron expuestos tiles con `TileIndexProperties["Passable"]` o `"Water"` en la hoja de sprites.
+   - **Costuras interiores y efecto «MissingNo»:** Pegar tiras de 4 casillas (`VanillaBlockCatalog` `EdgeStrip`) encima de un recorte de 40×32 creó una costura interior en `x=3` / `y=3`, partiendo árboles multi-casilla por la mitad y mezclando hierba de sombra de bosque (`351`) con pradera soleada (`175`).
+   - **Anexo Fluvial destrozado:** Recortar 40×32 por puntuación numérica y pegar tiras de borde guillotinó islas, canales y puentes de `Maps/Farm_Fishing`.
+   - **Árboles y escombros de runtime en la entrada:** No se definió ni limpió un área de despeje interior de **3×4 casillas** frente a la entrada, dejando al jugador atrapado contra árboles (`Tree`) y rocas al entrar.
+   - **Ceguera visual:** Se desplegó confiando únicamente en `dotnet test` sin haber renderizado ni inspeccionado visualmente los `.png` 1:1 en `MapStudio`.
 
-## Opciones Evaluadas
+## Decisión: Replicar el Flujo de Trabajo de los «Mapas Puente» ([ADR-0005](0005-host-plaza-and-bridge-maps.md))
 
-* **Opción A (Seguir con recorte y más parches procedurales por índice):** Descartada. Aumenta la deuda técnica, añade fragilidad entre versiones y no resuelve el corte brusco de los bordes.
-* **Opción B (Mapas dibujados por un agente de IA):** Descartada tajantemente tras el fracaso de `c06b40c`.
-* **Opción C (Composición exclusivamente con piezas vanilla):** Seleccionada. Recorte de ventanas óptimas puntuadas por herramienta, aprovechando esquinas y pasos de salida ya dibujados por ConcernedApe, y cerrando lados abiertos con bloques completos copiados del mapa vanilla original.
-* **Opción D (Mapas dibujados a mano por una persona en Tiled):** Plan B para aquellos tipos o lados específicos que no admitan una solución estética perfecta mediante la Opción C.
+En la Épica 10 (`Pelican4Ever_Bridge_1..3` y las 5 entradas de `Pelican4Ever_HostFarm`), el trabajo quedó fino y aceptable a la primera porque combinó **inspección visual previa con `MapStudio`**, **un único recorte coherente** y **cirugía localizada con clasificadores verificados en el atlas `.xnb`**. Adoptamos exactamente ese mismo flujo para los 8 anexos:
 
-## Decisión
+1. **Simulador Visual Offline (`MapStudio`) y Atlas Indexado (`.xnb` → `.png`):**
+   * Extraer las hojas de tiles reales (`spring_outdoorsTileSheet`, etc.) y componer fuera del juego todas las capas (`Back`, `Buildings`, `Front`, `AlwaysFront`) en imágenes `.png` 1:1 con rejilla de coordenadas y mapa de colisión real.
+   * **Regla de oro:** Ningún cambio en los anexos se da por terminado ni se despliega sin haber generado y revisado visualmente su render `.png` en `MapStudio`.
 
-1. **Regla de oro: Ningún agente elige índices de tile.**
-   * Ningún agente ni código del mod colocará tiles con índices fijos a mano (`new StaticTile(..., índice)`), ni generará mapas dibujados por IA, ni implementará reglas de "decoración" por índice.
-   * Todo lo visible en un anexo debe provenir de un mapa vanilla del juego, respetando su forma y proporciones originales.
-   * Se autoriza únicamente:
-     - Recortar ventanas de mapas vanilla.
-     - Pegar **bloques enteros** (definidos por mapa de origen, rectángulo fuente y capas completas: `Back`, `Buildings`, `Front`, `AlwaysFront`, `Paths`).
-     - Modificar propiedades (`Passable`, `Type`, `Diggable`, `Warp`) y despejar objetos de suelo o colisión en pasos de entrada.
+2. **Un único recorte canónico (40×32) por cada uno de los 8 tipos (sin pegar tiras de catálogo):**
+   * Igual que `CreateBridgeMap` usa un único recorte coherente de `Maps/BusStop` (`10, 0, 35×30`), cada uno de los 8 anexos (`Standard`, `Fishing`, `Foraging`, `Mining`, `Combat`, `FourCorners`, `Ranching`, `Beach`) parte de **un único recorte base 40×32** elegido visualmente en `MapStudio` para preservar su topología natural (islas enteras con sus puentes en `Fishing`, pradera despejada en `Standard`, etc.).
+   * **Se retira `VanillaBlockCatalog` (`EdgeStrip`) y `AnnexWindowScoringLogic`**, eliminando de raíz las costuras interiores y los ríos guillotinados.
 
-2. **Aprovechamiento de bordes y salidas vanilla naturales:**
-   * Las esquinas de los mapas `Maps/Farm_*` ya poseen dos bordes naturales acabados (acantilados, lindes de árboles, agua).
-   * Las salidas naturales de las granjas (hacia Backwoods al norte, BusStop al este y Forest al sur) se usan como entradas al anexo cuando la ventana elegida las incluya.
-   * La posición de la entrada pasa a ser una coordenada declarativa propia de cada ventana en lugar de un punto central fijo.
+3. **Cirugía Fina con Clasificadores Verificados en el Atlas (`TerrainTileClassifier` y `VerticalMultiTileClassifier`):**
+   * Prohibido adivinar números de tile: toda sustitución puntual usa exclusivamente [`TerrainTileClassifier`](../../Pelican4Ever.Core/World/TerrainTileClassifier.cs) y [`VerticalMultiTileClassifier`](../../Pelican4Ever.Core/World/VerticalMultiTileClassifier.cs), cuyos índices están verificados contra el atlas `.xnb`:
+     - **Suelo (`TerrainTileClassifier`):** Pradera soleada (`175` con acentos `150, 151, 152, 256`), camino de tierra (`587`) con bordes suaves tierra/hierba (`225, 228, 201, 251, 250, 253`) y puentes de madera canónicos sobre canales de agua. Prohibido mezclar sombra de bosque (`351..401`) en pradera abierta.
+     - **Objetos verticales multi-casilla (`VerticalMultiTileClassifier`):** Toda base en `Buildings[x, y]` conserva su remate en `Front[x, y - 1]`; se eliminan bases decapitadas en `y = 0` y copas huérfanas en bordes, y los árboles estáticos interceptados por una apertura se limpian por su caja completa (`3×4` / `6×4`).
+     - **Cierre de tramos abiertos:** Vallas horizontales (`383..385` / `358..360`), verticales (`361, 386, 411, 436`) y arbustos completos 3×3 (`63..65` / `38..40` / `13..15`).
 
-3. **Carga dinámica desde el juego:**
-   * Los bloques y ventanas se leen directamente del mapa vanilla cargado por el juego (`Helper.GameContent.Load<Map>("Maps/Farm_*")`).
-   * Esto garantiza que los anexos cambien de estación automáticamente (primavera, verano, otoño, invierno) sin duplicar texturas ni arte en el mod.
+4. **Umbral Transitable y Área de Despeje Interior de 3×4 Casillas:**
+   * En la apertura (2 casillas), corredor y margen interior de **3×4 casillas**:
+     - En `Back`: **eliminar** la propiedad `Passable` (`Properties.Remove("Passable")`, jamás asignar `"T"`) y colocar un tile de suelo limpio sin `TileIndexProperties["Passable"]` ni `"Water"`.
+     - En runtime (`FarmSlotModule`): despejar de `objects` (rocas, ramas, maleza), `terrainFeatures` (`Tree`, `Bush`, `Grass`) y `resourceClumps` el área 3×4 junto a la entrada al crear o cargar el anexo, y situar el letrero de retorno al costado exterior del corredor.
 
-4. **Tratamiento de anexos existentes (TASK-912):**
-   * Al migrar a la nueva composición, los objetos, cultivos, máquinas y árboles de los jugadores que queden sobre colisión o fuera de los límites transitables se trasladarán automáticamente a un cofre de resguardo situado cerca de la entrada (fuera de la casilla de llegada).
-   * La migración es ejecutada exclusivamente por el host una sola vez por anexo.
-
-## Consecuencias
-
-* **Positivas:**
-  - Acabado visual idéntico al juego original, sin cortes geométricos bruscos ni muros invisibles en el campo abierto.
-  - Compatibilidad estacional nativa y limpia.
-  - Código desacoplado de heurísticas visuales frágiles por número de tile.
-* **Negativas:**
-  - Requiere evaluar y catalogar las 24 ventanas (8 tipos × 3 lados). Si alguna orientación en un mapa particular no tiene una solución natural adecuada, deberá recurrirse a la Opción D (diseño manual en Tiled).
+5. **Verificación Topológica BFS Fiel a `GameLocation.isTilePassable` y Migración con Cofre de Resguardo:**
+   * `IsTilePassableSDV` replica exactamente `GameLocation.isTilePassable` (cualquier `Passable` en `Back` es intransitable).
+   * Los 24 casos se verifican con BFS sobre los `.xnb` reales (como en `TASK-1403` de los Mapas Puente).
+   * Los anexos ya comprados migran una sola vez (`MigrateAnnexToV2`), resguardando cualquier objeto o cultivo desplazado en un cofre situado fuera del área de despeje de entrada.

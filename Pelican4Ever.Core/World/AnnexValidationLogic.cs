@@ -211,6 +211,34 @@ namespace Pelican4Ever.Core.World
                 }
             }
 
+            // 3.5. Comprobación del área de despeje interior de 3×4 casillas junto a la entrada
+            TileArea clearance = GetInteriorClearanceArea(data.Side, data.EntryTile, w, h);
+            for (int cx = clearance.X; cx < clearance.X + clearance.Width; cx++)
+            {
+                for (int cy = clearance.Y; cy < clearance.Y + clearance.Height; cy++)
+                {
+                    if (cx >= 0 && cx < w && cy >= 0 && cy < h)
+                    {
+                        if (!data.IsPassable[cx, cy])
+                        {
+                            issues.Add(new ValidationIssue(
+                                ValidationSeverity.Error,
+                                "CLEARANCE_BLOCKED",
+                                $"Casilla de despeje interior ({cx}, {cy}) frente a la entrada es colisión.",
+                                new TilePoint(cx, cy)));
+                        }
+                        if (data.IsWater[cx, cy])
+                        {
+                            issues.Add(new ValidationIssue(
+                                ValidationSeverity.Error,
+                                "CLEARANCE_WATER",
+                                $"Casilla de despeje interior ({cx}, {cy}) contiene agua.",
+                                new TilePoint(cx, cy)));
+                        }
+                    }
+                }
+            }
+
             // 4. Transitabilidad y recorrido en anchura (BFS) desde la casilla de entrada
             int totalTransitable = 0;
             for (int x = 0; x < w; x++)
@@ -501,6 +529,20 @@ namespace Pelican4Ever.Core.World
                 WarpTilesPassable: allWarpsPassable,
                 PathFromArrivalToWarpExists: pathExists
             );
+        }
+
+        /// <summary>
+        /// Obtiene el área de despeje interior (3×4 casillas) requerida frente a la apertura de entrada (TASK-907 / TASK-911).
+        /// </summary>
+        public static TileArea GetInteriorClearanceArea(AnnexSide side, TilePoint entry, int width, int height)
+        {
+            return side switch
+            {
+                AnnexSide.North => new TileArea(Math.Clamp(entry.X - 1, 1, width - 4), Math.Max(1, height - 5), 3, 4),
+                AnnexSide.South => new TileArea(Math.Clamp(entry.X - 1, 1, width - 4), 1, 3, 4),
+                AnnexSide.East  => new TileArea(1, Math.Clamp(entry.Y - 1, 1, height - 4), 4, 3),
+                _ => new TileArea(entry.X, entry.Y, 1, 1)
+            };
         }
     }
 }

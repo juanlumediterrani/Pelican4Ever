@@ -1913,10 +1913,22 @@ namespace Pelican4Ever.Modules
                 MigrateAnnexToV2(annexFarm, annex, template);
             }
 
-            // Despejar siempre el corredor de la única entrada para que no haya rocas, maleza ni tocones bloqueando el paso
+            // Despejar siempre la apertura, corredor y área de seguridad interior 3×4 para que no haya rocas, maleza ni tocones (TASK-911)
             AnnexWindowLayout layout = template.GetWindowLayoutForSide(annex.Side);
             MapCloneHelper.GetEntranceOpeningAndCorridor(annex.Side, template.Width, template.Height, out var openingBorderTiles, out var corridorTiles, layout.EntranceTile);
-            foreach (var (cx, cy) in corridorTiles)
+            TileArea clearanceArea = AnnexValidationLogic.GetInteriorClearanceArea(annex.Side, layout.EntranceTile, template.Width, template.Height);
+
+            var runtimeClearTiles = new HashSet<(int X, int Y)>(openingBorderTiles);
+            foreach (var ct in corridorTiles) runtimeClearTiles.Add(ct);
+            for (int cx = clearanceArea.X; cx < clearanceArea.X + clearanceArea.Width; cx++)
+            {
+                for (int cy = clearanceArea.Y; cy < clearanceArea.Y + clearanceArea.Height; cy++)
+                {
+                    runtimeClearTiles.Add((cx, cy));
+                }
+            }
+
+            foreach (var (cx, cy) in runtimeClearTiles)
             {
                 annexFarm.removeEverythingFromThisTile(cx, cy);
                 for (int i = annexFarm.resourceClumps.Count - 1; i >= 0; i--)
@@ -1996,13 +2008,15 @@ namespace Pelican4Ever.Modules
 
                 if (rescuedItems.Count > 0)
                 {
+                    TileArea clearanceArea = AnnexValidationLogic.GetInteriorClearanceArea(annex.Side, entry, template.Width, template.Height);
                     TilePoint chestTile = AnnexMigrationLogic.FindRescueChestPlacement(
                         template.Width,
                         template.Height,
                         entry,
                         (x, y) => annexFarm.isTileLocationOpen(new xTile.Dimensions.Location(x, y))
                                && annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport)
-                               && !annexFarm.objects.ContainsKey(new Vector2(x, y)));
+                               && !annexFarm.objects.ContainsKey(new Vector2(x, y)),
+                        clearanceArea);
 
                     Vector2 chestPos = new Vector2(chestTile.X, chestTile.Y);
                     var rescueChest = new StardewValley.Objects.Chest(true, chestPos, "130")

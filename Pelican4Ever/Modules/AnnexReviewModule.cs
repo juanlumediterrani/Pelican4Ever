@@ -420,34 +420,12 @@ namespace Pelican4Ever.Modules
 
                 foreach (AnnexSide side in new[] { AnnexSide.North, AnnexSide.East, AnnexSide.South })
                 {
-                    var scoringInput = new MapScoringInput(
-                        TemplateId: t.Id,
-                        Side: side,
-                        MapWidth: mw,
-                        MapHeight: mh,
-                        IsPassable: passable,
-                        IsWater: isWater,
-                        HasBuildingLayerTile: hasBld,
-                        OreArea: t.Behavior.MountainOreArea,
-                        HasForestForage: t.Behavior.ForestForage,
-                        VanillaHouseTile: houseTile,
-                        VanillaExit: vanillaExit
-                    );
-
-                    var top3 = AnnexWindowScoringLogic.FindTopWindows(scoringInput, topN: 3);
-                    if (top3.Count == 0) continue;
-
-                    var best = top3[0];
-                    Say($"[Windows] {t.Id}_{side} -> #1 Ventana ({best.WindowX:D2}, {best.WindowY:D2}), Entrada ({best.EntranceTile.X:D2}, {best.EntranceTile.Y:D2}), Pts={best.Score} | {best.Details}", LogLevel.Info);
-                    for (int i = 1; i < top3.Count; i++)
-                    {
-                        var alt = top3[i];
-                        context.Monitor.Log($"    #{i + 1} ({alt.WindowX:D2}, {alt.WindowY:D2}) Pts={alt.Score} | {alt.Details}", LogLevel.Trace);
-                    }
+                    var layout = t.GetWindowLayoutForSide(side);
+                    Say($"[Windows] {t.Id}_{side} -> Ventana Canónica ({layout.CropX:D2}, {layout.CropY:D2}), Entrada ({layout.EntranceTile.X:D2}, {layout.EntranceTile.Y:D2})", LogLevel.Info);
                 }
             }
 
-            Say("[AnnexWindows] Análisis completado. Consulta el registro de SMAPI para ver candidatos alternativos.", LogLevel.Info);
+            Say("[AnnexWindows] Recortes canónicos verificados sin costuras.", LogLevel.Info);
         }
 
         // ==========================================
@@ -481,22 +459,33 @@ namespace Pelican4Ever.Modules
 
             Tile? backTile = back?.Tiles[x, y];
             if (backTile == null) return false;
-            if (backTile.TileIndexProperties.ContainsKey("Passable")) return false;
-            if (backTile.Properties.TryGetValue("Passable", out var bp) && bp == "F") return false;
+            // Regla exacta de GameLocation.isTilePassable (SDV 1.6):
+            // Cualquier propiedad "Passable" en Back (sea "F" o "T") convierte la casilla en intransitable
+            if (backTile.TileIndexProperties.TryGetValue("Passable", out var tip) && tip != null) return false;
+            if (backTile.Properties.TryGetValue("Passable", out var bp) && bp != null) return false;
 
             Tile? bldTile = bld?.Tiles[x, y];
             if (bldTile != null)
             {
-                if (bldTile.Properties.TryGetValue("Passable", out var bp2))
+                if (bldTile.Properties.TryGetValue("Passable", out var bp2) && bp2 != null)
                 {
-                    if (bp2 == "F") return false;
-                    if (bp2 == "T") return true;
+                    string s = bp2.ToString();
+                    if (s.Equals("F", StringComparison.OrdinalIgnoreCase) || s.Equals("False", StringComparison.OrdinalIgnoreCase)) return false;
+                    if (s.Equals("T", StringComparison.OrdinalIgnoreCase) || s.Equals("True", StringComparison.OrdinalIgnoreCase)) return true;
                 }
                 if (bldTile.TileIndexProperties.ContainsKey("Shadow"))
                 {
                     // Shadow no colisiona
                 }
-                else if (!bldTile.TileIndexProperties.ContainsKey("Passable"))
+                else if (bldTile.TileIndexProperties.TryGetValue("Passable", out var btip) && btip != null)
+                {
+                    string s = btip.ToString();
+                    if (!s.Equals("T", StringComparison.OrdinalIgnoreCase) && !s.Equals("True", StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+                else
                 {
                     return false;
                 }

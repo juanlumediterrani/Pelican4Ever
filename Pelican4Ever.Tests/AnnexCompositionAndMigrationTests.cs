@@ -9,7 +9,7 @@ namespace Pelican4Ever.Tests
     public class AnnexCompositionAndMigrationTests
     {
         [Fact]
-        public void All24AnnexWindowLayouts_AreConfiguredWithValidBlocksAndCoordinates()
+        public void All24AnnexWindowLayouts_UseSingleCanonicalCropAndValidEntrances()
         {
             var templates = AnnexTemplateCatalog.Templates.Values;
             Assert.Equal(8, templates.Count());
@@ -20,6 +20,10 @@ namespace Pelican4Ever.Tests
                 {
                     AnnexWindowLayout layout = template.GetWindowLayoutForSide(side);
                     Assert.NotNull(layout);
+
+                    // Recorte canónico 40×32 unificado para cada tipo de granja (ADR-0007 / TASK-910)
+                    Assert.Equal(template.SourceCropX, layout.CropX);
+                    Assert.Equal(template.SourceCropY, layout.CropY);
 
                     // Coordenadas de ventana dentro de los límites del mapa vanilla
                     var exitPassage = VanillaFarmExitTable.Table[template.Id];
@@ -41,15 +45,6 @@ namespace Pelican4Ever.Tests
                         case AnnexSide.East:
                             Assert.Equal(1, layout.EntranceTile.X);
                             break;
-                    }
-
-                    // Todos los bloques existen en el catálogo canónico
-                    Assert.NotEmpty(layout.BlockIdsToPaste);
-                    foreach (string blockId in layout.BlockIdsToPaste)
-                    {
-                        Assert.True(
-                            VanillaBlockCatalog.Blocks.ContainsKey(blockId),
-                            $"Bloque '{blockId}' referenciado en {template.Id}_{side} no existe en VanillaBlockCatalog.");
                     }
 
                     // Si tiene área de mineral, debe estar contenida en 40×32
@@ -142,10 +137,12 @@ namespace Pelican4Ever.Tests
                 return !occupied.Contains(new TilePoint(x, y));
             }
 
-            TilePoint chest = AnnexMigrationLogic.FindRescueChestPlacement(w, h, entry, IsFreeAndPassable);
+            TileArea clearance = new TileArea(19, 27, 3, 4);
+            TilePoint chest = AnnexMigrationLogic.FindRescueChestPlacement(w, h, entry, IsFreeAndPassable, clearance);
 
-            // Nunca en la casilla de llegada ni en los bordes
+            // Nunca en la casilla de llegada, ni en los bordes, ni en el área de despeje interior
             Assert.NotEqual(entry, chest);
+            Assert.False(clearance.Contains(chest.X, chest.Y));
             Assert.InRange(chest.X, 1, w - 2);
             Assert.InRange(chest.Y, 1, h - 2);
 

@@ -497,13 +497,17 @@ namespace Pelican4Ever.Framework
         /// Genera un mapa de anexo temático de 40×32 recortando el cuadrante representativo del mapa vanilla
         /// (<paramref name="source"/>), eliminando warps vanilla, sellando los cuatro bordes salvo la única
         /// entrada (<paramref name="side"/>) y configurando las zonas de bonificación recalculadas (TASK-902).
-        /// </summary>
         /// <summary>
-        /// Genera el minimapa temático (40×32) para un anexo mediante composición estrictamente vanilla (TASK-911):
-        /// 1. Recorta la ventana 40×32 seleccionada en <see cref="AnnexWindowLayout"/> conservando bordes y salidas naturales.
-        /// 2. Pega bloques vanilla completos del catálogo (<see cref="VanillaBlockCatalog"/>) en los lados cortados.
-        /// 3. Sella el perímetro con Passable = "F" salvo la apertura única de entrada.
-        /// 4. Despeja el umbral de entrada sin añadir ningún StaticTile con índice sintético (Regla de Oro de Épica 9.1).
+        /// Genera el minimapa temático (40×32) para un anexo mediante composición vanilla pura estilo «Mapas Puente» (TASK-911):
+        /// 1. Recorta el rectángulo canónico 40×32 del tipo (<see cref="AnnexTemplate.SourceCropX"/>, <see cref="AnnexTemplate.SourceCropY"/>).
+        /// 2. Limpia propiedades de warp y acciones de mapa vanilla residuales.
+        /// 3. Sella el perímetro (4 bordes) con Passable = "F" salvo la apertura de 2 casillas activa.
+        /// 4. Despeja la apertura, corredor y área de seguridad interior de 3×4 casillas:
+        ///    - En Back: elimina 'Passable', 'Water' y 'NoSpawn'. NUNCA asigna Passable="T" en Back (regla GameLocation.isTilePassable).
+        ///    - Si el suelo era sombra oscura (351..401) o agua sin puente, restaura terreno canónico limpio de TerrainTileClassifier.
+        ///    - En Buildings/Front/AlwaysFront: despeja obstáculos y sanea árboles cortados con VerticalMultiTileClassifier.
+        ///    - Flanquea la apertura con cancelas/postes de valla canónicos.
+        /// 5. Sanea los bordes del recorte para eliminar troncos decapitados en y=0 y copas huérfanas.
         /// </summary>
         public static Map CreateAnnexMap(
             Map source,
@@ -605,96 +609,16 @@ namespace Pelican4Ever.Framework
             Layer bldLayer = EnsureLayer(target, "Buildings", width, height, tileSize);
             Layer frontLayer = EnsureLayer(target, "Front", width, height, tileSize);
             Layer alwaysFrontLayer = EnsureLayer(target, "AlwaysFront", width, height, tileSize);
+            Layer? alwaysFront2Layer = target.GetLayer("AlwaysFront2");
+            Layer? alwaysFront3Layer = target.GetLayer("AlwaysFront3");
             EnsureLayer(target, "Paths", width, height, tileSize);
+            TileSheet? outdoorsSheet = GetOutdoorsTileSheet(target);
 
-            // 4. Pegar bloques vanilla completos del catálogo en los lados cortados (TASK-909 / TASK-911)
-            if (layout.BlockIdsToPaste != null)
-            {
-                foreach (string blockId in layout.BlockIdsToPaste)
-                {
-                    if (!VanillaBlockCatalog.Blocks.TryGetValue(blockId, out VanillaBlockDefinition? blockDef))
-                        continue;
-
-                    Map? blockSourceMap = mapLoader != null
-                        ? (mapLoader(blockDef.SourceMapAsset) ?? source)
-                        : source;
-
-                    if (blockSourceMap == null)
-                        continue;
-
-                    CopyTileSheets(blockSourceMap, target);
-
-                    int dx = 0;
-                    int dy = 0;
-                    if (blockDef.Kind == BlockKind.EdgeStrip)
-                    {
-                        switch (blockDef.Orientation)
-                        {
-                            case BlockOrientation.North:
-                                dx = 0; dy = 0; break;
-                            case BlockOrientation.South:
-                                dx = 0; dy = height - blockDef.SourceRectangle.Height; break;
-                            case BlockOrientation.West:
-                                dx = 0; dy = 0; break;
-                            case BlockOrientation.East:
-                                dx = width - blockDef.SourceRectangle.Width; dy = 0; break;
-                        }
-                    }
-                    else if (blockDef.Kind == BlockKind.Corner)
-                    {
-                        switch (blockDef.Orientation)
-                        {
-                            case BlockOrientation.NorthWest:
-                                dx = 0; dy = 0; break;
-                            case BlockOrientation.NorthEast:
-                                dx = width - blockDef.SourceRectangle.Width; dy = 0; break;
-                            case BlockOrientation.SouthWest:
-                                dx = 0; dy = height - blockDef.SourceRectangle.Height; break;
-                            case BlockOrientation.SouthEast:
-                                dx = width - blockDef.SourceRectangle.Width; dy = height - blockDef.SourceRectangle.Height; break;
-                        }
-                    }
-                    else if (blockDef.Kind == BlockKind.Doorway)
-                    {
-                        dx = Math.Clamp(layout.EntranceTile.X - (blockDef.DoorwayStepTile?.X ?? 0), 0, width - blockDef.SourceRectangle.Width);
-                        dy = Math.Clamp(layout.EntranceTile.Y - (blockDef.DoorwayStepTile?.Y ?? 0), 0, height - blockDef.SourceRectangle.Height);
-                    }
-
-                    foreach (Layer srcBlockLayer in blockSourceMap.Layers)
-                    {
-                        Layer targetLayer = EnsureLayer(target, srcBlockLayer.Id, width, height, tileSize);
-
-                        for (int bx = 0; bx < blockDef.SourceRectangle.Width; bx++)
-                        {
-                            int sx = blockDef.SourceRectangle.X + bx;
-                            int tx = dx + bx;
-                            if (tx < 0 || tx >= width || sx < 0 || sx >= srcBlockLayer.LayerWidth)
-                                continue;
-
-                            for (int by = 0; by < blockDef.SourceRectangle.Height; by++)
-                            {
-                                int sy = blockDef.SourceRectangle.Y + by;
-                                int ty = dy + by;
-                                if (ty < 0 || ty >= height || sy < 0 || sy >= srcBlockLayer.LayerHeight)
-                                    continue;
-
-                                Tile? srcTile = srcBlockLayer.Tiles[sx, sy];
-                                if (srcTile != null)
-                                {
-                                    Tile cloned = CloneTile(srcTile, targetLayer, target);
-                                    StripVanillaWarpTileProperties(cloned);
-                                    targetLayer.Tiles[tx, ty] = cloned;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // 5. Calcular apertura de entrada y corredor según coordenadas de ventana
+            // 4. Apertura de entrada y área interior de 3×4 casillas (TASK-907 / TASK-911)
             GetEntranceOpeningAndCorridor(side, width, height, out HashSet<(int X, int Y)> openingBorderTiles, out HashSet<(int X, int Y)> corridorTiles, layout.EntranceTile);
+            TileArea clearanceArea = AnnexValidationLogic.GetInteriorClearanceArea(side, layout.EntranceTile, width, height);
 
-            // 6. Sellar todo el perímetro (4 bordes) con Passable = "F" salvo la apertura de entrada
+            // 5. Sellar todo el perímetro (4 bordes) con Passable = "F" salvo la apertura de entrada
             for (int x = 0; x < width; x++)
             {
                 for (int y = 0; y < height; y++)
@@ -715,8 +639,33 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // 7. Despejar apertura y corredor de entrada sin añadir ningún tile sintético (Regla de Oro)
-            foreach (var (cx, cy) in corridorTiles.Concat(openingBorderTiles))
+            // 6. Conjunto total de casillas a despejar: apertura + corredor + área de seguridad interior 3×4
+            var clearTiles = new HashSet<(int X, int Y)>(openingBorderTiles);
+            foreach (var ct in corridorTiles) clearTiles.Add(ct);
+            for (int cx = clearanceArea.X; cx < clearanceArea.X + clearanceArea.Width; cx++)
+            {
+                for (int cy = clearanceArea.Y; cy < clearanceArea.Y + clearanceArea.Height; cy++)
+                {
+                    clearTiles.Add((cx, cy));
+                }
+            }
+
+            // Saneado previo de árboles que intersecten el área de entrada por su caja completa (VerticalMultiTileClassifier)
+            foreach (var (cx, cy) in clearTiles)
+            {
+                if (cx < 0 || cx >= width || cy < 0 || cy >= height)
+                    continue;
+
+                int? bldIdx = bldLayer.Tiles[cx, cy]?.TileIndex;
+                if (bldIdx.HasValue && VerticalMultiTileClassifier.IsTreeTrunkBase(bldIdx.Value))
+                {
+                    TileArea treeBox = VerticalMultiTileClassifier.GetStaticTreeBoundingBox(cx, cy, bldIdx.Value);
+                    ClearMapBox(treeBox, bldLayer, frontLayer, alwaysFrontLayer, alwaysFront2Layer, alwaysFront3Layer, width, height);
+                }
+            }
+
+            // Despejar capas superiores y normalizar suelo en Back (regla de oro: NUNCA asignar Passable="T" en Back)
+            foreach (var (cx, cy) in clearTiles)
             {
                 if (cx < 0 || cx >= width || cy < 0 || cy >= height)
                     continue;
@@ -724,15 +673,173 @@ namespace Pelican4Ever.Framework
                 bldLayer.Tiles[cx, cy] = null;
                 frontLayer.Tiles[cx, cy] = null;
                 alwaysFrontLayer.Tiles[cx, cy] = null;
+                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[cx, cy] = null;
+                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[cx, cy] = null;
 
                 if (backLayer.Tiles[cx, cy] != null)
                 {
                     ClearBlockingAndWaterProperties(backLayer.Tiles[cx, cy]);
-                    backLayer.Tiles[cx, cy].Properties["Passable"] = "T";
+                    int backIdx = backLayer.Tiles[cx, cy].TileIndex;
+
+                    bool isWater = HasWaterProperty(backLayer.Tiles[cx, cy]) || backIdx >= 1200;
+                    bool isShade = TerrainTileClassifier.IsForestShadeGrass(backIdx);
+
+                    if (isWater || isShade || (outdoorsSheet != null && backLayer.Tiles[cx, cy].TileSheet == outdoorsSheet && backIdx == 0))
+                    {
+                        if (outdoorsSheet != null)
+                        {
+                            int groundIdx = (cy == height - 1 || cy == 0 || cx == 0 || cx == width - 1)
+                                ? TerrainTileClassifier.DirtPlainTileIndex
+                                : TerrainTileClassifier.SunnyGrassTileIndex;
+                            var newTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, groundIdx);
+                            newTile.Properties["Type"] = (groundIdx == TerrainTileClassifier.DirtPlainTileIndex) ? "Dirt" : "Grass";
+                            backLayer.Tiles[cx, cy] = newTile;
+                        }
+                    }
                 }
             }
 
+            // 7. Flanquear la apertura de entrada con cancelas/postes canónicos y sanear el perímetro 40×32
+            if (outdoorsSheet != null)
+            {
+                FlankOpeningWithFencePosts(side, openingBorderTiles, bldLayer, frontLayer, outdoorsSheet, width, height);
+                SanitizeAnnexMultiTileObjects(backLayer, bldLayer, frontLayer, alwaysFrontLayer, alwaysFront2Layer, outdoorsSheet, width, height);
+            }
+
             return target;
+        }
+
+        private static void ClearMapBox(
+            TileArea box,
+            Layer bld,
+            Layer front,
+            Layer alwaysFront,
+            Layer? alwaysFront2,
+            Layer? alwaysFront3,
+            int mapWidth,
+            int mapHeight)
+        {
+            for (int x = box.X; x < box.X + box.Width; x++)
+            {
+                if (x < 0 || x >= mapWidth) continue;
+                for (int y = box.Y; y < box.Y + box.Height; y++)
+                {
+                    if (y < 0 || y >= mapHeight) continue;
+                    bld.Tiles[x, y] = null;
+                    front.Tiles[x, y] = null;
+                    alwaysFront.Tiles[x, y] = null;
+                    if (alwaysFront2 != null) alwaysFront2.Tiles[x, y] = null;
+                    if (alwaysFront3 != null) alwaysFront3.Tiles[x, y] = null;
+                }
+            }
+        }
+
+        private static void FlankOpeningWithFencePosts(
+            AnnexSide side,
+            HashSet<(int X, int Y)> openingBorderTiles,
+            Layer bldLayer,
+            Layer frontLayer,
+            TileSheet outdoorsSheet,
+            int width,
+            int height)
+        {
+            if (openingBorderTiles.Count == 0) return;
+
+            int minX = int.MaxValue, maxX = int.MinValue;
+            int minY = int.MaxValue, maxY = int.MinValue;
+            foreach (var (x, y) in openingBorderTiles)
+            {
+                if (x < minX) minX = x;
+                if (x > maxX) maxX = x;
+                if (y < minY) minY = y;
+                if (y > maxY) maxY = y;
+            }
+
+            switch (side)
+            {
+                case AnnexSide.North:
+                    // Entrada por el sur (y = height - 1)
+                    if (minX - 1 >= 0)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, minX - 1, height - 1, VerticalMultiTileClassifier.FenceRightBaseTileIndex);
+                        SetTileIfValid(frontLayer, outdoorsSheet, minX - 1, height - 2, VerticalMultiTileClassifier.FenceRightTopTileIndex);
+                        SetPassableIfValid(bldLayer, minX - 1, height - 1, false);
+                    }
+                    if (maxX + 1 < width)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, maxX + 1, height - 1, VerticalMultiTileClassifier.FenceLeftBaseTileIndex);
+                        SetTileIfValid(frontLayer, outdoorsSheet, maxX + 1, height - 2, VerticalMultiTileClassifier.FenceLeftTopTileIndex);
+                        SetPassableIfValid(bldLayer, maxX + 1, height - 1, false);
+                    }
+                    break;
+
+                case AnnexSide.South:
+                    // Entrada por el norte (y = 0)
+                    if (minX - 1 >= 0)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, minX - 1, 0, VerticalMultiTileClassifier.FenceVerticalBaseTileIndex);
+                        SetPassableIfValid(bldLayer, minX - 1, 0, false);
+                    }
+                    if (maxX + 1 < width)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, maxX + 1, 0, VerticalMultiTileClassifier.FenceVerticalBaseTileIndex);
+                        SetPassableIfValid(bldLayer, maxX + 1, 0, false);
+                    }
+                    break;
+
+                case AnnexSide.East:
+                    // Entrada por el oeste (x = 0)
+                    if (minY - 1 >= 0)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, 0, minY - 1, VerticalMultiTileClassifier.FenceVerticalUpperMidTileIndex);
+                        SetTileIfValid(frontLayer, outdoorsSheet, 0, minY - 2, VerticalMultiTileClassifier.FenceVerticalTopTileIndex);
+                        SetPassableIfValid(bldLayer, 0, minY - 1, false);
+                    }
+                    if (maxY + 1 < height)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, 0, maxY + 1, VerticalMultiTileClassifier.FenceVerticalBaseTileIndex);
+                        SetPassableIfValid(bldLayer, 0, maxY + 1, false);
+                    }
+                    break;
+            }
+        }
+
+        private static void SanitizeAnnexMultiTileObjects(
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            Layer? alwaysFront2Layer,
+            TileSheet outdoorsSheet,
+            int width,
+            int height)
+        {
+            // 1. Fila y = 0: limpiar troncos decapitados cuya copa caía en y = -1
+            for (int x = 0; x < width; x++)
+            {
+                int? bldIdx = bldLayer.Tiles[x, 0]?.TileIndex;
+                if (bldIdx.HasValue && (VerticalMultiTileClassifier.IsTreeTrunkBase(bldIdx.Value) || VerticalMultiTileClassifier.IsBushTile(bldIdx.Value)))
+                {
+                    bldLayer.Tiles[x, 0] = null;
+                }
+
+                // Copas huérfanas en Front y=0 cuyos troncos estaban en y=1 cortados
+                int? frontIdx = frontLayer.Tiles[x, 0]?.TileIndex;
+                if (frontIdx.HasValue && bldLayer.Tiles[x, 1] == null && VerticalMultiTileClassifier.IsBushTile(frontIdx.Value))
+                {
+                    frontLayer.Tiles[x, 0] = null;
+                }
+            }
+
+            // 2. Fila y = height - 1: limpiar copas huérfanas
+            for (int x = 0; x < width; x++)
+            {
+                int? frontIdx = frontLayer.Tiles[x, height - 1]?.TileIndex;
+                if (frontIdx.HasValue && VerticalMultiTileClassifier.IsBushTile(frontIdx.Value))
+                {
+                    frontLayer.Tiles[x, height - 1] = null;
+                }
+            }
         }
 
         public static void GetEntranceOpeningAndCorridor(
@@ -754,11 +861,11 @@ namespace Pelican4Ever.Framework
             {
                 case AnnexSide.North:
                     // Entrada por el borde Sur del anexo (y = height - 1)
-                    int o1 = (ex > 0) ? ex - 1 : ex;
-                    int o2 = (ex > 0) ? ex : ex + 1;
+                    int o1 = ex;
+                    int o2 = (ex < width - 1) ? ex + 1 : ex - 1;
                     openingBorderTiles.Add((o1, height - 1));
                     openingBorderTiles.Add((o2, height - 1));
-                    for (int y = Math.Max(1, height - 7); y < height; y++)
+                    for (int y = Math.Max(1, height - 6); y < height; y++)
                     {
                         corridorTiles.Add((o1, y));
                         corridorTiles.Add((o2, y));
@@ -767,11 +874,11 @@ namespace Pelican4Ever.Framework
 
                 case AnnexSide.South:
                     // Entrada por el borde Norte del anexo (y = 0)
-                    int so1 = (ex > 0) ? ex - 1 : ex;
-                    int so2 = (ex > 0) ? ex : ex + 1;
+                    int so1 = ex;
+                    int so2 = (ex < width - 1) ? ex + 1 : ex - 1;
                     openingBorderTiles.Add((so1, 0));
                     openingBorderTiles.Add((so2, 0));
-                    for (int y = 0; y <= Math.Min(height - 2, 6); y++)
+                    for (int y = 0; y <= Math.Min(height - 2, 5); y++)
                     {
                         corridorTiles.Add((so1, y));
                         corridorTiles.Add((so2, y));
@@ -780,11 +887,11 @@ namespace Pelican4Ever.Framework
 
                 case AnnexSide.East:
                     // Entrada por el borde Oeste del anexo (x = 0)
-                    int eo1 = (ey > 0) ? ey - 1 : ey;
-                    int eo2 = (ey > 0) ? ey : ey + 1;
+                    int eo1 = ey;
+                    int eo2 = (ey < height - 1) ? ey + 1 : ey - 1;
                     openingBorderTiles.Add((0, eo1));
                     openingBorderTiles.Add((0, eo2));
-                    for (int x = 0; x <= Math.Min(width - 2, 6); x++)
+                    for (int x = 0; x <= Math.Min(width - 2, 5); x++)
                     {
                         corridorTiles.Add((x, eo1));
                         corridorTiles.Add((x, eo2));

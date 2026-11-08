@@ -6,6 +6,9 @@ namespace Pelican4Ever.Core.World
     /// <summary>Rectángulo de casillas del mapa.</summary>
     public readonly record struct TileArea(int X, int Y, int Width, int Height)
     {
+        /// <summary>Comprueba si una casilla está contenida en el rectángulo.</summary>
+        public bool Contains(int x, int y) => x >= X && x < X + Width && y >= Y && y < Y + Height;
+
         /// <summary>Formato de las propiedades de mapa de Stardew ("x y ancho alto").</summary>
         public string ToMapProperty() => $"{X} {Y} {Width} {Height}";
 

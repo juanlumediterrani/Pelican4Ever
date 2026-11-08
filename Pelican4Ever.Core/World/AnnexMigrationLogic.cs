@@ -21,13 +21,15 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>
         /// Localiza una casilla libre y transitable para colocar el cofre de resguardo cerca de la entrada.
-        /// El cofre se coloca en una casilla libre interior, nunca en la casilla de llegada ni en el borde exterior.
+        /// El cofre se coloca en una casilla libre interior, nunca en la casilla de llegada, ni en el borde exterior,
+        /// ni dentro del área de seguridad de despeje interior (TASK-912).
         /// </summary>
         public static TilePoint FindRescueChestPlacement(
             int mapWidth,
             int mapHeight,
             TilePoint entryTile,
-            Func<int, int, bool> isTileFreeAndPassable)
+            Func<int, int, bool> isTileFreeAndPassable,
+            TileArea? clearanceArea = null)
         {
             int maxRadius = Math.Max(mapWidth, mapHeight);
 
@@ -52,6 +54,10 @@ namespace Pelican4Ever.Core.World
                         if (tx == entryTile.X && ty == entryTile.Y)
                             continue;
 
+                        // No colocar dentro del área de despeje interior de seguridad (TASK-912)
+                        if (clearanceArea.HasValue && clearanceArea.Value.Contains(tx, ty))
+                            continue;
+
                         if (isTileFreeAndPassable(tx, ty))
                         {
                             return new TilePoint(tx, ty);
@@ -61,8 +67,8 @@ namespace Pelican4Ever.Core.World
             }
 
             // Fallback determinista en el interior si no se encontró casilla ideal
-            int fallbackX = Math.Clamp(entryTile.X + (entryTile.X > mapWidth / 2 ? -1 : 1), 1, mapWidth - 2);
-            int fallbackY = Math.Clamp(entryTile.Y + (entryTile.Y > mapHeight / 2 ? -1 : 1), 1, mapHeight - 2);
+            int fallbackX = Math.Clamp(entryTile.X + (entryTile.X > mapWidth / 2 ? -2 : 2), 1, mapWidth - 2);
+            int fallbackY = Math.Clamp(entryTile.Y + (entryTile.Y > mapHeight / 2 ? -2 : 2), 1, mapHeight - 2);
             return new TilePoint(fallbackX, fallbackY);
         }
     }

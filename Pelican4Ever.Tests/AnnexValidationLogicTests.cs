@@ -237,5 +237,18 @@ namespace Pelican4Ever.Tests
             Assert.False(report.IsValid);
             Assert.Contains(report.Issues, i => i.Code == "ARRIVAL_COLLISION");
         }
+
+        [Fact]
+        public void AnnexValidation_FailsWhenClearanceAreaIsBlocked()
+        {
+            var mapData = CreateValidMap(AnnexSide.North);
+            // El área de despeje interior para North es Math.Max(1, height - 5) a height - 2 (filas 27..30) y columnas 19..21
+            // Colocamos un obstáculo dentro del área de despeje:
+            mapData.IsPassable[20, 29] = false;
+
+            var report = AnnexValidationLogic.ValidateAnnex(mapData);
+            Assert.False(report.IsValid);
+            Assert.Contains(report.Issues, i => i.Code == "CLEARANCE_BLOCKED");
+        }
     }
 }

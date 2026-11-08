@@ -227,8 +227,9 @@ namespace Pelican4Ever.Tests
                 Assert.Equal(40, t.Width);
                 Assert.Equal(32, t.Height);
                 Assert.StartsWith("Maps/", t.SourceVanillaMap);
-                Assert.InRange(t.SourceCropX, 0, 40);
-                Assert.InRange(t.SourceCropY, 0, 33);
+                var mapDims = VanillaFarmExitTable.Table[t.Id];
+                Assert.InRange(t.SourceCropX, 0, mapDims.MapWidth - t.Width);
+                Assert.InRange(t.SourceCropY, 0, mapDims.MapHeight - t.Height);
 
                 if (t.Behavior.MountainOreArea is { } area)
                 {
@@ -247,7 +248,7 @@ namespace Pelican4Ever.Tests
 
             var mining = AnnexTemplateCatalog.GetTemplate("Mining");
             Assert.NotNull(mining.Behavior.MountainOreArea);
-            Assert.Equal(new TileArea(5, 13, 22, 8), mining.Behavior.MountainOreArea!.Value);
+            Assert.Equal(new TileArea(2, 12, 22, 8), mining.Behavior.MountainOreArea!.Value);
 
             var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
             Assert.True(foraging.Behavior.ForestForage);
@@ -510,7 +511,7 @@ namespace Pelican4Ever.Tests
             // Un anexo minero ("Mining") tiene área de mineral recalculada en 40×32
             var miningAnnex = AnnexTemplateCatalog.GetTemplate("Mining");
             Assert.NotNull(miningAnnex.Behavior.MountainOreArea);
-            Assert.Equal(new TileArea(5, 13, 22, 8), miningAnnex.Behavior.MountainOreArea!.Value);
+            Assert.Equal(new TileArea(2, 12, 22, 8), miningAnnex.Behavior.MountainOreArea!.Value);
             Assert.Equal(14, miningAnnex.Behavior.InitialMountainOreDays);
         }
 
@@ -528,8 +529,9 @@ namespace Pelican4Ever.Tests
                 Assert.False(string.IsNullOrWhiteSpace(t.DisplayName));
                 Assert.False(string.IsNullOrWhiteSpace(t.MapAsset));
                 Assert.StartsWith("Maps/", t.SourceVanillaMap);
-                Assert.InRange(t.SourceCropX, 0, 80 - t.Width);
-                Assert.InRange(t.SourceCropY, 0, 80 - t.Height);
+                var mapDims = VanillaFarmExitTable.Table[t.Id];
+                Assert.InRange(t.SourceCropX, 0, mapDims.MapWidth - t.Width);
+                Assert.InRange(t.SourceCropY, 0, mapDims.MapHeight - t.Height);
 
                 // Cada lado cardinal genera una ruta de asset válida
                 Assert.Equal($"{t.MapAsset}_North", t.GetMapAssetForSide(AnnexSide.North));
@@ -540,8 +542,8 @@ namespace Pelican4Ever.Tests
             // Validación específica de la plantilla Fluvial (Fishing)
             var fishing = templates["Fishing"];
             Assert.Equal("Maps/Farm_Fishing", fishing.SourceVanillaMap);
-            Assert.Equal(16, fishing.SourceCropX);
-            Assert.Equal(18, fishing.SourceCropY);
+            Assert.Equal(20, fishing.SourceCropX);
+            Assert.Equal(33, fishing.SourceCropY);
             Assert.True(fishing.Behavior.RiverFishSplashes);
             Assert.Equal("Farm_Riverland", fishing.LocationDataKey);
         }

@@ -546,158 +546,142 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     2. Un anexo de Colinas genera mineral a diario dentro de su zona.
     3. Un anexo salvaje tiene monstruos nocturnos y la residencia estándar a la que pertenece no.
 
-### Épica 9.1: Minimapas de anexo con acabado vanilla (rama `minimaps_improvements`)
-> **Objetivo:** Que los 8 anexos (40×32) parezcan mapas del juego y no recortes: bordes vanilla de verdad (acantilados, linde de árboles, agua, vallas) sacados de los propios mapas del juego, sin cortes bruscos ni muros invisibles y sin fallos gráficos. Además, que cada salida hacia un anexo y su vuelta se vean como camino y funcionen en todos los tipos de residencia y lados.
+### Épica 9.1: Minimapas de anexo con acabado vanilla — Enfoque «Mapas Puente» (rama `minimaps_improvements`)
+> **Objetivo:** Conseguir en los 8 anexos (40×32) el mismo nivel de acabado limpio, transitable y sin glitches que se logró en los **Mapas Puente (`Pelican4Ever_Bridge_1..3`) y las 5 entradas de la Granja Host (Épica 10 / [ADR-0005](docs/adr/0005-host-plaza-and-bridge-maps.md))**, aplicando su mismo flujo de trabajo: simulador visual offline (`MapStudio`) sobre `.xnb` reales, un recorte base coherente por bioma (sin pegar retales que creen costuras), cirugía verificada con los clasificadores canónicos (`TerrainTileClassifier` y `VerticalMultiTileClassifier`), área de despeje interior de 3×4 casillas y validación BFS exacta según `GameLocation.isTilePassable`.
 
-**Situación de partida (revisión del 2026-11-08, `4eeb66f`):**
-- `MapCloneHelper.CreateAnnexMap` genera cada anexo en tiempo de carga: recorta 40×32 del mapa vanilla del tipo (`SourceCropX/Y`), sella el perímetro con `Passable=F` invisible y abre una entrada de 2 casillas con postes de valla. Después lo corrige con parches procedurales: puentes de tablas sobre el agua del corredor, barandillas donde un puente toca el borde, suavizado de orillas y `SanitizeMapGraphicGlitches`. Son unas 1000 líneas de reglas por índice de tile.
-- En partida (prueba del 2026-11-07), todos los anexos se ven parecidos, no hay borde visible y queda algún fallo gráfico. Casi todo viene de recortar: los tiles multicasilla (árboles, casas, acantilados, orillas) quedan partidos en el borde, y el límite es una pared invisible en mitad del terreno.
-- El lado de entrada cambia con la residencia: con acceso norte se entra por el borde sur del anexo, con acceso este por el oeste y con acceso sur por el norte. El asset es `Maps/Pelican4Ever_Annex_<Tipo>_<Lado>`.
-- Warps de la residencia al anexo: `ResidenceAnnexAccessLogic` (por tipo de mapa). Vuelta: warps en la apertura del anexo hacia `FarmTemplate.<Lado>ArrivalTile`. Aviso visual: solo el letrero flotante a menos de 3,5 casillas (`🌲 … (Caminar para entrar)` / `Adquirir Anexo`).
-- **Fallos de warps encontrados al revisar los mapas vanilla** (casillas comprobadas con colisión de `Buildings` en cada `Maps/Farm_*`):
-  - *Fluvial, salida sur:* la llegada (40,63) y las casillas de warp (39–41,64) son colisión. Un anexo sur de una residencia fluvial no es alcanzable. Una residencia fluvial con portal en el borde norte de la plaza (se entra por el sur) dejaría al jugador dentro de la colisión. **Prioritario**.
-  - *Colinas, salida este:* el warp (79,15) es colisión. Quedan (79,16) y (79,17), así que funciona, pero hay que alinearlo.
-  - *Estándar, Forestal, Salvaje y Cuatro Esquinas:* la casilla de warp (39,0) es colisión (el paso es x 40–41). (39,64) también, salvo en Fluvial, donde lo es toda la fila. Funcionan, pero conviene usar el ancho real de cada paso.
-  - *Pradera y Playa:* sin problemas (la Playa se corrigió en `d3e329b`).
+#### 9.1.0 Diagnóstico de intentos previos y cambio de rumbo (2026-11-08)
 
-**Intento descartado (2026-11-08):** se probó la propuesta anterior de esta épica, mapas `.tbin` dibujados casilla a casilla por un agente (commit `c06b40c`, retirado de la rama con reset). El resultado no es admisible: igual que el repintado procedural de `MapCloneHelper`, parece dibujado por un niño, porque un modelo de texto no sabe componer tiles. **No volver a intentarlo.**
+1. **Intento 1 descartado (`c06b40c`):** Mapas `.tbin` dibujados casilla a casilla desde cero por un agente. Descartado: un modelo de texto sin referencia visual no sabe componer mapas enteros.
+2. **Intento 2 descartado (`d3def1a`, sesión del 2026-11-08):** «Prohibición absoluta de usar índices de tile + 24 ventanas elegidas por un algoritmo numérico (`AnnexWindowScoringLogic`) + pegado de tiras de catálogo (`VanillaBlockCatalog`)». Al probarlo en vivo empeoró severamente el punto de partida:
+   - **Bloqueo total en la entrada (`Back.Properties["Passable"] = "T"`):** En el motor de Stardew Valley (`GameLocation.isTilePassable`), cualquier propiedad `Passable` no nula en la capa `Back` (incluso `"T"`) marca la casilla como **intransitable** (`return passable == null`). Además, al borrar `Buildings`/`Front` en la entrada sin sustituir el tile de `Back`, quedaron expuestos tiles de sombra de bosque (`351`) o acantilado/agua cuyas `TileIndexProperties` en la hoja de sprites bloquean el paso. El validador `IsTilePassableSDV` solo filtraba `bp == "F"`, dando un falso positivo en los tests.
+   - **Costuras interiores, árboles guillotinados y efecto «MissingNo» (Anexo Estándar):** Pegar tiras de 4 casillas (`EdgeStrip`) encima de un recorte de 40×32 creó una costura interior en `x=3` / `y=3`, partiendo árboles multi-casilla por la mitad y mezclando hierba oscura de sombra de bosque (`351..401`) con pradera soleada (`175`).
+   - **Anexo Fluvial destrozado:** Recortar 40×32 por puntuación matemática y superponer tiras de borde guillotinó islas, canales y puentes de `Maps/Farm_Fishing`, dejando masas de agua cortadas en seco y pasos intransitables.
+   - **Obstáculos de runtime en la llegada:** La ventana elegida aterrizaba junto a árboles (`Tree`), rocas y ramas spawneados por el juego porque no se garantizó ni despejó un área interior de seguridad de **3×4 casillas** (como sí se hizo en los Mapas Puente).
+   - **Ausencia de validación visual previa:** Se cerró y desplegó confiando únicamente en `dotnet test` sin haber renderizado ni inspeccionado las imágenes `.png` 1:1 en `MapStudio`.
 
-**Regla de la épica: ningún agente elige índices de tile.** Todo lo que se ve en un anexo sale de un mapa vanilla, copiado con su forma original:
-- Se permite recortar un rectángulo de un mapa vanilla y pegar **bloques enteros** copiados de otro rectángulo vanilla (definidos por mapa de origen y coordenadas, nunca por índices de tile).
-- Se permite cambiar **propiedades** (`Passable`, `Type`, `Diggable`, warps) y quitar objetos o tiles sueltos para despejar un paso.
-- No se permite poner un tile elegido a mano (`new StaticTile(..., índice)`), ni dibujar mapas nuevos en `.tmx`/`.tbin`, ni «decorar» o «arreglar» gráficos por reglas de índice.
-- Si un tipo no queda bien así, se deja como está y se anota para que lo dibuje una persona en Tiled.
+#### 9.1.1 El Flujo de Trabajo «Mapas Puente» aplicado a los Anexos ([ADR-0007](docs/adr/0007-annex-vanilla-composition.md))
 
-**Decisión propuesta (TASK-908):** aprovechar lo que el juego ya trae dibujado:
-1. **Bordes vanilla:** el perímetro de cada `Maps/Farm_*` ya está decorado (linde de árboles, acantilados, agua). Un recorte pegado a una esquina del mapa vanilla tiene dos lados auténticos sin tocar nada.
-2. **Salidas vanilla como entrada:** las granjas vanilla tienen pasos reales en sus bordes (hacia Backwoods, la parada del autobús o el bosque). Si el recorte incluye uno en el lado por el que se entra al anexo, la entrada ya viene dibujada. Por eso el recorte puede ser distinto en cada lado (hasta 24 ventanas), y la posición de la entrada pasa a ser un dato de la ventana en vez de estar siempre en el centro del lado.
-3. **Lados que quedan cortados:** se cierran pegando franjas enteras copiadas de un tramo del borde vanilla del mismo mapa (por ejemplo, 40×4 casillas de linde de árboles).
-4. **La ventana la elige una herramienta, no un agente:** recorre cada mapa vanilla, puntúa cada recorte posible y propone el mejor (TASK-910).
+| Pilar en Mapas Puente (Épica 10) | Aplicación directa en Anexos (Épica 9.1) |
+| --- | --- |
+| **1. Atlas `.xnb` y Renderizador `MapStudio`** (`unpack_xnb.py` + `render_sim.py`) | Extraer las hojas `.xnb` reales (`spring_outdoorsTileSheet`, etc.) y renderizar cada anexo (`Back`, `Buildings`, `Front`, `AlwaysFront`) a `.png` 1:1 con rejilla y colisiones antes de tocar el juego. **Cero cambios a ciegas.** |
+| **2. Un único recorte base coherente por mapa** (`BusStop` 35×30 en `(10, 0)`, sin pegar tiras encima) | Cada uno de los 8 tipos (`Standard`, `Fishing`, `Foraging`, `Mining`, `Combat`, `FourCorners`, `Ranching`, `Beach`) usa **un único recorte canónico 40×32** elegido visualmente en `MapStudio` que preserve su topología (islas completas con sus puentes en `Fishing`, claro limpio en `Standard`, etc.). **Se retira `VanillaBlockCatalog` (`EdgeStrip`)** para eliminar de raíz las costuras interiores. |
+| **3. Clasificadores canónicos verificados en atlas** (`TerrainTileClassifier` + `VerticalMultiTileClassifier`) | Prohibido inventar índices a ciegas: se usan exclusivamente los índices verificados en el atlas real (`175, 150..152, 256` pradera soleada; `587` tierra con bordes `225, 228, 201, 251`; vallas `383..385`/`358..360` y `361, 386, 411, 436`; arbustos 3×3 `63..65`/`38..40`/`13..15`; puentes sobre agua) y se limpian árboles por su caja completa (`3×4` / `6×4`) sin dejar medios árboles ni bases decapitadas en `y=0`. |
+| **4. Apertura limpia + Área de despeje interior 3×4** (`GetInteriorClearanceTiles`) | En la entrada (2 casillas) y su margen interior de **3×4 casillas**: quitar `Passable` en `Back` (`Properties.Remove("Passable")`, jamás `"T"`), poner suelo limpio sin `TileIndexProperties["Passable"]` ni `"Water"`, y despejar en runtime `objects`, `terrainFeatures` (`Tree`, `Bush`) y `resourceClumps`. |
+| **5. Verificación BFS fiel al motor sobre `.xnb` reales** (`TASK-1403`) | `IsTilePassableSDV` replica exactamente `GameLocation.isTilePassable`. Test automatizado carga los `.xnb` reales y verifica por BFS los 24 casos (8 tipos × 3 lados): entrada + despeje 3×4 + zonas de bonificación en una única componente conexa. |
 
-Sin verificar todavía: que cada tipo tenga una esquina y una salida aprovechables en cada lado. Es lo primero que contesta TASK-910; el lado este (se entra por el oeste del anexo) es el más dudoso, porque las granjas vanilla casi nunca tienen salida al oeste.
+**Orden de trabajo refactorizado:**
+```text
+Fase A (Herramientas y Base: TASK-907, TASK-908, TASK-913)
+  ──> Fase B (Clasificadores y Recortes en MapStudio: TASK-909, TASK-910)
+  ──> Fase C (Montaje Quirúrgico, Despeje 3×4 y Señalización: TASK-911, TASK-912, TASK-914)
+  ──> Fase D (Verificación BFS sobre .xnb, Galería PNG y Vivo: TASK-915)
+```
 
-**Orden recomendado:** TASK-907 (herramientas) → TASK-913 (warps, por el fallo de la Fluvial sur) → TASK-908 → TASK-910 (análisis de ventanas) → TASK-909 (catálogo de bloques) → TASK-911 → TASK-912 → TASK-914 → TASK-915.
+---
 
-- [x] **TASK-907: Herramientas para revisar los anexos**
-  * **Análisis Técnico:** Implementadas las herramientas de revisión y validación in situ en `Pelican4Ever/Modules/AnnexReviewModule.cs` y `Pelican4Ever.Core/World/AnnexValidationLogic.cs`:
-    - `p4e_annex_preview <tipo> <north|east|south>`: crea/actualiza la ubicación temporal en memoria `Pelican4Ever_AnnexPreview` con el mapa del anexo solicitado y transporta al host a su casilla de entrada con orientación congruente (`AnnexEntrance.For`). No toca `ServerWorldState` y se elimina incondicionalmente en `GameLoop.Saving` devolviendo al jugador a la granja host para garantizar que nunca se serialice en el guardado.
-    - `p4e_annex_screenshot [tipo|all]`: exporta captura de mapa completo a resolución 1:1 mediante `Game1.game1.takeMapScreenshot` con nombres deterministas (`annex_<tipo>_<lado>.png`) a la carpeta oficial de capturas de Stardew Valley.
-    - `p4e_annex_validate [tipo|all]`: valida automáticamente los 24 casos de anexos y los 24 casos de residencias, comprobando:
-      - dimensiones 40×32 y ausencia de casillas `Back` nulas;
-      - sellado perimetral estricto con apertura única contigua en el borde cardinal esperado;
-      - conectividad transitable mediante recorrido en anchura (BFS) desde la casilla de entrada hasta toda la superficie útil y las zonas de bonificación (cantera de minerales, forraje de bosque y orilla de agua pescable);
-      - integridad de hojas de tiles (`TileSheets`) y eliminación total de warps o acciones vanilla residuales.
-    - Lógica pura sin dependencias del juego testeada exhaustivamente en `Pelican4Ever.Tests/AnnexValidationLogicTests.cs`.
-  * **Prioridad:** Alta (sin esto no se puede comprobar el resto)
+#### Fase A — Herramientas de Simulación Visual (`MapStudio`), Regla de Colisión Real y Warps de Residencia
+
+- [x] **TASK-907: Validador fiel a `GameLocation.isTilePassable` y renderizador offline `MapStudio` (`.xnb` → `.png`)**
+  * **Estado:** Completada. Corregida la regla de transitabilidad en `Back` (`IsTilePassableSDV`: cualquier propiedad `Passable` en `Back` invalida la transitabilidad según SDV 1.6), incorporada la validación de seguridad de 3×4 casillas interiores en `AnnexValidationLogic` y construido el simulador visual `render_annex_sim.py` (`MapStudio`).
+  * **Prioridad:** Crítica
   * **Criterios de Aceptación:**
-    1. Herramienta lista para tomar capturas de los 24 casos como referencia «antes».
-    2. `p4e_annex_validate all` ejecuta comprobaciones automáticas por consola y chat.
-    3. Ver un caso con `p4e_annex_preview` no compra nada ni deja ubicaciones en el guardado.
+    1. `IsTilePassableSDV` devuelve `false` ante cualquier propiedad `Passable` en `Back.Properties` o `Back.TileIndexProperties` (cubierto con test unitario de regresión).
+    2. `AnnexValidationLogic.ValidateAnnex` verifica que el área de despeje interior de **3×4 casillas** junto a la entrada sea 100% transitable.
+    3. `MapStudio` genera los renders `.png` 1:1 de los anexos directamente desde los `.xnb` reales.
 
-- [x] **TASK-908: ADR — anexos compuestos solo con piezas vanilla**
-  * **Análisis Técnico:** Formalizada la decisión arquitectónica en [ADR-0007](docs/adr/0007-annex-vanilla-composition.md):
-    - Regla de oro de la épica: ningún agente ni código elige índices de tile fijos a mano ni genera mapas procedurales/sintéticos; todo lo visible en un anexo procede de rectángulos de mapas vanilla oficiales.
-    - Comparativa de opciones descartadas: se descartan el repintado procedural empírico por índice de tile y los mapas dibujados casilla a casilla por modelos de IA (experimento fallido `c06b40c`).
-    - Opción elegida: composición basada en recortar ventanas puntuadas automáticamente por herramienta geométrica (TASK-910), conservando bordes y pasos vanilla originales, cerrando lados abiertos con bloques completos del catálogo (TASK-909) y dejando el diseño manual en Tiled únicamente como plan B si algún caso específico no admitiera solución natural.
-    - Carga en caliente desde `Helper.GameContent.Load<Map>("Maps/Farm_*")` para soporte estacional nativo sin redistribuir arte vanilla.
-    - Migración de anexos previamente adquiridos con cofre de resguardo fuera de la llegada (TASK-912).
+- [x] **TASK-908: ADR-0007 — Metodología «Mapas Puente» para la generación de anexos**
+  * **Análisis Técnico:** Actualizado [ADR-0007](docs/adr/0007-annex-vanilla-composition.md) documentando el post-mortem de los dos extremos fallidos (`c06b40c` mapas dibujados desde cero y `d3def1a` 24 ventanas por scoring ciego con pegado de `VanillaBlockCatalog`) y formalizando la adopción del flujo de trabajo de los **Mapas Puente (ADR-0005)**:
+    - Un único recorte canónico 40×32 por tipo de granja, sin pegar tiras `EdgeStrip` que creen costuras interiores.
+    - Cirugía perimetral y de entradas exclusivamente mediante índices canónicos verificados en el atlas `.xnb` (`TerrainTileClassifier` y `VerticalMultiTileClassifier`).
+    - Área de despeje interior de 3×4 casillas libre de colisiones de mapa y de `objects`/`terrainFeatures` en runtime.
+    - Validación visual obligatoria en `MapStudio` (`.png` 1:1) y verificación BFS sobre `.xnb` reales antes de desplegar.
   * **Prioridad:** Alta
   * **Criterios de Aceptación:**
-    1. ADR aceptada con la opción elegida y su justificación técnica documentada.
-    2. La regla está explicitada en el ADR y en el encabezado de la épica.
+    1. ADR-0007 actualizado y alineado con la arquitectura de ADR-0005 (Mapas Puente).
 
-- [x] **TASK-909: Catálogo de bloques vanilla para cerrar bordes**
-  * **Análisis Técnico:** Implementado el catálogo puro en datos en `Pelican4Ever.Core/World/VanillaBlockCatalog.cs`:
-    - Modelo formal `VanillaBlockDefinition`: `Id`, `FarmTypeId`, `SourceMapAsset`, `SourceRectangle`, `BlockKind` (`EdgeStrip`, `Corner`, `Doorway`), `BlockOrientation` y `DoorwayStepTile`. Nunca listas ni números de índice de tile.
-    - Catálogo completo para los 8 tipos de granja (Standard, Fishing, Foraging, Mining, Combat, FourCorners, Ranching, Beach):
-      - 4 franjas de borde cardinales (North, South, East, West) de 3–4 casillas de fondo con acantilados, lindes de árboles y orillas de agua tomadas del perímetro exterior de cada mapa.
-      - 4 esquinas naturales (NorthWest, NorthEast, SouthWest, SouthEast).
-      - Bocas de entrada con paso despejado (ej. puente de madera en Fishing, paso norte de Backwoods y sur de Forest en Standard).
-    - Verificación geométrica en `Pelican4Ever.Tests/VanillaBlockCatalogTests.cs`: todos los bloques pertenecen a sus mapas y sus rectángulos quedan 100% contenidos dentro de los límites físicos del mapa fuente.
+- [x] **TASK-913: Warps de las residencias hacia los anexos correctos en todos los tipos y lados**
+  * **Análisis Técnico:** Corregidos y fijados los pasos transitables y las casillas de warp en las residencias para los 8 tipos de granja y 3 orientaciones cardinales:
+    - **Paso sur Fluvial (`Maps/Farm_Fishing`):** verificado directamente sobre el mapa vanilla oficial (`x = 40..41, y = 63..64`, puente de madera con `Passable = "T"` en `Buildings`; excluido el poste `(39, 64)`).
+    - **Ajustes de ancho real en `ResidenceAnnexAccessLogic`:** excluido el acantilado `(79, 15)` en Colinas este y ajustados los pasos norte/sur de Estándar, Fluvial, Forestal, Salvaje y Cuatro Esquinas a `x = 40..41`.
+    - **Tabla canónica fija en Core (`VanillaFarmExitTable`):** cubierta por `VanillaFarmExitTableTests` y `ResidenceAnnexAccessLogicTests`.
   * **Prioridad:** Alta
   * **Criterios de Aceptación:**
-    1. Catálogo completo con franjas, esquinas y bocas de entrada para los 8 tipos.
-    2. Rectángulos contenidos estrictamente en los mapas vanilla oficiales sin cortar estructuras anómalas.
-    3. Cobertura de pruebas unitarias en `VanillaBlockCatalogTests`.
+    1. En las residencias (8 tipos × 3 lados), ninguna llegada ni warp hacia un anexo cae en colisión.
+    2. Cubierto por tests unitarios sobre la tabla canónica.
 
-- [x] **TASK-910: Herramienta que elige la ventana de recorte**
-  * **Análisis Técnico:** Implementada la lógica pura de evaluación y puntuación geométrica de ventanas 40×32 en `Pelican4Ever.Core/World/AnnexWindowScoringLogic.cs` y su comando host `p4e_annex_windows <tipo|all>` en `Pelican4Ever/Modules/AnnexReviewModule.cs`:
-    - Algoritmo de puntuación: premia bordes coincidentes con el perímetro vanilla (+100 cada uno, esquinas +200), salidas vanilla naturales coincidentes con el lado de entrada (+150) y contención de áreas de bonificación (+120 mineral/forraje/pesca); penaliza cortes de obstáculos (-3 por tile en bordes artificiales), superposición con la casa vanilla (-150) y colisión/agua en la casilla de entrada (-500).
-    - Generado el informe canónico de los 24 casos en [`docs/anexos-ventanas-recorte.md`](docs/anexos-ventanas-recorte.md).
-    - Conclusiones del análisis:
-      - Los 24 casos poseen casillas de entrada transitables libres de colisión y agua.
-      - 8 casos de acceso norte y 7 de acceso sur aprovechan salidas vanilla reales hacia Backwoods y Forest.
-      - Los casos de acceso este aprovechan esquinas naturales (`North+West` o `South+East`) con 2 bordes intactos, requiriendo únicamente cerrar los otros dos con bloques del catálogo (TASK-909).
-      - Ningún caso requiere diseño manual en Tiled (Plan B) como bloqueante.
-    - Testeado exhaustivamente en `Pelican4Ever.Tests/AnnexWindowScoringLogicTests.cs`.
+---
+
+#### Fase B — Clasificadores Canónicos y Selección Visual de los 8 Recortes en `MapStudio`
+
+- [x] **TASK-909: Extender `TerrainTileClassifier` y `VerticalMultiTileClassifier` para anexos y retirar `VanillaBlockCatalog`**
+  * **Estado:** Completada. Eliminados `VanillaBlockCatalog` y `AnnexWindowScoringLogic`. Extendidos `TerrainTileClassifier` (pradera soleada `175`, `150..152`, `256`, tierra `587`, detección de sombra `325..405`, puente de madera `809..910`) y `VerticalMultiTileClassifier` (troncos `IsTreeTrunkBase`, copas `IsTreePart`, arbustos `IsBushTile`, vallas `IsFenceTile`, y desbroce quirúrgico de caja completa `GetStaticTreeBoundingBox`). Cubierto con tests unitarios en `TerrainAndMultiTileClassifierAnnexTests.cs`.
   * **Prioridad:** Alta
+  * **Dependencias:** TASK-907, TASK-908.
   * **Criterios de Aceptación:**
-    1. Informe completo de los 24 casos disponible en `docs/anexos-ventanas-recorte.md`.
-    2. Clasificación documentada: ventanas óptimas con salida vanilla, ventanas con esquinas naturales y lados a cerrar por catálogo.
-    3. Comando `p4e_annex_windows` operativo en consola y chat del host.
+    1. `VanillaBlockCatalog` y `AnnexWindowScoringLogic` eliminados del código de producción.
+    2. `TerrainTileClassifier` y `VerticalMultiTileClassifier` exponen los métodos puros de terreno, vallas, arbustos y limpieza de cajas multi-casilla cubiertos con tests unitarios en `Pelican4Ever.Tests`.
 
-- [x] **TASK-911: Componer los 8 anexos con la ventana y los bloques elegidos**
-  * **Análisis Técnico:**
-    - Creado el modelo `AnnexWindowLayout` en `Pelican4Ever.Core/World/AnnexTemplateLogic.cs`, asociando a cada plantilla y lado cardinal (`AnnexSide`) las coordenadas canónicas ganadoras de `docs/anexos-ventanas-recorte.md`, bloque(s) del catálogo y posición de entrada.
-    - Poblados los 24 casos en `AnnexTemplateCatalog.Templates` (8 tipos × 3 lados).
-    - Adaptado `MapCloneHelper.CreateAnnexMap` para montar el anexo recortando desde `(layout.CropX, layout.CropY)`, pegando bloques íntegros desde `VanillaBlockCatalog.Blocks`, sellando el contorno perimetral con `Passable = "F"` y despejando la entrada en la apertura correspondiente sin crear tiles sintéticos.
-    - Actualizado `AnnexEntrance.For(template, side, farmType)` para resolver la entrada directamente desde la geometría de la ventana y el lado cardinal.
-    - Verificado con tests unitarios en `AnnexCompositionAndMigrationTests` (cobertura total de los 24 casos y consistencia de datos).
+- [x] **TASK-910: Selección y verificación visual en `MapStudio` de los 8 recortes base (40×32) y sus 3 entradas**
+  * **Estado:** Completada. Fijados y documentados en `docs/anexos-ventanas-recorte.md` los 8 recortes canónicos 40×32 y sus 3 entradas simétricas sin edificios vanilla ni costuras:
+    - `Standard`: `(15, 33)` (1020 casillas agrícolas limpias, salida sur vanilla al bosque `x=40..41`).
+    - `Fishing`: `(20, 33)` (853 casillas en red de islas conectadas con sus 4 puentes vanilla intactos y paso sur oficial).
+    - `Foraging`: `(10, 8)` (4 tocones renovables en claro despejado).
+    - `Mining`: `(3, 25)` (cantera completa en `(2, 12, 22, 8)`, entrada sur en `x=17` directa a 829 casillas de llanura).
+    - `Combat`: `(24, 10)`, `FourCorners`: `(32, 8)`, `Ranching`: `(48, 14)`, `Beach`: `(38, 16)`.
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-907, TASK-909.
+  * **Criterios de Aceptación:**
+    1. Tabla de los 8 recortes canónicos 40×32 y sus 3 entradas documentada en `docs/anexos-ventanas-recorte.md`.
+    2. Renders `.png` de `MapStudio` generados y revisados para los 8 tipos, confirmando que `Standard` y `Fishing` lucen limpios y coherentes.
+
+---
+
+#### Fase C — Montaje Quirúrgico estilo «Mapa Puente», Despeje 3×4 en Runtime y Señalización
+
+- [x] **TASK-911: Reescribir `MapCloneHelper.CreateAnnexMap` con el patrón de `CreateBridgeMap` y despeje 3×4 en `FarmSlotModule`**
+  * **Estado:** Completada.
+    - `MapCloneHelper.CreateAnnexMap` reescrito con el patrón de Mapas Puente: un solo recorte canónico 40×32, sellado perimetral con `Passable = "F"`, tallado limpio de apertura (2 casillas) y área interior 3×4 con `ClearBlockingAndWaterProperties` (`Properties.Remove("Passable")`, nunca `"T"`), sustitución de sombras o agua por tierra `587` o pradera `175`, postes de valla canónicos flanqueando la puerta y saneado de objetos multi-casilla decapitados en `y=0`.
+    - En `FarmSlotModule.EnsureAnnexLocation`: despeje en runtime en el área 3×4 de maleza, ramas, rocas, árboles y tocones.
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-909, TASK-910.
+  * **Criterios de Aceptación:**
+    1. Ninguna casilla de `Back` en la apertura, corredor ni área 3×4 tiene la propiedad `Passable` definida ni `TileIndexProperties` bloqueantes.
+    2. El jugador entra al Anexo Estándar, Anexo Fluvial y resto de tipos en las 3 orientaciones y camina libremente hacia el interior sin bloqueo ni árboles/escombros en la entrada.
+    3. Los renders `.png` de `MapStudio` de los 24 casos no muestran parches de hierba de sombra oscura (`351`), ni árboles guillotinados, ni ríos cortados en seco.
+
+- [x] **TASK-912: Consolidar limpieza de `MapCloneHelper` y migración de guardados con cofre de resguardo**
+  * **Estado:** Completada. `AnnexMigrationLogic.FindRescueChestPlacement` acepta el área de despeje 3×4 (`clearanceArea`) y garantiza que el cofre de resguardo nunca se deposite en la llegada ni en el corredor. Cubierto por tests unitarios.
   * **Prioridad:** Media
+  * **Dependencias:** TASK-911.
   * **Criterios de Aceptación:**
-    1. Cada caso con solución pasa `p4e_annex_validate`.
-    2. Revisión de capturas y consistencia en estaciones, sin costuras, sin tiles partidos y sin paredes invisibles en mitad del terreno.
-    3. Ningún tile del anexo lleva un índice puesto por código: todos vienen de la ventana o de un bloque del catálogo.
+    1. Un guardado previo carga sin perder objetos y el cofre de resguardo nunca bloquea el corredor de entrada.
+    2. La suite de tests pasa al 100%.
 
-- [x] **TASK-912: Retirar el repintado procedural y migración de guardados**
-  * **Análisis Técnico:**
-    - Eliminadas de `MapCloneHelper.cs` todas las funciones procedurales que elegían tiles a mano por índice: `MarkAndDecorateEntranceDoorway`, `EnsureAnnexBonusZones`, `SmoothThematicAnnexBordersAndEntrances`, `SanitizeMapGraphicGlitches`, el relleno con tile 587 y los tablones de puente (1244/184/211) (~520 líneas eliminadas). `CreateAnnexMap` ahora contiene estrictamente 0 llamadas a `new StaticTile`.
-    - Creada la lógica pura de migración en `Pelican4Ever.Core/World/AnnexMigrationLogic.cs` (`IsTileDisplaced` y `FindRescueChestPlacement` con búsqueda Chebyshev en espiral para colocar el cofre en suelo transitable sin obstruir la llegada ni los bordes).
-    - Añadida versión de mapa en `AnnexAssignment.MapVersion` y `CurrentMapVersion = 2`.
-    - Implementado `MigrateAnnexToV2` en `FarmSlotModule.cs`: detecta anexos con versión de mapa < 2, rescata objetos y cultivos desplazados hacia un `Chest` vanilla ("Cofre de resguardo") cerca de la entrada, emite evento a `AdminApiModule.EventLog` (`HostEventTypes.AnnexMigrated`) y actualiza `MapVersion = 2`.
-    - Cubierto por pruebas unitarias en `AnnexCompositionAndMigrationTests`.
+- [x] **TASK-914: Verificar señalización de salidas y retorno fuera del corredor de paso**
+  * **Estado:** Completada. `ResidenceAnnexSignLogic.GetAnnexReturnCandidateTiles` coloca los letreros fuera del rectángulo de despeje de 3×4 casillas (con offsets $\pm 2$ en el lateral exterior del paso). Cubierto por tests unitarios.
   * **Prioridad:** Media
+  * **Dependencias:** TASK-911.
   * **Criterios de Aceptación:**
-    1. `MapCloneHelper` no crea ningún `StaticTile` con índice fijo para los anexos.
-    2. Un guardado con anexos comprados con el recorte viejo carga sin perder objetos: los que no caben acaban en el cofre y el jugador no aparece encima de él.
-    3. La suite de tests pasa.
+    1. Los letreros de ida y de vuelta son visibles e interactivos sin bloquear ninguna casilla del corredor de entrada/salida.
 
-- [x] **TASK-913: Warps de los anexos correctos en todos los tipos y lados**
-  * **Análisis Técnico:** Corregidos y fijados los pasos transitables y las casillas de warp para los 8 tipos de granja y 3 orientaciones cardinales:
-    - **Paso sur Fluvial (`Maps/Farm_Fishing`):** verificado directamente sobre el mapa vanilla oficial. La salida hacia el sur no es colisión: es el puente de madera sobre el agua en `x = 40..41, y = 63..64`, cuyos tiles 809 y 859 en `Buildings` declaran `Passable = "T"` en sus propiedades de tilesheet. La casilla `(39, 64)` sí es colisión (poste de valla tile 16) y se excluye de los warps. Tanto la llegada sur (40, 63) como los warps sur (40..41, 64) son 100% transitables y funcionales.
-    - **Ajustes de ancho real en `ResidenceAnnexAccessLogic`:**
-      - Colinas (`Farm_Mining`): el acantilado rocoso vanilla en `(79, 15)` queda excluido de los warps este, dejando exclusivamente `(79, 16..18)`.
-      - Mapas Estándar, Fluvial, Forestal, Salvaje y Cuatro Esquinas: pasos norte y sur ajustados al ancho real libre `x = 40..41` (excluyendo la casilla 39, que en todos ellos contiene colisión lateral).
-    - **Tabla canónica fija en Core (`VanillaFarmExitTable`):** describe formalmente los rectángulos de paso, ancho transitable y llegadas seguras de los 8 tipos sin dependencias de SMAPI.
-    - **Validación automatizada en Core y Tests:** verificados mediante `AnnexValidationLogic.ValidateResidence` y la suite de pruebas unitarias (`VanillaFarmExitTableTests` y `ResidenceAnnexAccessLogicTests`), confirmando 24 de 24 casos correctos (llegadas libres de colisión y warps transitables con conectividad mutua).
-  * **Prioridad:** Alta
-  * **Criterios de Aceptación:**
-    1. Para los 8 tipos × 3 lados: el tránsito de entrada y salida entre residencia y anexo es continuo y sin bloqueos.
-    2. Ninguna llegada a una residencia (desde la plaza o desde un anexo) cae en colisión.
-    3. Los tests de Core cubren la tabla canónica de pasos y las reglas de llegada y warp.
+---
 
-- [x] **TASK-914: Señalizar las salidas hacia los anexos**
-  * **Análisis Técnico:**
-    - Implementada la lógica pura de señalización en `Pelican4Ever.Core/World/ResidenceAnnexSignLogic.cs`: evaluación de casillas candidatas adyacentes al paso transitable y generación de textos de letrero ("Terreno en venta", "Anexo: [DisplayName]", "Volver a la residencia").
-    - Implementados `UpdateResidenceAnnexSigns` y `UpdateAnnexReturnSign` en `FarmSlotModule.cs`: coloca y mantiene letreros vanilla de madera (`Sign`, parentSheetIndex `"37"`) con `CanBeGrabbed = false`, `Fragility = 2` y marcas en `modData`. Solo lo ejecuta el host al fundar o comprar anexo, buscando casillas libres sin pisar objetos del jugador.
-    - Parche Harmony en `Sign.checkForAction`: previene sustitución de textura o recolección accidental y despliega cuadro de diálogo informativo al interactuar con el letrero.
-    - Señalización HUD mejorada en `OnRenderedHud`: cuadro flotante descriptivo al colocar el cursor sobre el letrero o salida (radio 2 casillas) o al estar de pie a menos de 3.5 casillas, incluyendo badge de vuelta en los anexos.
-  * **Prioridad:** Media
-  * **Criterios de Aceptación:**
-    1. Desde la casa de la residencia se ven las salidas y se sabe cuál es cada una.
-    2. Al comprar un anexo, su letrero cambia sin reiniciar.
-    3. Los letreros no se pueden romper ni recoger como objeto normal.
+#### Fase D — Verificación Topológica BFS sobre `.xnb` Reales, Galería `MapStudio` y Pruebas en Vivo
 
-- [x] **TASK-915: Pruebas en vivo de los minimapas**
-  * **Análisis Técnico:**
-    - Documentado y ampliado el protocolo de verificación en `docs/pruebas-residencias.md`: checklist completa de los 24 casos (8 tipos de granja × 3 orientaciones cardinales) con comandos de teleportación rápida (`p4e_annex_preview`, `p4e_annex_validate`, `p4e_annex_screenshot`).
-    - Protocolo de pruebas en 4 estaciones (`p4e_time season spring|summer|fall|winter`) para verificar ausencia de tiles corruptos y coherencia estacional en los tilesets de cada anexo.
-    - Protocolo de validación multijugador host y farmhand: tránsito bidireccional continuo, letreros interactivos y persistencia.
-    - Protocolo de migración v1 → v2: colocación de objetos en zonas desplazadas, verificación de generación de cofre de resguardo y registro de eventos.
-  * **Prioridad:** Media
+- [ ] **TASK-915: Verificación topológica BFS sobre `.xnb` reales (estilo `TASK-1403`), galería `MapStudio` y pruebas en vivo**
+  * **Estado:** Verificación BFS automatizada (100% de 24 casos transitables y conexos) y galería de 24 renders `.png` en `MapStudio` completadas. Pendiente de validación visual del usuario y prueba en vivo en partida tras autorización de despliegue local.
+  * **Análisis Técnico:** Replicar el protocolo de cierre de `TASK-1401` y `TASK-1403` de los Mapas Puente:
+    1. **Verificación topológica BFS sobre `.xnb` reales:** Ejecutar el generador `MapCloneHelper.CreateAnnexMap` sobre los 8 archivos `Content/Maps/Farm*.xnb` de Stardew Valley 1.6 para los 24 casos (8 tipos × 3 lados) y comprobar con `IsTilePassableSDV` (regla exacta de `GameLocation.isTilePassable`) que:
+       - las 2 casillas de apertura, el corredor, las 12 casillas del área de despeje 3×4 y la casilla de llegada son 100% transitables;
+       - el recorrido BFS desde la llegada alcanza toda la superficie útil del anexo y sus zonas de bonificación (cantera, forraje, orilla de pesca).
+    2. **Revisión visual en `MapStudio`:** Generar las 24 capturas `.png` en `MapStudio` y presentar al usuario la comparativa visual (especialmente `Standard` y `Fishing` en sus 3 lados) antes de dar por cerrada la tarea.
+    3. **Pruebas en vivo en partida:** Verificar en el juego con host y cliente farmhand el tránsito de entrada/salida, ausencia de glitches gráficos y cambio de estación (`p4e_time`).
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-911, TASK-912, TASK-914.
   * **Criterios de Aceptación:**
-    1. Los 24 casos detallados y cubiertos en la checklist de `docs/pruebas-residencias.md`.
-    2. Capturas y validación integradas con comandos automatizados `p4e_annex_screenshot` y `p4e_annex_validate`.
+    1. 24 de 24 casos superan la verificación BFS sobre los `.xnb` reales con la regla exacta de `GameLocation.isTilePassable`.
+    2. Capturas `.png` de `MapStudio` validadas visualmente sin costuras, sin parches de sombra ni árboles cortados.
+    3. Verificado en partida en vivo sin bloqueos en la entrada ni fallos gráficos.
 
 ---
 
