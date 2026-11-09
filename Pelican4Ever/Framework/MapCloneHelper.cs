@@ -656,7 +656,8 @@ namespace Pelican4Ever.Framework
                 || template.Id.Equals("Foraging", StringComparison.OrdinalIgnoreCase)
                 || template.Id.Equals("Mining", StringComparison.OrdinalIgnoreCase)
                 || template.Id.Equals("Combat", StringComparison.OrdinalIgnoreCase)
-                || template.Id.Equals("FourCorners", StringComparison.OrdinalIgnoreCase);
+                || template.Id.Equals("FourCorners", StringComparison.OrdinalIgnoreCase)
+                || template.Id.Equals("Ranching", StringComparison.OrdinalIgnoreCase);
 
             if (!isCustomComposed)
             {
@@ -758,6 +759,10 @@ namespace Pelican4Ever.Framework
                 {
                     ApplyFourCornersFarmEnclosure(source, target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, side, width, height);
                 }
+                else if (template.Id.Equals("Ranching", StringComparison.OrdinalIgnoreCase))
+                {
+                    ApplyRanchingFarmEnclosure(source, target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, side, width, height);
+                }
                 else
                 {
                     FlankOpeningWithFencePosts(side, openingBorderTiles, bldLayer, frontLayer, outdoorsSheet, width, height);
@@ -814,6 +819,268 @@ namespace Pelican4Ever.Framework
                     if (alwaysFront2 != null) alwaysFront2.Tiles[x, y] = null;
                     if (alwaysFront3 != null) alwaysFront3.Tiles[x, y] = null;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Compone la miniatura canónica 40×32 de Ranching / Meadowlands Farm (V4 aprobado) centrada en (40, 0),
+        /// capturando el paso canónico a Backwoods (lx=23..24, ly=0), la icónica doble cascada y desfiladero (lx=4..9, ly=0..13),
+        /// la cancela oeste de pastizales (ly=20..21), el borde este boscoso continuo (lx=38..39) y el seto sur de robles (ly=29..31).
+        /// </summary>
+        private static void ApplyRanchingFarmEnclosure(
+            Map source,
+            Map target,
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            AnnexSide side,
+            int width,
+            int height)
+        {
+            const int cx = 40;
+            const int cy = 0;
+
+            // 1. Mapeo base 40x32 en cx=40, cy=0 (captura Backwoods pass lx=23..24, doble cascada lx=4..9, pastos Meadowlands):
+            for (int lx = 0; lx < width; lx++)
+            {
+                int sx = cx + lx;
+                for (int ly = 0; ly < height; ly++)
+                {
+                    int sy = cy + ly;
+                    CopySourceCellToTarget(source, target, lx, ly, sx, sy);
+                }
+            }
+
+            // 2. BORDE Y ENTRADA NORTE (lx=23..24, ly=0..1):
+            // En Farm_Ranching.xnb, el paso canónico a Backwoods está en sx=63..64 (local lx=23..24),
+            // flanqueado naturalmente por riscos de montaña a la izquierda (lx=22) y derecha (lx=25).
+            if (side == AnnexSide.South) // Entrar desde el Norte hacia el Sur
+            {
+                // Paso canónico abierto:
+                for (int lx = 23; lx <= 24; lx++)
+                {
+                    bldLayer.Tiles[lx, 0] = null;
+                    bldLayer.Tiles[lx, 1] = null;
+                    frontLayer.Tiles[lx, 0] = null;
+                    alwaysFrontLayer.Tiles[lx, 0] = null;
+                    if (backLayer.Tiles[lx, 0] != null)
+                    {
+                        backLayer.Tiles[lx, 0].Properties.Remove("Passable");
+                    }
+                }
+            }
+            else // Borde Norte cerrado: portón rústico entre los dos riscos
+            {
+                // Postes en ly=1 con remates en ly=0:
+                SetTileIfValid(frontLayer, outdoorsSheet, 23, 0, 358);
+                SetTileIfValid(bldLayer, outdoorsSheet, 23, 1, 383);
+                SetPassableIfValid(bldLayer, 23, 1, false);
+
+                SetTileIfValid(frontLayer, outdoorsSheet, 24, 0, 360);
+                SetTileIfValid(bldLayer, outdoorsSheet, 24, 1, 385);
+                SetPassableIfValid(bldLayer, 24, 1, false);
+
+                // Barrera sólida en fila 0:
+                SetTileIfValid(bldLayer, outdoorsSheet, 23, 0, 16);
+                SetPassableIfValid(bldLayer, 23, 0, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, 24, 0, 16);
+                SetPassableIfValid(bldLayer, 24, 0, false);
+            }
+
+            // Garantizar colisión sólida en fila 0 fuera de la apertura activa:
+            for (int lx = 0; lx < width; lx++)
+            {
+                if (side == AnnexSide.South && (lx == 23 || lx == 24))
+                    continue;
+
+                if (bldLayer.Tiles[lx, 0] == null)
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 0, 16);
+                }
+                SetPassableIfValid(bldLayer, lx, 0, false);
+                SetPassableIfValid(backLayer, lx, 0, false);
+            }
+
+            // 3. BORDE Y ENTRADA OESTE (lx=0..1):
+            // ly=0..13: Risco de montaña (100% auténtico vanilla).
+            // ly=14..17: Desembocadura del río (agua). Garantizar bloqueo perimetral:
+            for (int ly = 14; ly <= 17; ly++)
+            {
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                SetPassableIfValid(backLayer, 0, ly, false);
+            }
+
+            // ly=18..27: Valla vertical de postes y rieles a lo largo del pastizal:
+            // Poste terminal anclado a la orilla en (0, 18):
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 18, 386);
+            SetPassableIfValid(bldLayer, 0, 18, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 17, 361);
+
+            // Poste superior del portón en (0, 19):
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 19, 436);
+            SetPassableIfValid(bldLayer, 0, 19, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 18, 361);
+
+            if (side == AnnexSide.East) // Entrar desde el Oeste hacia el Este
+            {
+                // Pad de tierra canónico 3x2 en lx=0..2, ly=20..21:
+                for (int lx = 0; lx <= 2; lx++)
+                {
+                    for (int ly = 20; ly <= 21; ly++)
+                    {
+                        bldLayer.Tiles[lx, ly] = null;
+                        frontLayer.Tiles[lx, ly] = null;
+                        alwaysFrontLayer.Tiles[lx, ly] = null;
+                        var dirtTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 587);
+                        dirtTile.Properties["Type"] = "Dirt";
+                        backLayer.Tiles[lx, ly] = dirtTile;
+                    }
+                }
+
+                // Ribetes de transición:
+                SetTileIfValid(backLayer, outdoorsSheet, 1, 19, 201);
+                SetTileIfValid(backLayer, outdoorsSheet, 2, 19, 203);
+                SetTileIfValid(backLayer, outdoorsSheet, 3, 20, 228);
+                SetTileIfValid(backLayer, outdoorsSheet, 3, 21, 228);
+                SetTileIfValid(backLayer, outdoorsSheet, 1, 22, 251);
+                SetTileIfValid(backLayer, outdoorsSheet, 2, 22, 253);
+
+                // Poste inferior del portón en (0, 22):
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 22, 383);
+                SetPassableIfValid(bldLayer, 0, 22, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 21, 358);
+                SetGrassTile(backLayer, outdoorsSheet, 0, 22, 175);
+                SetPassableIfValid(backLayer, 0, 22, false);
+            }
+            else // Portón cerrado
+            {
+                for (int ly = 20; ly <= 21; ly++)
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                    SetPassableIfValid(bldLayer, 0, ly, false);
+                    SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+                    frontLayer.Tiles[0, ly] = null;
+                    SetGrassTile(backLayer, outdoorsSheet, 0, ly, 175);
+                    SetPassableIfValid(backLayer, 0, ly, false);
+                }
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 22, 386);
+                SetPassableIfValid(bldLayer, 0, 22, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 21, 361);
+                SetGrassTile(backLayer, outdoorsSheet, 0, 22, 175);
+                SetPassableIfValid(backLayer, 0, 22, false);
+            }
+
+            // Continuación de valla vertical hasta fila 27:
+            for (int ly = 23; ly <= 26; ly++)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+                frontLayer.Tiles[0, ly] = null;
+                SetGrassTile(backLayer, outdoorsSheet, 0, ly, 175);
+                SetPassableIfValid(backLayer, 0, ly, false);
+            }
+
+            // Poste terminal anclado al bosque sur en (0, 27):
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 27, 436);
+            SetPassableIfValid(bldLayer, 0, 27, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 26, 361);
+            SetGrassTile(backLayer, outdoorsSheet, 0, 27, 175);
+            SetPassableIfValid(backLayer, 0, 27, false);
+
+            // 4. BORDE ESTE (lx=37..39):
+            // ly=0..11: Risco de montaña natural (100% auténtico vanilla).
+            // ly=12..31: Límite boscoso denso de robles de 2 casillas extendiéndose desde el pie del risco hasta el bosque sur:
+            for (int ly = 12; ly < height; ly++)
+            {
+                // Buffer de vereda de hierba en lx=37 si hay tierra de cultivo:
+                int? bkIdx = backLayer.Tiles[37, ly]?.TileIndex;
+                if (bkIdx is 176 or 178 or 179 or 180 or 201 or 226 or 488 or 513 or 560 or 614)
+                {
+                    SetTileIfValid(backLayer, outdoorsSheet, 36, ly, 228);
+                    SetGrassTile(backLayer, outdoorsSheet, 37, ly, 175);
+                }
+
+                // Columna 38: Línea interior del bosque
+                SetGrassTile(backLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 175 : 150);
+                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 294 : 319);
+                SetPassableIfValid(bldLayer, 38, ly, false);
+                frontLayer.Tiles[38, ly] = null;
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 994 : 1019);
+
+                // Columna 39: Línea exterior del bosque
+                SetGrassTile(backLayer, outdoorsSheet, 39, ly, 150);
+                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 295 : 320);
+                SetPassableIfValid(bldLayer, 39, ly, false);
+                frontLayer.Tiles[39, ly] = null;
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 1019 : 1020);
+            }
+
+            // 5. BORDE Y ENTRADA SUR (ly=28..31):
+            // Fila 28: Vereda de hierba natural.
+            // Filas 29..31: Seto denso de robles canónico de 3 filas en lx=0..37:
+            for (int lx = 0; lx < 38; lx++)
+            {
+                SetGrassTile(backLayer, outdoorsSheet, lx, 29, 175);
+                SetGrassTile(backLayer, outdoorsSheet, lx, 30, 175);
+                SetGrassTile(backLayer, outdoorsSheet, lx, 31, 175);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
+                SetPassableIfValid(bldLayer, lx, 29, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
+                SetPassableIfValid(bldLayer, lx, 30, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
+                SetPassableIfValid(bldLayer, lx, 31, false);
+
+                frontLayer.Tiles[lx, 29] = null;
+                frontLayer.Tiles[lx, 30] = null;
+                frontLayer.Tiles[lx, 31] = null;
+
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
+            }
+
+            // Mecánica de entrada Sur en lx=23..24 (alineada con el paso a Backwoods):
+            if (side == AnnexSide.North) // Entrar desde el Sur hacia el Norte
+            {
+                // Abrir camino de tierra a través del bosque (filas 28..31):
+                for (int lx = 23; lx <= 24; lx++)
+                {
+                    for (int ly = 28; ly < height; ly++)
+                    {
+                        bldLayer.Tiles[lx, ly] = null;
+                        frontLayer.Tiles[lx, ly] = null;
+                        alwaysFrontLayer.Tiles[lx, ly] = null;
+                        var dirtTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 587);
+                        dirtTile.Properties["Type"] = "Dirt";
+                        backLayer.Tiles[lx, ly] = dirtTile;
+                    }
+                }
+
+                // Transición al prado en fila 27:
+                SetTileIfValid(backLayer, outdoorsSheet, 23, 27, 201);
+                SetTileIfValid(backLayer, outdoorsSheet, 24, 27, 201);
+                SetTileIfValid(backLayer, outdoorsSheet, 22, 27, 200);
+                SetTileIfValid(backLayer, outdoorsSheet, 25, 27, 203);
+
+                // Ribetes verticales de tierra a los lados del camino:
+                for (int ly = 28; ly < height; ly++)
+                {
+                    SetTileIfValid(backLayer, outdoorsSheet, 22, ly, 225);
+                    SetTileIfValid(backLayer, outdoorsSheet, 25, ly, 228);
+                }
+
+                // Postes flanqueando la entrada:
+                SetTileIfValid(bldLayer, outdoorsSheet, 22, 29, 385);
+                SetPassableIfValid(bldLayer, 22, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 22, 28, 360);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 25, 29, 383);
+                SetPassableIfValid(bldLayer, 25, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 25, 28, 358);
             }
         }
 

@@ -185,13 +185,13 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_MeadowlandsFarm",
                 "Maps/Farm_Ranching",
-                48, 14,
+                40, 0,
                 FarmTypeBehavior.None,
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(48, 14, new TilePoint(20, 30)),
-                    [AnnexSide.East] = new(48, 14, new TilePoint(1, 15)),
-                    [AnnexSide.South] = new(48, 14, new TilePoint(20, 1))
+                    [AnnexSide.North] = new(40, 0, new TilePoint(23, 30)),
+                    [AnnexSide.East] = new(40, 0, new TilePoint(1, 20)),
+                    [AnnexSide.South] = new(40, 0, new TilePoint(23, 1))
                 }
             ),
             ["Beach"] = new AnnexTemplate(

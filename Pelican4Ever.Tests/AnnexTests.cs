@@ -700,6 +700,33 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexTemplates_Ranching_ConfiguresAuthenticMeadowlandsLayouts()
+        {
+            var ranching = AnnexTemplateCatalog.GetTemplate("Ranching");
+            Assert.Equal("Maps/Farm_Ranching", ranching.SourceVanillaMap);
+            Assert.Equal(40, ranching.SourceCropX);
+            Assert.Equal(0, ranching.SourceCropY);
+
+            var northLayout = ranching.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(23, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.Equal(40, northLayout.CropX);
+            Assert.Equal(0, northLayout.CropY);
+
+            var eastLayout = ranching.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(20, eastLayout.EntranceTile.Y);
+            Assert.Equal(40, eastLayout.CropX);
+            Assert.Equal(0, eastLayout.CropY);
+
+            var southLayout = ranching.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(23, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.Equal(40, southLayout.CropX);
+            Assert.Equal(0, southLayout.CropY);
+        }
+
+        [Fact]
         public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
         {
             const int w = 40;
