@@ -152,11 +152,11 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void AnnexAssignment_DefaultMapVersionIsOne_AndCurrentVersionIsTwo()
+        public void AnnexAssignment_DefaultMapVersionIsOne_AndCurrentVersionIsThree()
         {
             var assignment = new AnnexAssignment();
             Assert.Equal(1, assignment.MapVersion);
-            Assert.Equal(2, AnnexAssignment.CurrentMapVersion);
+            Assert.Equal(3, AnnexAssignment.CurrentMapVersion);
 
             var door = new DoorAssignment { DoorId = "door_01", FarmSlotId = "Farm_01", OwnerId = 12345 };
             var worldState = new ServerWorldState();

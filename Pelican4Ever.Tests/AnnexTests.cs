@@ -248,7 +248,7 @@ namespace Pelican4Ever.Tests
 
             var mining = AnnexTemplateCatalog.GetTemplate("Mining");
             Assert.NotNull(mining.Behavior.MountainOreArea);
-            Assert.Equal(new TileArea(2, 12, 22, 8), mining.Behavior.MountainOreArea!.Value);
+            Assert.Equal(new TileArea(5, 4, 21, 7), mining.Behavior.MountainOreArea!.Value);
 
             var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
             Assert.True(foraging.Behavior.ForestForage);
@@ -511,7 +511,7 @@ namespace Pelican4Ever.Tests
             // Un anexo minero ("Mining") tiene área de mineral recalculada en 40×32
             var miningAnnex = AnnexTemplateCatalog.GetTemplate("Mining");
             Assert.NotNull(miningAnnex.Behavior.MountainOreArea);
-            Assert.Equal(new TileArea(2, 12, 22, 8), miningAnnex.Behavior.MountainOreArea!.Value);
+            Assert.Equal(new TileArea(5, 4, 21, 7), miningAnnex.Behavior.MountainOreArea!.Value);
             Assert.Equal(14, miningAnnex.Behavior.InitialMountainOreDays);
         }
 
@@ -610,18 +610,18 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Maps/Farm_Foraging", foraging.SourceVanillaMap);
 
             var northLayout = foraging.GetWindowLayoutForSide(AnnexSide.North);
-            Assert.Equal(18, northLayout.EntranceTile.X);
+            Assert.Equal(26, northLayout.EntranceTile.X);
             Assert.Equal(30, northLayout.EntranceTile.Y);
             Assert.NotNull(northLayout.RenewableStumpTiles);
-            Assert.Contains(new TilePoint(8, 22), northLayout.RenewableStumpTiles);
+            Assert.Contains(new TilePoint(8, 18), northLayout.RenewableStumpTiles);
 
             var eastLayout = foraging.GetWindowLayoutForSide(AnnexSide.East);
             Assert.Equal(1, eastLayout.EntranceTile.X);
-            Assert.Equal(16, eastLayout.EntranceTile.Y);
+            Assert.Equal(14, eastLayout.EntranceTile.Y);
             Assert.NotNull(eastLayout.RenewableStumpTiles);
 
             var southLayout = foraging.GetWindowLayoutForSide(AnnexSide.South);
-            Assert.Equal(18, southLayout.EntranceTile.X);
+            Assert.Equal(26, southLayout.EntranceTile.X);
             Assert.Equal(1, southLayout.EntranceTile.Y);
             Assert.NotNull(southLayout.RenewableStumpTiles);
         }
@@ -633,19 +633,19 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Maps/Farm_Mining", mining.SourceVanillaMap);
 
             var northLayout = mining.GetWindowLayoutForSide(AnnexSide.North);
-            Assert.Equal(19, northLayout.EntranceTile.X);
+            Assert.Equal(24, northLayout.EntranceTile.X);
             Assert.Equal(30, northLayout.EntranceTile.Y);
             Assert.NotNull(northLayout.MountainOreArea);
-            Assert.Equal(2, northLayout.MountainOreArea.Value.X);
-            Assert.Equal(12, northLayout.MountainOreArea.Value.Y);
+            Assert.Equal(5, northLayout.MountainOreArea.Value.X);
+            Assert.Equal(4, northLayout.MountainOreArea.Value.Y);
 
             var eastLayout = mining.GetWindowLayoutForSide(AnnexSide.East);
             Assert.Equal(1, eastLayout.EntranceTile.X);
-            Assert.Equal(15, eastLayout.EntranceTile.Y);
+            Assert.Equal(19, eastLayout.EntranceTile.Y);
             Assert.NotNull(eastLayout.MountainOreArea);
 
             var southLayout = mining.GetWindowLayoutForSide(AnnexSide.South);
-            Assert.Equal(29, southLayout.EntranceTile.X);
+            Assert.Equal(15, southLayout.EntranceTile.X);
             Assert.Equal(1, southLayout.EntranceTile.Y);
             Assert.NotNull(southLayout.MountainOreArea);
         }

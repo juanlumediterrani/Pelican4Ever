@@ -113,13 +113,13 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Forest",
                 "Maps/Farm_Foraging",
-                0, 0,
+                0, 14,
                 FarmTypeBehavior.None with { ForestForage = true, ForestStumps = true },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(0, 0, new TilePoint(18, 30), RenewableStumpTiles: new[] { new TilePoint(8, 22), new TilePoint(12, 9), new TilePoint(24, 9), new TilePoint(33, 22) }),
-                    [AnnexSide.East] = new(0, 0, new TilePoint(1, 16), RenewableStumpTiles: new[] { new TilePoint(8, 22), new TilePoint(12, 9), new TilePoint(24, 9), new TilePoint(33, 22) }),
-                    [AnnexSide.South] = new(0, 0, new TilePoint(18, 1), RenewableStumpTiles: new[] { new TilePoint(8, 22), new TilePoint(12, 9), new TilePoint(24, 9), new TilePoint(33, 22) })
+                    [AnnexSide.North] = new(0, 14, new TilePoint(26, 30), RenewableStumpTiles: new[] { new TilePoint(8, 18), new TilePoint(9, 13), new TilePoint(14, 11), new TilePoint(14, 15) }),
+                    [AnnexSide.East] = new(0, 14, new TilePoint(1, 14), RenewableStumpTiles: new[] { new TilePoint(8, 18), new TilePoint(9, 13), new TilePoint(14, 11), new TilePoint(14, 15) }),
+                    [AnnexSide.South] = new(0, 14, new TilePoint(26, 1), RenewableStumpTiles: new[] { new TilePoint(8, 18), new TilePoint(9, 13), new TilePoint(14, 11), new TilePoint(14, 15) })
                 }
             ),
             ["Mining"] = new AnnexTemplate(
@@ -131,13 +131,13 @@ namespace Pelican4Ever.Core.World
                 35000,
                 "Farm_Hilltop",
                 "Maps/Farm_Mining",
-                0, 0,
-                FarmTypeBehavior.None with { MountainOreArea = new TileArea(2, 12, 22, 8), InitialMountainOreDays = 14 },
+                0, 33,
+                FarmTypeBehavior.None with { MountainOreArea = new TileArea(5, 4, 21, 7), InitialMountainOreDays = 14 },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(0, 0, new TilePoint(19, 30), MountainOreArea: new TileArea(2, 12, 22, 8)),
-                    [AnnexSide.East] = new(0, 0, new TilePoint(1, 15), MountainOreArea: new TileArea(2, 12, 22, 8)),
-                    [AnnexSide.South] = new(0, 0, new TilePoint(29, 1), MountainOreArea: new TileArea(2, 12, 22, 8))
+                    [AnnexSide.North] = new(0, 33, new TilePoint(24, 30), MountainOreArea: new TileArea(5, 4, 21, 7)),
+                    [AnnexSide.East] = new(0, 33, new TilePoint(1, 19), MountainOreArea: new TileArea(5, 4, 21, 7)),
+                    [AnnexSide.South] = new(0, 33, new TilePoint(15, 1), MountainOreArea: new TileArea(5, 4, 21, 7))
                 }
             ),
             ["Combat"] = new AnnexTemplate(

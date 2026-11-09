@@ -42,7 +42,7 @@ namespace Pelican4Ever.Core.World
     /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901 / TASK-912).</summary>
     public class AnnexAssignment
     {
-        public const int CurrentMapVersion = 2;
+        public const int CurrentMapVersion = 3;
 
         public string AnnexId { get; set; } = string.Empty;
 

@@ -1907,11 +1907,15 @@ namespace Pelican4Ever.Modules
                 FarmTypeModule.SpawnInitialOres(annexFarm, template.Id);
             }
 
-            // TASK-912: Migración única de anexos con mapas previos hacia composición vanilla v2
+            // TASK-912: Migración única de anexos con mapas previos hacia composición vanilla v3
             if (annex.MapVersion < AnnexAssignment.CurrentMapVersion && !newlyCreated)
             {
+                annexFarm.reloadMap();
                 MigrateAnnexToV2(annexFarm, annex, template);
             }
+
+            // Saneado en tiempo de ejecución de spawns inválidos sobre agua, acantilados, vallas o bordes decorativos
+            SanitizeExistingAnnexRuntimeSpawns(annexFarm, template, annex.Side);
 
             // Despejar siempre la apertura, corredor y área de seguridad interior 3×4 para que no haya rocas, maleza ni tocones (TASK-911)
             AnnexWindowLayout layout = template.GetWindowLayoutForSide(annex.Side);
@@ -1982,7 +1986,14 @@ namespace Pelican4Ever.Modules
                 foreach (var kvp in displacedObjects)
                 {
                     annexFarm.objects.Remove(kvp.Key);
-                    rescuedItems.Add(kvp.Value);
+                    var obj = kvp.Value;
+                    bool isWildDebris = obj.isDebrisOrForage() || obj.IsSpawnedObject
+                        || obj.ItemId is "294" or "295" or "343" or "450"
+                        || (int.TryParse(obj.ItemId, out int id) && ((id >= 674 && id <= 679) || (id >= 784 && id <= 791)));
+                    if (!isWildDebris)
+                    {
+                        rescuedItems.Add(obj);
+                    }
                 }
 
                 foreach (var pair in annexFarm.terrainFeatures.Pairs)
@@ -2048,6 +2059,134 @@ namespace Pelican4Ever.Modules
             {
                 context?.Monitor.Log($"[AnnexMigration] Error migrando anexo '{annex.AnnexId}': {ex.Message}", LogLevel.Error);
                 annex.MapVersion = AnnexAssignment.CurrentMapVersion;
+            }
+        }
+
+        private static void SanitizeExistingAnnexRuntimeSpawns(Farm annexFarm, AnnexTemplate template, AnnexSide side)
+        {
+            try
+            {
+                AnnexWindowLayout layout = template.GetWindowLayoutForSide(side);
+                MapCloneHelper.GetEntranceOpeningAndCorridor(side, template.Width, template.Height, out var openingBorderTiles, out _, layout.EntranceTile);
+
+                // 1. Sanitizar annexFarm.terrainFeatures (árboles silvestres, hierba en agua/acantilados/NoSpawn)
+                List<Vector2> removeTf = new();
+                foreach (var pair in annexFarm.terrainFeatures.Pairs)
+                {
+                    int x = (int)pair.Key.X;
+                    int y = (int)pair.Key.Y;
+                    bool isBorder = x <= 2 || x >= template.Width - 3 || y <= 2 || y >= template.Height - 3;
+                    bool isEntrance = openingBorderTiles.Contains((x, y));
+                    bool isPassable = annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport);
+                    bool isWater = annexFarm.isWaterTile(x, y);
+                    bool hasNoSpawn = annexFarm.doesTileHaveProperty(x, y, "NoSpawn", "Back") != null;
+
+                    if (isWater || (!isPassable && !isEntrance) || hasNoSpawn || (isBorder && !isEntrance))
+                    {
+                        if (pair.Value is not HoeDirt)
+                        {
+                            removeTf.Add(pair.Key);
+                        }
+                    }
+                }
+                foreach (var pos in removeTf)
+                {
+                    annexFarm.terrainFeatures.Remove(pos);
+                }
+
+                // 2. Sanitizar annexFarm.largeTerrainFeatures (arbustos generados en agua o colisiones)
+                for (int i = annexFarm.largeTerrainFeatures.Count - 1; i >= 0; i--)
+                {
+                    var feature = annexFarm.largeTerrainFeatures[i];
+                    int x = (int)feature.Tile.X;
+                    int y = (int)feature.Tile.Y;
+                    bool isBorder = x <= 2 || x >= template.Width - 3 || y <= 2 || y >= template.Height - 3;
+                    bool isEntrance = openingBorderTiles.Contains((x, y));
+                    bool isPassable = annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport);
+                    bool isWater = annexFarm.isWaterTile(x, y);
+                    bool hasNoSpawn = annexFarm.doesTileHaveProperty(x, y, "NoSpawn", "Back") != null;
+
+                    if (isWater || (!isPassable && !isEntrance) || hasNoSpawn || (isBorder && !isEntrance))
+                    {
+                        annexFarm.largeTerrainFeatures.RemoveAt(i);
+                    }
+                }
+
+                // 3. Sanitizar annexFarm.resourceClumps (tocones, piedras gigantes en agua/bordes no válidos)
+                var validStumpTiles = layout.RenewableStumpTiles != null
+                    ? new HashSet<TilePoint>(layout.RenewableStumpTiles)
+                    : new HashSet<TilePoint>();
+
+                for (int i = annexFarm.resourceClumps.Count - 1; i >= 0; i--)
+                {
+                    var clump = annexFarm.resourceClumps[i];
+                    int cx = (int)clump.Tile.X;
+                    int cy = (int)clump.Tile.Y;
+                    bool isRenewableStump = template.Id.Equals("Foraging", StringComparison.OrdinalIgnoreCase)
+                        && validStumpTiles.Contains(new TilePoint(cx, cy));
+
+                    if (!isRenewableStump)
+                    {
+                        bool overlapsInvalid = false;
+                        int cw = clump.width.Value;
+                        int ch = clump.height.Value;
+                        for (int dx = 0; dx < cw; dx++)
+                        {
+                            for (int dy = 0; dy < ch; dy++)
+                            {
+                                int tx = cx + dx;
+                                int ty = cy + dy;
+                                if (annexFarm.isWaterTile(tx, ty) || !annexFarm.isTilePassable(new xTile.Dimensions.Location(tx, ty), Game1.viewport)
+                                    || annexFarm.doesTileHaveProperty(tx, ty, "NoSpawn", "Back") != null
+                                    || tx <= 2 || tx >= template.Width - 3 || ty <= 2 || ty >= template.Height - 3)
+                                {
+                                    overlapsInvalid = true;
+                                    break;
+                                }
+                            }
+                            if (overlapsInvalid) break;
+                        }
+
+                        if (overlapsInvalid)
+                        {
+                            annexFarm.resourceClumps.RemoveAt(i);
+                        }
+                    }
+                }
+
+                // 4. Sanitizar objetos silvestres y maleza en annexFarm.objects
+                List<Vector2> removeObjects = new();
+                foreach (var pair in annexFarm.objects.Pairs)
+                {
+                    int x = (int)pair.Key.X;
+                    int y = (int)pair.Key.Y;
+                    bool isBorder = x <= 2 || x >= template.Width - 3 || y <= 2 || y >= template.Height - 3;
+                    bool isEntrance = openingBorderTiles.Contains((x, y));
+                    bool isPassable = annexFarm.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport);
+                    bool isWater = annexFarm.isWaterTile(x, y);
+                    bool hasNoSpawn = annexFarm.doesTileHaveProperty(x, y, "NoSpawn", "Back") != null;
+
+                    if (isWater || (!isPassable && !isEntrance) || hasNoSpawn || (isBorder && !isEntrance))
+                    {
+                        var obj = pair.Value;
+                        bool isWildDebris = obj.isDebrisOrForage() || obj.IsSpawnedObject
+                            || obj.ItemId is "294" or "295" or "343" or "450"
+                            || (int.TryParse(obj.ItemId, out int id) && ((id >= 674 && id <= 679) || (id >= 784 && id <= 791)));
+
+                        if (isWildDebris)
+                        {
+                            removeObjects.Add(pair.Key);
+                        }
+                    }
+                }
+                foreach (var pos in removeObjects)
+                {
+                    annexFarm.objects.Remove(pos);
+                }
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[SanitizeAnnexSpawns] Error sanitizando spawns en anexo: {ex.Message}", LogLevel.Trace);
             }
         }
 
