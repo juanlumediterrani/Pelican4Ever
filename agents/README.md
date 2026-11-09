@@ -117,3 +117,55 @@ El cuerpo conserva las acciones y animaciones de herramientas del granjero del
 juego. Comprobado visualmente en un host de pruebas aislado: dragón completo
 en las cuatro orientaciones y sin restos humanos. Sin comprobar todavía:
 animaciones de herramientas, natación y cliente remoto.
+
+## Referencia del granjero vanilla (`farmer_reference/`)
+
+Para diseñar o entrenar nuevas skins de agentes (como Dr4co) y calibrar proporciones,
+puntos de apoyo y posición de las manos/herramientas, `agents/farmer_reference/`
+contiene los sprites originales de Stardew Valley 1.6 y el granjero ya ensamblado:
+
+- `unpacked/`: hojas PNG nativas (`1x`) extraídas directamente de `Content/Characters/Farmer/*.xnb`
+  (`farmer_base.png`, `farmer_girl_base.png`, `farmer_base_bald.png`, `shirts.png`, `pants.png`,
+  `hairstyles.png`, `hairstyles2.png`, `accessories.png`, `hats.png`, `skinColors.png`, `shoeColors.png`).
+- `dr4co_template/`: plantillas equivalentes al formato de cuerpo `4×4` (`24×32` por celda) de Fashion Sense:
+  - `farmer_body_1x.png` (`96×128 px`) y `farmer_body_4x.png` (`384×512 px`, zoom real `4x` del juego).
+  - `farmer_vs_dr4co_x6.png`: comparativa ampliada (`x6`) con la rejilla de `24×32` y la sombra marcada en `x=8, y=30`.
+  - `farmer_vs_dr4co_caminar_4x.gif`: ciclo de paso en las 4 direcciones a tamaño de pantalla (`4x`).
+  - `poses_9/`: las 9 poses únicas (`frontal`/`lateral`/`trasera` × `quieto`/`paso1`/`paso2`) a `1x` (`16×32`) y `4x` (`64×128`).
+- `assembled/`: el granjero completo ensamblado con las tablas `featureXOffsetPerFrame` y `featureYOffsetPerFrame` de `FarmerRenderer`:
+  - `farmer_full_sheet_1x.png` (`96×672 px`, los 126 cuadros a `1x`) y `farmer_full_sheet_4x.png` (`384×2688 px`, los 126 cuadros a `4x` Nearest-Neighbor).
+  - `farmer_full_sheet_carry_1x.png`: los 126 cuadros con los brazos secundarios de sostener objetos (`armOffset = 12`).
+  - `farmer_animations_showcase_1x.png` y `farmer_animations_showcase_4x.png`: secuencias principales (caminar, correr, llevar objeto, usar herramientas, regar/cosechar, espada, esquilar, comer, sentarse) en las 4 direcciones.
+
+Para regenerar todas las hojas ensambladas (p. ej. cambiando camisa, pelo o colores):
+
+```bash
+python3 scripts/build_farmer_reference.py
+```
+
+## Pipeline de sprites por IA para Dr4co (`scripts/`)
+
+Para completar la skin completa de Dr4co (ciclo de paso, acciones de herramientas y combate, y retrato de diálogo)
+manteniendo la coherencia de píxeles y paleta fija de 12 colores:
+
+1. **Ciclo de paso (`scripts/dr4co_llm_pipeline.py`)**:
+   - Entrada: guía 3×3 de poses únicas sin herramientas (`llm_pose_guide_3x3.png`) + hoja de diseño (`dr4co-sid-v2.png`).
+   - Generación LLM: `agents/Dr4co sprites/fuente/dr4co_3x3_llm.png`.
+   - Post-procesado: *Head-Lock* (fija la cabeza de `quieto` en `paso1` y `paso2`), rebote vertical de paso (+1 px), reducción por área y cuantización de 12 colores con contorno *sel-out*.
+   - Salidas: `agents/Dr4co sprites/pruebas/pipeline_ia/` (`body_v1_refinado.png`, `body_v2_llm3x3.png`, `comparativa_4_hojas_x6.png`, `comparativa_caminar_4x.gif`).
+
+2. **Acciones de herramientas y combate (`scripts/dr4co_actions_pipeline.py`)**:
+   - Entrada: guía 3×3 de acciones vanilla (`llm_action_guide_3x3.png`) con postura pura de garras/cuerpo (sin herramientas de metal que tapen la silueta).
+   - Generación LLM: `agents/Dr4co sprites/fuente/dr4co_action_3x3_llm.png` (9 poses: golpe de herramienta, regadera y tajo de combate en Abajo, Derecha y Arriba).
+   - Salidas en `agents/Dr4co sprites/pruebas/pipeline_acciones/`:
+     - `comparativa_acciones_x6.png`: panel comparativo de las 12 acciones (Abajo, Derecha, Arriba, Izquierda) contra el granjero vanilla.
+     - `dr4co_acciones_animadas_4x.gif`: animación en bucle a tamaño de pantalla (4x) ejecutando golpe de pico/hacha, regar y tajo con espada.
+     - `dr4co_skin_showcase_1x.png` y `dr4co_skin_showcase_4x.png`: sábana completa de la skin combinando caminar y acciones en las 4 direcciones.
+     - Recortes a 1x en `agents/Dr4co sprites/acciones_1x/` y en alta resolución en `grandes_acciones/`.
+
+3. **Retrato de diálogo (`scripts/build_dr4co_portrait.py`)**:
+   - Generación LLM: `agents/Dr4co sprites/fuente/dr4co_portrait_llm.png` (busto expresivo de Dr4co con cuernos crema, ojos de reptil y escamas rojas).
+   - Salidas en `agents/Dr4co sprites/portrait/`:
+     - `dr4co_portrait_64x64.png`: tamaño estándar de retrato de diálogo de Stardew Valley a 1x.
+     - `dr4co_portrait_256x256.png`: retrato ampliado a 4x con marco de madera y pergamino del juego.
+     - Copiado directo al pack en `agents/Dr4co.FashionSense/Bodies/Dr4co/portrait.png`.

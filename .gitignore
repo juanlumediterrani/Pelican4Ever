@@ -11,3 +11,5 @@ local.props
 config.json
 data/
 TestResults/
+__pycache__/
+*.pyc
