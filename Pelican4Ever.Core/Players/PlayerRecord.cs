@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace Pelican4Ever.Core.Players
 {
+    public enum FarmCaveChoice
+    {
+        None = 0,
+        FruitBats = 1,
+        Mushrooms = 2
+    }
+
     /// <summary>Estado de descanso visible para el jugador. Se DERIVA de <see cref="PlayerRecord"/>; no se almacena.</summary>
     public enum SleepState
     {
@@ -44,6 +51,9 @@ namespace Pelican4Ever.Core.Players
 
         /// <summary>Hueco de granja asignado (ej. "Pelican4Ever_Farm_02"), o null si aún no ha reclamado puerta.</summary>
         public string? FarmSlotId { get; set; }
+
+        /// <summary>Elección para las cuevas de su residencia privada.</summary>
+        public FarmCaveChoice CaveChoice { get; set; }
 
         /// <summary>Token único del equipo/cliente propietario para evitar usurpación de partida (Opción A).</summary>
         public string? OwnerToken { get; set; }

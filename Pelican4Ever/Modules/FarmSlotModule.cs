@@ -79,6 +79,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
 
             ApplyHarmonyPatches(ctx.Harmony);
+            new PrivateFarmCaves(ctx).Register();
         }
 
         private void LoadDoors()
@@ -2745,11 +2746,8 @@ namespace Pelican4Ever.Modules
                 UpdateOrCreateWarp(farm, farmTemplate.CaveEntranceX, farmTemplate.CaveEntranceY, caveId, 8, 11);
                 UpdateOrCreateWarp(cave, 8, 12, farm.NameOrUniqueName, farmTemplate.CaveExitX, farmTemplate.CaveExitY);
 
-                int caveChoice = Game1.player.caveChoice.Value != 0 ? Game1.player.caveChoice.Value : Game1.MasterPlayer.caveChoice.Value;
-                if (caveChoice == 2 && cave.objects.Count() == 0)
-                {
-                    cave.setUpMushroomHouse();
-                }
+                if (context != null)
+                    PrivateFarmCaves.ApplyChoice(context.WorldState, cave, assignment?.OwnerId ?? 0);
             }
 
             // 8. Configurar el Sótano privado de la residencia (Cellar) y warps de escaleras (GAP-10 / TASK-905)
@@ -3115,7 +3113,8 @@ namespace Pelican4Ever.Modules
             {
                 SendDoorsSyncToPlayer(e.FromPlayerID);
             }
-            else if (e.Type == ModMessages.SyncDoorsState)
+            else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
+                && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
             {
                 var payload = e.ReadAs<SyncDoorsPayload>();
                 if (payload != null)
