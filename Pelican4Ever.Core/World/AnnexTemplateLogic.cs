@@ -203,13 +203,13 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Beach",
                 "Maps/Farm_Island",
-                38, 16,
+                29, 0,
                 FarmTypeBehavior.None with { BeachForage = true },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(38, 16, new TilePoint(20, 30)),
-                    [AnnexSide.East] = new(38, 16, new TilePoint(1, 15)),
-                    [AnnexSide.South] = new(38, 16, new TilePoint(20, 1))
+                    [AnnexSide.North] = new(29, 0, new TilePoint(11, 30)),
+                    [AnnexSide.East] = new(29, 0, new TilePoint(1, 20)),
+                    [AnnexSide.South] = new(29, 0, new TilePoint(11, 1))
                 }
             )
         };

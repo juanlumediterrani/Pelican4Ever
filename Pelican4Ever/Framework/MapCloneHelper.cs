@@ -657,7 +657,8 @@ namespace Pelican4Ever.Framework
                 || template.Id.Equals("Mining", StringComparison.OrdinalIgnoreCase)
                 || template.Id.Equals("Combat", StringComparison.OrdinalIgnoreCase)
                 || template.Id.Equals("FourCorners", StringComparison.OrdinalIgnoreCase)
-                || template.Id.Equals("Ranching", StringComparison.OrdinalIgnoreCase);
+                || template.Id.Equals("Ranching", StringComparison.OrdinalIgnoreCase)
+                || template.Id.Equals("Beach", StringComparison.OrdinalIgnoreCase);
 
             if (!isCustomComposed)
             {
@@ -763,6 +764,10 @@ namespace Pelican4Ever.Framework
                 {
                     ApplyRanchingFarmEnclosure(source, target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, side, width, height);
                 }
+                else if (template.Id.Equals("Beach", StringComparison.OrdinalIgnoreCase))
+                {
+                    ApplyBeachFarmEnclosure(source, target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, side, width, height);
+                }
                 else
                 {
                     FlankOpeningWithFencePosts(side, openingBorderTiles, bldLayer, frontLayer, outdoorsSheet, width, height);
@@ -819,6 +824,302 @@ namespace Pelican4Ever.Framework
                     if (alwaysFront2 != null) alwaysFront2.Tiles[x, y] = null;
                     if (alwaysFront3 != null) alwaysFront3.Tiles[x, y] = null;
                 }
+            }
+        }
+
+        /// <summary>
+        /// Compone la miniatura canónica 40×32 de Beach / Island Farm (V10 aprobado) centrada en (29, 0),
+        /// capturando el desfiladero norte de montaña con camino festoneado (lx=11..12, ly=0..3),
+        /// la ensenada oceánica turquesa al este (lx=38..39, ly=0..8) y rompiente de espuma (ly=9),
+        /// el seto forestal este y sur sobre arena y pasto isleño, y el vallado rústico oeste con dunas diagonales preservadas.
+        /// </summary>
+        private static void ApplyBeachFarmEnclosure(
+            Map source,
+            Map target,
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            AnnexSide side,
+            int width,
+            int height)
+        {
+            const int cx = 29;
+            const int cy = 0;
+
+            // 1. Mapeo base 40×32 en cx=29, cy=0 (captura la cueva de la granja, ensenada oceánica, dunas y riscos norte):
+            for (int lx = 0; lx < width; lx++)
+            {
+                int sx = cx + lx;
+                for (int ly = 0; ly < height; ly++)
+                {
+                    int sy = cy + ly;
+                    CopySourceCellToTarget(source, target, lx, ly, sx, sy);
+                }
+            }
+
+            TileSheet islandSheet = target.GetTileSheet("untitled tile sheet2") ?? outdoorsSheet;
+
+            // -------------------------------------------------------------
+            // Saneado de Dunas Este: Retirar blob marrón huérfano en (lx=35..37, ly=16..18)
+            // -------------------------------------------------------------
+            for (int lx = 35; lx <= 37; lx++)
+            {
+                for (int ly = 16; ly <= 18; ly++)
+                {
+                    SetTileIfValid(backLayer, islandSheet, lx, ly, 674);
+                }
+            }
+
+            // -------------------------------------------------------------
+            // Paso Norte de Montaña (lx=11..12, ly=0..3): Camino de tierra con festón
+            // -------------------------------------------------------------
+            if (side == AnnexSide.South) // Entrada activa Norte (el jugador camina hacia el Sur)
+            {
+                for (int ly = 0; ly <= 3; ly++)
+                {
+                    SetTileIfValid(backLayer, outdoorsSheet, 11, ly, 225);
+                    backLayer.Tiles[11, ly].Properties["Type"] = "Dirt";
+                    SetTileIfValid(backLayer, outdoorsSheet, 12, ly, 228);
+                    backLayer.Tiles[12, ly].Properties["Type"] = "Dirt";
+
+                    bldLayer.Tiles[11, ly] = null;
+                    bldLayer.Tiles[12, ly] = null;
+                    frontLayer.Tiles[11, ly] = null;
+                    frontLayer.Tiles[12, ly] = null;
+                    alwaysFrontLayer.Tiles[11, ly] = null;
+                    alwaysFrontLayer.Tiles[12, ly] = null;
+                    backLayer.Tiles[11, ly]?.Properties.Remove("Passable");
+                    backLayer.Tiles[12, ly]?.Properties.Remove("Passable");
+                }
+            }
+            else // Borde Norte cerrado: portón de empalizada rústica entre los riscos
+            {
+                SetTileIfValid(frontLayer, outdoorsSheet, 11, 0, 358);
+                SetTileIfValid(bldLayer, outdoorsSheet, 11, 1, 383);
+                SetPassableIfValid(bldLayer, 11, 1, false);
+
+                SetTileIfValid(frontLayer, outdoorsSheet, 12, 0, 360);
+                SetTileIfValid(bldLayer, outdoorsSheet, 12, 1, 385);
+                SetPassableIfValid(bldLayer, 12, 1, false);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 11, 0, 16);
+                SetPassableIfValid(bldLayer, 11, 0, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, 12, 0, 16);
+                SetPassableIfValid(bldLayer, 12, 0, false);
+            }
+
+            // Colisión sólida a lo largo de toda la fila 0 fuera de la apertura activa:
+            for (int lx = 0; lx < width; lx++)
+            {
+                if (side == AnnexSide.South && (lx == 11 || lx == 12))
+                    continue;
+
+                if (bldLayer.Tiles[lx, 0] == null)
+                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 0, 16);
+                SetPassableIfValid(bldLayer, lx, 0, false);
+                if (backLayer.Tiles[lx, 0] != null)
+                    backLayer.Tiles[lx, 0].Properties["Passable"] = "F";
+            }
+
+            // -------------------------------------------------------------
+            // Borde Oeste: Vallado rústico, franja herbosa canónica y dunas preservadas
+            // -------------------------------------------------------------
+            // ly=0..12: Risco de montaña norte (impenetrable)
+            for (int ly = 0; ly <= 12; ly++)
+            {
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                if (backLayer.Tiles[0, ly] != null)
+                    backLayer.Tiles[0, ly].Properties["Passable"] = "F";
+            }
+
+            // Columna 0 con pasto verde isleño bajo postes, columna 1 con festón vertical derecho:
+            for (int ly = 13; ly <= 27; ly++)
+            {
+                SetTileIfValid(backLayer, islandSheet, 0, ly, 608);
+                backLayer.Tiles[0, ly].Properties["Type"] = "Grass";
+                SetTileIfValid(backLayer, islandSheet, 1, ly, 672);
+            }
+
+            for (int ly = 28; ly <= 31; ly++)
+            {
+                SetTileIfValid(backLayer, islandSheet, 0, ly, 608);
+                backLayer.Tiles[0, ly].Properties["Type"] = "Grass";
+            }
+
+            // Anclaje superior de valla al pie del risco (ly=12):
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 13, 386);
+            SetPassableIfValid(bldLayer, 0, 13, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 12, 361);
+
+            for (int ly = 14; ly <= 18; ly++)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, (ly % 2 == 0) ? 411 : 436);
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+            }
+
+            if (side == AnnexSide.East) // Entrada activa Oeste (el jugador camina hacia el Este)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 19, 436);
+                SetPassableIfValid(bldLayer, 0, 19, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 18, 361);
+
+                bldLayer.Tiles[0, 20] = null;
+                bldLayer.Tiles[0, 21] = null;
+                frontLayer.Tiles[0, 19] = null;
+                frontLayer.Tiles[0, 20] = null;
+                backLayer.Tiles[0, 20]?.Properties.Remove("Passable");
+                backLayer.Tiles[0, 21]?.Properties.Remove("Passable");
+
+                // Despejar colisiones en lx=1..3 at ly=20..21 preservando las texturas y sombras diagonales de duna en Back:
+                for (int clx = 1; clx <= 3; clx++)
+                {
+                    for (int cly = 20; cly <= 21; cly++)
+                    {
+                        bldLayer.Tiles[clx, cly] = null;
+                        frontLayer.Tiles[clx, cly] = null;
+                        alwaysFrontLayer.Tiles[clx, cly] = null;
+                        backLayer.Tiles[clx, cly]?.Properties.Remove("Passable");
+                    }
+                }
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 22, 386);
+                SetPassableIfValid(bldLayer, 0, 22, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 21, 361);
+            }
+            else // Borde Oeste cerrado
+            {
+                for (int ly = 19; ly <= 22; ly++)
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, (ly % 2 == 0) ? 411 : 436);
+                    SetPassableIfValid(bldLayer, 0, ly, false);
+                    SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+                }
+            }
+
+            for (int ly = 23; ly <= 28; ly++)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, (ly % 2 == 0) ? 411 : 436);
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+            }
+
+            // -------------------------------------------------------------
+            // Borde Este (Opción A Aprobada): Ensenada marina (ly=0..8), espuma rompiente (ly=9) y bosque continuo (ly=10..31)
+            // -------------------------------------------------------------
+            // Filas 0..8: Agua marina turquesa abierta
+            for (int ly = 0; ly <= 8; ly++)
+            {
+                bldLayer.Tiles[38, ly] = null;
+                bldLayer.Tiles[39, ly] = null;
+                frontLayer.Tiles[38, ly] = null;
+                frontLayer.Tiles[39, ly] = null;
+                alwaysFrontLayer.Tiles[38, ly] = null;
+                alwaysFrontLayer.Tiles[39, ly] = null;
+            }
+
+            // Fila 9: Espuma rompiente continua alineada con columnas 30..37:
+            bldLayer.Tiles[38, 9] = null;
+            bldLayer.Tiles[39, 9] = null;
+            frontLayer.Tiles[38, 9] = null;
+            frontLayer.Tiles[39, 9] = null;
+            alwaysFrontLayer.Tiles[38, 9] = null;
+            alwaysFrontLayer.Tiles[39, 9] = null;
+            SetTileIfValid(backLayer, islandSheet, 38, 9, 268);
+            SetTileIfValid(backLayer, islandSheet, 39, 9, 197);
+
+            // Filas 10..31: Franja boscosa continua en tierra firme hasta el límite sur:
+            for (int ly = 10; ly < height; ly++)
+            {
+                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 294 : 319);
+                SetPassableIfValid(bldLayer, 38, ly, false);
+                frontLayer.Tiles[38, ly] = null;
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 994 : 1019);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 295 : 320);
+                SetPassableIfValid(bldLayer, 39, ly, false);
+                frontLayer.Tiles[39, ly] = null;
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 1019 : 1020);
+            }
+
+            // -------------------------------------------------------------
+            // Borde Sur y Portón de Entrada: Seto boscoso sobre pasto isleño
+            // -------------------------------------------------------------
+            // Fila 28: Festón arena-a-pasto en columnas lx=0..37:
+            for (int lx = 0; lx <= 37; lx++)
+            {
+                SetTileIfValid(backLayer, islandSheet, lx, 28, (lx % 2 == 0) ? 36 : 37);
+            }
+
+            // Filas 29..31: Seto denso de robles sobre pasto isleño en lx=0..37:
+            for (int lx = 0; lx <= 37; lx++)
+            {
+                SetTileIfValid(backLayer, islandSheet, lx, 29, 608);
+                backLayer.Tiles[lx, 29].Properties["Type"] = "Grass";
+                SetTileIfValid(backLayer, islandSheet, lx, 30, 608);
+                backLayer.Tiles[lx, 30].Properties["Type"] = "Grass";
+                SetTileIfValid(backLayer, islandSheet, lx, 31, 608);
+                backLayer.Tiles[lx, 31].Properties["Type"] = "Grass";
+
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
+                SetPassableIfValid(bldLayer, lx, 29, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
+                SetPassableIfValid(bldLayer, lx, 30, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
+                SetPassableIfValid(bldLayer, lx, 31, false);
+
+                frontLayer.Tiles[lx, 29] = null;
+                frontLayer.Tiles[lx, 30] = null;
+                frontLayer.Tiles[lx, 31] = null;
+
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
+            }
+
+            // Entrada Sur en lx=11..12 (alineada con el paso norte y la granja):
+            if (side == AnnexSide.North) // Entrada activa Sur (el jugador camina hacia el Norte)
+            {
+                for (int lx = 11; lx <= 12; lx++)
+                {
+                    for (int ly = 28; ly <= 31; ly++)
+                    {
+                        bldLayer.Tiles[lx, ly] = null;
+                        frontLayer.Tiles[lx, ly] = null;
+                        alwaysFrontLayer.Tiles[lx, ly] = null;
+                        SetTileIfValid(backLayer, islandSheet, lx, ly, 674);
+                        backLayer.Tiles[lx, ly]?.Properties.Remove("Passable");
+                    }
+                }
+
+                SetTileIfValid(backLayer, islandSheet, 10, 28, 130);
+                SetTileIfValid(backLayer, islandSheet, 13, 28, 129);
+
+                for (int ly = 29; ly <= 31; ly++)
+                {
+                    SetTileIfValid(backLayer, islandSheet, 10, ly, 672);
+                    SetTileIfValid(backLayer, islandSheet, 13, ly, 675);
+
+                    if (ly > 29)
+                    {
+                        bldLayer.Tiles[10, ly] = null;
+                        bldLayer.Tiles[13, ly] = null;
+                        alwaysFrontLayer.Tiles[10, ly] = null;
+                        alwaysFrontLayer.Tiles[13, ly] = null;
+                    }
+                }
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 10, 29, 386);
+                SetPassableIfValid(bldLayer, 10, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 10, 28, 361);
+                alwaysFrontLayer.Tiles[10, 29] = null;
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 13, 29, 386);
+                SetPassableIfValid(bldLayer, 13, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 13, 28, 361);
+                alwaysFrontLayer.Tiles[13, 29] = null;
             }
         }
 
