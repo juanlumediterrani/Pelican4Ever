@@ -35,6 +35,7 @@ namespace Pelican4Ever.Modules
         private static ModContext? context;
         private static bool welcomeNotified;
         private static bool chatCommandsRegistered;
+        private const string SharedIslandFarmId = "IslandWest";
 
         /// <summary>Slot cuya residencia no estaba cargada en el cliente al despertar; se viaja a ella en cuanto se pueda.</summary>
         private static string? pendingResidenceWakeSlotId;
@@ -4466,6 +4467,19 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu))
                 );
 
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved))
+                );
+
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
                 harmony.Patch(
                     original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
@@ -4680,7 +4694,7 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
-        private static List<KeyValuePair<string, string>> GetOwnedFarmDestinations()
+        private static List<KeyValuePair<string, string>> GetFarmServiceDestinations()
         {
             long playerId = Game1.player.UniqueMultiplayerID;
             string? residenceId = context!.WorldState.ResolvePlayerResidenceSlot(playerId);
@@ -4689,17 +4703,21 @@ namespace Pelican4Ever.Modules
                 : context.WorldState.GetAnnexesForResidence(residenceId)
                     .Where(annex => annex.OwnerId == playerId).ToList();
 
-            return ConstructionLocationFilter.GetAllowedConstructionLocations(
+            var destinations = ConstructionLocationFilter.GetAllowedConstructionLocations(
                 playerId, Context.IsMainPlayer, residenceId, annexes);
+            if (Game1.getLocationFromName(SharedIslandFarmId) is IslandWest island && island.farmhouseRestored.Value)
+                destinations.Add(new KeyValuePair<string, string>(SharedIslandFarmId, "Isla Jengibre (compartida)"));
+
+            return destinations;
         }
 
-        private static Farm? ResolveOwnedFarmDestination(string locationId)
+        private static GameLocation? ResolveFarmServiceDestination(string locationId)
         {
-            if (context == null || !GetOwnedFarmDestinations().Any(destination => destination.Key == locationId))
+            if (context == null || !GetFarmServiceDestinations().Any(destination => destination.Key == locationId))
                 return null;
 
-            if (Game1.getLocationFromName(locationId) is Farm farm)
-                return farm;
+            if (Game1.getLocationFromName(locationId) is GameLocation location)
+                return location;
 
             if (context.WorldState.FindAnnexById(locationId) is AnnexAssignment annex)
                 return EnsureAnnexLocation(annex, regenerate: false);
@@ -4712,10 +4730,10 @@ namespace Pelican4Ever.Modules
             if (context == null)
                 return true;
 
-            var destinations = GetOwnedFarmDestinations();
+            var destinations = GetFarmServiceDestinations();
             if (destinations.Count == 0)
             {
-                Game1.drawObjectDialogue("Debes reclamar una residencia en la Plaza Central antes de poder encargar obras de construcción.");
+                Game1.drawObjectDialogue("Debes reclamar una residencia o restaurar la casa de Isla Jengibre antes de encargar obras.");
                 return false;
             }
 
@@ -4724,7 +4742,7 @@ namespace Pelican4Ever.Modules
                 destinations,
                 locationId =>
                 {
-                    if (ResolveOwnedFarmDestination(locationId) is Farm farm)
+                    if (ResolveFarmServiceDestination(locationId) is GameLocation farm)
                         Game1.activeClickableMenu = new CarpenterMenu(builder, farm);
                     else
                         Game1.drawObjectDialogue("La granja aún no está sincronizada. Inténtalo de nuevo en unos segundos.");
@@ -4740,9 +4758,9 @@ namespace Pelican4Ever.Modules
             if (context == null)
                 return true;
 
-            var destinations = GetOwnedFarmDestinations();
+            var destinations = GetFarmServiceDestinations();
             var farmsWithSpace = destinations.Where(destination =>
-                ResolveOwnedFarmDestination(destination.Key)?.buildings.Any(building =>
+                ResolveFarmServiceDestination(destination.Key)?.buildings.Any(building =>
                     !building.isUnderConstruction()
                     && building.GetIndoors() is AnimalHouse house
                     && !house.isFull()) == true).ToList();
@@ -4750,12 +4768,12 @@ namespace Pelican4Ever.Modules
             // Conservar el catálogo de animales como referencia aunque todavía no haya alojamiento libre.
             var choices = farmsWithSpace.Count > 0
                 ? farmsWithSpace
-                : destinations.Where(destination => ResolveOwnedFarmDestination(destination.Key) != null).Take(1).ToList();
+                : destinations.Where(destination => ResolveFarmServiceDestination(destination.Key) != null).Take(1).ToList();
 
             if (choices.Count == 0)
             {
                 Game1.drawObjectDialogue(destinations.Count == 0
-                    ? "Debes reclamar una residencia en la Plaza Central antes de poder comprar animales."
+                    ? "Debes reclamar una residencia o restaurar la casa de Isla Jengibre antes de comprar animales."
                     : "La granja aún no está sincronizada. Inténtalo de nuevo en unos segundos.");
                 return false;
             }
@@ -4765,7 +4783,7 @@ namespace Pelican4Ever.Modules
                 choices,
                 locationId =>
                 {
-                    if (ResolveOwnedFarmDestination(locationId) is not Farm farm)
+                    if (ResolveFarmServiceDestination(locationId) is not GameLocation farm)
                         return;
 
                     var menu = new PurchaseAnimalsMenu(Utility.getPurchaseAnimalStock(farm), farm);
@@ -5890,8 +5908,34 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
+        public static void Postfix_IsBuildableLocation(GameLocation __instance, ref bool __result)
+        {
+            if (__instance is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+                __result = island.farmhouseRestored.Value;
+        }
+
+        public static void Postfix_CarpenterCanMoveIslandBuilding(Building building, ref bool __result)
+        {
+            if (building?.GetParentLocation() is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+                __result = island.farmhouseRestored.Value;
+        }
+
+        public static void Postfix_OnIslandBuildingMoved(GameLocation __instance, Building building)
+        {
+            if (__instance is IslandWest { NameOrUniqueName: SharedIslandFarmId })
+                building.updateInteriorWarps();
+        }
+
         public static void Postfix_IsAlwaysActiveLocation(GameLocation location, ref bool __result)
         {
+            // IslandWest es una granja compartida. Su estado viaja con las ubicaciones activas
+            // de vanilla y la restauración de la casa se sincroniza aunque nadie esté en la isla.
+            if (location is IslandWest { NameOrUniqueName: SharedIslandFarmId })
+            {
+                __result = true;
+                return;
+            }
+
             if (location == null || string.IsNullOrEmpty(location.NameOrUniqueName))
                 return;
 
