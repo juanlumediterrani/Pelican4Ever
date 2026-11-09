@@ -671,6 +671,35 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexTemplates_FourCorners_ConfiguresAuthenticCrossroadsLayouts()
+        {
+            var fourCorners = AnnexTemplateCatalog.GetTemplate("FourCorners");
+            Assert.Equal("Maps/Farm_FourCorners", fourCorners.SourceVanillaMap);
+            Assert.True(fourCorners.Behavior.FourCornersExtras);
+            Assert.Equal(20, fourCorners.SourceCropX);
+            Assert.Equal(24, fourCorners.SourceCropY);
+            Assert.NotNull(fourCorners.Behavior.MountainOreArea);
+
+            var northLayout = fourCorners.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(13, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.Equal(20, northLayout.CropX);
+            Assert.Equal(24, northLayout.CropY);
+
+            var eastLayout = fourCorners.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(5, eastLayout.EntranceTile.Y);
+            Assert.Equal(20, eastLayout.CropX);
+            Assert.Equal(24, eastLayout.CropY);
+
+            var southLayout = fourCorners.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(13, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.Equal(20, southLayout.CropX);
+            Assert.Equal(24, southLayout.CropY);
+        }
+
+        [Fact]
         public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
         {
             const int w = 40;

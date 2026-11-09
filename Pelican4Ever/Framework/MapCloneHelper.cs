@@ -655,7 +655,8 @@ namespace Pelican4Ever.Framework
                 || template.Id.Equals("Fishing", StringComparison.OrdinalIgnoreCase)
                 || template.Id.Equals("Foraging", StringComparison.OrdinalIgnoreCase)
                 || template.Id.Equals("Mining", StringComparison.OrdinalIgnoreCase)
-                || template.Id.Equals("Combat", StringComparison.OrdinalIgnoreCase);
+                || template.Id.Equals("Combat", StringComparison.OrdinalIgnoreCase)
+                || template.Id.Equals("FourCorners", StringComparison.OrdinalIgnoreCase);
 
             if (!isCustomComposed)
             {
@@ -753,6 +754,10 @@ namespace Pelican4Ever.Framework
                 {
                     ApplyCombatFarmEnclosure(source, target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, side, width, height);
                 }
+                else if (template.Id.Equals("FourCorners", StringComparison.OrdinalIgnoreCase))
+                {
+                    ApplyFourCornersFarmEnclosure(source, target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, side, width, height);
+                }
                 else
                 {
                     FlankOpeningWithFencePosts(side, openingBorderTiles, bldLayer, frontLayer, outdoorsSheet, width, height);
@@ -808,6 +813,415 @@ namespace Pelican4Ever.Framework
                     alwaysFront.Tiles[x, y] = null;
                     if (alwaysFront2 != null) alwaysFront2.Tiles[x, y] = null;
                     if (alwaysFront3 != null) alwaysFront3.Tiles[x, y] = null;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Compone la miniatura canónica 40×32 de Four Corners Farm (V5 aprobado) centrada en la encrucijada circular en (20, 24),
+        /// con los cuatro cuadrantes perfectamente transitables, el corral superior con cancela y valla de postes y maderos,
+        /// la cancela oeste simétrica, el seto sur de 3 filas con autotiling canónico (251) y el pasto auténtico del cuadrante SE.
+        /// </summary>
+        private static void ApplyFourCornersFarmEnclosure(
+            Map source,
+            Map target,
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            AnnexSide side,
+            int width,
+            int height)
+        {
+            const int cx = 20;
+            const int cy = 24;
+
+            // 1. Mapeo base 40x32 centrado en la encrucijada icónica en cx=20, cy=24:
+            for (int lx = 0; lx < width; lx++)
+            {
+                int sx = cx + lx;
+                for (int ly = 0; ly < height; ly++)
+                {
+                    int sy = cy + ly;
+                    CopySourceCellToTarget(source, target, lx, ly, sx, sy);
+                }
+            }
+
+            // 1b. Saneado de tiles de hierba superpuestos en Buildings (Buildings: 175):
+            for (int lx = 0; lx < width; lx++)
+            {
+                for (int ly = 0; ly < height; ly++)
+                {
+                    if (bldLayer.Tiles[lx, ly]?.TileIndex == 175)
+                    {
+                        int? bkIdx = backLayer.Tiles[lx, ly]?.TileIndex;
+                        if (bkIdx is 562 or 587 or 589)
+                        {
+                            SetGrassTile(backLayer, outdoorsSheet, lx, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                        }
+                        bldLayer.Tiles[lx, ly] = null;
+                    }
+                }
+            }
+
+            // 1c. Limpiar agujero en terraza NO (7, 14) y completar copa de roble en (2, 6):
+            SetGrassTile(backLayer, outdoorsSheet, 7, 14, TerrainTileClassifier.SunnyGrassTileIndex);
+            bldLayer.Tiles[7, 14] = null;
+            frontLayer.Tiles[7, 14] = null;
+            alwaysFrontLayer.Tiles[7, 14] = null;
+
+            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 2, 6, 12);
+            frontLayer.Tiles[2, 6] = null;
+
+            // 2. BORDE Y ENTRADA NORTE:
+            // Paddock fence NO (lx=0..15):
+            for (int lx = 0; lx < 16; lx++)
+            {
+                SetGrassTile(backLayer, outdoorsSheet, lx, 0, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, lx, 1, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetTileIfValid(frontLayer, outdoorsSheet, lx, 0, 359);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 1, 384);
+                SetPassableIfValid(bldLayer, lx, 1, false);
+                frontLayer.Tiles[lx, 1] = null;
+            }
+
+            // Esquina NO en (0, 0..1):
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 0, 358);
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 1, 383);
+            SetPassableIfValid(bldLayer, 0, 1, false);
+
+            if (side == AnnexSide.South)
+            {
+                // Entrada Norte abierta en lx=13..14:
+                for (int lx = 13; lx <= 14; lx++)
+                {
+                    frontLayer.Tiles[lx, 0] = null;
+                    bldLayer.Tiles[lx, 1] = null;
+                    frontLayer.Tiles[lx, 1] = null;
+                    SetDirtTile(backLayer, outdoorsSheet, lx, 0, TerrainTileClassifier.DirtPlainTileIndex);
+                    SetDirtTile(backLayer, outdoorsSheet, lx, 1, TerrainTileClassifier.DirtPlainTileIndex);
+                    backLayer.Tiles[lx, 0]?.Properties.Remove("Passable");
+                    backLayer.Tiles[lx, 1]?.Properties.Remove("Passable");
+                }
+
+                // Postes de cancela:
+                SetTileIfValid(frontLayer, outdoorsSheet, 12, 0, 360);
+                SetTileIfValid(bldLayer, outdoorsSheet, 12, 1, 385);
+                SetPassableIfValid(bldLayer, 12, 1, false);
+                SetDirtTile(backLayer, outdoorsSheet, 12, 1, 225);
+
+                SetTileIfValid(frontLayer, outdoorsSheet, 15, 0, 358);
+                SetTileIfValid(bldLayer, outdoorsSheet, 15, 1, 383);
+                SetPassableIfValid(bldLayer, 15, 1, false);
+                SetDirtTile(backLayer, outdoorsSheet, 15, 1, 228);
+
+                // Borde superior de tierra en fila 2:
+                for (int lx = 1; lx < 12; lx++)
+                    SetDirtTile(backLayer, outdoorsSheet, lx, 2, 201);
+                SetDirtTile(backLayer, outdoorsSheet, 12, 2, 253);
+                SetDirtTile(backLayer, outdoorsSheet, 13, 2, TerrainTileClassifier.DirtPlainTileIndex);
+                SetDirtTile(backLayer, outdoorsSheet, 14, 2, TerrainTileClassifier.DirtPlainTileIndex);
+                SetDirtTile(backLayer, outdoorsSheet, 15, 2, 200);
+            }
+            else
+            {
+                // Cancelas cerradas:
+                for (int lx = 13; lx <= 14; lx++)
+                {
+                    SetTileIfValid(frontLayer, outdoorsSheet, lx, 0, 359);
+                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 1, 384);
+                    SetPassableIfValid(bldLayer, lx, 1, false);
+                }
+                SetTileIfValid(frontLayer, outdoorsSheet, 15, 0, 360);
+                SetTileIfValid(bldLayer, outdoorsSheet, 15, 1, 385);
+                SetPassableIfValid(bldLayer, 15, 1, false);
+
+                for (int lx = 1; lx <= 15; lx++)
+                    SetDirtTile(backLayer, outdoorsSheet, lx, 2, 201);
+            }
+
+            // Paddock fence NE (lx=23..39):
+            for (int lx = 23; lx < 40; lx++)
+            {
+                SetGrassTile(backLayer, outdoorsSheet, lx, 0, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, lx, 1, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetTileIfValid(frontLayer, outdoorsSheet, lx, 0, 359);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 1, 384);
+                SetPassableIfValid(bldLayer, lx, 1, false);
+                frontLayer.Tiles[lx, 1] = null;
+            }
+
+            SetTileIfValid(frontLayer, outdoorsSheet, 23, 0, 358);
+            SetTileIfValid(bldLayer, outdoorsSheet, 23, 1, 383);
+            SetPassableIfValid(bldLayer, 23, 1, false);
+
+            SetTileIfValid(frontLayer, outdoorsSheet, 39, 0, 360);
+            SetTileIfValid(bldLayer, outdoorsSheet, 39, 1, 385);
+            SetPassableIfValid(bldLayer, 39, 1, false);
+
+            for (int lx = 23; lx < 39; lx++)
+                SetDirtTile(backLayer, outdoorsSheet, lx, 2, 201);
+
+            SetDirtTile(backLayer, outdoorsSheet, 1, 2, 200);
+
+            // 3. BORDE Y ENTRADA OESTE:
+            for (int ly = 2; ly <= 4; ly++)
+            {
+                SetGrassTile(backLayer, outdoorsSheet, 0, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetDirtTile(backLayer, outdoorsSheet, 1, ly, 225);
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+                frontLayer.Tiles[0, ly] = null;
+            }
+
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 4, 436);
+            SetPassableIfValid(bldLayer, 0, 4, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 3, 361);
+            frontLayer.Tiles[0, 4] = null;
+
+            if (side == AnnexSide.East)
+            {
+                // Entrada Oeste abierta en ly=5..6:
+                for (int lx = 0; lx <= 2; lx++)
+                {
+                    for (int ly = 5; ly <= 6; ly++)
+                    {
+                        bldLayer.Tiles[lx, ly] = null;
+                        frontLayer.Tiles[lx, ly] = null;
+                        alwaysFrontLayer.Tiles[lx, ly] = null;
+                        SetDirtTile(backLayer, outdoorsSheet, lx, ly, TerrainTileClassifier.DirtPlainTileIndex);
+                        backLayer.Tiles[lx, ly]?.Properties.Remove("Passable");
+                    }
+                }
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 2, 6, 12);
+                SetDirtTile(backLayer, outdoorsSheet, 1, 4, 200);
+                SetDirtTile(backLayer, outdoorsSheet, 1, 7, 228);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 7, 383);
+                SetPassableIfValid(bldLayer, 0, 7, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 6, 358);
+                SetGrassTile(backLayer, outdoorsSheet, 0, 7, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetPassableIfValid(backLayer, 0, 7, false);
+            }
+            else
+            {
+                for (int ly = 5; ly <= 6; ly++)
+                {
+                    SetGrassTile(backLayer, outdoorsSheet, 0, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                    SetDirtTile(backLayer, outdoorsSheet, 1, ly, 225);
+                    SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                    SetPassableIfValid(bldLayer, 0, ly, false);
+                    SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+                    frontLayer.Tiles[0, ly] = null;
+                }
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 6, 436);
+                SetPassableIfValid(bldLayer, 0, 6, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 5, 361);
+                frontLayer.Tiles[0, 6] = null;
+            }
+
+            // Valla SO (ly=19..27):
+            SetGrassTile(backLayer, outdoorsSheet, 0, 19, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetDirtTile(backLayer, outdoorsSheet, 1, 19, 225);
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 19, 386);
+            SetPassableIfValid(bldLayer, 0, 19, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 18, 361);
+            frontLayer.Tiles[0, 19] = null;
+
+            for (int ly = 20; ly <= 26; ly++)
+            {
+                SetGrassTile(backLayer, outdoorsSheet, 0, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetDirtTile(backLayer, outdoorsSheet, 1, ly, 225);
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                SetPassableIfValid(bldLayer, 0, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
+                frontLayer.Tiles[0, ly] = null;
+            }
+
+            SetGrassTile(backLayer, outdoorsSheet, 0, 27, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetDirtTile(backLayer, outdoorsSheet, 1, 27, 225);
+            SetTileIfValid(bldLayer, outdoorsSheet, 0, 27, 436);
+            SetPassableIfValid(bldLayer, 0, 27, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 0, 26, 361);
+            frontLayer.Tiles[0, 27] = null;
+
+            // 4. BORDE ESTE:
+            for (int ly = 2; ly <= 9; ly++)
+            {
+                SetDirtTile(backLayer, outdoorsSheet, 36, ly, 228);
+                SetGrassTile(backLayer, outdoorsSheet, 37, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                bldLayer.Tiles[37, ly] = null;
+
+                SetGrassTile(backLayer, outdoorsSheet, 38, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, 386);
+                SetPassableIfValid(bldLayer, 38, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 38, ly - 1, 361);
+                frontLayer.Tiles[38, ly] = null;
+                alwaysFrontLayer.Tiles[38, ly] = null;
+
+                SetGrassTile(backLayer, outdoorsSheet, 39, ly, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, 16);
+                SetPassableIfValid(bldLayer, 39, ly, false);
+                frontLayer.Tiles[39, ly] = null;
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, 1020);
+            }
+
+            SetGrassTile(backLayer, outdoorsSheet, 38, 10, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetTileIfValid(bldLayer, outdoorsSheet, 38, 10, 436);
+            SetPassableIfValid(bldLayer, 38, 10, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 38, 9, 361);
+            frontLayer.Tiles[38, 10] = null;
+            alwaysFrontLayer.Tiles[38, 10] = null;
+
+            // Valla SE (ly=19..27):
+            SetGrassTile(backLayer, outdoorsSheet, 38, 19, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetTileIfValid(bldLayer, outdoorsSheet, 38, 19, 386);
+            SetPassableIfValid(bldLayer, 38, 19, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 38, 18, 361);
+            frontLayer.Tiles[38, 19] = null;
+            alwaysFrontLayer.Tiles[38, 19] = null;
+
+            SetDirtTile(backLayer, outdoorsSheet, 36, 19, 228);
+            SetDirtTile(backLayer, outdoorsSheet, 37, 19, 251);
+
+            for (int ly = 20; ly <= 26; ly++)
+            {
+                SetDirtTile(backLayer, outdoorsSheet, 36, ly, 228);
+                SetGrassTile(backLayer, outdoorsSheet, 37, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                bldLayer.Tiles[37, ly] = null;
+
+                SetGrassTile(backLayer, outdoorsSheet, 38, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, 386);
+                SetPassableIfValid(bldLayer, 38, ly, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 38, ly - 1, 361);
+                frontLayer.Tiles[38, ly] = null;
+                alwaysFrontLayer.Tiles[38, ly] = null;
+
+                SetGrassTile(backLayer, outdoorsSheet, 39, ly, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, 16);
+                SetPassableIfValid(bldLayer, 39, ly, false);
+                frontLayer.Tiles[39, ly] = null;
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, 1020);
+            }
+
+            SetGrassTile(backLayer, outdoorsSheet, 38, 27, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetTileIfValid(bldLayer, outdoorsSheet, 38, 27, 436);
+            SetPassableIfValid(bldLayer, 38, 27, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 38, 26, 361);
+            frontLayer.Tiles[38, 27] = null;
+            alwaysFrontLayer.Tiles[38, 27] = null;
+
+            SetGrassTile(backLayer, outdoorsSheet, 39, 27, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+            SetTileIfValid(bldLayer, outdoorsSheet, 39, 27, 16);
+            SetPassableIfValid(bldLayer, 39, 27, false);
+            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 27, 1020);
+
+            SetGrassTile(backLayer, outdoorsSheet, 39, 28, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+            SetTileIfValid(bldLayer, outdoorsSheet, 39, 28, 16);
+            SetPassableIfValid(bldLayer, 39, 28, false);
+            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 28, 1020);
+
+            SetDirtTile(backLayer, outdoorsSheet, 36, 27, 253);
+            SetGrassTile(backLayer, outdoorsSheet, 36, 28, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetGrassTile(backLayer, outdoorsSheet, 37, 27, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetGrassTile(backLayer, outdoorsSheet, 37, 28, TerrainTileClassifier.SunnyGrassTileIndex);
+
+            // 5. BORDE Y ENTRADA SUR:
+            SetTileIfValid(bldLayer, outdoorsSheet, 16, 28, 542);
+            SetPassableIfValid(bldLayer, 16, 28, false);
+            SetGrassTile(backLayer, outdoorsSheet, 16, 28, 537);
+
+            for (int lx = 0; lx < width; lx++)
+            {
+                if (lx == 25) continue; // Acantilado natural
+
+                SetGrassTile(backLayer, outdoorsSheet, lx, 28, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                if (lx != 16) bldLayer.Tiles[lx, 28] = null;
+                frontLayer.Tiles[lx, 28] = null;
+                alwaysFrontLayer.Tiles[lx, 28] = null;
+
+                SetGrassTile(backLayer, outdoorsSheet, lx, 29, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, lx, 30, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, lx, 31, TerrainTileClassifier.SunnyGrassTileIndex);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
+                SetPassableIfValid(bldLayer, lx, 29, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
+                SetPassableIfValid(bldLayer, lx, 30, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
+                SetPassableIfValid(bldLayer, lx, 31, false);
+
+                frontLayer.Tiles[lx, 29] = null;
+                frontLayer.Tiles[lx, 30] = null;
+                frontLayer.Tiles[lx, 31] = null;
+
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
+                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
+            }
+
+            if (side == AnnexSide.North)
+            {
+                // Entrada Sur abierta en lx=13..14:
+                for (int lx = 13; lx <= 14; lx++)
+                {
+                    for (int ly = 27; ly < height; ly++)
+                    {
+                        bldLayer.Tiles[lx, ly] = null;
+                        frontLayer.Tiles[lx, ly] = null;
+                        alwaysFrontLayer.Tiles[lx, ly] = null;
+                        SetDirtTile(backLayer, outdoorsSheet, lx, ly, TerrainTileClassifier.DirtPlainTileIndex);
+                        backLayer.Tiles[lx, ly]?.Properties.Remove("Passable");
+                    }
+                }
+
+                SetDirtTile(backLayer, outdoorsSheet, 11, 27, 251);
+                SetDirtTile(backLayer, outdoorsSheet, 12, 27, 253);
+                SetDirtTile(backLayer, outdoorsSheet, 15, 27, 250);
+                SetDirtTile(backLayer, outdoorsSheet, 16, 27, 251);
+
+                SetDirtTile(backLayer, outdoorsSheet, 12, 28, 225);
+                SetDirtTile(backLayer, outdoorsSheet, 15, 28, 228);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 12, 29, 385);
+                SetPassableIfValid(bldLayer, 12, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 12, 28, 360);
+
+                SetTileIfValid(bldLayer, outdoorsSheet, 15, 29, 383);
+                SetPassableIfValid(bldLayer, 15, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, 15, 28, 358);
+            }
+            else
+            {
+                // Borde Sur cerrado con autotiling canónico (Back: 251):
+                for (int lx = 10; lx <= 15; lx++)
+                    SetDirtTile(backLayer, outdoorsSheet, lx, 27, 251);
+
+                for (int lx = 13; lx <= 14; lx++)
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
+                    SetPassableIfValid(bldLayer, lx, 29, false);
+                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
+                    SetPassableIfValid(bldLayer, lx, 30, false);
+                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
+                    SetPassableIfValid(bldLayer, lx, 31, false);
+
+                    SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
+                    SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
+                    SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
+                }
+            }
+
+            // 6. SECTOR SURESTE (PASTO AUTÉNTICO):
+            for (int ly = 20; ly <= 26; ly++)
+            {
+                for (int lx = 28; lx <= 35; lx++)
+                {
+                    int? bIdx = bldLayer.Tiles[lx, ly]?.TileIndex;
+                    if (bIdx is 708 or 710 or 695 or 712 or 768)
+                        bldLayer.Tiles[lx, ly] = null;
                 }
             }
         }

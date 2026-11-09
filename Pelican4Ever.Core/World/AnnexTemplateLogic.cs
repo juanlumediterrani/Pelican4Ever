@@ -167,13 +167,13 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_FourCorners",
                 "Maps/Farm_FourCorners",
-                32, 8,
-                FarmTypeBehavior.None with { MountainOreArea = new TileArea(24, 22, 10, 5), InitialMountainOreDays = 10, FourCornersExtras = true },
+                20, 24,
+                FarmTypeBehavior.None with { MountainOreArea = new TileArea(28, 20, 9, 7), InitialMountainOreDays = 10, FourCornersExtras = true },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(32, 8, new TilePoint(13, 30)),
-                    [AnnexSide.East] = new(32, 8, new TilePoint(1, 15)),
-                    [AnnexSide.South] = new(32, 8, new TilePoint(20, 1))
+                    [AnnexSide.North] = new(20, 24, new TilePoint(13, 30), MountainOreArea: new TileArea(28, 20, 9, 7)),
+                    [AnnexSide.East] = new(20, 24, new TilePoint(1, 5), MountainOreArea: new TileArea(28, 20, 9, 7)),
+                    [AnnexSide.South] = new(20, 24, new TilePoint(13, 1), MountainOreArea: new TileArea(28, 20, 9, 7))
                 }
             ),
             ["Ranching"] = new AnnexTemplate(
