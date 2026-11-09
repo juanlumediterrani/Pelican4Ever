@@ -651,6 +651,26 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void AnnexTemplates_Combat_ConfiguresAuthenticWildernessLayouts()
+        {
+            var combat = AnnexTemplateCatalog.GetTemplate("Combat");
+            Assert.Equal("Maps/Farm_Combat", combat.SourceVanillaMap);
+            Assert.True(combat.Behavior.NightMonsters);
+
+            var northLayout = combat.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(16, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+
+            var eastLayout = combat.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(14, eastLayout.EntranceTile.Y);
+
+            var southLayout = combat.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(16, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+        }
+
+        [Fact]
         public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
         {
             const int w = 40;

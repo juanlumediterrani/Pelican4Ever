@@ -153,9 +153,9 @@ namespace Pelican4Ever.Core.World
                 FarmTypeBehavior.None with { NightMonsters = true },
                 Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
                 {
-                    [AnnexSide.North] = new(24, 10, new TilePoint(20, 30)),
-                    [AnnexSide.East] = new(24, 10, new TilePoint(1, 15)),
-                    [AnnexSide.South] = new(24, 10, new TilePoint(20, 1))
+                    [AnnexSide.North] = new(24, 10, new TilePoint(16, 30)),
+                    [AnnexSide.East] = new(24, 10, new TilePoint(1, 14)),
+                    [AnnexSide.South] = new(24, 10, new TilePoint(16, 1))
                 }
             ),
             ["FourCorners"] = new AnnexTemplate(
