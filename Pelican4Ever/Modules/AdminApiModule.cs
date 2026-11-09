@@ -535,6 +535,20 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "GET /api/v1/host/render":
+                {
+                    WriteJson(res, HeadlessRenderModule.GetStatus());
+                    break;
+                }
+
+                case "POST /api/v1/host/render":
+                {
+                    // El registro de préstamos es seguro entre hilos y no toca el juego: no hace falta ir al hilo principal.
+                    HostRenderRequestDto body = ReadJsonBody<HostRenderRequestDto>(req) ?? new HostRenderRequestDto();
+                    WriteJson(res, HeadlessRenderModule.RequestRendering(body.Requester, body.Minutes));
+                    break;
+                }
+
                 case "GET /api/v1/host/events":
                 {
                     long sinceId = 0;

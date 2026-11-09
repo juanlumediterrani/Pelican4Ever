@@ -209,6 +209,15 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool RestartExitsProcess { get; set; } = false;
 
+        /// <summary>
+        /// Servidor desatendido sin dibujado: con <see cref="AutoHostSaveName"/> configurado, el host deja de dibujar
+        /// mientras el mundo está cargado (la simulación sigue a 60 Hz y la red igual; cada cliente dibuja lo suyo).
+        /// Sin GPU, dibujar por CPU ocupa núcleos enteros aunque no haya nadie. Se dibuja igualmente en el título, con la
+        /// pantalla de guardado abierta (el juego la necesita) y mientras haya un préstamo de dibujado
+        /// (<c>POST /api/v1/host/render</c>, <c>p4e_render</c> o la API de mod). Sin efecto si un humano hace de host.
+        /// </summary>
+        public bool HeadlessRendering { get; set; } = true;
+
         // ─────────────────────── Checkpoints intradía (Épica 11) ───────────────────────
 
         /// <summary>
