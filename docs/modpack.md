@@ -65,6 +65,25 @@ En el archivo `config.json` generado por Nature In The Valley (`Mods/NatureInThe
 
 ---
 
+## 🔒 El servidor exige el modpack
+
+`RequireClientMod` (activo por defecto) expulsa a quien entre sin SMAPI o sin Pelican 4Ever con la misma versión mayor.menor. Con **`RequiredClientMods`** el servidor exige también el resto del modpack: cada UniqueID de la lista, **en la versión exacta que tiene instalada el propio servidor** (no se repite en config.json; al actualizar un mod en el servidor, la exigencia cambia sola). Un ID que el servidor no tenga se ignora con un aviso.
+
+```json
+"RequiredClientMods": [
+  "Pathoschild.ContentPatcher",
+  "spacechase0.SpaceCore",
+  "PeacefulEnd.FashionSense",
+  "Dr4co.Stardew.FashionSenseBody",
+  "Nature.NatureInTheValley",
+  "Nature.NatureInValleyContent",
+  "SmolHooman.WildAnimalsInTheValley",
+  "Pelican4Ever.NITVCompat"
+]
+```
+
+Al expulsar, el registro de SMAPI del servidor y el suceso `player.rejected` de la API de anfitrión dicen qué falta o qué versión no coincide (por ejemplo, `falta spacechase0.SpaceCore 1.28.4`). Los mods que el cliente tenga de más no se comprueban. Los mods que solo usa el servidor (el puente de Stardew Voyager) no van en la lista.
+
 ## 🚀 Despliegue del Modpack
 
 1. **Estructura final del directorio `Mods/`:**

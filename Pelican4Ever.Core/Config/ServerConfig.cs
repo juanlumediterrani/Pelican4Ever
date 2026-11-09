@@ -156,6 +156,14 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Si es true, el host expulsa a los clientes que no tengan Pelican 4Ever con versión compatible.</summary>
         public bool RequireClientMod { get; set; } = true;
 
+        /// <summary>
+        /// Resto del modpack que debe tener cada cliente (UniqueID de SMAPI), además de Pelican 4Ever. La versión exigida es
+        /// la que tiene instalada el host, exacta: actualizar un mod en el servidor cambia la exigencia sin tocar este
+        /// fichero. Un ID que el host no tenga instalado se ignora con un aviso. Vacío (por defecto) = solo Pelican 4Ever.
+        /// Requiere <see cref="RequireClientMod"/>.
+        /// </summary>
+        public List<string> RequiredClientMods { get; set; } = new();
+
         /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations.</summary>
         public int FarmSlotCount { get; set; } = 4;
 
@@ -357,6 +365,11 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
             if (BackupRetentionDays < 0)
                 errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
+            foreach (string id in RequiredClientMods ?? new List<string>())
+            {
+                if (!Pelican4Ever.Core.Networking.ClientModRequirements.IsValidUniqueId(id))
+                    errors.Add($"{nameof(RequiredClientMods)} contiene un UniqueID no válido: '{id}'.");
+            }
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
                 errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
 

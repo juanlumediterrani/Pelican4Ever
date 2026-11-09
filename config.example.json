@@ -31,6 +31,16 @@
   "FestivalWindowEnd": 2350,
   "DedicatedServerMode": false,
   "RequireClientMod": true,
+  "RequiredClientMods": [
+    "Pathoschild.ContentPatcher",
+    "spacechase0.SpaceCore",
+    "PeacefulEnd.FashionSense",
+    "Dr4co.Stardew.FashionSenseBody",
+    "Nature.NatureInTheValley",
+    "Nature.NatureInValleyContent",
+    "SmolHooman.WildAnimalsInTheValley",
+    "Pelican4Ever.NITVCompat"
+  ],
   "FarmSlotCount": 16,
   "MaxAnnexesPerResidence": 2,
   "FirstAnnexPriceMultiplier": 0.4,
