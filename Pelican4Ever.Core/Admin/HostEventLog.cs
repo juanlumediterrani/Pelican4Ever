@@ -11,6 +11,7 @@ namespace Pelican4Ever.Core.Admin
     {
         public const string PlayerConnected = "player.connected";
         public const string PlayerDisconnected = "player.disconnected";
+        public const string PlayerRejected = "player.rejected";
         public const string FestivalSignUp = "festival.signup";
         public const string FestivalSignUpLeft = "festival.signup.left";
         public const string FestivalRunStarted = "festival.run.started";
