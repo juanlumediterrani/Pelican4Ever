@@ -235,7 +235,7 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
 ### `GET /api/v1/host/events?since=N`
 
 Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados. Si `LastEventId` es menor que el cursor solicitado, el registro se ha reiniciado y el cliente debe volver a consultar desde 0.
-Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`), préstamos de dibujado (`host.render.lease.granted`, `host.render.lease.released`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
 
 **Respuesta `200 OK` (`HostEventsResponseDto`):**
 ```json
@@ -272,3 +272,48 @@ Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), 
   ]
 }
 ```
+
+### `GET /api/v1/host/render`
+
+Estado del **servidor sin dibujado** (`HeadlessRendering`). En un servidor desatendido (`AutoHostSaveName` configurado) el host deja de dibujar con el mundo cargado: la simulación sigue a 60 Hz, la red funciona igual y cada cliente dibuja lo suyo. Sin GPU, dibujar por CPU ocupa núcleos enteros aunque nadie mire la pantalla del host. Se dibuja igualmente en el título y la carga, con la pantalla de guardado abierta (`SaveGameMenu` no empieza a guardar hasta haberse dibujado) y mientras haya un préstamo de dibujado.
+
+**Respuesta `200 OK` (`HostRenderStatusDto`):**
+```json
+{
+  "HeadlessRenderingEnabled": true,
+  "Drawing": false,
+  "Reason": "Suppressed",
+  "Leases": [],
+  "Message": ""
+}
+```
+
+`Reason`: `Disabled` (opción desactivada), `Attended` (sin `AutoHostSaveName`: hay una persona de host), `WorldNotReady` (título o carga), `DrawRequiredMenu` (pantalla de guardado), `Lease` (préstamo vigente) o `Suppressed` (sin dibujar).
+
+### `POST /api/v1/host/render`
+
+Pide o retira un **préstamo de dibujado** con caducidad, para quien necesite ver la pantalla del host (Stardew Voyager manejando menús, Putre o un diagnóstico). Cada solicitante tiene como mucho uno: pedirlo de nuevo lo renueva. Dura entre 1 y 120 minutos (se recorta); si quien lo pidió se cae, caduca solo y el host vuelve a no dibujar. `Minutes: 0` lo retira. No toca el estado del juego. Las capturas de `takeMapScreenshot` (las del puente de Voyager) no necesitan préstamo.
+
+También: comando de consola `p4e_render [status] | <minutos> | off` (solicitante `console`) y, para otros mods, la API de mod `RequestRendering(requester, minutes)` / `ReleaseRendering(requester)` / `IsHostDrawing()` (`Helper.ModRegistry.GetApi<...>("Pelican4Ever.SVRTMP")`).
+
+**Cuerpo de petición (`HostRenderRequestDto`):**
+```json
+{
+  "Requester": "putre",
+  "Minutes": 15
+}
+```
+
+**Respuesta `200 OK` (`HostRenderStatusDto`):**
+```json
+{
+  "HeadlessRenderingEnabled": true,
+  "Drawing": true,
+  "Reason": "Lease",
+  "Leases": [
+    { "Requester": "putre", "ExpiresAtUtc": "2026-11-09T05:15:00Z" }
+  ],
+  "Message": "Dibujado prestado a 'putre' hasta 2026-11-09T05:15:00.0000000Z."
+}
+```
+

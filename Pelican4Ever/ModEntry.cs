@@ -59,11 +59,15 @@ namespace Pelican4Ever
                 new FestivalParticipationModule(),
                 new AgentCosmeticsModule(),
                 new AdminApiModule(),
-                new AutoHostModule()
+                new AutoHostModule(),
+                new HeadlessRenderModule()
             );
 
             Monitor.Log($"Cargado (cambio de fecha {config.CalendarDayChangeTime}, inicio de reloj/horarios {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
         }
+
+        /// <summary>API para otros mods (por ejemplo, el puente de Stardew Voyager). Ver <see cref="PelicanApi"/>.</summary>
+        public override object? GetApi() => context == null ? null : new PelicanApi();
 
         private void RegisterModules(params IModule[] modules)
         {

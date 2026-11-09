@@ -42,6 +42,7 @@
   "SafeRestartWarningMinutes": 5,
   "AutoHostSaveName": "",
   "RestartExitsProcess": false,
+  "HeadlessRendering": true,
   "CheckpointIntervalMinutes": 0,
   "EnableTestCommands": false,
   "CheckpointDebugMode": false,

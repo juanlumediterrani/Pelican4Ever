@@ -197,6 +197,38 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
+    /// Petición de préstamo de dibujado para <c>POST /api/v1/host/render</c>. <c>Minutes = 0</c> lo retira.
+    /// </summary>
+    public sealed class HostRenderRequestDto
+    {
+        /// <summary>Quién lo pide (1-40 caracteres [A-Za-z0-9._-]); cada uno tiene como mucho un préstamo.</summary>
+        public string Requester { get; set; } = "api";
+        /// <summary>Minutos de dibujado (1-120, se recorta); 0 retira el préstamo del solicitante.</summary>
+        public int Minutes { get; set; } = 10;
+    }
+
+    /// <summary>Préstamo vigente en <see cref="HostRenderStatusDto"/>.</summary>
+    public sealed class HostRenderLeaseDto
+    {
+        public string Requester { get; set; } = string.Empty;
+        public DateTime ExpiresAtUtc { get; set; }
+    }
+
+    /// <summary>Estado del dibujado del host para <c>GET/POST /api/v1/host/render</c>.</summary>
+    public sealed class HostRenderStatusDto
+    {
+        /// <summary><c>HeadlessRendering</c> en config.json.</summary>
+        public bool HeadlessRenderingEnabled { get; set; }
+        /// <summary>Si el host está dibujando ahora.</summary>
+        public bool Drawing { get; set; }
+        /// <summary>Motivo (<c>Disabled</c>, <c>Attended</c>, <c>WorldNotReady</c>, <c>DrawRequiredMenu</c>, <c>Lease</c>, <c>Suppressed</c>).</summary>
+        public string Reason { get; set; } = string.Empty;
+        public List<HostRenderLeaseDto> Leases { get; set; } = new();
+        /// <summary>Mensaje de la última petición (vacío en GET).</summary>
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Respuesta estándar de acciones de <c>/api/v1/host/*</c>.
     /// </summary>
     public sealed class HostActionResultDto
@@ -229,7 +261,9 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/announce",          MutatesGameState: true,  "Envía un aviso global por chat y/o en pantalla (HUD) a los jugadores."),
             new("POST", "/api/v1/host/rest",              MutatesGameState: true,  "Registra el descanso diario del anfitrión sin desconectar la sesión (TASK-804)."),
             new("POST", "/api/v1/host/restart",           MutatesGameState: true,  "Programa o cancela un reinicio controlado del servidor con preaviso (TASK-804)."),
-            new("GET",  "/api/v1/host/events",            MutatesGameState: false, "Devuelve la lista incremental de sucesos desde el cursor ?since=N.")
+            new("GET",  "/api/v1/host/events",            MutatesGameState: false, "Devuelve la lista incremental de sucesos desde el cursor ?since=N."),
+            new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
+            new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico).")
         };
 
         /// <summary>
