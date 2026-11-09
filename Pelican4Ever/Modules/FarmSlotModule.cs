@@ -5061,7 +5061,7 @@ namespace Pelican4Ever.Modules
             string targetLoc = locationRequest.Name;
 
             // Control de acceso continuo a granjas privadas instanciadas (Opción B: Bloqueo si está Locked)
-            if (targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!locationRequest.IsStructure && targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 string baseSlot = targetLoc;
                 if (baseSlot.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase))
@@ -5119,7 +5119,7 @@ namespace Pelican4Ever.Modules
                     }
                 }
             }
-            else if (targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            else if (!locationRequest.IsStructure && targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 if (Context.IsMainPlayer && locationRequest.Location == null)
                 {
@@ -5298,7 +5298,8 @@ namespace Pelican4Ever.Modules
             if (curLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 var annex = context?.WorldState.FindAnnexById(curLoc);
-                if (annex != null)
+                if (annex != null && !locationRequest.IsStructure
+                    && string.Equals(targetLoc, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))
                 {
                     string? residenceFarmType = context?.WorldState.Doors.Values
                         .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))?.FarmType;
