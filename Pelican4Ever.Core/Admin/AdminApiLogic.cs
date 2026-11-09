@@ -109,6 +109,23 @@ namespace Pelican4Ever.Core.Admin
         }
 
         /// <summary>
+        /// Si una petición que lleva cuerpo (POST, PUT, PATCH) llega sin <c>Content-Length</c> ni
+        /// <c>Transfer-Encoding: chunked</c>. <c>HttpListener</c> ya le ha respondido por su cuenta
+        /// <c>411 Length Required</c> y cerrado la respuesta, pero la petición sigue llegando al mod: hay que
+        /// descartarla sin ejecutar la acción (el cliente ya recibió un error).
+        /// </summary>
+        public static bool IsMissingRequiredBodyLength(string? method, string? contentLength, string? transferEncoding)
+        {
+            string m = (method ?? string.Empty).Trim().ToUpperInvariant();
+            if (m != "POST" && m != "PUT" && m != "PATCH")
+                return false;
+            if (!string.IsNullOrWhiteSpace(contentLength))
+                return false;
+            return transferEncoding == null
+                || transferEncoding.IndexOf("chunked", StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+        /// <summary>
         /// Evalúa el acceso tanto para el panel (<c>GET /</c>, <c>GET /dashboard</c>) como para cualquier ruta <c>/api/*</c> (TASK-803).
         /// Sin token válido o si el servidor tiene el token por defecto, responde 401.
         /// </summary>

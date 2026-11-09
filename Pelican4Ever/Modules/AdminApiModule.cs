@@ -258,7 +258,7 @@ namespace Pelican4Ever.Modules
                 try
                 {
                     HttpListenerContext httpCtx = listener.GetContext();
-                    ThreadPool.QueueUserWorkItem(_ => ProcessRequest(httpCtx));
+                    ThreadPool.QueueUserWorkItem(_ => ProcessRequestSafe(httpCtx));
                 }
                 catch (HttpListenerException)
                 {
@@ -274,10 +274,52 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        /// <summary>
+        /// Envoltorio de último recurso: corre en un hilo del pool, donde una excepción sin capturar aborta el proceso
+        /// del juego entero (SIGABRT). Nada de lo que haga un cliente HTTP puede tumbar el servidor.
+        /// </summary>
+        private void ProcessRequestSafe(HttpListenerContext httpCtx)
+        {
+            try
+            {
+                ProcessRequest(httpCtx);
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[AdminApiModule] Petición {httpCtx.Request.HttpMethod} {httpCtx.Request.Url?.AbsolutePath} falló: {ex.GetType().Name}: {ex.Message}", LogLevel.Warn);
+                TryWriteError(httpCtx.Response, HttpStatusCode.InternalServerError, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Escribe una respuesta de error si todavía se puede. Si el cliente ya se fue o la respuesta ya se envió (por
+        /// ejemplo, el 411 automático de <c>HttpListener</c>), no hay nada que hacer y no debe propagarse.
+        /// </summary>
+        private static void TryWriteError(HttpListenerResponse res, HttpStatusCode status, string message)
+        {
+            try
+            {
+                res.StatusCode = (int)status;
+                WriteJson(res, new { error = message });
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or HttpListenerException or InvalidOperationException or System.IO.IOException)
+            {
+                // Respuesta ya cerrada: el cliente ya tiene su respuesta (o se fue).
+            }
+        }
+
         private void ProcessRequest(HttpListenerContext httpCtx)
         {
             HttpListenerRequest req = httpCtx.Request;
             HttpListenerResponse res = httpCtx.Response;
+
+            // HttpListener ya ha contestado 411 a un POST sin longitud y ha cerrado la respuesta: no ejecutar la acción.
+            if (AdminApiLogic.IsMissingRequiredBodyLength(req.HttpMethod, req.Headers["Content-Length"], req.Headers["Transfer-Encoding"]))
+            {
+                context?.Monitor.Log($"[AdminApiModule] Descartada {req.HttpMethod} {req.Url?.AbsolutePath} sin Content-Length (411): no se ejecuta.", LogLevel.Warn);
+                TryWriteError(res, HttpStatusCode.LengthRequired, "Las peticiones POST deben llevar cuerpo (aunque sea {}).");
+                return;
+            }
 
             if (req.HttpMethod == "OPTIONS")
             {
@@ -360,8 +402,7 @@ namespace Pelican4Ever.Modules
             }
             catch (Exception ex)
             {
-                res.StatusCode = (int)HttpStatusCode.InternalServerError;
-                WriteJson(res, new { error = ex.Message });
+                TryWriteError(res, HttpStatusCode.InternalServerError, ex.Message);
             }
         }
 
