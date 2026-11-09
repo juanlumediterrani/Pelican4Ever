@@ -5152,6 +5152,17 @@ namespace Pelican4Ever.Modules
                 }
             }
 
+            // Durante la colocación remota, currentLocation es el mapa de la cámara.
+            // El regreso al comercio debe conservar la solicitud y su callback de cierre.
+            string curLoc = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
+            string? viewedLocation = Game1.player.viewingLocation.Value;
+            if (!string.IsNullOrEmpty(viewedLocation)
+                && string.Equals(curLoc, viewedLocation, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(targetLoc, Game1.player.currentLocation?.NameOrUniqueName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             // Si el jugador está saliendo de una cabaña hacia la granja principal
             if (Game1.currentLocation is Cabin && targetLoc == "Farm")
             {
@@ -5170,9 +5181,6 @@ namespace Pelican4Ever.Modules
                 }
                 return true;
             }
-
-            // Si el jugador está en una granja privada o en su cueva
-            string curLoc = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
 
             // Interceptar salida desde la cueva de una residencia privada
             if (curLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
