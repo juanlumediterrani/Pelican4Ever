@@ -36,6 +36,8 @@ namespace Pelican4Ever.Models
         public const string BuyAnnexRequest = "BuyAnnexRequest";
         public const string UnlockGreenhouseRequest = "UnlockGreenhouseRequest";
         public const string SyncDoorsState = "SyncDoorsState";
+        public const string RequestAnnexLocation = "RequestAnnexLocation";
+        public const string SyncAnnexLocation = "SyncAnnexLocation";
         public const string RequestDoorsSync = "RequestDoorsSync";
     }
 

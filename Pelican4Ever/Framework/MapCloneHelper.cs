@@ -817,6 +817,13 @@ namespace Pelican4Ever.Framework
                 }
             }
 
+            // Mantener la entrada libre de edificios sin cambiar su transitabilidad.
+            foreach (var (x, y) in clearTiles)
+            {
+                if (x >= 0 && x < width && y >= 0 && y < height && backLayer.Tiles[x, y] is Tile tile)
+                    tile.Properties["Buildable"] = "F";
+            }
+
             return target;
         }
 

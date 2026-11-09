@@ -3472,7 +3472,35 @@ namespace Pelican4Ever.Modules
             {
                 SendDoorsSyncToPlayer(e.FromPlayerID);
             }
-            else if (e.Type == ModMessages.SyncDoorsState)
+            else if (e.Type == ModMessages.RequestAnnexLocation && Context.IsMainPlayer)
+            {
+                var annex = context.WorldState.FindAnnexById(e.ReadAs<string>());
+                if (annex != null
+                    && annex.OwnerId == e.FromPlayerID
+                    && context.WorldState.FindResidenceOf(e.FromPlayerID)?.FarmSlotId == annex.ResidenceSlotId
+                    && (Game1.getLocationFromName(annex.AnnexId) ?? EnsureAnnexLocation(annex, regenerate: false)) is Farm farm)
+                {
+                    var multiplayer = context.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                    byte[] snapshot = multiplayer.writeObjectFullBytes(multiplayer.locationRoot(farm), e.FromPlayerID);
+                    context.Helper.Multiplayer.SendMessage(snapshot, ModMessages.SyncAnnexLocation,
+                        new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                }
+            }
+            else if (e.Type == ModMessages.SyncAnnexLocation && !Context.IsMainPlayer
+                && Context.IsWorldReady && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
+            {
+                using var reader = new BinaryReader(new MemoryStream(e.ReadAs<byte[]>()));
+                // Registrar la raíz del host para recibir los deltas de edificios y animales incluso fuera del anexo.
+                var multiplayer = context.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                if (multiplayer.readObjectFull<GameLocation>(reader).Value is Farm farm
+                    && context.WorldState.FindAnnexById(farm.NameOrUniqueName)?.OwnerId == Game1.player.UniqueMultiplayerID
+                    && Game1.getLocationFromName(farm.NameOrUniqueName) == null)
+                {
+                    RetainSyncedOwnPrivateLocation(farm);
+                }
+            }
+            else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
+                && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
             {
                 var payload = e.ReadAs<SyncDoorsPayload>();
                 if (payload != null)
@@ -3529,6 +3557,15 @@ namespace Pelican4Ever.Modules
 
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas, {context.WorldState.Annexes.Count} anexos).", LogLevel.Info);
                     RefreshSlotLocationData();
+
+                    foreach (var annex in context.WorldState.Annexes.Values)
+                    {
+                        if (annex.OwnerId == localId && Game1.getLocationFromName(annex.AnnexId) == null)
+                        {
+                            context.Helper.Multiplayer.SendMessage(annex.AnnexId, ModMessages.RequestAnnexLocation,
+                                new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                        }
+                    }
 
                     if (Game1.currentLocation != null && HostPlazaLayout.IsPlazaLocation(Game1.currentLocation.NameOrUniqueName))
                     {
@@ -4424,15 +4461,10 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions))
                 );
 
-                // TASK-906: Redirigir el menú de compra de animales de Marnie a la granja privada del jugador
-                var purchaseAnimalsCtors = typeof(PurchaseAnimalsMenu).GetConstructors();
-                if (purchaseAnimalsCtors.Length > 0)
-                {
-                    harmony.Patch(
-                        original: purchaseAnimalsCtors[0],
-                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PurchaseAnimalsMenu_Ctor))
-                    );
-                }
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowAnimalShopMenu)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu))
+                );
 
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
                 harmony.Patch(
@@ -4648,73 +4680,97 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
-        public static bool Prefix_ShowConstructOptions(GameLocation __instance, string builder, int page)
+        private static List<KeyValuePair<string, string>> GetOwnedFarmDestinations()
+        {
+            long playerId = Game1.player.UniqueMultiplayerID;
+            string? residenceId = context!.WorldState.ResolvePlayerResidenceSlot(playerId);
+            var annexes = string.IsNullOrEmpty(residenceId)
+                ? null
+                : context.WorldState.GetAnnexesForResidence(residenceId)
+                    .Where(annex => annex.OwnerId == playerId).ToList();
+
+            return ConstructionLocationFilter.GetAllowedConstructionLocations(
+                playerId, Context.IsMainPlayer, residenceId, annexes);
+        }
+
+        private static Farm? ResolveOwnedFarmDestination(string locationId)
+        {
+            if (context == null || !GetOwnedFarmDestinations().Any(destination => destination.Key == locationId))
+                return null;
+
+            if (Game1.getLocationFromName(locationId) is Farm farm)
+                return farm;
+
+            if (context.WorldState.FindAnnexById(locationId) is AnnexAssignment annex)
+                return EnsureAnnexLocation(annex, regenerate: false);
+
+            return EnsureFarmSlotExists(locationId);
+        }
+
+        public static bool Prefix_ShowConstructOptions(GameLocation __instance, string builder)
         {
             if (context == null)
                 return true;
 
-            Farmer who = Game1.player;
-
-            // Obtener el hueco de residencia asignado al jugador actual
-            string? residenceSlotId = context.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID)?.FarmSlotId;
-
-            if (string.IsNullOrEmpty(residenceSlotId))
-            {
-                if (context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var playerRec) && !string.IsNullOrEmpty(playerRec.FarmSlotId))
-                {
-                    residenceSlotId = playerRec.FarmSlotId;
-                }
-            }
-
-            var annexes = !string.IsNullOrEmpty(residenceSlotId) && context.WorldState.Annexes != null
-                ? context.WorldState.GetAnnexesForResidence(residenceSlotId)
-                : null;
-
-            var allowedLocations = ConstructionLocationFilter.GetAllowedConstructionLocations(
-                who.UniqueMultiplayerID,
-                Context.IsMainPlayer,
-                residenceSlotId,
-                annexes
-            );
-
-            if (allowedLocations.Count == 0)
+            var destinations = GetOwnedFarmDestinations();
+            if (destinations.Count == 0)
             {
                 Game1.drawObjectDialogue("Debes reclamar una residencia en la Plaza Central antes de poder encargar obras de construcción.");
                 return false;
             }
 
-            // Si solo tiene su granja principal (sin anexos), abrimos directamente el menú de construcción en su granja
-            if (allowedLocations.Count == 1)
+            __instance.ShowPagedResponses(
+                Game1.content.LoadString(@"Strings\Buildings:Construction_ChooseLocation"),
+                destinations,
+                locationId =>
+                {
+                    if (ResolveOwnedFarmDestination(locationId) is Farm farm)
+                        Game1.activeClickableMenu = new CarpenterMenu(builder, farm);
+                    else
+                        Game1.drawObjectDialogue("La granja aún no está sincronizada. Inténtalo de nuevo en unos segundos.");
+                },
+                auto_select_single_choice: true
+            );
+
+            return false;
+        }
+
+        public static bool Prefix_ShowAnimalShopMenu(Action<PurchaseAnimalsMenu>? onMenuOpened)
+        {
+            if (context == null)
+                return true;
+
+            var destinations = GetOwnedFarmDestinations();
+            var farmsWithSpace = destinations.Where(destination =>
+                ResolveOwnedFarmDestination(destination.Key)?.buildings.Any(building =>
+                    !building.isUnderConstruction()
+                    && building.GetIndoors() is AnimalHouse house
+                    && !house.isFull()) == true).ToList();
+
+            // Conservar el catálogo de animales como referencia aunque todavía no haya alojamiento libre.
+            var choices = farmsWithSpace.Count > 0
+                ? farmsWithSpace
+                : destinations.Where(destination => ResolveOwnedFarmDestination(destination.Key) != null).Take(1).ToList();
+
+            if (choices.Count == 0)
             {
-                string targetLocName = allowedLocations[0].Key;
-                GameLocation? targetLoc = Game1.getLocationFromName(targetLocName)
-                    ?? EnsureFarmSlotExists(targetLocName);
-                if (targetLoc != null)
-                {
-                    Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, targetLoc);
-                }
-                else
-                {
-                    Game1.drawObjectDialogue(Context.IsMainPlayer
-                        ? $"No se pudo acceder a la ubicación '{targetLocName}'. Inténtalo de nuevo."
-                        : "Tu residencia aún no está sincronizada. Visítala una vez y vuelve a hablar conmigo.");
-                }
+                Game1.drawObjectDialogue(destinations.Count == 0
+                    ? "Debes reclamar una residencia en la Plaza Central antes de poder comprar animales."
+                    : "La granja aún no está sincronizada. Inténtalo de nuevo en unos segundos.");
                 return false;
             }
 
-            // Si tiene anexos, le permitimos elegir entre su granja principal y sus propios anexos (nunca el host ni granjas ajenas)
-            __instance.ShowPagedResponses(
-                Game1.content.LoadString("Strings\\Buildings:Construction_ChooseLocation"),
-                allowedLocations,
-                delegate(string chosenLocationName)
+            Game1.currentLocation.ShowPagedResponses(
+                Game1.content.LoadString(@"Strings\StringsFromCSFiles:PurchaseAnimalsMenu.ChooseLocation"),
+                choices,
+                locationId =>
                 {
-                    GameLocation? loc = Game1.getLocationFromName(chosenLocationName)
-                        ?? EnsureFarmSlotExists(chosenLocationName);
-                    if (loc != null)
-                    {
-                        Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, loc);
-                    }
+                    if (ResolveOwnedFarmDestination(locationId) is not Farm farm)
+                        return;
+
+                    var menu = new PurchaseAnimalsMenu(Utility.getPurchaseAnimalStock(farm), farm);
+                    onMenuOpened?.Invoke(menu);
+                    Game1.activeClickableMenu = menu;
                 },
                 auto_select_single_choice: true
             );
@@ -6211,8 +6267,6 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        // ─── TASK-906: Menú de animales de Marnie redirigido a la granja privada ───
-
         /// <summary>
         /// Versión tolerante de Utility.getAllPets: omite las casas de granjeros que no están cargadas en esta
         /// instancia (residencias ajenas en un farmhand) en lugar de lanzar KeyNotFoundException.
@@ -6300,42 +6354,5 @@ namespace Pelican4Ever.Modules
             context?.Monitor.Log($"[FarmSlotModule] Cliente: {location.NameOrUniqueName} registrada en Game1.locations para menús de Robin/Marnie.", LogLevel.Trace);
         }
 
-        /// <summary>
-        /// Obtiene la granja privada del jugador actual, creándola si aún no está instanciada.
-        /// Devuelve null si el jugador no tiene residencia asignada (en ese caso se usa la granja host).
-        /// </summary>
-        private static Farm? GetPlayerPrivateFarm()
-        {
-            if (context == null) return null;
-            Farmer who = Game1.player;
-
-            // Buscar el slotId asignado al jugador
-            string? slotId = context.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID)?.FarmSlotId;
-
-            if (string.IsNullOrEmpty(slotId))
-            {
-                if (context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var rec) && !string.IsNullOrEmpty(rec.FarmSlotId))
-                    slotId = rec.FarmSlotId;
-            }
-
-            if (string.IsNullOrEmpty(slotId))
-                return null;
-
-            return (Game1.getLocationFromName(slotId) ?? EnsureFarmSlotExists(slotId)) as Farm;
-        }
-
-        /// <summary>
-        /// TASK-906: Antes de construir el PurchaseAnimalsMenu, sustituye la granja que se pasará
-        /// al menú por la granja privada del jugador, de modo que Marnie muestre los corrales
-        /// y gallineros correctos en lugar de los de la granja host.
-        /// El parámetro se llama 'targetLocation' en el ctor de PurchaseAnimalsMenu(List stock, GameLocation targetLocation).
-        /// </summary>
-        public static void Prefix_PurchaseAnimalsMenu_Ctor(ref GameLocation? targetLocation)
-        {
-            Farm? privateFarm = GetPlayerPrivateFarm();
-            if (privateFarm != null)
-                targetLocation = privateFarm;
-        }
     }
 }
