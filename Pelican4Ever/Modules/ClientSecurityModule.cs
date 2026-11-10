@@ -38,8 +38,8 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
 
             // Comandos de consola de administración en el host
-            ctx.Helper.ConsoleCommands.Add("p4e_claim_list", "Lista los peones registrados y su estado de posesión/token.", OnConsoleClaimList);
-            ctx.Helper.ConsoleCommands.Add("p4e_claim_reset", "Libera la posesión de un peón para que pueda ser reclamado de nuevo: p4e_claim_reset <nombre_o_id>", OnConsoleClaimReset);
+            ctx.AddCommand("p4e_claim_list", "Lista los peones registrados y su estado de posesión/token.", OnConsoleClaimList);
+            ctx.AddCommand("p4e_claim_reset", "Libera la posesión de un peón para que pueda ser reclamado de nuevo: p4e_claim_reset <nombre_o_id>", OnConsoleClaimReset);
 
             ApplyHarmonyPatches(ctx.Harmony);
         }

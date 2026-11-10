@@ -228,6 +228,45 @@ namespace Pelican4Ever.Core.Admin
         public string Message { get; set; } = string.Empty;
     }
 
+    /// <summary>Petición de <c>POST /api/v1/host/command</c>: un comando de la lista de permitidos y sus argumentos.</summary>
+    public sealed class HostCommandRequestDto
+    {
+        /// <summary>Nombre del comando de consola (p. ej. <c>p4e_status</c>).</summary>
+        public string Command { get; set; } = string.Empty;
+
+        /// <summary>Argumentos, ya separados.</summary>
+        public List<string> Args { get; set; } = new();
+    }
+
+    /// <summary>Un comando de la lista de permitidos, en <c>GET /api/v1/host/commands</c>.</summary>
+    public sealed class HostCommandInfoDto
+    {
+        public string Command { get; set; } = string.Empty;
+        /// <summary><c>Read</c>, <c>Safe</c> o <c>Sensitive</c>.</summary>
+        public string Risk { get; set; } = string.Empty;
+        public string Usage { get; set; } = string.Empty;
+        /// <summary>Si el comando está registrado en este servidor ahora.</summary>
+        public bool Available { get; set; }
+    }
+
+    public sealed class HostCommandCatalogDto
+    {
+        public List<HostCommandInfoDto> Commands { get; set; } = new();
+    }
+
+    /// <summary>Resultado de <c>POST /api/v1/host/command</c>.</summary>
+    public sealed class HostCommandResultDto
+    {
+        public bool Ok { get; set; }
+        public string Command { get; set; } = string.Empty;
+        public string Risk { get; set; } = string.Empty;
+        /// <summary>Líneas que el comando escribió en el registro mientras se ejecutaba (acotadas).</summary>
+        public List<string> Output { get; set; } = new();
+        public string Message { get; set; } = string.Empty;
+        public int ExecutedOnThreadId { get; set; }
+        public long? EventId { get; set; }
+    }
+
     /// <summary>
     /// Respuesta estándar de acciones de <c>/api/v1/host/*</c>.
     /// </summary>
@@ -262,6 +301,8 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/rest",              MutatesGameState: true,  "Registra el descanso diario del anfitrión sin desconectar la sesión (TASK-804)."),
             new("POST", "/api/v1/host/restart",           MutatesGameState: true,  "Programa o cancela un reinicio controlado del servidor con preaviso (TASK-804)."),
             new("GET",  "/api/v1/host/events",            MutatesGameState: false, "Devuelve la lista incremental de sucesos desde el cursor ?since=N."),
+            new("GET",  "/api/v1/host/commands",          MutatesGameState: false, "Lista cerrada de comandos de consola de Pelican que se pueden ejecutar a distancia, con su riesgo."),
+            new("POST", "/api/v1/host/command",           MutatesGameState: true,  "Ejecuta un comando de consola de la lista de permitidos y devuelve lo que escribe en el registro."),
             new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
             new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico).")
         };

@@ -49,7 +49,7 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_checkpoint_spike",
                 "Spike TASK-1601: guarda la partida a mitad de día y escribe un informe en Pelican4Ever_Backups/spike/.\n" +
                 "Uso: p4e_checkpoint_spike [clonar] [forzar]\n" +

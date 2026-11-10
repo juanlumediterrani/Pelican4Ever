@@ -61,7 +61,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
 
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_safe_restart",
                 "Programa o cancela un reinicio controlado del servidor (TASK-804). Uso: p4e_safe_restart [motivo] [--immediate] [--minutes N] [--cancel]",
                 OnConsoleSafeRestart);
@@ -535,6 +535,31 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "GET /api/v1/host/commands":
+                {
+                    HostCommandCatalogDto dto = ExecuteOnGameThread(() => new HostCommandCatalogDto
+                    {
+                        Commands = RemoteCommandCatalog.Commands.Select(c => new HostCommandInfoDto
+                        {
+                            Command = c.Name,
+                            Risk = c.Risk.ToString(),
+                            Usage = c.Usage,
+                            Available = context != null && context.HasCommand(c.Name)
+                        }).ToList()
+                    });
+                    WriteJson(res, dto);
+                    break;
+                }
+
+                case "POST /api/v1/host/command":
+                {
+                    HostCommandRequestDto body = ReadJsonBody<HostCommandRequestDto>(req) ?? new HostCommandRequestDto();
+                    MainThreadExecutionResult<HostCommandResultDto> result = ExecuteWithThreadInfoOnGameThread(() => RunRemoteCommandOnMainThread(body));
+                    result.Value.ExecutedOnThreadId = result.ExecutedOnThreadId;
+                    WriteJson(res, result.Value);
+                    break;
+                }
+
                 case "GET /api/v1/host/render":
                 {
                     WriteJson(res, HeadlessRenderModule.GetStatus());
@@ -839,6 +864,45 @@ namespace Pelican4Ever.Modules
             }
 
             return statusDto;
+        }
+
+        /// <summary>
+        /// Ejecuta en el hilo del juego un comando de la lista de permitidos (<see cref="RemoteCommandCatalog"/>). Todo intento,
+        /// aceptado o rechazado, queda en el registro de sucesos: es una acción administrativa a distancia.
+        /// </summary>
+        private HostCommandResultDto RunRemoteCommandOnMainThread(HostCommandRequestDto body)
+        {
+            var result = new HostCommandResultDto { Command = body.Command?.Trim() ?? string.Empty };
+            List<string> args = (body.Args ?? new List<string>()).Select(a => a?.Trim() ?? string.Empty).ToList();
+
+            string? rejection = RemoteCommandCatalog.Validate(result.Command, args, out RemoteCommandSpec? spec);
+            if (spec != null)
+                result.Risk = spec.Risk.ToString();
+            if (rejection == null && !Context.IsWorldReady)
+                rejection = "No hay una partida cargada: los comandos solo se ejecutan con el mundo listo.";
+
+            if (rejection != null)
+            {
+                result.Ok = false;
+                result.Message = rejection;
+            }
+            else
+            {
+                result.Ok = context!.TryRunRemote(spec!.Name, args.ToArray(), out IReadOnlyList<string> output, out string? error);
+                result.Output = output.ToList();
+                result.Message = result.Ok
+                    ? $"{spec.Name} ejecutado.{(output.Count == 0 ? " No escribió nada en el registro (puede terminar en los siguientes ticks)." : string.Empty)}"
+                    : error ?? "El comando falló.";
+            }
+
+            context?.Monitor.Log($"[RemoteCommand] {result.Command} {string.Join(" ", args)} -> {(result.Ok ? "ok" : "rechazado/falló: " + result.Message)}", LogLevel.Info);
+            result.EventId = EventLog.Append(
+                HostEventTypes.RemoteCommand,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"Comando remoto {result.Command} {string.Join(" ", args)}: {(result.Ok ? "ejecutado" : "no ejecutado")}",
+                new Dictionary<string, object?> { ["command"] = result.Command, ["args"] = args, ["ok"] = result.Ok, ["risk"] = result.Risk }).Id;
+            return result;
         }
 
         // ── /api/v1/host/map ─────────────────────────────────────────────────────────

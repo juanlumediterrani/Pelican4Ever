@@ -28,7 +28,7 @@ namespace Pelican4Ever
                 return;
             }
 
-            context = new ModContext(helper, Monitor, ModManifest, config, new Harmony(ModManifest.UniqueID));
+            context = new ModContext(helper, new CapturingMonitor(Monitor), ModManifest, config, new Harmony(ModManifest.UniqueID));
 
             // Orden de registro = orden de dependencia. Cada iteración del backlog añade aquí sus módulos.
             RegisterModules(
