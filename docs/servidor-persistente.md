@@ -57,6 +57,10 @@ En una máquina sin GPU (Xvfb y render por CPU) hay dos consumos que no aportan 
    ```json
    { "ListenForConsoleInput": false }
    ```
+   Sin consola, los comandos de administración de Pelican se lanzan por la API: `GET /api/v1/host/commands`
+   lista los permitidos (con su riesgo) y `POST /api/v1/host/command` ejecuta uno y devuelve lo que escribe en el
+   registro. Es una lista cerrada: no incluye `p4e_rollover_now`, `p4e_safe_restart`, `p4e_time`, `p4e_migrate_save`,
+   `p4e_give_*` ni los de prueba.
 2. **Dibujado del host.** `HeadlessRendering` (activo por defecto con `AutoHostSaveName`) deja de dibujar con el mundo
    cargado. Quien necesite ver la pantalla pide un préstamo: `POST /api/v1/host/render` o la API de mod.
 

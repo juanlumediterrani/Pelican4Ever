@@ -235,7 +235,7 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
 ### `GET /api/v1/host/events?since=N`
 
 Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados. Si `LastEventId` es menor que el cursor solicitado, el registro se ha reiniciado y el cliente debe volver a consultar desde 0.
-Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`), préstamos de dibujado (`host.render.lease.granted`, `host.render.lease.released`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`) y expulsión por mods (`player.rejected`, con el motivo).
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`), préstamos de dibujado (`host.render.lease.granted`, `host.render.lease.released`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`) y expulsión por mods (`player.rejected`, con el motivo) y comandos remotos (`host.command`).
 
 **Respuesta `200 OK` (`HostEventsResponseDto`):**
 ```json
@@ -272,6 +272,50 @@ Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), 
   ]
 }
 ```
+
+### `GET /api/v1/host/commands`
+
+Lista **cerrada** de comandos de consola de Pelican que se pueden ejecutar a distancia. Con la consola de SMAPI desactivada (servidor sin terminal) es la única forma de lanzarlos. Lo que no está en la lista no se puede invocar, aunque exista como comando.
+
+**Respuesta `200 OK` (`HostCommandCatalogDto`):**
+```json
+{
+  "Commands": [
+    { "Command": "p4e_status", "Risk": "Read", "Usage": "p4e_status", "Available": true },
+    { "Command": "p4e_checkpoint_now", "Risk": "Safe", "Usage": "p4e_checkpoint_now", "Available": true },
+    { "Command": "p4e_claim_reset", "Risk": "Sensitive", "Usage": "p4e_claim_reset <nombre_o_id>", "Available": true }
+  ]
+}
+```
+
+`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_forage_wave`, `p4e_festival_move`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_time` (desajusta el calendario real), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+
+### `POST /api/v1/host/command`
+
+Ejecuta **en el hilo del juego** un comando de esa lista y devuelve lo que escribe en el registro de SMAPI mientras se ejecuta (hasta 40 líneas de 300 caracteres; lo que emita más tarde, en otros ticks, no entra). Valida el comando, el número de argumentos y su alfabeto (`A-Z a-z 0-9 . _ - @ :`, máx. 40) y exige una partida cargada. Todo intento, aceptado o rechazado, deja un suceso `host.command`.
+
+**Cuerpo de petición (`HostCommandRequestDto`):**
+```json
+{
+  "Command": "p4e_claim_reset",
+  "Args": [ "mTx" ]
+}
+```
+
+**Respuesta `200 OK` (`HostCommandResultDto`):**
+```json
+{
+  "Ok": true,
+  "Command": "p4e_claim_reset",
+  "Risk": "Sensitive",
+  "Output": [ "Posesión de 'mTx' liberada." ],
+  "Message": "p4e_claim_reset ejecutado.",
+  "ExecutedOnThreadId": 1,
+  "EventId": 31
+}
+```
+
+Un comando no permitido o con argumentos no válidos devuelve `Ok: false` con el motivo en `Message` y no se ejecuta.
 
 ### `GET /api/v1/host/render`
 

@@ -66,8 +66,8 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.UpdateTicked += OnPendingResidenceWakeTicked;
 
             // Comandos de consola y chat
-            ctx.Helper.ConsoleCommands.Add("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
-            ctx.Helper.ConsoleCommands.Add("p4e_migrate_save", "Migra y sanea el mapa host y las salidas de la partida actual al nuevo diseño de Plaza Central: p4e_migrate_save [slot|geo]", OnConsoleMigrateSave);
+            ctx.AddCommand("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
+            ctx.AddCommand("p4e_migrate_save", "Migra y sanea el mapa host y las salidas de la partida actual al nuevo diseño de Plaza Central: p4e_migrate_save [slot|geo]", OnConsoleMigrateSave);
             ctx.Helper.Events.GameLoop.GameLaunched += (s, e) =>
             {
                 RegisterChatCommands();

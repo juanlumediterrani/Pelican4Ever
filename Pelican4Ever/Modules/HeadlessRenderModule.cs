@@ -51,7 +51,7 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 Command,
                 "Dibujado del host en el servidor desatendido. Uso: p4e_render [status] | <minutos 1-120> | off",
                 OnCommand);

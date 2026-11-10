@@ -60,7 +60,7 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_checkpoint_now",
                 "Guarda la partida ahora sin cambiar de día y deja una copia en Pelican4Ever_Backups/checkpoints/ (Épica 11).",
                 (_, _) => RequestManual());

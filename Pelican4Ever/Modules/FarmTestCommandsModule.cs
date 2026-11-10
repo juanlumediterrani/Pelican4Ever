@@ -54,7 +54,7 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
             foreach (var command in Commands)
-                ctx.Helper.ConsoleCommands.Add(command.Name, command.Help, (_, args) => Run(command.Name, args, command.Handler));
+                ctx.AddCommand(command.Name, command.Help, (_, args) => Run(command.Name, args, command.Handler));
 
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => RegisterChatCommands();
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;

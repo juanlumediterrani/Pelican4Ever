@@ -34,11 +34,11 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_give_gold",
                 "Da (o quita, si es negativo) oro: p4e_give_gold <cantidad> [jugador_nombre_o_id]",
                 (cmd, args) => Run(() => OnGiveGold(args)));
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_give_item",
                 "Da un item: p4e_give_item <id_o_nombre> [cantidad=1] [jugador_nombre_o_id]  (id p.ej. 74 o (O)74; nombre con _ por espacios, p.ej. Prismatic_Shard)",
                 (cmd, args) => Run(() => OnGiveItem(args)));

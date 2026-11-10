@@ -57,7 +57,7 @@ namespace Pelican4Ever.Modules
                 ctx.Monitor.Log($"[AgentCosmeticsModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
             }
 
-            ctx.Helper.ConsoleCommands.Add(Command,
+            ctx.AddCommand(Command,
                 $"Pone o quita el cuerpo de Dr4co (Fashion Sense): {Command} [on|off] [jugador_nombre_o_id]. Sin jugador, al host.",
                 OnCommand);
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => RegisterChatCommand();

@@ -62,7 +62,7 @@ namespace Pelican4Ever.Modules
                 ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
                 ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
                 ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-                ctx.Helper.ConsoleCommands.Add("p4e_rollover_now", "Fuerza la secuencia segura de guardado y rollover.", OnForceRollover);
+                ctx.AddCommand("p4e_rollover_now", "Fuerza la secuencia segura de guardado y rollover.", OnForceRollover);
             }
         }
 

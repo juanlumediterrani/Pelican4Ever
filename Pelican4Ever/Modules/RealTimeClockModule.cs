@@ -68,7 +68,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
 
             // Comandos para host para forzar o adelantar/retrasar horas (+X, -X, reset)
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_time",
                 "Ajusta o fuerza la hora del juego en el servidor. Uso: p4e_time <+X|-X|reset|set HH:mm> (ej: p4e_time +2, p4e_time -1, p4e_time reset)",
                 OnConsoleTime
