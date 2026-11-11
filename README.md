@@ -12,13 +12,13 @@ Features customizable private residences accessible via the Central Plaza and a 
 
 The **Pelican 4Ever Preview Server** is now live for playtesters and collaborators!
 
-Server access is protected via cryptographic device authentication and prior pairing whitelist (`P4E\x02`). To join the playtesting phase:
+Server access is protected via cryptographic device authentication (`P4E\x02`). To join the playtesting phase:
 
 1. **Join the Discord server:** [https://discord.gg/2x5RuvvQB](https://discord.gg/2x5RuvvQB)
-2. **Send a direct message (DM) to Dextrure** to request your **pairing code** and provide your initial public IP address.
-3. Once authorized and connected for the first time with the updated mod, your device will be permanently linked, allowing subsequent logins from any IP address.
+2. **Install the mod and connect:** Follow the client installation steps and enter the server's direct IP.
+3. **Request approval:** Send your short public fingerprint via direct message (DM) to **Dextrure** on Discord to permanently authorize your device.
 
-For detailed instructions on setup and requirements, see the [Playtester Guide](docs/plan-despliegue-y-guia-testers-identidad.md).
+For complete step-by-step instructions, see the [Playtester Guide](docs/guia-testers.en.md).
 
 ---
 
@@ -70,7 +70,8 @@ For detailed instructions on setup and requirements, see the [Playtester Guide](
 
 ## 📚 Technical Documentation
 
-* [Playtester Guide & Identity Deployment Plan (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
+* [Playtester Guide (`docs/guia-testers.en.md`)](docs/guia-testers.en.md)
+* [Identity Deployment Plan & Operations (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
 * [Device Identity Protocol & Threat Model (`docs/protocolo-identidad-y-modelo-amenazas.md`)](docs/protocolo-identidad-y-modelo-amenazas.md)
 * [Game Design (`design.md`)](design.md)
 * [Technical Architecture (`architecture.md`)](architecture.md)

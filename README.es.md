@@ -12,13 +12,13 @@ Incluye residencias privadas personalizables accesibles desde la Plaza Central y
 
 ¡El **Servidor Preview de Pelican 4Ever** ya está disponible para testers y colaboradores!
 
-El acceso al servidor está protegido mediante autenticación criptográfica y lista blanca por emparejamiento previo (`P4E\x02`). Para participar en las pruebas:
+El acceso al servidor está protegido mediante autenticación criptográfica de dispositivos (`P4E\x02`). Para unirte a la fase de pruebas:
 
 1. **Únete al servidor de Discord:** [https://discord.gg/2x5RuvvQB](https://discord.gg/2x5RuvvQB)
-2. **Envía un mensaje directo (DM) a Dextrure** para solicitar tu **código de pairing** e indicar tu IP pública inicial.
-3. Tras recibir la confirmación y conectar por primera vez con el mod actualizado, tu dispositivo quedará vinculado de forma permanente para acceder desde cualquier conexión.
+2. **Instala el mod y conecta:** Sigue los pasos de instalación en tu cliente e introduce la IP directa del servidor.
+3. **Solicita aprobación:** Envía tu huella digital pública corta por mensaje directo (DM) a **Dextrure** en Discord para autorizar tu dispositivo permanentemente.
 
-Para más detalles sobre el proceso de conexión y requisitos del cliente, consulta la [Guía para Testers](docs/plan-despliegue-y-guia-testers-identidad.md).
+Para ver las instrucciones detalladas paso a paso, consulta la [Guía para Testers](docs/guia-testers.md).
 
 ---
 
@@ -70,7 +70,8 @@ Para más detalles sobre el proceso de conexión y requisitos del cliente, consu
 
 ## 📚 Documentación Técnica
 
-* [Guía para Testers e Identidad de Dispositivos (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
+* [Guía para Testers (`docs/guia-testers.md`)](docs/guia-testers.md)
+* [Plan de Despliegue de Identidad y Operaciones (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
 * [Protocolo de Identidad y Modelo de Amenazas (`docs/protocolo-identidad-y-modelo-amenazas.md`)](docs/protocolo-identidad-y-modelo-amenazas.md)
 * [Diseño del Juego (`design.md`)](design.md)
 * [Arquitectura Técnica (`architecture.md`)](architecture.md)
