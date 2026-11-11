@@ -10,16 +10,16 @@ Todos los mods listados a continuación deben estar instalados en el **servidor 
 
 | Mod / Paquete | Autor | Rol / Dependencia | Nexus / Ubicación |
 | :--- | :--- | :--- | :--- |
-| **Pelican 4Ever (`SV-RTMP`)** | Pelican 4Ever Team | Mod principal de persistencia 24/7, reloj 1:1, residencias y economía | [Repositorio local](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG) |
+| **Pelican 4Ever (`SV-RTMP`)** | Pelican 4Ever Team | Mod principal de persistencia 24/7, reloj 1:1, residencias y economía | [Repositorio](../) |
 | **SMAPI (4.1+)** | Pathoschild | Cargador base de mods para Stardew Valley 1.6+ | [smapi.io](https://smapi.io/) |
 | **Content Patcher (1.30+)** | Pathoschild | Framework para inyección de datos y assets sin alterar binarios | [Nexus #1915](https://www.nexusmods.com/stardewvalley/mods/1915) |
 | **SpaceCore (1.24+)** | spacechase0 | Framework de C# requerido por NITV para herramientas y skills | [Nexus #1348](https://www.nexusmods.com/stardewvalley/mods/1348) |
 | **Fashion Sense (7.5.0+)** | PeacefulEnd | **Requerido para el sprite del Host.** Framework de cuerpos/animaciones | [Nexus #9969](https://www.nexusmods.com/stardewvalley/mods/9969) |
-| **Dr4co Dragon Body** | Dr4co / Codex | Pack cosmético para Fashion Sense que viste al Host como dragón | [`agents/Dr4co.FashionSense`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/agents/Dr4co.FashionSense) (PR #1) |
+| **Dr4co Dragon Body** | Dr4co / Codex | Pack cosmético para Fashion Sense que viste al Host como dragón | [`agents/Dr4co.FashionSense`](../agents/Dr4co.FashionSense) (PR #1) |
 | **Nature In The Valley (NITV) 1.3.4** | w8AwA8w | Mecánica de captura de fauna con red, terrarios e Insectario | [Nexus #30138](https://www.nexusmods.com/stardewvalley/mods/30138) |
 | **NITV Multiplayer Support** | XanCreations | **Parche obligatorio de concurrencia** para spawns con múltiples jugadores | [Nexus #30138 (Addons)](https://www.nexusmods.com/stardewvalley/mods/30138) |
 | **NITV - SH's Wild Animals In The Valley** | plurffle (SmolHooman) | Paquete de fauna salvaje ambiental y agresiva para el framework NITV | [Nexus #42968](https://www.nexusmods.com/stardewvalley/mods/42968) |
-| **Pelican 4Ever NITV Compat** | Pelican 4Ever Team | Pack de Content Patcher que mapea las 16 residencias privadas en NITV | [`deploy/modpack/Pelican4Ever.NITVCompat`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/deploy/modpack/Pelican4Ever.NITVCompat) |
+| **Pelican 4Ever NITV Compat** | Pelican 4Ever Team | Pack de Content Patcher que mapea las 16 residencias privadas en NITV | [`deploy/modpack/Pelican4Ever.NITVCompat`](../deploy/modpack/Pelican4Ever.NITVCompat) |
 
 ---
 
@@ -43,7 +43,7 @@ El PR `#1` (`codex/dr4co-agent-sprite`) añade el pack cosmético en la carpeta 
 
 ### 1. Parche de Concurrencia Multijugador y Aislamiento de Spawns
 * **Motivo:** En NITV vainilla, el evento `Player.Warped` de SMAPI se activa cuando cualquier jugador de la partida cambia de mapa. Al no verificar si el jugador es local, el cambio de mapa de un granjero provocaba que los clientes remotos recalculasen sus árboles y vaciasen su fauna activa (`ClearUnclaimedCreatures`).
-* **Solución nativa en Pelican 4Ever:** [`FarmSlotModule.cs`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/Pelican4Ever/Modules/FarmSlotModule.cs) incluye parches Harmony automáticos que interceptan `OnWarp` para aislar el ciclo exclusivamente al granjero local (`eventArgs.IsLocalPlayer`) y enrutar las etiquetas de bioma (`validLocation`) hacia `Forest` y `Beach`. No se requiere instalar librerías externas adicionales.
+* **Solución nativa en Pelican 4Ever:** [`FarmSlotModule.cs`](../Pelican4Ever/Modules/FarmSlotModule.cs) incluye parches Harmony automáticos que interceptan `OnWarp` para aislar el ciclo exclusivamente al granjero local (`eventArgs.IsLocalPlayer`) y enrutar las etiquetas de bioma (`validLocation`) hacia `Forest` y `Beach`. No se requiere instalar librerías externas adicionales.
 
 ### 2. Aumento del Límite de Apariciones (*Spawn Cap*)
 En el archivo `config.json` generado por Nature In The Valley (`Mods/NatureInTheValley/config.json`):
@@ -56,7 +56,7 @@ En el archivo `config.json` generado por Nature In The Valley (`Mods/NatureInThe
   * `"Nature.NIV.Forest"`: Inyectado dinámicamente en parcelas y anexos de Recolección (*Foraging*) y Cuatro Esquinas (*FourCorners*). Permite la aparición de fauna de bosque sin depender de superar 60 árboles.
   * `"Nature.NIV.Beach"`: Inyectado dinámicamente en parcelas y anexos Fluviales (*Fishing*) y Costeros (*Beach*). Permite la aparición de fauna acuática y de litoral.
   * `"Nature.NIV.Underground"`: Inyectado en las cuevas privadas de cada residencia (`Pelican4Ever_Farm_XX_Cave`) para habilitar criaturas subterráneas.
-* El pack Content Patcher [`deploy/modpack/Pelican4Ever.NITVCompat`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/deploy/modpack/Pelican4Ever.NITVCompat) y el módulo C# [`FarmSlotModule.cs`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/Pelican4Ever/Modules/FarmSlotModule.cs) mantienen sincronizadas estas propiedades en `Data/Locations`.
+* El pack Content Patcher [`deploy/modpack/Pelican4Ever.NITVCompat`](../deploy/modpack/Pelican4Ever.NITVCompat) y el módulo C# [`FarmSlotModule.cs`](../Pelican4Ever/Modules/FarmSlotModule.cs) mantienen sincronizadas estas propiedades en `Data/Locations`.
 
 ### 4. Dinámica con el Reloj en Tiempo Real 1:1 y Madrugada (*NightHold*)
 * Durante la **Madrugada continua (*NightHold*)**, entre las 01:50 y las 06:00 de la vida real, el reloj del juego permanece fijo en `2550`.
