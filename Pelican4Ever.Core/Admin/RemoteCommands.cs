@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using Pelican4Ever.Core.Players;
 
 namespace Pelican4Ever.Core.Admin
 {
@@ -53,8 +54,11 @@ namespace Pelican4Ever.Core.Admin
             new("p4e_status", RemoteCommandRisk.Read, 0, 0, "p4e_status"),
             new("p4e_doors", RemoteCommandRisk.Read, 0, 0, "p4e_doors"),
             new("p4e_claim_list", RemoteCommandRisk.Read, 0, 0, "p4e_claim_list"),
+            new("p4e_pair_list", RemoteCommandRisk.Read, 0, 0, "p4e_pair_list"),
             new("p4e_checkpoint_now", RemoteCommandRisk.Safe, 0, 0, "p4e_checkpoint_now"),
+            new("p4e_pair_allow", RemoteCommandRisk.Safe, 2, 2, "p4e_pair_allow <usuario> <ip>", CheckPairAllow),
             new("p4e_claim_reset", RemoteCommandRisk.Sensitive, 1, 1, "p4e_claim_reset <nombre_o_id>"),
+            new("p4e_pair_revoke", RemoteCommandRisk.Sensitive, 1, 1, "p4e_pair_revoke <usuario_o_ip_o_id>"),
             new("p4e_forage_wave", RemoteCommandRisk.Sensitive, 0, 0, "p4e_forage_wave"),
             new("p4e_festival_move", RemoteCommandRisk.Sensitive, 3, 3, "p4e_festival_move <spring|summer|fall|winter> <díaActual> <díaNuevo>", CheckFestivalMove),
         };
@@ -88,6 +92,13 @@ namespace Pelican4Ever.Core.Admin
                 return "La estación debe ser spring, summer, fall o winter.";
             if (!int.TryParse(args[1], out int from) || !int.TryParse(args[2], out int to) || from is < 1 or > 28 || to is < 1 or > 28)
                 return "Los días deben ser números entre 1 y 28.";
+            return null;
+        }
+
+        private static string? CheckPairAllow(IReadOnlyList<string> args)
+        {
+            if (!ClientPairingLogic.IsValidInviteIp(args[1], out _, out string? error))
+                return error;
             return null;
         }
     }

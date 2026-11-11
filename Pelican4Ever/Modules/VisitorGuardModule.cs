@@ -62,6 +62,12 @@ namespace Pelican4Ever.Modules
             if (context == null || location == null || Game1.player == null)
                 return false;
 
+            if (ClientSecurityModule.IsLocalClientAwaitingPairing)
+                return true;
+
+            if (!Context.IsMainPlayer && context.Config.ProtectPublicHubs && VisitorPermissionLogic.IsProtectedPublicHub(location.NameOrUniqueName))
+                return true;
+
             string? slotId = VisitorPermissionLogic.ResidenceSlotOf(location.NameOrUniqueName);
             if (slotId == null)
                 return false;

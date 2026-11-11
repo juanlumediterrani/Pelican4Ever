@@ -3112,6 +3112,10 @@ namespace Pelican4Ever.Modules
             else if (e.Type == ModMessages.RequestDoorsSync && Context.IsMainPlayer)
             {
                 SendDoorsSyncToPlayer(e.FromPlayerID);
+                if (ClientSecurityModule.IsPlayerPendingPairing(e.FromPlayerID))
+                {
+                    ClientSecurityModule.SendPairingChallengeToPlayer(e.FromPlayerID);
+                }
             }
             else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
@@ -3260,6 +3264,14 @@ namespace Pelican4Ever.Modules
         {
             if (context == null) return false;
             var worldState = context.WorldState;
+
+            if (playerId != Game1.player.UniqueMultiplayerID && ClientSecurityModule.IsPlayerPendingPairing(playerId))
+            {
+                context.Monitor.Log($"[FarmSlotModule] Reclamo de {doorId} por {playerId} rechazado (pendiente de código de pairing).", LogLevel.Warn);
+                SendDoorsSyncToPlayer(playerId);
+                ClientSecurityModule.SendPairingChallengeToPlayer(playerId);
+                return false;
+            }
 
             DoorModel? door = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
             bool doorActive = door != null && PlazaCatalogFormatter.IsDoorActive(door.DefaultSlotId, door.LocationName, context.Config.FarmSlotCount);
@@ -3569,6 +3581,11 @@ namespace Pelican4Ever.Modules
         public static void InteractWithResidentialDoor(DoorModel door)
         {
             if (context == null || Game1.currentLocation == null) return;
+            if (ClientSecurityModule.IsLocalClientAwaitingPairing)
+            {
+                Game1.addHUDMessage(new HUDMessage("Introduce primero tu código de pairing para poder reclamar una residencia.", HUDMessage.error_type));
+                return;
+            }
             var worldState = context.WorldState;
 
             worldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment);

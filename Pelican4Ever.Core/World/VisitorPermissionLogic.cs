@@ -70,6 +70,15 @@ namespace Pelican4Ever.Core.World
                 || assignment.VisitorsCanEdit;
         }
 
+        /// <summary>
+        /// Indica si la ubicación forma parte de la Plaza Central común (<c>Farm</c> o <c>Pelican4Ever_Bridge_*</c>),
+        /// donde solo el anfitrión puede usar herramientas de trabajo, colocar objetos o abrir cofres/máquinas.
+        /// </summary>
+        public static bool IsProtectedPublicHub(string? locationName)
+        {
+            return HostPlazaLayout.IsPlazaLocation(locationName);
+        }
+
         /// <summary>Texto del estado de acceso para los diálogos.</summary>
         public static string Describe(AccessPolicy policy, bool visitorsCanEdit)
         {

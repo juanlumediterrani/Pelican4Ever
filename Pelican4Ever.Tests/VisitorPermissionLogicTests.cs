@@ -65,6 +65,18 @@ namespace Pelican4Ever.Tests
             Assert.Equal(expected, VisitorPermissionLogic.Describe(policy, canEdit));
         }
 
+        [Theory]
+        [InlineData("Farm", true)]
+        [InlineData("Pelican4Ever_Bridge_1", true)]
+        [InlineData("Pelican4Ever_Bridge_3", true)]
+        [InlineData("Pelican4Ever_Farm_01", false)]
+        [InlineData("Town", false)]
+        [InlineData(null, false)]
+        public void IsProtectedPublicHub_IdentifiesPlazaAndBridges(string? locationName, bool expected)
+        {
+            Assert.Equal(expected, VisitorPermissionLogic.IsProtectedPublicHub(locationName));
+        }
+
         [Fact]
         public void ChatSummary_ListsOnlyClaimedAndCountsFree()
         {

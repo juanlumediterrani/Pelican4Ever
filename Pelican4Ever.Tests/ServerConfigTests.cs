@@ -117,4 +117,17 @@ public class ServerConfigTests
         Assert.True(config.IsModuleEnabled("Persistence"));
         Assert.False(config.IsModuleEnabled("Festivals"));
     }
+
+    [Fact]
+    public void PairingWhitelistAndPublicHubProtection_HaveExpectedDefaultsAndValidation()
+    {
+        var config = new ServerConfig();
+        Assert.True(config.RequirePairingWhitelist);
+        Assert.Equal(72, config.PairingInviteTtlHours);
+        Assert.False(config.ProtectPublicHubs);
+        Assert.Empty(config.Validate());
+
+        var invalidTtl = new ServerConfig { PairingInviteTtlHours = 0 };
+        Assert.Contains(invalidTtl.Validate(), e => e.Contains(nameof(ServerConfig.PairingInviteTtlHours)));
+    }
 }

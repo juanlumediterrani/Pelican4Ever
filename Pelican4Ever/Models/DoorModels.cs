@@ -37,6 +37,29 @@ namespace Pelican4Ever.Models
         public const string UnlockGreenhouseRequest = "UnlockGreenhouseRequest";
         public const string SyncDoorsState = "SyncDoorsState";
         public const string RequestDoorsSync = "RequestDoorsSync";
+        public const string PairingChallenge = "PairingChallenge";
+        public const string PairingSubmit = "PairingSubmit";
+        public const string PairingResult = "PairingResult";
+    }
+
+    public class PairingChallengePayload
+    {
+        public string Alias { get; set; } = string.Empty;
+        public int RemainingAttempts { get; set; } = 3;
+        public string PromptMessage { get; set; } = "Introduce tu código de pairing:";
+    }
+
+    public class PairingSubmitPayload
+    {
+        public string Code { get; set; } = string.Empty;
+        public string ClientToken { get; set; } = string.Empty;
+    }
+
+    public class PairingResultPayload
+    {
+        public bool Ok { get; set; }
+        public int RemainingAttempts { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 
     public class UnlockGreenhousePayload

@@ -157,6 +157,24 @@ namespace Pelican4Ever.Core.Config
         public bool RequireClientMod { get; set; } = true;
 
         /// <summary>
+        /// Si es true (por defecto), solo pueden acceder los dispositivos emparejados en la lista blanca o las conexiones
+        /// cuya IP tenga una invitación activa (<c>p4e_pair_allow &lt;usuario&gt; &lt;ip&gt;</c>) pendiente de introducir el código de pairing.
+        /// </summary>
+        public bool RequirePairingWhitelist { get; set; } = true;
+
+        /// <summary>
+        /// Horas de validez de un código de emparejamiento asíncrono desde que se genera (por defecto 72h = 3 días).
+        /// </summary>
+        public int PairingInviteTtlHours { get; set; } = 72;
+
+        /// <summary>
+        /// Si es true, impide a los jugadores que no sean el anfitrión usar herramientas de trabajo, colocar objetos/bombas
+        /// o abrir cofres/máquinas en la Plaza Central (<c>Farm</c>) y en los puentes (<c>Pelican4Ever_Bridge_*</c>).
+        /// Desactivado (<c>false</c>) por defecto.
+        /// </summary>
+        public bool ProtectPublicHubs { get; set; } = false;
+
+        /// <summary>
         /// Resto del modpack que debe tener cada cliente (UniqueID de SMAPI), además de Pelican 4Ever. La versión exigida es
         /// la que tiene instalada el host, exacta: actualizar un mod en el servidor cambia la exigencia sin tocar este
         /// fichero. Un ID que el host no tenga instalado se ignora con un aviso. Vacío (por defecto) = solo Pelican 4Ever.
@@ -365,6 +383,8 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
             if (BackupRetentionDays < 0)
                 errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
+            if (PairingInviteTtlHours is < 1 or > 720)
+                errors.Add($"{nameof(PairingInviteTtlHours)} debe estar entre 1 y 720 horas. Valor: {PairingInviteTtlHours}.");
             foreach (string id in RequiredClientMods ?? new List<string>())
             {
                 if (!Pelican4Ever.Core.Networking.ClientModRequirements.IsValidUniqueId(id))

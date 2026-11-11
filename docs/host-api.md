@@ -288,7 +288,7 @@ Lista **cerrada** de comandos de consola de Pelican que se pueden ejecutar a dis
 }
 ```
 
-`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_forage_wave`, `p4e_festival_move`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_time` (desajusta el calendario real), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`, `p4e_pair_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día; `p4e_pair_allow <usuario> <ip>`: prepara un alta por IP con código de pairing válido 3 días); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_pair_revoke`, `p4e_forage_wave`, `p4e_festival_move`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_time` (desajusta el calendario real), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
 
 ### `POST /api/v1/host/command`
 

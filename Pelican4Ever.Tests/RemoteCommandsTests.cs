@@ -12,6 +12,7 @@ public class RemoteCommandsTests
     [InlineData("p4e_status")]
     [InlineData("p4e_doors")]
     [InlineData("p4e_claim_list")]
+    [InlineData("p4e_pair_list")]
     [InlineData("p4e_checkpoint_now")]
     [InlineData("p4e_forage_wave")]
     [InlineData("P4E_STATUS")]        // sin distinguir mayúsculas
@@ -99,10 +100,23 @@ public class RemoteCommandsTests
         Assert.Equal(RemoteCommandRisk.Read, Risk("p4e_status"));
         Assert.Equal(RemoteCommandRisk.Read, Risk("p4e_doors"));
         Assert.Equal(RemoteCommandRisk.Read, Risk("p4e_claim_list"));
+        Assert.Equal(RemoteCommandRisk.Read, Risk("p4e_pair_list"));
         Assert.Equal(RemoteCommandRisk.Safe, Risk("p4e_checkpoint_now"));
+        Assert.Equal(RemoteCommandRisk.Safe, Risk("p4e_pair_allow"));
         Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_claim_reset"));
+        Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_pair_revoke"));
         Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_forage_wave"));
         Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_festival_move"));
+    }
+
+    [Theory]
+    [InlineData("Dextrure", "83.44.12.34", true)]
+    [InlineData("Dextrure", "2001:db8::1", true)]
+    [InlineData("Dextrure", "0.0.0.0", false)]
+    [InlineData("Dextrure", "no-es-ip", false)]
+    public void PairAllow_ValidatesIpAddress(string user, string ip, bool valid)
+    {
+        Assert.Equal(valid, Validate("p4e_pair_allow", user, ip) == null);
     }
 
     [Fact]

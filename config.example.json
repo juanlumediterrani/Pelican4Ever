@@ -31,6 +31,9 @@
   "FestivalWindowEnd": 2350,
   "DedicatedServerMode": false,
   "RequireClientMod": true,
+  "RequirePairingWhitelist": true,
+  "PairingInviteTtlHours": 72,
+  "ProtectPublicHubs": false,
   "RequiredClientMods": [
     "Pathoschild.ContentPatcher",
     "spacechase0.SpaceCore",

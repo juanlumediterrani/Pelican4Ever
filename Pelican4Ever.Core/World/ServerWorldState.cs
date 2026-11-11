@@ -103,6 +103,12 @@ namespace Pelican4Ever.Core.World
         /// <summary>Puntuaciones de minijuegos en festivales asíncronos (TASK-701).</summary>
         public List<FestivalScoreEntry> FestivalScores { get; set; } = new();
 
+        /// <summary>Dispositivos de clientes emparejados y autorizados en la lista blanca (clave: ClientToken).</summary>
+        public Dictionary<string, AuthorizedClient> AuthorizedClients { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>Invitaciones de emparejamiento pendientes (con IP autorizada, código de un solo uso y caducidad de 3 días).</summary>
+        public List<PairingInvite> PairingInvites { get; set; } = new();
+
         /// <summary>Último día de juego cerrado por un Rollover (TotalDays), o -1.</summary>
         public int LastRolloverGameDay { get; set; } = -1;
 
@@ -324,6 +330,18 @@ namespace Pelican4Ever.Core.World
             if (Annexes == null)
             {
                 Annexes = new Dictionary<string, AnnexAssignment>();
+                changed = true;
+            }
+
+            if (AuthorizedClients == null)
+            {
+                AuthorizedClients = new Dictionary<string, AuthorizedClient>(StringComparer.Ordinal);
+                changed = true;
+            }
+
+            if (PairingInvites == null)
+            {
+                PairingInvites = new List<PairingInvite>();
                 changed = true;
             }
 
