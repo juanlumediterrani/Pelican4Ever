@@ -87,7 +87,7 @@ Pelican4Ever.sln
 ├── Pelican4Ever/           # Mod SMAPI (.NET 6, ensamblado con parches Harmony)
 │   ├── Framework/          # ModContext, IModule, routing espacial y clonación de mapas
 │   └── Modules/            # 31 módulos SMAPI desacoplados con registro defensivo
-└── Pelican4Ever.Tests/     # Suite de 1.205 pruebas unitarias y de contrato en xUnit (.NET 8)
+└── Pelican4Ever.Tests/     # Suite de 1.235 pruebas unitarias y de contrato en xUnit (.NET 8)
 ```
 
 ---
