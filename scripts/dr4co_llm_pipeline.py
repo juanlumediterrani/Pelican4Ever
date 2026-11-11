@@ -18,8 +18,8 @@ import shutil
 from PIL import Image, ImageDraw, ImageFilter
 import numpy as np
 
-ROOT = "/home/mtx/Documentos/Projects/Stardew Valley MORPG"
-ARTIFACT_DIR = "/home/mtx/.gemini/antigravity/brain/388369fa-4859-4b2e-9a31-3c90c4a2d744"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ARTIFACT_DIR = os.environ.get("ARTIFACT_DIR", os.path.join(ROOT, "agents", "Dr4co sprites", "fuente"))
 LLM_JPG_SRC = os.path.join(ARTIFACT_DIR, "dr4co_3x3_llm_1794193495219.jpg")
 
 DR4CO_DIR = os.path.join(ROOT, "agents", "Dr4co sprites")

@@ -16,7 +16,7 @@ import shutil
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-ROOT = "/home/mtx/Documentos/Projects/Stardew Valley MORPG"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 

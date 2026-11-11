@@ -1,0 +1,20 @@
+# Experimental and work-in-progress agent skins
+Putre/
+Putre.FashionSense/
+
+# Image editor workfiles and source projects
+*.xcf
+*.psd
+
+# Local testing and preview tools
+sprite_viewer.html
+
+# Generated test artifacts and intermediate frames
+**/pruebas/
+**/scratch/
+
+# Temporary and backup files
+*.tmp
+*.bak
+*~
+*.log

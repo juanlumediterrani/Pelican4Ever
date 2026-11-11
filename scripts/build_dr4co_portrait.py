@@ -11,7 +11,7 @@ import shutil
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
-ROOT = "/home/mtx/Documentos/Projects/Stardew Valley MORPG"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC_PORTRAIT = os.path.join(ROOT, "agents", "Dr4co sprites", "fuente", "dr4co_portrait_llm.png")
 OUT_PORTRAIT_DIR = os.path.join(ROOT, "agents", "Dr4co sprites", "portrait")
 FS_BODY_DIR = os.path.join(ROOT, "agents", "Dr4co.FashionSense", "Bodies", "Dr4co")

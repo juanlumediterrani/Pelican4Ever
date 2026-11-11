@@ -1,15 +1,57 @@
+# .NET build outputs
 bin/
 obj/
 *.user
 *.suo
-*.zip
 .vs/
+TestResults/
+
+# IDE & Editor settings
 .idea/
 .vscode/
+
+# Local configuration and credentials
 local.props
-.env
 config.json
+.env
+.env.*
+!.env.example
+*.token
+*.secret
+*.key
+*.pem
+*.pfx
+*.p12
+
+# Runtime and persistent world data
 data/
-TestResults/
+
+# Archives and binaries
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.rar
+
+# Python caches & virtual environments
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Scratch & WIP experimental scripts
+scripts/retrodiffusion_generate.py
+scripts/build_putre_*.py
+
+# Agent tooling & local metadata
+.agents/
+
+# Operating system artifacts
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+*.tmp
+*.bak
