@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Pelican4Ever.Core.Localization;
 
 namespace Pelican4Ever.Core.Festivals
 {
@@ -126,8 +127,10 @@ namespace Pelican4Ever.Core.Festivals
             IEnumerable<FestivalScoreEntry> entries,
             string festivalId,
             int gameDay,
-            string? festivalTitle = null)
+            string? festivalTitle = null,
+            ITranslationProvider? translations = null)
         {
+            var provider = translations ?? CoreI18n.Current;
             string normId = NormalizeFestivalId(festivalId);
             var ordered = entries
                 .Where(e => (NormalizeFestivalId(e.FestivalId) == normId || string.IsNullOrEmpty(normId) || e.GameDay == gameDay) && e.Score > 0)
@@ -141,15 +144,12 @@ namespace Pelican4Ever.Core.Festivals
 
             if (ordered.Count == 0)
             {
-                return $"=== Tablón Oficial: {title} ===^^"
-                    + "Todavía no hay marcas registradas en el evento de hoy.^^"
-                    + "¡Habla con el alcalde Lewis para participar en la próxima tanda!^^"
-                    + "El premio oficial se entregará a la mejor marca al cierre del festival (23:50).";
+                return provider.Get("festival.score_board_empty", new { title });
             }
 
             var lines = new List<string>
             {
-                $"=== Clasificación Oficial: {title} ===^^"
+                provider.Get("festival.score_board_header", new { title })
             };
 
             for (int i = 0; i < ordered.Count; i++)
@@ -157,15 +157,15 @@ namespace Pelican4Ever.Core.Festivals
                 var entry = ordered[i];
                 string medal = i switch
                 {
-                    0 => "1. [1er Puesto]",
-                    1 => "2. [2º Puesto]",
-                    2 => "3. [3er Puesto]",
+                    0 => provider.Get("festival.rank_1"),
+                    1 => provider.Get("festival.rank_2"),
+                    2 => provider.Get("festival.rank_3"),
                     _ => $"{i + 1}."
                 };
                 lines.Add($"{medal} {entry.PlayerName} — {entry.Score} pts");
             }
 
-            lines.Add("^^El ganador con la mayor puntuación de la jornada recibirá el premio oficial a las 23:50.");
+            lines.Add(provider.Get("festival.score_board_footer"));
             return string.Join("^", lines);
         }
     }

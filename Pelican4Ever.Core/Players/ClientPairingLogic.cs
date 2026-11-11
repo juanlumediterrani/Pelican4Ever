@@ -4,6 +4,7 @@ using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using Pelican4Ever.Core.Localization;
 using Pelican4Ever.Core.World;
 
 namespace Pelican4Ever.Core.Players
@@ -400,7 +401,7 @@ namespace Pelican4Ever.Core.Players
 
             if (string.IsNullOrWhiteSpace(clientToken))
             {
-                message = "Tu cliente no proporcionó un identificador de dispositivo válido.";
+                message = CoreI18n.Get("security.pairing_invalid_device");
                 return PairingRedeemResult.MissingToken;
             }
 
@@ -412,7 +413,7 @@ namespace Pelican4Ever.Core.Players
 
             if (string.IsNullOrEmpty(cleanCode))
             {
-                message = "El código de emparejamiento no puede estar vacío.";
+                message = CoreI18n.Get("security.pairing_code_empty");
                 return PairingRedeemResult.InvalidCode;
             }
 
@@ -426,11 +427,11 @@ namespace Pelican4Ever.Core.Players
                 PairingInvite? inviteForIp = FindActiveInviteForIp(state, normIp, nowUtc);
                 if (inviteForIp == null)
                 {
-                    message = "No hay ninguna invitación de emparejamiento activa para tu conexión o ha caducado.";
+                    message = CoreI18n.Get("security.pairing_no_active_invite");
                     return PairingRedeemResult.ExpiredOrNoInvite;
                 }
 
-                message = "Código de emparejamiento incorrecto.";
+                message = CoreI18n.Get("security.pairing_incorrect_code");
                 return PairingRedeemResult.InvalidCode;
             }
 
@@ -439,7 +440,7 @@ namespace Pelican4Ever.Core.Players
                 !string.IsNullOrEmpty(normIp) &&
                 !string.Equals(NormalizeIp(inviteByCode.AllowedIp), normIp, StringComparison.OrdinalIgnoreCase))
             {
-                message = "Este código de emparejamiento está vinculado a otra dirección IP.";
+                message = CoreI18n.Get("security.pairing_ip_mismatch");
                 return PairingRedeemResult.IpMismatch;
             }
 
@@ -461,7 +462,7 @@ namespace Pelican4Ever.Core.Players
             PlayerRecord record = state.GetOrCreatePlayer(playerId, string.IsNullOrWhiteSpace(playerName) ? inviteByCode.Alias : playerName);
             record.OwnerToken = trimmedToken;
 
-            message = $"¡Dispositivo emparejado correctamente como '{inviteByCode.Alias}'!";
+            message = CoreI18n.Get("security.pairing_success", new { alias = inviteByCode.Alias });
             return PairingRedeemResult.Success;
         }
 

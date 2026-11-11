@@ -216,7 +216,7 @@ namespace Pelican4Ever.Modules
             if (RolloverTiming.IsWarningDue(diff, warningMinutes: 10) && !warned10)
             {
                 warned10 = true;
-                BroadcastHUDMessage("Aviso: en 10 minutos se guardará la granja y se cerrarán las conexiones para el cambio de fecha.", HUDMessage.newQuest_type);
+                BroadcastHUDMessage(I18n.Get("rollover.warning_10min"), HUDMessage.newQuest_type);
             }
 
             // Inicio de la secuencia diaria exacto a la hora configurada (primeros 3 segundos).
@@ -382,9 +382,9 @@ namespace Pelican4Ever.Modules
 
         private void RequestPeerClose()
         {
-            BroadcastHUDMessage("Guardado confirmado. El servidor cerrará esta conexión para cambiar la fecha.", HUDMessage.error_type);
+            BroadcastHUDMessage(I18n.Get("rollover.closing_server"), HUDMessage.error_type);
             context.Helper.Multiplayer.SendMessage(
-                message: "Guardado confirmado. Desconectando para el cambio de fecha.",
+                message: "rollover.disconnecting",
                 messageType: RolloverCloseMessageType,
                 modIDs: new[] { context.Manifest.UniqueID });
             peerCloseDeadlineUtc = DateTimeOffset.UtcNow + PeerGracePeriod;
@@ -400,7 +400,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             string message = e.ReadAs<string>();
-            Game1.addHUDMessage(new HUDMessage(message, HUDMessage.error_type));
+            Game1.addHUDMessage(new HUDMessage(I18n.Get(message), HUDMessage.error_type));
             DelayedAction.functionAfterDelay(() => Game1.ExitToTitle(), 1500);
         }
 

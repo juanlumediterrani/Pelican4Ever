@@ -75,7 +75,7 @@ namespace Pelican4Ever.Modules
         {
             if (Context.IsMainPlayer || e.FromModID != context.Manifest.UniqueID || e.Type != NoticeMessageType)
                 return;
-            Game1.addHUDMessage(new HUDMessage(e.ReadAs<string>(), HUDMessage.newQuest_type));
+            Game1.addHUDMessage(new HUDMessage(I18n.Get(e.ReadAs<string>()), HUDMessage.newQuest_type));
         }
 
         private void ResetDay()
@@ -145,9 +145,9 @@ namespace Pelican4Ever.Modules
         {
             pendingManual = manual;
             pendingStartUtc = DateTimeOffset.UtcNow.AddSeconds(AnnounceSeconds);
-            Game1.addHUDMessage(new HUDMessage("Guardando el mundo en unos segundos…", HUDMessage.newQuest_type));
+            Game1.addHUDMessage(new HUDMessage(I18n.Get("checkpoint.saving_soon"), HUDMessage.newQuest_type));
             context.Helper.Multiplayer.SendMessage(
-                "Guardando el mundo en unos segundos…",
+                "checkpoint.saving_soon",
                 NoticeMessageType,
                 modIDs: new[] { context.Manifest.UniqueID });
         }

@@ -202,11 +202,11 @@ namespace Pelican4Ever.Modules
 
             if (scores.Count == 0)
             {
-                chat.addInfoMessage("No hay puntuaciones registradas en el festival de hoy todavía.");
+                chat.addInfoMessage(I18n.Get("festival.no_scores"));
                 return;
             }
 
-            chat.addMessage($"=== Clasificación de {seasonDay} ===", new Color(255, 215, 0));
+            chat.addMessage(I18n.Get("festival.leaderboard_header", new { date = seasonDay }), new Color(255, 215, 0));
             var formatted = FestivalScoreLogic.FormatLeaderboard(scores, seasonDay, today);
             foreach (string entry in formatted)
             {
@@ -239,7 +239,7 @@ namespace Pelican4Ever.Modules
                 if (!warningAnnouncedToday && CeremonyLogic.IsWarningWindow(e.NewTime, CeremonyLogic.DefaultCeremonyTime, CeremonyLogic.WarningLeadTimeMinutes))
                 {
                     warningAnnouncedToday = true;
-                    Game1.chatBox?.addMessage($"[Aviso Festivo] La ceremonia de {ceremonyName} dará comienzo en 15 minutos (21:00) en la playa.", new Color(255, 215, 0));
+                    Game1.chatBox?.addMessage(I18n.Get("festival.ceremony_warning_15m", new { ceremony = ceremonyName }), new Color(255, 215, 0));
                 }
 
                 // 2. Arranque automático sincronizado a las 21:00 con los vecinos presentes en el mapa
@@ -255,12 +255,12 @@ namespace Pelican4Ever.Modules
                         bool started = FestivalParticipationModule.StartCeremonyRun(festId, attendees);
                         if (started)
                         {
-                            Game1.chatBox?.addMessage($"[Ceremonia] ¡Comienza la ceremonia de {ceremonyName} en la playa con {attendees.Count} vecinos presentes!", new Color(255, 215, 0));
+                            Game1.chatBox?.addMessage(I18n.Get("festival.ceremony_started", new { ceremony = ceremonyName, count = attendees.Count }), new Color(255, 215, 0));
                         }
                     }
                     else
                     {
-                        Game1.chatBox?.addInfoMessage($"[Ceremonia] La ceremonia de {ceremonyName} estaba programada a las 21:00, pero no había vecinos presentes en la playa.");
+                        Game1.chatBox?.addInfoMessage(I18n.Get("festival.ceremony_no_attendees", new { ceremony = ceremonyName }));
                     }
                 }
             }
@@ -282,7 +282,7 @@ namespace Pelican4Ever.Modules
             if (winner != null && !winner.RewardAwarded)
             {
                 winner.RewardAwarded = true;
-                Game1.chatBox?.addMessage($"[Festivales] ¡{winner.PlayerName} ha ganado el minijuego festivo de hoy con {winner.Score} puntos!", new Color(255, 215, 0));
+                Game1.chatBox?.addMessage(I18n.Get("festival.winner_announcement", new { winner = winner.PlayerName, score = winner.Score }), new Color(255, 215, 0));
 
                 QueuePrize(winner.PlayerId, winner.PlayerName, FestivalPrizeLogic.PrizeKey(seasonDay, today));
 
@@ -353,7 +353,7 @@ namespace Pelican4Ever.Modules
 
                 Game1.player.modData[GrantedPrizesKey] = FestivalPrizeLogic.AddToList(granted, key);
                 Game1.player.addItemsByMenuIfNecessary(prizes);
-                Game1.addHUDMessage(new HUDMessage("¡Has recibido el premio oficial por ganar el minijuego del festival!", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("festival.prize_received"), HUDMessage.newQuest_type));
             }
 
             ConfirmPrize(key);

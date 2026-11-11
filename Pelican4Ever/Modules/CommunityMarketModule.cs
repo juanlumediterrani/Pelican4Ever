@@ -124,14 +124,14 @@ namespace Pelican4Ever.Modules
 
             Response[] choices = new[]
             {
-                new Response("Browse", "Ver ofertas a la venta"),
-                new Response("Sell", "Poner objeto en venta (sostenido en mano)"),
-                new Response("Manage", "Gestionar mis ofertas activas"),
-                new Response("Cancel", "Salir")
+                new Response("Browse", I18n.Get("market.menu.browse")),
+                new Response("Sell", I18n.Get("market.menu.sell")),
+                new Response("Manage", I18n.Get("market.menu.manage")),
+                new Response("Cancel", I18n.Get("dialog.exit"))
             };
 
             QuestionDialog.Ask(
-                "Tablón del Mercado Vecinal de Pelican Town:",
+                I18n.Get("market.board_title"),
                 choices,
                 (who, whichAnswer) =>
                 {
@@ -164,20 +164,20 @@ namespace Pelican4Ever.Modules
 
             if (activeListings.Count == 0)
             {
-                Game1.drawObjectDialogue("No hay ofertas de vecinos en venta en este momento.");
+                Game1.drawObjectDialogue(I18n.Get("market.no_listings"));
                 return;
             }
 
             var choices = new List<Response>();
             foreach (MarketListing listing in activeListings)
             {
-                string text = $"{listing.ItemDisplayName} (x{listing.Stack}) - {listing.PriceGold}g (De: {listing.SellerName})";
+                string text = $"{listing.ItemDisplayName} (x{listing.Stack}) - {listing.PriceGold}g ({listing.SellerName})";
                 choices.Add(new Response(listing.ListingId, text));
             }
-            choices.Add(new Response("Cancel", "Volver"));
+            choices.Add(new Response("Cancel", I18n.Get("dialog.back")));
 
             QuestionDialog.Ask(
-                "Ofertas disponibles en el Mercado Vecinal:",
+                I18n.Get("market.available_listings"),
                 choices.ToArray(),
                 (who, whichAnswer) =>
                 {
@@ -199,12 +199,12 @@ namespace Pelican4Ever.Modules
 
             Response[] choices = new[]
             {
-                new Response("Buy", $"Comprar por {listing.PriceGold}g"),
-                new Response("Cancel", "Cancelar")
+                new Response("Buy", I18n.Get("market.buy_confirm", new { price = listing.PriceGold })),
+                new Response("Cancel", I18n.Get("dialog.cancel"))
             };
 
             QuestionDialog.Ask(
-                $"¿Deseas comprar {listing.ItemDisplayName} (x{listing.Stack}) de {listing.SellerName} por {listing.PriceGold}g?",
+                I18n.Get("market.buy_question", new { item = listing.ItemDisplayName, stack = listing.Stack, seller = listing.SellerName, price = listing.PriceGold }),
                 choices,
                 (who, whichAnswer) =>
                 {
@@ -222,14 +222,14 @@ namespace Pelican4Ever.Modules
 
             if (Game1.player.Money < listing.PriceGold)
             {
-                Game1.drawObjectDialogue($"No tienes suficiente oro. Requiere {listing.PriceGold}g (tienes {Game1.player.Money}g).");
+                Game1.drawObjectDialogue(I18n.Get("market.not_enough_gold", new { price = listing.PriceGold, current = Game1.player.Money }));
                 return;
             }
 
             Item itemToReceive = ItemRegistry.Create(listing.ItemId, listing.Stack, listing.Quality);
             if (!Game1.player.couldInventoryAcceptThisItem(itemToReceive))
             {
-                Game1.drawObjectDialogue("Tu inventario está lleno. Haz espacio antes de comprar.");
+                Game1.drawObjectDialogue(I18n.Get("market.inventory_full"));
                 return;
             }
 
@@ -253,20 +253,20 @@ namespace Pelican4Ever.Modules
             Item? held = Game1.player.CurrentItem;
             if (held == null)
             {
-                Game1.drawObjectDialogue("Sostén en tus manos el objeto que deseas poner a la venta.");
+                Game1.drawObjectDialogue(I18n.Get("market.must_hold_item"));
                 return;
             }
 
             if (held is Tool && !(held is MeleeWeapon || held is Slingshot))
             {
-                Game1.drawObjectDialogue("No puedes vender herramientas esenciales de trabajo.");
+                Game1.drawObjectDialogue(I18n.Get("market.cannot_sell_tools"));
                 return;
             }
 
             int suggestedPrice = Math.Max(10, held.salePrice(true) * held.Stack);
 
             Game1.activeClickableMenu = new NumberSelectionMenu(
-                $"Precio en oro para {held.DisplayName} (x{held.Stack}):",
+                I18n.Get("market.gold_price_prompt", new { item = held.DisplayName, stack = held.Stack }),
                 (number, price, who) =>
                 {
                     if (number > 0)
@@ -318,7 +318,7 @@ namespace Pelican4Ever.Modules
                 );
             }
 
-            Game1.addHUDMessage(new HUDMessage($"¡Oferta de {payload.ItemDisplayName} publicada por {price}g!", HUDMessage.newQuest_type));
+            Game1.addHUDMessage(new HUDMessage(I18n.Get("market.listing_published", new { item = payload.ItemDisplayName, price }), HUDMessage.newQuest_type));
         }
 
         private static void ShowManageMyListingsMenu()
@@ -332,19 +332,19 @@ namespace Pelican4Ever.Modules
 
             if (myListings.Count == 0)
             {
-                Game1.drawObjectDialogue("No tienes ofertas activas en el Mercado Vecinal.");
+                Game1.drawObjectDialogue(I18n.Get("market.no_active_listings"));
                 return;
             }
 
             var choices = new List<Response>();
             foreach (MarketListing listing in myListings)
             {
-                choices.Add(new Response(listing.ListingId, $"Retirar: {listing.ItemDisplayName} (x{listing.Stack}) [{listing.PriceGold}g]"));
+                choices.Add(new Response(listing.ListingId, I18n.Get("market.withdraw_listing", new { item = listing.ItemDisplayName, stack = listing.Stack, price = listing.PriceGold })));
             }
-            choices.Add(new Response("Cancel", "Volver"));
+            choices.Add(new Response("Cancel", I18n.Get("dialog.back")));
 
             QuestionDialog.Ask(
-                "Tus ofertas a la venta en el Mercado:",
+                I18n.Get("market.my_listings_title"),
                 choices.ToArray(),
                 (who, whichAnswer) =>
                 {
@@ -489,7 +489,7 @@ namespace Pelican4Ever.Modules
                 DailyRolloverModule.SetFarmerMoney(seller, seller.Money + sellerProfit);
                 if (seller.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
                 {
-                    Game1.addHUDMessage(new HUDMessage($"¡Tu oferta de {listing.ItemDisplayName} se vendió por {sellerProfit}g!", HUDMessage.newQuest_type));
+                    Game1.addHUDMessage(new HUDMessage(I18n.Get("market.listing_sold", new { item = listing.ItemDisplayName, gold = sellerProfit }), HUDMessage.newQuest_type));
                 }
             }
             else
@@ -530,7 +530,7 @@ namespace Pelican4Ever.Modules
             context.WorldState.MarketListings.Remove(listing);
             if (seller.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
             {
-                Game1.addHUDMessage(new HUDMessage($"Oferta retirada. Se devolvió {listing.ItemDisplayName}.", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("market.listing_withdrawn", new { item = listing.ItemDisplayName }), HUDMessage.newQuest_type));
             }
 
             BroadcastMarketSync();
@@ -580,7 +580,7 @@ namespace Pelican4Ever.Modules
                 DailyRolloverModule.SetFarmerMoney(player, player.Money + pending);
                 if (player.UniqueMultiplayerID == Game1.player.UniqueMultiplayerID)
                 {
-                    Game1.addHUDMessage(new HUDMessage($"Has recibido {pending}g por ventas en el Mercado Vecinal mientras estabas fuera.", HUDMessage.newQuest_type));
+                    Game1.addHUDMessage(new HUDMessage(I18n.Get("market.offline_profits", new { gold = pending }), HUDMessage.newQuest_type));
                 }
                 record.PendingMarketGold = 0;
                 context.Monitor.Log($"[CommunityMarketModule] Cobrados {pending}g pendientes para jugador {player.Name} ({player.UniqueMultiplayerID}).", LogLevel.Info);

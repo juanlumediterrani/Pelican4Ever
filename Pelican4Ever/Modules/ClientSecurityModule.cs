@@ -57,7 +57,7 @@ namespace Pelican4Ever.Modules
 
         // Estado en el cliente cuando el servidor exige introducir el código de pairing al entrar por primera vez
         private static bool localClientAwaitingPairing;
-        private static string localPairingPrompt = "Código de pairing (Pelican 4Ever):";
+        private static string localPairingPrompt = "security.pairing_code_prompt";
         private static int localPairingReopenDelayTicks;
 
         /// <summary>True en el cliente local mientras tiene pendiente introducir el código de emparejamiento.</summary>
@@ -265,8 +265,8 @@ namespace Pelican4Ever.Modules
                 Alias = invite?.Alias ?? string.Empty,
                 RemainingAttempts = session.RemainingAttempts,
                 PromptMessage = string.IsNullOrWhiteSpace(invite?.Alias)
-                    ? "Código de pairing (Pelican 4Ever):"
-                    : $"Código de pairing para {invite.Alias}:"
+                    ? "security.pairing_code_prompt"
+                    : invite.Alias
             };
 
             context.Helper.Multiplayer.SendMessage(
@@ -291,7 +291,7 @@ namespace Pelican4Ever.Modules
 
                     localPairingReopenDelayTicks = 90; // esperar respuesta del host (~1.5s) antes de reabrir
                     Game1.exitActiveMenu();
-                    Game1.addHUDMessage(new HUDMessage("Verificando código de emparejamiento...", HUDMessage.newQuest_type));
+                    Game1.addHUDMessage(new HUDMessage(I18n.Get("security.verifying_code"), HUDMessage.newQuest_type));
 
                     context.Helper.Multiplayer.SendMessage(
                         new PairingSubmitPayload
@@ -304,7 +304,7 @@ namespace Pelican4Ever.Modules
                         Game1.MasterPlayer != null ? new[] { Game1.MasterPlayer.UniqueMultiplayerID } : null
                     );
                 },
-                title: title,
+                title: I18n.Get(title),
                 defaultName: string.Empty)
             {
                 minLength = 1
@@ -322,9 +322,9 @@ namespace Pelican4Ever.Modules
                 if (payload != null)
                 {
                     localClientAwaitingPairing = true;
-                    localPairingPrompt = string.IsNullOrWhiteSpace(payload.PromptMessage)
-                        ? "Código de pairing (Pelican 4Ever):"
-                        : payload.PromptMessage;
+                    localPairingPrompt = string.IsNullOrWhiteSpace(payload.Alias)
+                        ? I18n.Get("security.pairing_code_prompt")
+                        : I18n.Get("security.pairing_code_prompt_alias", new { alias = payload.Alias });
                     if (Context.IsWorldReady && !Game1.eventUp && Game1.activeClickableMenu is not NamingMenu)
                     {
                         OpenPairingDialogOnClient(localPairingPrompt);
@@ -344,16 +344,16 @@ namespace Pelican4Ever.Modules
                     if (Game1.activeClickableMenu is NamingMenu)
                         Game1.exitActiveMenu();
                     Game1.playSound("reward");
-                    Game1.addHUDMessage(new HUDMessage(payload.Message, HUDMessage.achievement_type));
+                    Game1.addHUDMessage(new HUDMessage(I18n.Get(payload.Message), HUDMessage.achievement_type));
                 }
                 else
                 {
                     Game1.playSound("cancel");
-                    Game1.addHUDMessage(new HUDMessage(payload.Message, HUDMessage.error_type));
+                    Game1.addHUDMessage(new HUDMessage(I18n.Get(payload.Message), HUDMessage.error_type));
                     if (payload.RemainingAttempts > 0)
                     {
                         localClientAwaitingPairing = true;
-                        localPairingPrompt = payload.Message;
+                        localPairingPrompt = I18n.Get(payload.Message);
                         localPairingReopenDelayTicks = 0;
                         if (Context.IsWorldReady && !Game1.eventUp)
                             OpenPairingDialogOnClient(localPairingPrompt);
@@ -450,7 +450,7 @@ namespace Pelican4Ever.Modules
                     {
                         Ok = false,
                         RemainingAttempts = remaining,
-                        Message = $"{message} Te quedan {remaining} intento(s)."
+                        Message = I18n.Get("security.pairing_incorrect_remaining", new { message = I18n.Get(message), remaining })
                     },
                     ModMessages.PairingResult,
                     new[] { context.Manifest.UniqueID },
@@ -474,7 +474,7 @@ namespace Pelican4Ever.Modules
                     {
                         Ok = false,
                         RemainingAttempts = 0,
-                        Message = "Has agotado los intentos de emparejamiento. Desconectando..."
+                        Message = "security.pairing_exhausted"
                     },
                     ModMessages.PairingResult,
                     new[] { context.Manifest.UniqueID },

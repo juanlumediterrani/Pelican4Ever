@@ -66,6 +66,25 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
+        [InlineData(AccessPolicy.Locked, true, "closed")]
+        [InlineData(AccessPolicy.Public, false, "open, visitors view only")]
+        [InlineData(AccessPolicy.Public, true, "open, visitors can edit")]
+        [InlineData(AccessPolicy.Friends, false, "friends only, visitors view only")]
+        public void Describe_TranslatesInEnglishWhenProviderIsEnglish(AccessPolicy policy, bool canEdit, string expected)
+        {
+            var en = new Dictionary<string, string>
+            {
+                ["residence.permission.closed"] = "closed",
+                ["residence.permission.friends_only"] = "friends only",
+                ["residence.permission.open"] = "open",
+                ["residence.permission.visitors_can_edit"] = "{{access}}, visitors can edit",
+                ["residence.permission.visitors_view_only"] = "{{access}}, visitors view only"
+            };
+            var provider = new Pelican4Ever.Core.Localization.DictionaryTranslationProvider(en);
+            Assert.Equal(expected, VisitorPermissionLogic.Describe(policy, canEdit, provider));
+        }
+
+        [Theory]
         [InlineData("Farm", true)]
         [InlineData("Pelican4Ever_Bridge_1", true)]
         [InlineData("Pelican4Ever_Bridge_3", true)]

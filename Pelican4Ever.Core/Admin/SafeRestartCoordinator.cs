@@ -1,4 +1,5 @@
 using System;
+using Pelican4Ever.Core.Localization;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
 
@@ -74,14 +75,14 @@ namespace Pelican4Ever.Core.Admin
                     RestRecorded: true,
                     GameDay: currentGameDay,
                     ShouldDisconnectSession: false,
-                    Message: "Descanso registrado. Modo anfitrión agente activo: el servidor permanece en línea.");
+                    Message: CoreI18n.Get("bed_logout.host_agent_active"));
             }
 
             return new HostRestResult(
                 RestRecorded: true,
                 GameDay: currentGameDay,
                 ShouldDisconnectSession: true,
-                Message: "Descanso registrado. Desconectando de forma segura...");
+                Message: CoreI18n.Get("bed_logout.disconnecting"));
         }
 
         /// <summary>

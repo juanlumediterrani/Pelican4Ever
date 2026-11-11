@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Pelican4Ever.Core.Localization;
 
 namespace Pelican4Ever.Core.World
 {
@@ -106,10 +107,24 @@ namespace Pelican4Ever.Core.World
         {
             if (!entry.IsClaimed)
             {
-                return $"[Libre] {entry.DoorId}: {entry.LocationDisplayName} ({entry.TileX},{entry.TileY}) - {entry.Description}";
+                return CoreI18n.Get("catalog.free", new
+                {
+                    door = entry.DoorId,
+                    location = entry.LocationDisplayName,
+                    x = entry.TileX,
+                    y = entry.TileY,
+                    desc = entry.Description
+                });
             }
-            string owner = !string.IsNullOrWhiteSpace(entry.OwnerName) ? entry.OwnerName : "Vecino";
-            return $"[Ocupada] {entry.DoorId} ({owner}): {entry.LocationDisplayName} ({entry.TileX},{entry.TileY})";
+            string owner = !string.IsNullOrWhiteSpace(entry.OwnerName) ? entry.OwnerName : CoreI18n.Get("common.neighbor");
+            return CoreI18n.Get("catalog.occupied", new
+            {
+                door = entry.DoorId,
+                owner,
+                location = entry.LocationDisplayName,
+                x = entry.TileX,
+                y = entry.TileY
+            });
         }
 
         /// <summary>
@@ -117,21 +132,27 @@ namespace Pelican4Ever.Core.World
         /// </summary>
         public static IReadOnlyList<string> FormatChatSummary(IReadOnlyList<CatalogEntry> entries)
         {
-            var lines = new List<string> { "=== RESIDENCIAS DE LA PLAZA ===" };
+            var lines = new List<string> { CoreI18n.Get("catalog.header") };
             foreach (CatalogEntry entry in entries.Where(e => e.IsClaimed))
             {
-                string owner = !string.IsNullOrWhiteSpace(entry.OwnerName) ? entry.OwnerName : "Vecino";
+                string owner = !string.IsNullOrWhiteSpace(entry.OwnerName) ? entry.OwnerName : CoreI18n.Get("common.neighbor");
                 string type = string.IsNullOrWhiteSpace(entry.FarmType) ? string.Empty : $", {entry.FarmType}";
-                lines.Add($"{entry.DoorId}: {owner}{type} - {entry.LocationDisplayName}");
+                lines.Add(CoreI18n.Get("catalog.summary_line", new
+                {
+                    door = entry.DoorId,
+                    owner,
+                    type,
+                    location = entry.LocationDisplayName
+                }));
             }
 
             int claimed = entries.Count(e => e.IsClaimed);
             int free = entries.Count - claimed;
             if (claimed == 0)
-                lines.Add("Ninguna ocupada todavía.");
+                lines.Add(CoreI18n.Get("catalog.none_occupied"));
             lines.Add(free > 0
-                ? $"{claimed} ocupadas, {free} libres. Camina hacia un portal libre de la plaza para fundar la tuya."
-                : $"{claimed} ocupadas, ninguna libre.");
+                ? CoreI18n.Get("catalog.prompt_walk", new { occupied = claimed, free })
+                : CoreI18n.Get("catalog.none_free", new { occupied = claimed }));
             return lines;
         }
 

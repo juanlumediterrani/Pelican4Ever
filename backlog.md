@@ -1405,3 +1405,65 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. **Plan de despliegue y guía para testers:** Publicado [`docs/plan-despliegue-y-guia-testers-identidad.md`](docs/plan-despliegue-y-guia-testers-identidad.md) con el procedimiento coordinado de actualización para Linux (Steam Deck, Debian) y Windows, instrucciones paso a paso para testers, protocolo de migración para mTx, punto de control mediante checkpoint/rollover verificado y plan de rollback seguro.
     4. **Límites de alcance explícitos:** Quedó formalmente documentado que el protocolo asimétrico opera en la fase de descubrimiento, saludo, entrega de peones y selección de ranura; el tráfico UDP de simulación durante la partida queda fuera del alcance de la Épica 18 conforme al acuerdo.
     5. **Compilación y suite completa:** Compilación limpia de todos los proyectos (`Pelican4Ever`, `Pelican4Ever.Core`, `Pelican4Ever.Tests`) sin errores ni advertencias. 1307 pruebas unitarias e integrales superadas en Pelican4Ever y 161 pruebas superadas en Putre (`putre_ops` y `hermes`). Cierre exitoso y completo de la Épica 18.
+
+---
+
+### Épica 19: Internacionalización (i18n) e Inyección de Idioma (Soporte Español / Inglés)
+> **Objetivo:** Eliminar los textos en castellano hardcodeados en el código y sustituirlos por un sistema de internacionalización desacoplado e inyectable que resuelva los mensajes en tiempo real en función del idioma configurado por el jugador en Stardew Valley (`LocalizedContentManager.CurrentLanguageCode` / SMAPI `IModHelper.Translation`), dando soporte completo a Inglés (`default.json`) y Castellano (`es.json`).
+
+- [x] **TASK-1901: Infraestructura de internacionalización (i18n) e inyección en runtime (`default.json`, `es.json`, `I18n` y `CoreI18n`)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Implementar la infraestructura de traducción SMAPI estándar con catálogos `Pelican4Ever/i18n/default.json` (inglés, idioma base de fallback) y `Pelican4Ever/i18n/es.json` (castellano). Diseñar e inyectar el servicio `I18n` en `Pelican4Ever` y la interfaz desacoplada `ITranslationProvider` / `CoreI18n` en `Pelican4Ever.Core` para permitir resolución contextual de textos respetando el idioma local de cada jugador sin dependencias de SMAPI en la capa de dominio puro. Implementar pruebas unitarias de integridad que verifiquen paridad 1:1 de claves entre catálogos, sustitución de tokens y fallback.
+  * **Criterios de aceptación:** `dotnet test` valida paridad total de claves entre `default.json` y `es.json`; resolución limpia en ambos idiomas; sin excepciones ante claves inexistentes.
+  * **Resolución:**
+    1. Creada la infraestructura en `Pelican4Ever.Core.Localization` con la interfaz `ITranslationProvider`, el motor de interpolación de tokens con sintaxis mustache (`{{token}}`) `TokenInterpolator`, `DictionaryTranslationProvider`, `FallbackTranslationProvider` y el acceso contextual thread-safe `CoreI18n` (utilizando `AsyncLocal` para soporte de ejecución concurrente sin interferencias en tests).
+    2. Creado el adaptador `SmapiTranslationProvider` en `Pelican4Ever/Framework` y la fachada estática `I18n` que resuelve cadenas usando el helper nativo de SMAPI (`helper.Translation`) sincronizado con `LocalizedContentManager.CurrentLanguageCode`.
+    3. Creados los catálogos base `Pelican4Ever/i18n/default.json` (inglés) y `Pelican4Ever/i18n/es.json` (castellano), configurados en `Pelican4Ever.csproj` para ser copiados en la salida de compilación (`PreserveNewest`).
+    4. Implementada la suite `Pelican4Ever.Tests/LocalizationTests.cs` verificando paridad bidireccional exacta de claves entre catálogos, equivalencia estricta de tokens en ambos idiomas, interpolación de objetos anónimos y diccionarios, y conmutación dinámica de proveedores.
+
+- [x] **TASK-1902: Internacionalización de Residencias, Plaza Central, Anexos, Buzones y Permisos de Visitas**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1901.
+  * **Descripción:** Sustituir los mensajes y opciones de menú hardcodeados en `FarmSlotModule.cs`, `TownMailboxModule.cs`, `VisitorGuardModule.cs` y lógica pura asociada (`VisitorPermissionLogic`, `TownMailboxLogic`, `PlazaCatalogFormatter`). Incluye bienvenida a la plaza, diálogos y confirmaciones de fundación de granjas, nombres/descripciones de plantillas de granja y anexos, menús de gestión de puertas y amigos, ampliación de anexos, reparación de invernadero, avisos de propiedad y restricciones de buzones residenciales.
+  * **Criterios de aceptación:** Todos los diálogos, HUD, preguntas interactivas (`Response`) y mensajes de comandos `/residencias` y `/puertas` se muestran en el idioma configurado por el jugador (inglés o castellano).
+  * **Resolución:**
+    1. Localizados `VisitorPermissionLogic.cs`, `TownMailboxLogic.cs` y `PlazaCatalogFormatter.cs` en `Core` delegando en `ITranslationProvider` / `CoreI18n`.
+    2. Localizado `VisitorGuardModule.cs` para emitir denegaciones en el idioma del cliente.
+    3. Localizado `TownMailboxModule.cs` con opciones de buzón, estado de correo y políticas residenciales.
+    4. Localizado íntegramente `FarmSlotModule.cs`: bienvenida en Plaza Central, fundar granjas, descripciones de plantillas de granjas y anexos, confirmación de parcelas, menús de puertas residenciales, selección de políticas de acceso, gestión de lista de amigos con HUDs contextuales, validaciones de carpintería y diálogos de reparación del invernadero (materiales y vía Joja).
+
+- [x] **TASK-1903: Internacionalización de Economía, Saciedad, Regeneración y Mercado Vecinal**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1901.
+  * **Descripción:** Sustituir los mensajes hardcodeados en `EconomyModule.cs`, `CommunityMarketModule.cs`, `CommunityMarketDelivery.cs` y `CommunityMarketLogic.cs`. Localizar las notificaciones de saciedad, buffs por comida, advertencias de saciedad al máximo, turnos mineros renovados, avisos del Spa y regeneración pasiva y sentado. Localizar el menú interactivo del Mercado Vecinal (explorar ofertas, vender objeto en mano, gestionar y retirar ofertas, confirmar compra) y todos los avisos de entrega, cobro offline y validaciones económicas.
+  * **Criterios de aceptación:** Los mensajes de HUD, diálogos y menús de economía y mercado se presentan en inglés o castellano según la preferencia del cliente, manteniendo el formateo numérico de oro y nombres de objetos.
+  * **Resolución:**
+    1. Localizadas todas las validaciones de negocio en `CommunityMarketLogic.cs` (`ValidateNewListing`, `ValidatePurchase`, `BuyListing`, `CancelListing`) utilizando `CoreI18n`.
+    2. Localizados todos los avisos en `EconomyModule.cs`: notificaciones del Spa, renovación de turnos de minería con reaparición de vetas, ganancia de energía por saciedad, advertencias de saciedad máxima, buff por platos cocinados e indicación para descansar sentado.
+    3. Localizado el Mercado Vecinal en `CommunityMarketModule.cs`: menú principal del tablón, explorador de ofertas con opciones de compra paginadas, confirmación interactiva de compra, validación de objeto en mano para poner a la venta, selector de precio en oro, gestión y retirada de ofertas activas, aviso de venta en tiempo real y recaudación acumulada offline.
+    4. Localizado el aviso HUD en `CommunityMarketDelivery.cs` ante devoluciones por inventario lleno.
+
+- [x] **TASK-1904: Internacionalización de Festivales, Minijuegos, Canales de Chat y Utilidades**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1901.
+  * **Descripción:** Sustituir los mensajes hardcodeados en `FestivalMinigameModule.cs`, `FestivalParticipationModule.cs`, `ChatChannelModule.cs`, `RealTimeClockModule.cs` y lógica pura asociada (`FestivalScoreLogic`). Localizar anuncios de ceremonias en chat y HUD, tableros de puntuaciones de minijuegos, menús y respuestas de inscripción comunitaria (`/evento`), mensajes de victoria y entrega de premios oficiales, así como la ayuda y sintaxis de comandos `/l`, `/g` y `/time`.
+  * **Criterios de aceptación:** Interacciones de festivales y comandos de chat/reloj devuelven respuestas en el idioma del jugador sin cadenas residuales en castellano en sesiones en inglés.
+  * **Resolución:**
+    1. Localizada la generación de la carta oficial de clasificación festiva en `FestivalScoreLogic.cs` con medallas y cabeceras/pies contextuales en `CoreI18n`.
+    2. Localizados en `FestivalMinigameModule.cs` los avisos de ausencia de marcas, cabecera de clasificaciones, preavisos e inicio de ceremonias comunitarias (Luau, Medusas), anuncio global del ganador y recepción de premios en el HUD.
+    3. Localizados en `FestivalParticipationModule.cs` los diálogos con Lewis, opciones de inscripción (`Response`), respuestas de inscripción individuales transmitidas por red y traducidas en el cliente receptor, alertas de inicio de tandas y ceremonias, y comando `/evento`.
+    4. Localizados en `ChatChannelModule.cs` las ayudas de registro y mensajes de sintaxis para `/l` (proximidad local) y `/g` (global).
+    5. Localizados en `RealTimeClockModule.cs` la ayuda del comando `/time`, consulta de estado y offset, confirmaciones de reinicio y fijado de hora, ajustes relativos de minutos/horas y avisos de formato inválido.
+
+- [x] **TASK-1905: Internacionalización del Ciclo de Vida de Sesión, Rollover, Checkpoints y Emparejamiento**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1901.
+  * **Descripción:** Sustituir los mensajes hardcodeados en `BedLogoutModule.cs`, `DailyRolloverModule.cs`, `CheckpointModule.cs` y `ClientSecurityModule.cs`. Localizar los avisos HUD de descanso offline y de anfitrión, los avisos de preaviso de 10 minutos y desconexión por rollover diario, avisos de checkpoint y los textos del menú interactivo de emparejamiento por código (`NamingMenu`), resultados de verificación y mensajes de error en el cliente.
+  * **Criterios de aceptación:** Al desconectarse por rollover o descanso, guardar por checkpoint o realizar el pairing de cliente, cada jugador recibe las notificaciones y títulos de interfaz en su idioma configurado.
+  * **Resolución:**
+    1. Localizado `BedLogoutModule.cs` y `SafeRestartCoordinator.cs` (`AgentHostLogic.ApplyRest`): HUD de energía restaurada offline, mensaje de descanso de host en modo agente y notificación de desconexión segura.
+    2. Localizado `DailyRolloverModule.cs`: aviso con 10 minutos de antelación para el rollover diario, notificación de cierre en el servidor y mensaje de desconexión ordenado emitido y traducido en los clientes (`rollover.disconnecting`).
+    3. Localizado `CheckpointModule.cs`: aviso de guardado intradía preventivo tanto local como transmitido por red a los peones en su respectivo idioma (`checkpoint.saving_soon`).
+    4. Localizados `ClientSecurityModule.cs` y `ClientPairingLogic.cs`: títulos y prompts del diálogo `NamingMenu` de emparejamiento (genérico o personalizado con alias), mensaje HUD durante la verificación, mensajes de error específicos (dispositivo inválido, código vacío, invitación expirada o inexistente, discrepancia de IP, intentos restantes decrementales) y notificación de emparejamiento exitoso.
+

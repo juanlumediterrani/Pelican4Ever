@@ -18,6 +18,8 @@ namespace Pelican4Ever
 
         public override void Entry(IModHelper helper)
         {
+            I18n.Init(helper.Translation);
+
             ServerConfig config = helper.ReadConfig<ServerConfig>();
             IReadOnlyList<string> errors = config.Validate();
             if (errors.Count > 0)

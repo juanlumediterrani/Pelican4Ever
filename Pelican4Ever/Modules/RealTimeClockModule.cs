@@ -89,7 +89,7 @@ namespace Pelican4Ever.Modules
                     ChatCommands.Register(
                         "time",
                         HandleTimeChatCommand,
-                        name => "Ajusta la hora del juego en el servidor (/time o /hora <+X|-X|reset|set HH:mm>)",
+                        name => I18n.Get("clock.command_help"),
                         new[] { "hora" },
                         mainOnly: true,
                         multiplayerOnly: false,
@@ -122,7 +122,7 @@ namespace Pelican4Ever.Modules
         {
             if (string.IsNullOrWhiteSpace(input))
             {
-                message = $"[Reloj] Offset actual: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}. Uso: /time <+X|-X|reset|set HH:mm>";
+                message = I18n.Get("clock.status_usage", new { offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay) });
                 return false;
             }
 
@@ -133,7 +133,7 @@ namespace Pelican4Ever.Modules
                 ManualTimeOffset = TimeSpan.Zero;
                 ApplyCurrentClock();
                 BroadcastTimeOffset();
-                message = $"[Reloj] Restablecido a hora real. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}.";
+                message = I18n.Get("clock.reset", new { time = Game1.getTimeOfDayString(Game1.timeOfDay) });
                 return true;
             }
 
@@ -146,10 +146,10 @@ namespace Pelican4Ever.Modules
                     ManualTimeOffset = targetSpan - baseNow.TimeOfDay;
                     ApplyCurrentClock();
                     BroadcastTimeOffset();
-                    message = $"[Reloj] Hora fijada a {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                    message = I18n.Get("clock.set", new { time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
                 }
-                message = "[Reloj] Formato de hora no válido. Usa HH:mm (ej: /time set 14:00 o /time set 08:30).";
+                message = I18n.Get("clock.invalid_time_format");
                 return false;
             }
 
@@ -165,7 +165,7 @@ namespace Pelican4Ever.Modules
                     ManualTimeOffset += delta;
                     ApplyCurrentClock();
                     BroadcastTimeOffset();
-                    message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{minutes} min. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                    message = I18n.Get("clock.adjusted_minutes", new { sign = isMinus ? "-" : "+", minutes = minutes.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
                 }
             }
@@ -175,11 +175,11 @@ namespace Pelican4Ever.Modules
                 ManualTimeOffset += delta;
                 ApplyCurrentClock();
                 BroadcastTimeOffset();
-                message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{hours}h. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                message = I18n.Get("clock.adjusted_hours", new { sign = isMinus ? "-" : "+", hours = hours.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                 return true;
             }
 
-            message = "[Reloj] Formato no válido. Ejemplos válidos: /time +2, /time -1, /time +30m, /time reset, /time set 14:00";
+            message = I18n.Get("clock.invalid_format");
             return false;
         }
 

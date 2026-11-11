@@ -75,7 +75,7 @@ namespace Pelican4Ever.Modules
                 Game1.player.exhausted.Value = false;
             }
 
-            Game1.addHUDMessage(new HUDMessage($"Descanso offline: +{gained} energía recuperada.", HUDMessage.newQuest_type));
+            Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.offline_rest", new { gained }), HUDMessage.newQuest_type));
             context?.Monitor.Log($"[BedLogoutModule] Recuperación de energía offline aplicada al jugador local: +{gained} ({oldStamina:F0} -> {Game1.player.Stamina:F0}/{Game1.player.MaxStamina}).", LogLevel.Info);
         }
 
@@ -409,7 +409,7 @@ namespace Pelican4Ever.Modules
                     playerIDs: new[] { Game1.MasterPlayer.UniqueMultiplayerID }
                 );
 
-                Game1.addHUDMessage(new HUDMessage("Descanso registrado. Desconectando de forma segura...", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.disconnecting"), HUDMessage.newQuest_type));
 
                 // Salir al menú principal limpiamente tras 1.5s
                 DelayedAction.functionAfterDelay(() =>

@@ -1,4 +1,5 @@
 using System;
+using Pelican4Ever.Core.Localization;
 
 namespace Pelican4Ever.Core.World
 {
@@ -80,17 +81,20 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>Texto del estado de acceso para los diálogos.</summary>
-        public static string Describe(AccessPolicy policy, bool visitorsCanEdit)
+        public static string Describe(AccessPolicy policy, bool visitorsCanEdit, ITranslationProvider? translations = null)
         {
+            var provider = translations ?? CoreI18n.Current;
             string access = policy switch
             {
-                AccessPolicy.Public => "abierta",
-                AccessPolicy.Friends => "solo amigos",
-                _ => "cerrada"
+                AccessPolicy.Public => provider.Get("residence.permission.open"),
+                AccessPolicy.Friends => provider.Get("residence.permission.friends_only"),
+                _ => provider.Get("residence.permission.closed")
             };
             if (policy == AccessPolicy.Locked)
                 return access;
-            return visitorsCanEdit ? $"{access}, visitas pueden editar" : $"{access}, visitas solo miran";
+            return visitorsCanEdit
+                ? provider.Get("residence.permission.visitors_can_edit", new { access })
+                : provider.Get("residence.permission.visitors_view_only", new { access });
         }
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using Pelican4Ever.Core.Localization;
 
 namespace Pelican4Ever.Core.Economy
 {
@@ -69,16 +70,17 @@ namespace Pelican4Ever.Core.Economy
         /// <summary>
         /// Valida si una nueva oferta cumple con las restricciones de precio y cantidad.
         /// </summary>
-        public static (bool Valid, string Error) ValidateNewListing(string itemId, int stack, int priceGold)
+        public static (bool Valid, string Error) ValidateNewListing(string itemId, int stack, int priceGold, ITranslationProvider? translations = null)
         {
+            var provider = translations ?? CoreI18n.Current;
             if (string.IsNullOrWhiteSpace(itemId))
-                return (false, "El objeto no es válido.");
+                return (false, provider.Get("market.invalid_item"));
 
             if (stack <= 0)
-                return (false, "La cantidad debe ser mayor a 0.");
+                return (false, provider.Get("market.stack_greater_than_zero"));
 
             if (priceGold < MinPrice || priceGold > MaxPrice)
-                return (false, $"El precio debe situarse entre {MinPrice}g y {MaxPrice}g.");
+                return (false, provider.Get("market.price_range", new { min = MinPrice, max = MaxPrice }));
 
             return (true, string.Empty);
         }
@@ -86,36 +88,37 @@ namespace Pelican4Ever.Core.Economy
         /// <summary>
         /// Valida la compra y calcula el oro sin cerrar la oferta antes de entregar el objeto.
         /// </summary>
-        public static MarketTransactionResult ValidatePurchase(MarketListing? listing, long buyerId, int buyerGold)
+        public static MarketTransactionResult ValidatePurchase(MarketListing? listing, long buyerId, int buyerGold, ITranslationProvider? translations = null)
         {
+            var provider = translations ?? CoreI18n.Current;
             if (listing == null)
-                return new MarketTransactionResult(MarketTransactionStatus.InvalidListing, "Oferta no encontrada.");
+                return new MarketTransactionResult(MarketTransactionStatus.InvalidListing, provider.Get("market.listing_not_found"));
 
             if (listing.IsSold)
-                return new MarketTransactionResult(MarketTransactionStatus.AlreadySold, "Esta oferta ya ha sido adquirida.");
+                return new MarketTransactionResult(MarketTransactionStatus.AlreadySold, provider.Get("market.already_bought"));
 
             if (listing.SellerId == buyerId)
-                return new MarketTransactionResult(MarketTransactionStatus.CannotBuyOwnListing, "No puedes comprar tu propia oferta.");
+                return new MarketTransactionResult(MarketTransactionStatus.CannotBuyOwnListing, provider.Get("market.cannot_buy_own"));
 
             if (buyerGold < listing.PriceGold)
                 return new MarketTransactionResult(
                     MarketTransactionStatus.InsufficientFunds,
-                    $"No tienes suficiente oro. Requiere {listing.PriceGold}g (tienes {buyerGold}g)."
+                    provider.Get("market.not_enough_gold", new { price = listing.PriceGold, current = buyerGold })
                 );
 
             int remainingGold = buyerGold - listing.PriceGold;
             return new MarketTransactionResult(
                 MarketTransactionStatus.Success,
-                $"Has adquirido {listing.ItemDisplayName} (x{listing.Stack}) por {listing.PriceGold}g.",
+                provider.Get("market.purchase_success", new { item = listing.ItemDisplayName, stack = listing.Stack, price = listing.PriceGold }),
                 RemainingBuyerGold: remainingGold,
                 SellerProfit: listing.PriceGold
             );
         }
 
         /// <summary>Confirma una compra después de validar y entregar el objeto en el hilo del anfitrión.</summary>
-        public static MarketTransactionResult BuyListing(MarketListing? listing, long buyerId, string buyerName, int buyerGold)
+        public static MarketTransactionResult BuyListing(MarketListing? listing, long buyerId, string buyerName, int buyerGold, ITranslationProvider? translations = null)
         {
-            MarketTransactionResult result = ValidatePurchase(listing, buyerId, buyerGold);
+            MarketTransactionResult result = ValidatePurchase(listing, buyerId, buyerGold, translations);
             if (result.Status != MarketTransactionStatus.Success)
                 return result;
 
@@ -129,20 +132,21 @@ namespace Pelican4Ever.Core.Economy
         /// <summary>
         /// Procesa la retirada de una oferta activa por parte de su vendedor original.
         /// </summary>
-        public static MarketTransactionResult CancelListing(MarketListing? listing, long requesterId)
+        public static MarketTransactionResult CancelListing(MarketListing? listing, long requesterId, ITranslationProvider? translations = null)
         {
+            var provider = translations ?? CoreI18n.Current;
             if (listing == null)
-                return new MarketTransactionResult(MarketTransactionStatus.InvalidListing, "Oferta no encontrada.");
+                return new MarketTransactionResult(MarketTransactionStatus.InvalidListing, provider.Get("market.listing_not_found"));
 
             if (listing.IsSold)
-                return new MarketTransactionResult(MarketTransactionStatus.AlreadySold, "No se puede retirar una oferta que ya ha sido vendida.");
+                return new MarketTransactionResult(MarketTransactionStatus.AlreadySold, provider.Get("market.already_sold"));
 
             if (listing.SellerId != requesterId)
-                return new MarketTransactionResult(MarketTransactionStatus.NotTheSeller, "Solo el vendedor original puede retirar esta oferta.");
+                return new MarketTransactionResult(MarketTransactionStatus.NotTheSeller, provider.Get("market.not_the_seller"));
 
             return new MarketTransactionResult(
                 MarketTransactionStatus.Success,
-                $"Has retirado {listing.ItemDisplayName} (x{listing.Stack}) del mercado."
+                provider.Get("market.withdrawn_success", new { item = listing.ItemDisplayName, stack = listing.Stack })
             );
         }
     }

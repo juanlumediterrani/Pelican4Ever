@@ -125,7 +125,7 @@ namespace Pelican4Ever.Modules
                 DeliveryId = delivery.DeliveryId, Accepted = accepted
             }, MarketMessages.DeliveryAcknowledgement, new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
             if (!accepted)
-                Game1.addHUDMessage(new HUDMessage("No cabe el objeto del mercado. La oferta se conserva y el oro se devuelve.", HUDMessage.error_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("market.delivery_inventory_full"), HUDMessage.error_type));
         }
 
         private static void CompleteObservedDeliveries()

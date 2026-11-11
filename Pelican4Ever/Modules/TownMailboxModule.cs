@@ -188,14 +188,16 @@ namespace Pelican4Ever.Modules
             {
                 Response[] choices = new[]
                 {
-                    new Response("Enter", "🏠 Entrar a mi granja"),
-                    new Response("Mailbox", Game1.mailbox.Count > 0 ? $"📬 Revisar correo ({Game1.mailbox.Count} sin leer)" : "📬 Revisar correo (vacío)"),
-                    new Response("Policy", $"🔒 Configurar acceso (ahora: {VisitorPermissionLogic.Describe(assignment?.Policy ?? AccessPolicy.Locked, assignment?.VisitorsCanEdit ?? false)})"),
-                    new Response("Cancel", "Cancelar")
+                    new Response("Enter", I18n.Get("mailbox.menu.enter")),
+                    new Response("Mailbox", Game1.mailbox.Count > 0
+                        ? I18n.Get("mailbox.menu.check_mail", new { count = Game1.mailbox.Count })
+                        : I18n.Get("mailbox.menu.check_mail_empty")),
+                    new Response("Policy", I18n.Get("mailbox.menu.policy", new { status = VisitorPermissionLogic.Describe(assignment?.Policy ?? AccessPolicy.Locked, assignment?.VisitorsCanEdit ?? false) })),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
                 };
 
                 QuestionDialog.Ask(
-                    $"Tu buzón / poste residencial ({door.Description}).",
+                    I18n.Get("mailbox.owner_prompt", new { description = door.Description }),
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -224,12 +226,12 @@ namespace Pelican4Ever.Modules
                 {
                     Response[] choices = new[]
                     {
-                        new Response("Visit", $"🏠 Visitar granja de {ownerName}"),
-                        new Response("Cancel", "Cancelar")
+                        new Response("Visit", I18n.Get("mailbox.menu.visit", new { owner = ownerName })),
+                        new Response("Cancel", I18n.Get("dialog.cancel"))
                     };
 
                     QuestionDialog.Ask(
-                        $"{door.Description}.\nPropiedad de {ownerName}. Acceso: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)}.",
+                        I18n.Get("mailbox.visit_prompt", new { description = door.Description, owner = ownerName, access = VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit) }),
                         choices,
                         (who, whichAnswer) =>
                         {
@@ -242,7 +244,7 @@ namespace Pelican4Ever.Modules
                 }
                 else
                 {
-                    Game1.drawObjectDialogue($"Esta residencia pertenece a {ownerName}. La entrada está restringida y el buzón es privado.");
+                    Game1.drawObjectDialogue(I18n.Get("mailbox.restricted", new { owner = ownerName }));
                 }
             }
         }

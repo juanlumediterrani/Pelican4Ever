@@ -22,7 +22,7 @@ namespace Pelican4Ever.Modules
     /// </summary>
     public sealed class VisitorGuardModule : IModule
     {
-        private const string DeniedMessage = "El dueño no permite a las visitas modificar esta residencia.";
+        private static string DeniedMessage => I18n.Get("visitor.denied");
 
         private static ModContext? context;
         private static int lastMessageTick = -1000;

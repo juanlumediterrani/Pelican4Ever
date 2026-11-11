@@ -93,12 +93,16 @@ namespace Pelican4Ever.Modules
                         spaRegenCarry = 0;
                         ReportConsumptionToHost(playerRecord, nowUtc);
                         Game1.addHUDMessage(new HUDMessage(
-                            $"Relajado: recuperas {modCtx.Config.SpaBuffTotalPoints} de energía y salud durante {FormatMinutes(modCtx.Config.SpaBuffDurationMinutes)}.",
+                            I18n.Get("economy.spa_relaxed", new
+                            {
+                                points = modCtx.Config.SpaBuffTotalPoints,
+                                duration = FormatMinutes(modCtx.Config.SpaBuffDurationMinutes)
+                            }),
                             HUDMessage.newQuest_type));
                     }
                     else if (!playerRecord.IsSpaBuffActive(nowUtc))
                     {
-                        Game1.showRedMessage("Ya has disfrutado del Spa hoy.");
+                        Game1.showRedMessage(I18n.Get("economy.spa_already_used"));
                     }
                 }
             }
@@ -291,7 +295,7 @@ namespace Pelican4Ever.Modules
                     return true;
                 });
 
-                Game1.addHUDMessage(new HUDMessage("Turno minero renovado: Las vetas de mineral han reaparecido.", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("economy.mining_shift_renewed"), HUDMessage.newQuest_type));
             }
             catch (Exception ex)
             {
@@ -412,24 +416,24 @@ namespace Pelican4Ever.Modules
                 {
                     if (remaining > 0)
                     {
-                        Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía ({remaining} de capacidad restante).", HUDMessage.newQuest_type));
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("economy.satiety_energy_remaining", new { gain = allowedGain, remaining }), HUDMessage.newQuest_type));
                     }
                     else
                     {
-                        Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía (Saciedad al máximo).", HUDMessage.newQuest_type));
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("economy.satiety_energy_max", new { gain = allowedGain }), HUDMessage.newQuest_type));
                     }
 
                     // Notificar si se alcanza el umbral de "Bien comido" (al menos 1/4 de saciedad)
                     if (oldSatiety < threshold && record.Satiety >= threshold)
                     {
                         Game1.addHUDMessage(new HUDMessage(
-                            "Bien comido: tienes suficiente saciedad para que descansar sentado recupere energía.",
+                            I18n.Get("economy.well_fed_threshold_reached"),
                             HUDMessage.newQuest_type));
                     }
                 }
                 else
                 {
-                    Game1.showRedMessage("Saciedad al máximo: no puedes consumir más energía por comida (solo recuperas salud y buffs).");
+                    Game1.showRedMessage(I18n.Get("economy.satiety_full_warning"));
                 }
             }
 
@@ -440,7 +444,7 @@ namespace Pelican4Ever.Modules
                 {
                     changed = true;
                     Game1.addHUDMessage(new HUDMessage(
-                        $"Plato cocinado: disfrutas de {FormatMinutes(context.Config.WellFedDurationMinutes)} garantizados de descanso sentado.",
+                        I18n.Get("economy.cooked_dish_buff", new { duration = FormatMinutes(context.Config.WellFedDurationMinutes) }),
                         HUDMessage.newQuest_type));
                 }
             }
@@ -476,13 +480,13 @@ namespace Pelican4Ever.Modules
 
                 string durationStr = minutesLeft > 0 ? $", {FormatMinutes(minutesLeft)}" : string.Empty;
                 Game1.addHUDMessage(new HUDMessage(
-                    $"Descansando: +1 de energía cada {context.Config.SittingRegenSeconds} s (Bien comido{durationStr}).",
+                    I18n.Get("economy.sitting_resting_hud", new { seconds = context.Config.SittingRegenSeconds, duration = durationStr }),
                     HUDMessage.stamina_type));
             }
             else if (Game1.player.Stamina < maxStamina)
             {
                 Game1.addHUDMessage(new HUDMessage(
-                    "Sentarte solo recupera energía con \"Bien comido\": come hasta llenar al menos 1/4 de saciedad.",
+                    I18n.Get("economy.sitting_need_well_fed"),
                     HUDMessage.error_type));
             }
         }

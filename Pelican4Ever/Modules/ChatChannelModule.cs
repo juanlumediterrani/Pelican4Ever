@@ -61,7 +61,7 @@ namespace Pelican4Ever.Modules
                     ChatCommands.Register(
                         "local",
                         HandleLocalChatCommand,
-                        name => "Enviar mensaje al canal de proximidad local (/l o /local <mensaje>)",
+                        name => I18n.Get("chat.local_help"),
                         new[] { "l" },
                         mainOnly: false,
                         multiplayerOnly: true,
@@ -75,7 +75,7 @@ namespace Pelican4Ever.Modules
                     ChatCommands.Register(
                         "global",
                         HandleGlobalChatCommand,
-                        name => "Enviar mensaje al canal global (/g o /global <mensaje>)",
+                        name => I18n.Get("chat.global_help"),
                         new[] { "g" },
                         mainOnly: false,
                         multiplayerOnly: true,
@@ -96,7 +96,7 @@ namespace Pelican4Ever.Modules
         {
             if (command.Length <= 1)
             {
-                chat.addInfoMessage("Uso: /l <mensaje> o /local <mensaje>");
+                chat.addInfoMessage(I18n.Get("chat.local_usage"));
                 return;
             }
 
@@ -136,7 +136,7 @@ namespace Pelican4Ever.Modules
         {
             if (command.Length <= 1)
             {
-                chat.addInfoMessage("Uso: /g <mensaje> o /global <mensaje>");
+                chat.addInfoMessage(I18n.Get("chat.global_usage"));
                 return;
             }
 

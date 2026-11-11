@@ -1961,7 +1961,7 @@ namespace Pelican4Ever.Modules
                         if (!hasResidence)
                         {
                             welcomeNotified = true;
-                            Game1.addHUDMessage(new HUDMessage("¡Bienvenido a la Plaza Central! Camina hacia un portal libre en la plaza o cruza el paso del oeste hacia los puentes (o escribe /residencias) para fundar tu granja.", HUDMessage.newQuest_type));
+                            Game1.addHUDMessage(new HUDMessage(I18n.Get("plaza.welcome"), HUDMessage.newQuest_type));
                         }
                     }
                 }
@@ -3483,7 +3483,7 @@ namespace Pelican4Ever.Modules
 
             if (playerId == Game1.player.UniqueMultiplayerID)
             {
-                Game1.addHUDMessage(new HUDMessage($"¡Anexo adquirido: {template.DisplayName}! La salida ya está abierta.", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("annex.acquired", new { name = template.DisplayName }), HUDMessage.newQuest_type));
             }
 
             BroadcastDoorsSync();
@@ -3583,7 +3583,7 @@ namespace Pelican4Ever.Modules
             if (context == null || Game1.currentLocation == null) return;
             if (ClientSecurityModule.IsLocalClientAwaitingPairing)
             {
-                Game1.addHUDMessage(new HUDMessage("Introduce primero tu código de pairing para poder reclamar una residencia.", HUDMessage.error_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("residence.claim.need_pairing"), HUDMessage.error_type));
                 return;
             }
             var worldState = context.WorldState;
@@ -3599,26 +3599,26 @@ namespace Pelican4Ever.Modules
                 {
                     var existingDoor = RegisteredDoors.FirstOrDefault(d => d.DoorId == existingAssignment.DoorId);
                     string desc = existingDoor?.Description ?? existingAssignment.DoorId;
-                    Game1.drawObjectDialogue($"Ya eres propietario de una residencia ({desc}). Cada granjero sólo puede poseer una parcela.");
+                    Game1.drawObjectDialogue(I18n.Get("residence.claim.already_owner", new { description = desc }));
                     return;
                 }
 
                 // Puerta libre: submenú de elección de tipo de granja (TASK-602)
                 Response[] choices = new[]
                 {
-                    new Response("Standard", "Granja Estándar (Clásica equilibrada)"),
-                    new Response("Foraging", "Granja Forestal (Recolección y madera)"),
-                    new Response("Fishing", "Granja Fluvial (Pesca e islas)"),
-                    new Response("Mining", "Granja Minera (Colinas y minerales)"),
-                    new Response("Combat", "Granja Salvaje (Monstruos de noche)"),
-                    new Response("FourCorners", "Granja Cuatro Esquinas (Parcelas)"),
-                    new Response("Ranching", "Granja Pradera (Ganadería y pasto azul)"),
-                    new Response("Beach", "Granja de la Playa (Arena y forraje marino)"),
-                    new Response("Cancel", "Cancelar")
+                    new Response("Standard", I18n.Get("farm_template.Standard")),
+                    new Response("Foraging", I18n.Get("farm_template.Foraging")),
+                    new Response("Fishing", I18n.Get("farm_template.Fishing")),
+                    new Response("Mining", I18n.Get("farm_template.Mining")),
+                    new Response("Combat", I18n.Get("farm_template.Combat")),
+                    new Response("FourCorners", I18n.Get("farm_template.FourCorners")),
+                    new Response("Ranching", I18n.Get("farm_template.Ranching")),
+                    new Response("Beach", I18n.Get("farm_template.Beach")),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
                 };
 
                 QuestionDialog.Ask(
-                    $"{door.Description}.\nEsta residencia está libre. ¿Qué tipo de granja deseas fundar?",
+                    I18n.Get("residence.claim.choose_farm_type", new { description = door.Description }),
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -3628,18 +3628,18 @@ namespace Pelican4Ever.Modules
                         string resolvedType = string.IsNullOrWhiteSpace(whichAnswer) ? "Standard" : whichAnswer;
                         Response[] confirmChoices = new[]
                         {
-                            new Response("Yes", "Sí, fundar y entrar ahora"),
-                            new Response("No", "No, cancelar sin construir")
+                            new Response("Yes", I18n.Get("residence.claim.confirm_yes")),
+                            new Response("No", I18n.Get("residence.claim.confirm_no"))
                         };
 
                         QuestionDialog.Ask(
-                            $"Vas a fundar la residencia ({resolvedType}) y entrar.\n¿Confirmas? Si eliges No, no se asignará ni construirá.",
+                            I18n.Get("residence.claim.confirm_full", new { farmType = resolvedType }),
                             confirmChoices,
                             (w, confirmation) =>
                             {
                                 if (!ResidenceClaimConfirmation.ShouldCreate(confirmation))
                                 {
-                                    Game1.addHUDMessage(new HUDMessage("Fundación cancelada; la residencia sigue libre.", HUDMessage.newQuest_type));
+                                    Game1.addHUDMessage(new HUDMessage(I18n.Get("residence.claim.cancelled"), HUDMessage.newQuest_type));
                                     return;
                                 }
 
@@ -3647,7 +3647,7 @@ namespace Pelican4Ever.Modules
                                 {
                                     if (!HandleClaimDoor(myId, door.DoorId, resolvedType))
                                     {
-                                        Game1.drawObjectDialogue("No se pudo fundar esta residencia.");
+                                        Game1.drawObjectDialogue(I18n.Get("residence.claim.failed"));
                                         return;
                                     }
                                 }
@@ -3674,7 +3674,7 @@ namespace Pelican4Ever.Modules
                                     Game1.player.homeLocation.Value = $"{door.DefaultSlotId}_Home";
                                 }
 
-                                Game1.addHUDMessage(new HUDMessage($"¡Residencia reclamada! Plantilla: {resolvedType}.", HUDMessage.newQuest_type));
+                                Game1.addHUDMessage(new HUDMessage(I18n.Get("residence.claim.success", new { farmType = resolvedType }), HUDMessage.newQuest_type));
                                 WarpToFarm(door.DefaultSlotId);
                             }
                         );
@@ -3686,13 +3686,13 @@ namespace Pelican4Ever.Modules
                 // Es mi casa
                 Response[] choices = new[]
                 {
-                    new Response("Enter", "Entrar a mi granja"),
-                    new Response("Policy", $"Cambiar acceso (ahora: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)})"),
-                    new Response("Cancel", "Cancelar")
+                    new Response("Enter", I18n.Get("residence.door.enter")),
+                    new Response("Policy", I18n.Get("residence.door.policy_option", new { status = VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit) })),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
                 };
 
                 QuestionDialog.Ask(
-                    $"Tu residencia en {PlazaCatalogFormatter.GetLocationDisplayName(door.LocationName)}. (Tipo: {assignment.FarmType})",
+                    I18n.Get("residence.owner_menu_prompt", new { location = PlazaCatalogFormatter.GetLocationDisplayName(door.LocationName), type = assignment.FarmType }),
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -3710,18 +3710,18 @@ namespace Pelican4Ever.Modules
             else
             {
                 // Casa de otro jugador
-                string ownerName = "un vecino";
+                string ownerName = I18n.Get("common.neighbor");
                 if (worldState.Players.TryGetValue(assignment.OwnerId, out var record) && !string.IsNullOrEmpty(record.PlayerName))
                     ownerName = record.PlayerName;
 
                 Response[] choices = new[]
                 {
-                    new Response("Visit", $"Visitar granja de {ownerName}"),
-                    new Response("Cancel", "Cancelar")
+                    new Response("Visit", I18n.Get("residence.door.visit", new { owner = ownerName })),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
                 };
 
                 QuestionDialog.Ask(
-                    $"Residencia de {ownerName}. Tipo: {assignment.FarmType}. Acceso: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)}.",
+                    I18n.Get("residence.door.info", new { owner = ownerName, type = assignment.FarmType, access = VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit) }),
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -3730,8 +3730,8 @@ namespace Pelican4Ever.Modules
                             if (!VisitorPermissionLogic.CanEnter(assignment, Game1.player.UniqueMultiplayerID))
                             {
                                 Game1.drawObjectDialogue(assignment.Policy == AccessPolicy.Friends
-                                    ? $"Solo los amigos de {ownerName} pueden entrar."
-                                    : "La puerta está cerrada con llave.");
+                                    ? I18n.Get("residence.friends_only_deny_visit", new { owner = ownerName })
+                                    : I18n.Get("residence.door_locked"));
                             }
                             else
                             {
@@ -3750,16 +3750,16 @@ namespace Pelican4Ever.Modules
             bool canEdit = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId)?.VisitorsCanEdit ?? false;
             Response[] choices = new[]
             {
-                new Response("Locked", "Cerrada: solo yo"),
-                new Response("Friends", "Solo amigos"),
-                new Response("Public", "Abierta a todas las visitas"),
-                new Response("ToggleEdit", canEdit ? "Visitas pueden editar: Sí (cambiar a No)" : "Visitas pueden editar: No (cambiar a Sí)"),
-                new Response("Friends_Manage", "Gestionar amigos"),
-                new Response("Cancel", "Cancelar")
+                new Response("Locked", I18n.Get("residence.policy.locked")),
+                new Response("Friends", I18n.Get("residence.policy.friends")),
+                new Response("Public", I18n.Get("residence.policy.public")),
+                new Response("ToggleEdit", I18n.Get("residence.policy.toggle_edit", new { state = canEdit ? I18n.Get("common.yes") : I18n.Get("common.no") })),
+                new Response("Friends_Manage", I18n.Get("residence.policy.manage_friends")),
+                new Response("Cancel", I18n.Get("dialog.cancel"))
             };
 
             QuestionDialog.Ask(
-                "Quién entra y si las visitas pueden usar herramientas, colocar, cosechar, abrir cofres y usar máquinas:",
+                I18n.Get("residence.policy.prompt"),
                 choices,
                 (who, whichAnswer) =>
                 {
@@ -3790,8 +3790,8 @@ namespace Pelican4Ever.Modules
                     }
 
                     string hud = newCanEdit.HasValue
-                        ? (newCanEdit.Value ? "Las visitas ya pueden editar tu residencia." : "Las visitas ya solo pueden mirar.")
-                        : $"Acceso actualizado: {VisitorPermissionLogic.Describe(Enum.Parse<AccessPolicy>(policy!), canEdit)}";
+                        ? (newCanEdit.Value ? I18n.Get("residence.policy.hud_edit_enabled") : I18n.Get("residence.policy.hud_edit_disabled"))
+                        : I18n.Get("residence.policy.updated", new { status = VisitorPermissionLogic.Describe(Enum.Parse<AccessPolicy>(policy!), canEdit) });
                     Game1.addHUDMessage(new HUDMessage(hud, HUDMessage.newQuest_type));
                 }
             );
@@ -3816,18 +3816,18 @@ namespace Pelican4Ever.Modules
 
             var choices = new List<Response>();
             foreach (long friend in door.Friends.OrderBy(NameOf))
-                choices.Add(new Response($"Remove_{friend}", $"Quitar a {NameOf(friend)}"));
+                choices.Add(new Response($"Remove_{friend}", I18n.Get("residence.friends.remove", new { name = NameOf(friend) })));
             foreach (Farmer online in Game1.getOnlineFarmers().Where(f => f.UniqueMultiplayerID != myId && !door.Friends.Contains(f.UniqueMultiplayerID)).OrderBy(f => f.Name))
-                choices.Add(new Response($"Add_{online.UniqueMultiplayerID}", $"Añadir a {online.Name}"));
+                choices.Add(new Response($"Add_{online.UniqueMultiplayerID}", I18n.Get("residence.friends.add", new { name = online.Name })));
 
             // El cuadro de preguntas no tiene scroll
             if (choices.Count > 8)
                 choices = choices.Take(8).ToList();
-            choices.Add(new Response("Cancel", "Cancelar"));
+            choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
 
             string question = door.Friends.Count == 0
-                ? "Aún no tienes amigos en la lista. Añade a un jugador conectado:"
-                : $"Amigos de tu residencia ({door.Friends.Count}). Con «Solo amigos», solo ellos pueden entrar.";
+                ? I18n.Get("residence.friends.no_friends")
+                : I18n.Get("residence.friends.has_friends", new { count = door.Friends.Count });
 
             QuestionDialog.Ask(question, choices.ToArray(), (who, whichAnswer) =>
             {
@@ -3851,7 +3851,9 @@ namespace Pelican4Ever.Modules
                         new[] { Game1.MasterPlayer.UniqueMultiplayerID }
                     );
                 }
-                Game1.addHUDMessage(new HUDMessage(add ? $"{NameOf(friendId)} ya es tu amigo." : $"{NameOf(friendId)} ya no está en tu lista.", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(add
+                    ? I18n.Get("residence.friends.updated_added", new { name = NameOf(friendId) })
+                    : I18n.Get("residence.friends.updated_removed", new { name = NameOf(friendId) }), HUDMessage.newQuest_type));
             });
         }
 
@@ -3868,7 +3870,7 @@ namespace Pelican4Ever.Modules
             var doorAssignment = worldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == residenceSlotId);
             if (doorAssignment == null || doorAssignment.OwnerId != myId)
             {
-                Game1.drawObjectDialogue("Este acceso está cerrado. Solo el propietario puede adquirir una ampliación de anexo.");
+                Game1.drawObjectDialogue(I18n.Get("annex.owner_only_short"));
                 return;
             }
 
@@ -3886,22 +3888,23 @@ namespace Pelican4Ever.Modules
             {
                 AnnexTemplate t = kvp.Value;
                 int price = AnnexPurchaseLogic.CalculatePrice(t, existingAnnexesCount, firstMultiplier, secondMultiplier);
-                choices.Add(new Response(t.Id, $"{t.DisplayName} ({price:N0}g)"));
+                string annexName = I18n.Get($"annex_template.{t.Id}");
+                choices.Add(new Response(t.Id, I18n.Get("annex.purchase_option", new { name = annexName, price = price.ToString("N0") })));
             }
-            choices.Add(new Response("Cancel", "Cancelar"));
+            choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
 
             string sideName = side switch
             {
-                AnnexSide.North => "Norte",
-                AnnexSide.East => "Este",
-                AnnexSide.South => "Sur",
+                AnnexSide.North => I18n.Get("side.north"),
+                AnnexSide.East => I18n.Get("side.east"),
+                AnnexSide.South => I18n.Get("side.south"),
                 _ => side.ToString()
             };
 
-            string tierDesc = existingAnnexesCount == 0 ? "Primer anexo (Tarifa reducida)" : "Segundo anexo";
+            string tierDesc = existingAnnexesCount == 0 ? I18n.Get("annex.tier_first") : I18n.Get("annex.tier_second");
 
             QuestionDialog.Ask(
-                $"Salida {sideName}: Espacio disponible para ampliación de granja [{tierDesc}].\n¿Deseas adquirir un anexo privado?",
+                I18n.Get("annex.dialog_prompt", new { side = sideName, tier = tierDesc }),
                 choices.ToArray(),
                 (who, whichAnswer) =>
                 {
@@ -3909,21 +3912,22 @@ namespace Pelican4Ever.Modules
                     {
                         int currentExisting = worldState.GetAnnexesForResidence(residenceSlotId).Count;
                         int price = AnnexPurchaseLogic.CalculatePrice(selectedTemplate, currentExisting, firstMultiplier, secondMultiplier);
+                        string selectedAnnexName = I18n.Get($"annex_template.{selectedTemplate.Id}");
 
                         if (Game1.player.Money < price)
                         {
-                            Game1.drawObjectDialogue($"No tienes suficiente oro para adquirir {selectedTemplate.DisplayName}.\nPrecio: {price:N0}g (tienes {Game1.player.Money:N0}g).");
+                            Game1.drawObjectDialogue(I18n.Get("annex.not_enough_gold", new { name = selectedAnnexName, price = price.ToString("N0"), current = Game1.player.Money.ToString("N0") }));
                             return;
                         }
 
                         Response[] confirmChoices = new[]
                         {
-                            new Response("Yes", $"Sí, adquirir ({price:N0}g)"),
-                            new Response("No", "No por ahora")
+                            new Response("Yes", I18n.Get("annex.confirm_yes", new { price = price.ToString("N0") })),
+                            new Response("No", I18n.Get("annex.confirm_no"))
                         };
 
                         QuestionDialog.Ask(
-                            $"¿Confirmas la compra de '{selectedTemplate.DisplayName}' para la salida {sideName} por {price:N0}g?",
+                            I18n.Get("annex.dialog_confirm", new { name = selectedAnnexName, side = sideName, price = price.ToString("N0") }),
                             confirmChoices,
                             (w, a) =>
                             {
@@ -4333,7 +4337,7 @@ namespace Pelican4Ever.Modules
 
             if (allowedLocations.Count == 0)
             {
-                Game1.drawObjectDialogue("Debes reclamar una residencia en la Plaza Central antes de poder encargar obras de construcción.");
+                Game1.drawObjectDialogue(I18n.Get("annex.need_residence_first"));
                 return false;
             }
 
@@ -4350,8 +4354,8 @@ namespace Pelican4Ever.Modules
                 else
                 {
                     Game1.drawObjectDialogue(Context.IsMainPlayer
-                        ? $"No se pudo acceder a la ubicación '{targetLocName}'. Inténtalo de nuevo."
-                        : "Tu residencia aún no está sincronizada. Visítala una vez y vuelve a hablar conmigo.");
+                        ? I18n.Get("carpenter.location_access_failed_host", new { location = targetLocName })
+                        : I18n.Get("carpenter.location_not_synced_client"));
                 }
                 return false;
             }
@@ -4471,19 +4475,28 @@ namespace Pelican4Ever.Modules
 
             if (!isOwner)
             {
-                Game1.drawObjectDialogue("El invernadero de esta residencia está en ruinas. Solo su propietario puede restaurarlo.");
+                Game1.drawObjectDialogue(I18n.Get("greenhouse.owner_only"));
                 return;
             }
 
             var choices = new List<KeyValuePair<string, string>>
             {
-                new KeyValuePair<string, string>("materials", $"Restaurar con materiales ({ResidenceUpgradeLogic.GreenhouseRepairCostMaterials:N0}g, {ResidenceUpgradeLogic.GreenhouseRepairMaterialWood} Madera, {ResidenceUpgradeLogic.GreenhouseRepairMaterialStone} Piedra, {ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars} Lingotes de Oro)"),
-                new KeyValuePair<string, string>("joja", $"Contratar cuadrilla de obras ({ResidenceUpgradeLogic.GreenhouseRepairCostJoja:N0}g)"),
-                new KeyValuePair<string, string>("leave", "Dejarlo de momento (o completar la Despensa del Centro Cívico)")
+                new KeyValuePair<string, string>("materials", I18n.Get("greenhouse.choice_materials", new
+                {
+                    gold = ResidenceUpgradeLogic.GreenhouseRepairCostMaterials.ToString("N0"),
+                    wood = ResidenceUpgradeLogic.GreenhouseRepairMaterialWood,
+                    stone = ResidenceUpgradeLogic.GreenhouseRepairMaterialStone,
+                    bars = ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars
+                })),
+                new KeyValuePair<string, string>("joja", I18n.Get("greenhouse.choice_joja", new
+                {
+                    gold = ResidenceUpgradeLogic.GreenhouseRepairCostJoja.ToString("N0")
+                })),
+                new KeyValuePair<string, string>("leave", I18n.Get("greenhouse.choice_leave"))
             };
 
             farm.ShowPagedResponses(
-                "El invernadero de tu residencia está en ruinas. ¿Deseas repararlo?",
+                I18n.Get("greenhouse.prompt_repair"),
                 choices,
                 delegate (string choice)
                 {
@@ -4510,7 +4523,13 @@ namespace Pelican4Ever.Modules
                 || stoneCount < ResidenceUpgradeLogic.GreenhouseRepairMaterialStone
                 || goldBarCount < ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars)
             {
-                Game1.drawObjectDialogue($"No tienes suficientes recursos. Necesitas {ResidenceUpgradeLogic.GreenhouseRepairCostMaterials:N0}g, {ResidenceUpgradeLogic.GreenhouseRepairMaterialWood} Madera, {ResidenceUpgradeLogic.GreenhouseRepairMaterialStone} Piedra y {ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars} Lingotes de Oro.");
+                Game1.drawObjectDialogue(I18n.Get("greenhouse.need_materials", new
+                {
+                    gold = ResidenceUpgradeLogic.GreenhouseRepairCostMaterials.ToString("N0"),
+                    wood = ResidenceUpgradeLogic.GreenhouseRepairMaterialWood,
+                    stone = ResidenceUpgradeLogic.GreenhouseRepairMaterialStone,
+                    bars = ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars
+                }));
                 return;
             }
 
@@ -4519,7 +4538,7 @@ namespace Pelican4Ever.Modules
             who.Items.ReduceId("(O)390", ResidenceUpgradeLogic.GreenhouseRepairMaterialStone);
             who.Items.ReduceId("(O)336", ResidenceUpgradeLogic.GreenhouseRepairMaterialGoldBars);
 
-            FinalizeGreenhouseRepair(farm, who, "¡Has reunido los materiales y reparado el invernadero de tu residencia! Ya está listo para cultivar en cualquier estación.");
+            FinalizeGreenhouseRepair(farm, who, I18n.Get("greenhouse.repaired_materials"));
         }
 
         public static void TryRepairGreenhouseWithJoja(Farm farm, Farmer who)
@@ -4533,7 +4552,7 @@ namespace Pelican4Ever.Modules
             who.Money -= ResidenceUpgradeLogic.GreenhouseRepairCostJoja;
             who.mailReceived.Add("jojaPantry");
 
-            FinalizeGreenhouseRepair(farm, who, "¡La cuadrilla de obras ha restaurado por completo el invernadero de tu residencia! Ya está disponible para tus cultivos.");
+            FinalizeGreenhouseRepair(farm, who, I18n.Get("greenhouse.repaired_joja"));
         }
 
         public static void FinalizeGreenhouseRepair(Farm farm, Farmer who, string message)
@@ -4669,8 +4688,8 @@ namespace Pelican4Ever.Modules
                     if (!VisitorPermissionLogic.CanEnter(assignment, myId))
                     {
                         Game1.showRedMessage(assignment.Policy == AccessPolicy.Friends
-                            ? "Esta parcela es solo para los amigos de su dueño."
-                            : "Esta parcela es privada y está cerrada con llave.");
+                            ? I18n.Get("residence.parcel_friends_only")
+                            : I18n.Get("residence.parcel_private_locked"));
                         // Detener al jugador tanto en la Granja Host como en los mapas puente de la plaza
                         if (Game1.currentLocation != null && (Game1.currentLocation is Farm || HostPlazaLayout.IsPlazaLocation(Game1.currentLocation.NameOrUniqueName)))
                         {
@@ -4724,7 +4743,7 @@ namespace Pelican4Ever.Modules
 
                 if (!canEnter)
                 {
-                    Game1.showRedMessage("Este anexo es privado y está cerrado con llave.");
+                    Game1.showRedMessage(I18n.Get("annex.private_locked"));
                     Game1.player.Halt();
                     Game1.player.completelyStopAnimatingOrDoingAction();
                     return false;
@@ -4857,7 +4876,7 @@ namespace Pelican4Ever.Modules
                             }
                             else
                             {
-                                Game1.drawObjectDialogue("Este paso está cerrado. Solo el propietario de la residencia puede adquirir una ampliación aquí.");
+                                Game1.drawObjectDialogue(I18n.Get("annex.owner_only"));
                             }
                             return false;
                         }
@@ -5391,7 +5410,7 @@ namespace Pelican4Ever.Modules
                 {
                     if (tool is Pickaxe or Axe or Hoe)
                     {
-                        Game1.showRedMessage("No tienes permiso para modificar esta granja.");
+                        Game1.showRedMessage(I18n.Get("residence.no_permission_modify"));
                         __instance.completelyStopAnimatingOrDoingAction();
                         return false;
                     }
@@ -5412,7 +5431,7 @@ namespace Pelican4Ever.Modules
                 {
                     if (__instance is Pickaxe or Axe or Hoe)
                     {
-                        Game1.showRedMessage("No tienes permiso para modificar esta granja.");
+                        Game1.showRedMessage(I18n.Get("residence.no_permission_modify"));
                         who.completelyStopAnimatingOrDoingAction();
                         return false;
                     }
@@ -5432,7 +5451,7 @@ namespace Pelican4Ever.Modules
                 long? ownerId = loc.GetFarmOwnerId();
                 if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
                 {
-                    Game1.showRedMessage("Este cofre es privado.");
+                    Game1.showRedMessage(I18n.Get("residence.chest_private"));
                     __result = false;
                     return false;
                 }
