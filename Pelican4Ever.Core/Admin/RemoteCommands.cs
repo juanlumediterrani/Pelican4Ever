@@ -42,11 +42,11 @@ namespace Pelican4Ever.Core.Admin
     /// </summary>
     public static class RemoteCommandCatalog
     {
-        public const int MaxArgLength = 40;
+        public const int MaxArgLength = 64;
         public const int MaxOutputLines = 40;
         public const int MaxOutputLineLength = 300;
 
-        private static readonly Regex ArgPattern = new("^[A-Za-z0-9_.@:-]{1,40}$", RegexOptions.Compiled);
+        private static readonly Regex ArgPattern = new("^[A-Za-z0-9_.@:-]{1,64}$", RegexOptions.Compiled);
         private static readonly string[] Seasons = { "spring", "summer", "fall", "winter" };
 
         public static readonly IReadOnlyList<RemoteCommandSpec> Commands = new List<RemoteCommandSpec>
@@ -57,6 +57,8 @@ namespace Pelican4Ever.Core.Admin
             new("p4e_pair_list", RemoteCommandRisk.Read, 0, 0, "p4e_pair_list"),
             new("p4e_checkpoint_now", RemoteCommandRisk.Safe, 0, 0, "p4e_checkpoint_now"),
             new("p4e_pair_allow", RemoteCommandRisk.Safe, 2, 2, "p4e_pair_allow <usuario> <ip>", CheckPairAllow),
+            new("p4e_pair_approve", RemoteCommandRisk.Sensitive, 1, 2, "p4e_pair_approve <huella_o_alias> [peon_id]"),
+            new("p4e_migrate_player", RemoteCommandRisk.Sensitive, 2, 2, "p4e_migrate_player <huella_o_alias> <peon_o_nombre>"),
             new("p4e_claim_reset", RemoteCommandRisk.Sensitive, 1, 1, "p4e_claim_reset <nombre_o_id>"),
             new("p4e_pair_revoke", RemoteCommandRisk.Sensitive, 1, 1, "p4e_pair_revoke <usuario_o_ip_o_id>"),
             new("p4e_forage_wave", RemoteCommandRisk.Sensitive, 0, 0, "p4e_forage_wave"),

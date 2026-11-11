@@ -22,6 +22,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Pelican4Ever.Core\Pelican4Ever.Core.csproj" />
+    <Reference Include="Lidgren.Network">
+      <HintPath>$(GamePath)/Lidgren.Network.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <ItemGroup>

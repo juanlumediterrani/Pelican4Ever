@@ -296,6 +296,19 @@ namespace Pelican4Ever.Core.Players
             if (state.AuthorizedClients != null && state.AuthorizedClients.TryGetValue(trimmed, out authorized) && authorized != null)
                 return true;
 
+            if (state.AuthorizedDevices != null && state.AuthorizedDevices.TryGetValue(trimmed, out var dev) && dev != null && dev.Status == Security.DeviceStatus.Active)
+            {
+                authorized = new AuthorizedClient
+                {
+                    ClientToken = dev.Fingerprint,
+                    Alias = dev.Alias,
+                    BoundPlayerId = dev.BoundPlayerId,
+                    LastSeenIp = dev.LastSeenIp,
+                    PairedAtUtc = dev.CreatedAtUtc
+                };
+                return true;
+            }
+
             // Respaldo: jugador ya reclamado en Players
             PlayerRecord? claimed = state.Players?.Values.FirstOrDefault(p =>
                 !string.IsNullOrWhiteSpace(p.OwnerToken) &&
@@ -484,6 +497,27 @@ namespace Pelican4Ever.Core.Players
             }
 
             bool parsedId = long.TryParse(clean, out long targetPlayerId);
+
+            if (state.AuthorizedDevices != null)
+            {
+                foreach (var kvp in state.AuthorizedDevices.ToList())
+                {
+                    var d = kvp.Value;
+                    bool match =
+                        string.Equals(d.Alias, clean, StringComparison.OrdinalIgnoreCase) ||
+                        string.Equals(d.Fingerprint, clean, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(normIp) && string.Equals(NormalizeIp(d.LastSeenIp), normIp, StringComparison.OrdinalIgnoreCase)) ||
+                        (parsedId && d.BoundPlayerId == targetPlayerId);
+
+                    if (match)
+                    {
+                        d.Status = Security.DeviceStatus.Revoked;
+                        removedClients++;
+                        if (d.BoundPlayerId != 0 && !affectedPlayerIds.Contains(d.BoundPlayerId))
+                            affectedPlayerIds.Add(d.BoundPlayerId);
+                    }
+                }
+            }
 
             if (state.AuthorizedClients != null)
             {

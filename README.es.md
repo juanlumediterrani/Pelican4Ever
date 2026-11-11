@@ -8,6 +8,20 @@ Incluye residencias privadas personalizables accesibles desde la Plaza Central y
 
 ---
 
+## 🚀 Servidor Preview y Acceso para Testers
+
+¡El **Servidor Preview de Pelican 4Ever** ya está disponible para testers y colaboradores!
+
+El acceso al servidor está protegido mediante autenticación criptográfica y lista blanca por emparejamiento previo (`P4E\x02`). Para participar en las pruebas:
+
+1. **Únete al servidor de Discord:** [https://discord.gg/2x5RuvvQB](https://discord.gg/2x5RuvvQB)
+2. **Envía un mensaje directo (DM) a Dextrure** para solicitar tu **código de pairing** e indicar tu IP pública inicial.
+3. Tras recibir la confirmación y conectar por primera vez con el mod actualizado, tu dispositivo quedará vinculado de forma permanente para acceder desde cualquier conexión.
+
+Para más detalles sobre el proceso de conexión y requisitos del cliente, consulta la [Guía para Testers](docs/plan-despliegue-y-guia-testers-identidad.md).
+
+---
+
 ## 🌟 Características Principales
 
 ### 1. Reloj 1:1 y Ciclo Diario Persistente (24/7)
@@ -56,6 +70,8 @@ Incluye residencias privadas personalizables accesibles desde la Plaza Central y
 
 ## 📚 Documentación Técnica
 
+* [Guía para Testers e Identidad de Dispositivos (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
+* [Protocolo de Identidad y Modelo de Amenazas (`docs/protocolo-identidad-y-modelo-amenazas.md`)](docs/protocolo-identidad-y-modelo-amenazas.md)
 * [Diseño del Juego (`design.md`)](design.md)
 * [Arquitectura Técnica (`architecture.md`)](architecture.md)
 * [Backlog de Iteraciones y Épicas (`backlog.md`)](backlog.md)
@@ -87,7 +103,7 @@ Pelican4Ever.sln
 ├── Pelican4Ever/           # Mod SMAPI (.NET 6, ensamblado con parches Harmony)
 │   ├── Framework/          # ModContext, IModule, routing espacial y clonación de mapas
 │   └── Modules/            # 31 módulos SMAPI desacoplados con registro defensivo
-└── Pelican4Ever.Tests/     # Suite de 1.235 pruebas unitarias y de contrato en xUnit (.NET 8)
+└── Pelican4Ever.Tests/     # Suite de 1.313 pruebas unitarias y de integración en xUnit (.NET 8)
 ```
 
 ---

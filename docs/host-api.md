@@ -288,11 +288,15 @@ Lista **cerrada** de comandos de consola de Pelican que se pueden ejecutar a dis
 }
 ```
 
-`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`, `p4e_pair_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día; `p4e_pair_allow <usuario> <ip>`: prepara un alta por IP con código de pairing válido 3 días); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_pair_revoke`, `p4e_forage_wave`, `p4e_festival_move`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_time` (desajusta el calendario real), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`, `p4e_pair_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día; `p4e_pair_allow <usuario> <ip>`: prepara un alta por IP con código de pairing válido 3 días); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_pair_approve`, `p4e_migrate_player`, `p4e_pair_revoke`, `p4e_forage_wave`, `p4e_festival_move`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_time` (desajusta el calendario real), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+
+En conexión directa por IP, un cliente actualizado que ya estuviera autorizado responde al desafío del servidor (`P4E\x02`) durante el descubrimiento, antes de recibir la lista de personajes. El desafío caduca a los 30 segundos, está ligado a la sesión del host y solo admite una respuesta. El cliente demuestra la posesión de su clave privada asimétrica mediante firma digital ECDSA NIST P-256 sin transmitir secretos por el canal de juego; cambiar de IP no exige un nuevo emparejamiento. Tanto el servidor como el cliente deben tener esta versión. Los clientes antiguos reciben un rechazo seguro con aviso de versión. La aprobación de un dispositivo nuevo se gestiona fuera de banda (por mensaje directo en Discord vía Putre) validando su huella digital pública.
+
+Este desafío autentica la identidad del dispositivo y el acceso a la ranura de peón hasta la entrada al juego. El cifrado del tráfico UDP durante la partida queda fuera del alcance acordado.
 
 ### `POST /api/v1/host/command`
 
-Ejecuta **en el hilo del juego** un comando de esa lista y devuelve lo que escribe en el registro de SMAPI mientras se ejecuta (hasta 40 líneas de 300 caracteres; lo que emita más tarde, en otros ticks, no entra). Valida el comando, el número de argumentos y su alfabeto (`A-Z a-z 0-9 . _ - @ :`, máx. 40) y exige una partida cargada. Todo intento, aceptado o rechazado, deja un suceso `host.command`.
+Ejecuta **en el hilo del juego** un comando de esa lista y devuelve lo que escribe en el registro de SMAPI mientras se ejecuta (hasta 40 líneas de 300 caracteres; lo que emita más tarde, en otros ticks, no entra). Valida el comando, el número de argumentos y su alfabeto (`A-Z a-z 0-9 . _ - @ :`, máx. 64 para huellas SHA-256) y exige una partida cargada. Todo intento, aceptado o rechazado, deja un suceso `host.command`.
 
 **Cuerpo de petición (`HostCommandRequestDto`):**
 ```json

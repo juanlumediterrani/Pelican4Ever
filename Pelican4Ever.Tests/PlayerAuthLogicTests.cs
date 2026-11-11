@@ -179,5 +179,22 @@ namespace Pelican4Ever.Tests
             bool actual = PlayerAuthLogic.BelongsToAnotherClient(slotOwnerToken, currentClientToken);
             Assert.Equal(expected, actual);
         }
+
+        [Theory]
+        [InlineData(TokenAlice, "fp_device_1", TokenAlice, false)] // Coincide con token secundario (legado)
+        [InlineData("fp_device_1", "fp_device_1", TokenAlice, false)] // Coincide con identificador primario (huella)
+        [InlineData(null, "fp_device_1", TokenAlice, false)] // Ranura libre
+        [InlineData("", "fp_device_1", TokenAlice, false)] // Ranura vacía
+        [InlineData(TokenBob, "fp_device_1", TokenAlice, true)] // De otro cliente
+        [InlineData(TokenAlice, null, null, true)] // Sin identificadores del cliente
+        public void BelongsToAnotherClient_WithSecondaryToken_EvaluatesCorrectly(
+            string? slotOwnerToken,
+            string? currentClientToken,
+            string? secondaryToken,
+            bool expected)
+        {
+            bool actual = PlayerAuthLogic.BelongsToAnotherClient(slotOwnerToken, currentClientToken, secondaryToken);
+            Assert.Equal(expected, actual);
+        }
     }
 }

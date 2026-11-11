@@ -5,12 +5,15 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using HarmonyLib;
+using Lidgren.Network;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.Security;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
 using StardewModdingAPI;
@@ -22,23 +25,19 @@ using StardewValley.Network;
 namespace Pelican4Ever.Modules
 {
     /// <summary>
-    /// Estado persistido de forma inmediata en <c>Saves/&lt;Partida&gt;/pelican4ever_pairing.json</c>
-    /// para que las invitaciones de 3 días y los emparejamientos sobrevivan aunque el proceso se reinicie
-    /// antes del guardado diario de las 02:00.
-    /// </summary>
-    public sealed class PairingSidecarFile
-    {
-        public Dictionary<string, AuthorizedClient> AuthorizedClients { get; set; } = new(StringComparer.Ordinal);
-        public List<PairingInvite> PairingInvites { get; set; } = new();
-    }
-
-    /// <summary>
     /// Módulo de seguridad, lista blanca por IP + código de emparejamiento (pairing) y protección contra usurpación de personajes.
     /// </summary>
     public sealed class ClientSecurityModule : IModule
     {
         private const string PairingSidecarFileName = "pelican4ever_pairing.json";
         private const int MaxRecentAttempts = 25;
+        private static readonly ServerChallengeManager serverChallenges = new();
+        private sealed class VerifiedConnection
+        {
+            public string Fingerprint { get; init; } = string.Empty;
+            public byte[] PublicKeySpki { get; init; } = Array.Empty<byte>();
+        }
+        private static readonly ConditionalWeakTable<NetConnection, VerifiedConnection> verifiedConnections = new();
 
         private sealed class PendingPairingSession
         {
@@ -88,6 +87,9 @@ namespace Pelican4Ever.Modules
             ctx.AddCommand("p4e_claim_reset", "Libera la posesión de un peón para que pueda ser reclamado de nuevo: p4e_claim_reset <nombre_o_id>", OnConsoleClaimReset);
             ctx.AddCommand("p4e_pair_list", "Lista los dispositivos emparejados, invitaciones activas (3 días) e intentos recientes bloqueados.", OnConsolePairList);
             ctx.AddCommand("p4e_pair_allow", "Prepara un alta por IP y genera un código de pairing válido 3 días: p4e_pair_allow <usuario> <ip>", OnConsolePairAllow);
+            ctx.AddCommand("p4e_pair_approve", "Aprueba una solicitud de alta pendiente de un dispositivo: p4e_pair_approve <huella_o_alias> [peon_id]", OnConsolePairApprove);
+            ctx.AddCommand("p4e_migrate_player", "Migra explícitamente un peón existente al nuevo dispositivo con respaldo verificable: p4e_migrate_player <huella_o_alias> <peon_o_nombre>", OnConsoleMigratePlayer);
+            ctx.AddCommand("p4e_pair_reject", "Rechaza o cancela una solicitud de alta pendiente: p4e_pair_reject <huella_o_alias>", OnConsolePairReject);
             ctx.AddCommand("p4e_pair_revoke", "Revoca una invitación pendiente o un dispositivo emparejado: p4e_pair_revoke <usuario_o_ip_o_id>", OnConsolePairRevoke);
 
             ApplyHarmonyPatches(ctx.Harmony);
@@ -95,6 +97,7 @@ namespace Pelican4Ever.Modules
 
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
         {
+            serverChallenges.Clear();
             pendingPairingSessions.Clear();
             playerRemoteIps.Clear();
             localClientAwaitingPairing = false;
@@ -131,50 +134,12 @@ namespace Pelican4Ever.Modules
                 return;
 
             string? path = GetPairingSidecarPath();
-            if (string.IsNullOrEmpty(path) || !File.Exists(path))
+            if (string.IsNullOrEmpty(path))
                 return;
 
-            try
+            if (!SidecarPersistence.LoadAndMerge(path, context.WorldState, out string? error) && !string.IsNullOrEmpty(error))
             {
-                string raw = File.ReadAllText(path);
-                var sidecar = JsonSerializer.Deserialize<PairingSidecarFile>(raw);
-                if (sidecar == null)
-                    return;
-
-                context.WorldState.AuthorizedClients ??= new Dictionary<string, AuthorizedClient>(StringComparer.Ordinal);
-                if (sidecar.AuthorizedClients != null)
-                {
-                    foreach (var (token, client) in sidecar.AuthorizedClients)
-                    {
-                        if (!string.IsNullOrWhiteSpace(token) && client != null)
-                        {
-                            context.WorldState.AuthorizedClients[token] = client;
-                        }
-                    }
-                }
-
-                context.WorldState.PairingInvites ??= new List<PairingInvite>();
-                if (sidecar.PairingInvites != null)
-                {
-                    DateTimeOffset now = DateTimeOffset.UtcNow;
-                    foreach (PairingInvite invite in sidecar.PairingInvites)
-                    {
-                        if (invite == null || invite.IsExpired(now))
-                            continue;
-
-                        bool exists = context.WorldState.PairingInvites.Any(i =>
-                            string.Equals(i.Code, invite.Code, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(i.Alias, invite.Alias, StringComparison.OrdinalIgnoreCase));
-                        if (!exists)
-                        {
-                            context.WorldState.PairingInvites.Add(invite);
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                context.Monitor.Log($"[ClientSecurity] No se pudo leer {PairingSidecarFileName}: {ex.Message}", LogLevel.Warn);
+                context.Monitor.Log($"[ClientSecurity] {error}", LogLevel.Warn);
             }
         }
 
@@ -189,15 +154,7 @@ namespace Pelican4Ever.Modules
 
             try
             {
-                var sidecar = new PairingSidecarFile
-                {
-                    AuthorizedClients = new Dictionary<string, AuthorizedClient>(context.WorldState.AuthorizedClients, StringComparer.Ordinal),
-                    PairingInvites = new List<PairingInvite>(context.WorldState.PairingInvites)
-                };
-                string json = JsonSerializer.Serialize(sidecar, new JsonSerializerOptions { WriteIndented = true });
-                string tmp = path + ".tmp";
-                File.WriteAllText(tmp, json);
-                File.Move(tmp, path, overwrite: true);
+                SidecarPersistence.SaveAtomic(path, context.WorldState);
             }
             catch (Exception ex)
             {
@@ -563,8 +520,8 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Sincroniza serverFarmer.userID.Value con PlayerRecord.OwnerToken en el host.
-        /// Necesario para que sendAvailableFarmhands transmita el token en la red nativa.
+        /// Sincroniza serverFarmer.userID.Value con el identificador público higienizado del dispositivo.
+        /// NUNCA serializa claves privadas, tokens legados secretos ni códigos en la red nativa (TASK-1805).
         /// </summary>
         public static void SyncServerTokensFromWorldState()
         {
@@ -573,11 +530,9 @@ namespace Pelican4Ever.Modules
 
             foreach (var (playerId, playerRecord) in context.WorldState.Players)
             {
-                if (!string.IsNullOrWhiteSpace(playerRecord.OwnerToken)
-                    && Game1.netWorldState.Value.farmhandData.TryGetValue(playerId, out Farmer? f)
-                    && f != null)
+                if (Game1.netWorldState.Value.farmhandData.TryGetValue(playerId, out Farmer? f) && f != null)
                 {
-                    f.userID.Value = playerRecord.OwnerToken;
+                    f.userID.Value = FarmhandAuthLogic.GetSanitizedFarmhandUserId(context.WorldState, playerId, playerRecord);
                 }
             }
         }
@@ -678,8 +633,20 @@ namespace Pelican4Ever.Modules
             string mode = context.Config.RequirePairingWhitelist ? "ACTIVA" : "DESACTIVADA";
             context.Monitor.Log($"=== Lista Blanca y Emparejamiento ({mode}, validez invitaciones: {context.Config.PairingInviteTtlHours}h) ===", LogLevel.Info);
 
+            var devices = context.WorldState.AuthorizedDevices.Values.OrderBy(d => d.Alias, StringComparer.OrdinalIgnoreCase).ToList();
+            if (devices.Count > 0)
+            {
+                context.Monitor.Log($"Dispositivos autorizados (ECDSA P-256) ({devices.Count}):", LogLevel.Info);
+                foreach (var d in devices)
+                {
+                    string ipInfo = string.IsNullOrWhiteSpace(d.LastSeenIp) ? "IP no registrada" : $"IP {d.LastSeenIp}";
+                    string shortFp = d.Fingerprint.Length >= 12 ? d.Fingerprint[..12] : d.Fingerprint;
+                    context.Monitor.Log($"  - {d.Alias} [Peón: {d.BoundPlayerId}, {ipInfo}, Estado: {d.Status}, Huella: {shortFp}...]", LogLevel.Info);
+                }
+            }
+
             var clients = context.WorldState.AuthorizedClients.Values.OrderBy(c => c.Alias, StringComparer.OrdinalIgnoreCase).ToList();
-            context.Monitor.Log($"Dispositivos emparejados ({clients.Count}):", LogLevel.Info);
+            context.Monitor.Log($"Dispositivos emparejados legacy ({clients.Count}):", LogLevel.Info);
             if (clients.Count == 0)
             {
                 context.Monitor.Log("  (ninguno)", LogLevel.Info);
@@ -706,6 +673,22 @@ namespace Pelican4Ever.Modules
                     double hoursLeft = Math.Max(0, (inv.ExpiresAtUtc - now).TotalHours);
                     context.Monitor.Log(
                         $"  - Usuario: {inv.Alias} | IP: {inv.AllowedIp} | Código de pairing: {inv.Code} | Caduca en {hoursLeft:F1}h ({inv.ExpiresAtUtc:yyyy-MM-dd HH:mm} UTC)",
+                        LogLevel.Info);
+                }
+            }
+
+            var pending = context.WorldState.PendingEnrollments?.Values.OrderBy(e => e.RequestedAtUtc).ToList();
+            context.Monitor.Log($"Solicitudes de alta pendientes ({pending?.Count ?? 0}):", LogLevel.Info);
+            if (pending == null || pending.Count == 0)
+            {
+                context.Monitor.Log("  (ninguna)", LogLevel.Info);
+            }
+            else
+            {
+                foreach (var req in pending)
+                {
+                    context.Monitor.Log(
+                        $"  - Usuario: {req.Alias} | Huella: {req.GetShortFingerprint()}... | IP: {req.RemoteIp} | Código: {req.InviteCode} | Intentos: {req.Attempts} | Caduca: {req.ExpiresAtUtc:yyyy-MM-dd HH:mm} UTC",
                         LogLevel.Info);
                 }
             }
@@ -769,6 +752,184 @@ namespace Pelican4Ever.Modules
             context.Monitor.Log(
                 $"Alta preparada para '{invite.Alias}' (IP {invite.AllowedIp}). Código de pairing: {invite.Code} (válido {context.Config.PairingInviteTtlHours}h, hasta {invite.ExpiresAtUtc:yyyy-MM-dd HH:mm} UTC).",
                 LogLevel.Info);
+        }
+
+        private void OnConsolePairApprove(string command, string[] args)
+        {
+            if (context == null) return;
+
+            if (!Context.IsMainPlayer)
+            {
+                context.Monitor.Log("Este comando solo puede ejecutarse en el Host.", LogLevel.Warn);
+                return;
+            }
+
+            if (args.Length == 0)
+            {
+                context.Monitor.Log("Uso: p4e_pair_approve <huella_o_alias> [peon_id_o_nombre]", LogLevel.Warn);
+                return;
+            }
+
+            string target = args[0].Trim();
+            if (args.Length > 1)
+            {
+                // Si se especifica peón o nombre, crear respaldo verificable y migrar explícitamente
+                string? sidecarPath = GetPairingSidecarPath();
+                if (!string.IsNullOrEmpty(sidecarPath))
+                {
+                    if (DeviceMigrationLogic.CreateVerifiableBackup(sidecarPath, context.WorldState, DateTimeOffset.UtcNow, out VerifiableBackupResult? backup, out string? backupErr))
+                    {
+                        context.Monitor.Log($"[ClientSecurity] Copia de seguridad verificada: {Path.GetFileName(backup?.BackupPath)} (SHA-256: {backup?.Sha256Checksum[..12]}...).", LogLevel.Info);
+                    }
+                    else
+                    {
+                        context.Monitor.Log($"[ClientSecurity] Error creando respaldo verificable previo a migración: {backupErr}", LogLevel.Warn);
+                    }
+                }
+
+                if (!DeviceMigrationLogic.MigratePlayer(context.WorldState, target, args[1].Trim(), DateTimeOffset.UtcNow, out AuthorizedDevice? dev, out PlayerRecord? rec, out string migMsg))
+                {
+                    context.Monitor.Log(migMsg, LogLevel.Warn);
+                    return;
+                }
+
+                SavePairingSidecar();
+                PersistenceModule.FlushToSaveData(context, "PairApproveMigrate");
+                SyncServerTokensFromWorldState();
+
+                int todayMig = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+                int timeMig = Context.IsWorldReady ? Game1.timeOfDay : 600;
+                AdminApiModule.EventLog.Append(
+                    HostEventTypes.PlayerPaired,
+                    todayMig,
+                    timeMig,
+                    migMsg,
+                    new Dictionary<string, object?>
+                    {
+                        ["alias"] = dev?.Alias,
+                        ["fingerprint"] = dev?.Fingerprint,
+                        ["boundPlayerId"] = dev?.BoundPlayerId
+                    });
+
+                context.Monitor.Log(migMsg, LogLevel.Info);
+                return;
+            }
+
+            if (!DeviceEnrollmentLogic.ApproveEnrollment(context.WorldState, target, 0, DateTimeOffset.UtcNow, out AuthorizedDevice? device, out string message))
+            {
+                context.Monitor.Log(message, LogLevel.Warn);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "PairApprove");
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerPaired,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = device?.Alias,
+                    ["fingerprint"] = device?.Fingerprint,
+                    ["boundPlayerId"] = device?.BoundPlayerId
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsoleMigratePlayer(string command, string[] args)
+        {
+            if (context == null) return;
+
+            if (!Context.IsMainPlayer)
+            {
+                context.Monitor.Log("Este comando solo puede ejecutarse en el Host.", LogLevel.Warn);
+                return;
+            }
+
+            if (args.Length < 2)
+            {
+                context.Monitor.Log("Uso: p4e_migrate_player <huella_o_alias> <peon_o_nombre>", LogLevel.Warn);
+                return;
+            }
+
+            string targetDevice = args[0].Trim();
+            string targetPlayer = args[1].Trim();
+            string? sidecarPath = GetPairingSidecarPath();
+            if (string.IsNullOrEmpty(sidecarPath))
+            {
+                context.Monitor.Log("[ClientSecurity] No hay una partida activa cargada con ruta en disco para migración.", LogLevel.Warn);
+                return;
+            }
+
+            // 1. Respaldo verificable con suma SHA-256 antes de cualquier cambio
+            if (!DeviceMigrationLogic.CreateVerifiableBackup(sidecarPath, context.WorldState, DateTimeOffset.UtcNow, out VerifiableBackupResult? backup, out string? backupError))
+            {
+                context.Monitor.Log($"[ClientSecurity] Error crítico al crear la copia de seguridad verificable previa a la migración: {backupError}", LogLevel.Error);
+                return;
+            }
+
+            context.Monitor.Log($"[ClientSecurity] Copia de seguridad verificada: {Path.GetFileName(backup?.BackupPath)} (SHA-256: {backup?.Sha256Checksum[..12]}...).", LogLevel.Info);
+
+            // 2. Ejecutar la migración atómica y purgar credenciales legadas
+            if (!DeviceMigrationLogic.MigratePlayer(context.WorldState, targetDevice, targetPlayer, DateTimeOffset.UtcNow, out AuthorizedDevice? dev, out PlayerRecord? rec, out string message))
+            {
+                context.Monitor.Log(message, LogLevel.Warn);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "PlayerMigrated");
+            SyncServerTokensFromWorldState();
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerPaired,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = dev?.Alias,
+                    ["fingerprint"] = dev?.Fingerprint,
+                    ["boundPlayerId"] = dev?.BoundPlayerId,
+                    ["backup"] = backup?.BackupPath
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsolePairReject(string command, string[] args)
+        {
+            if (context == null) return;
+
+            if (!Context.IsMainPlayer)
+            {
+                context.Monitor.Log("Este comando solo puede ejecutarse en el Host.", LogLevel.Warn);
+                return;
+            }
+
+            if (args.Length == 0)
+            {
+                context.Monitor.Log("Uso: p4e_pair_reject <huella_o_alias>", LogLevel.Warn);
+                return;
+            }
+
+            string target = args[0].Trim();
+            if (!DeviceEnrollmentLogic.RejectOrCancelEnrollment(context.WorldState, target, out string message))
+            {
+                context.Monitor.Log(message, LogLevel.Warn);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "PairReject");
+            context.Monitor.Log(message, LogLevel.Info);
         }
 
         private void OnConsolePairRevoke(string command, string[] args)
@@ -873,6 +1034,119 @@ namespace Pelican4Ever.Modules
             }
 
             return string.Empty;
+        }
+
+        private static bool HasValidEarlyProof(string connectionId, string remoteIp, out string verifiedToken)
+        {
+            verifiedToken = string.Empty;
+            if (context == null || Game1.server is not GameServer gs)
+                return false;
+            try
+            {
+                if (AccessTools.Field(typeof(GameServer), "servers")?.GetValue(gs) is not IEnumerable servers)
+                    return false;
+                foreach (object? server in servers)
+                {
+                    if (server is not LidgrenServer lidgren || lidgren.server == null)
+                        continue;
+                    foreach (NetConnection connection in lidgren.server.Connections)
+                    {
+                        if (!string.Equals(lidgren.getConnectionId(connection), connectionId, StringComparison.Ordinal))
+                            continue;
+                        if (verifiedConnections.TryGetValue(connection, out VerifiedConnection? verified))
+                        {
+                            verifiedToken = verified.Fingerprint;
+                            return true;
+                        }
+                        NetIncomingMessage? hail = connection.RemoteHailMessage;
+                        if (hail == null)
+                            return false;
+
+                        if (!DeviceAuthWire.TryParseHailPayload(
+                                hail.Data,
+                                out byte[]? nonce,
+                                out _,
+                                out byte[]? pubKeySpki,
+                                out byte[]? sig) || nonce == null || pubKeySpki == null || sig == null)
+                        {
+                            return false;
+                        }
+
+                        if (!serverChallenges.TryVerifyAndConsume(
+                                remoteIp,
+                                nonce,
+                                pubKeySpki,
+                                sig,
+                                DateTimeOffset.UtcNow,
+                                out string fingerprint,
+                                out string failureReason))
+                        {
+                            context.Monitor.Log($"[ClientSecurity] Verificación de conexión fallida desde {remoteIp}: {failureReason}", LogLevel.Trace);
+                            return false;
+                        }
+
+                        // Comprobar si la huella digital está autorizada en la lista blanca del servidor
+                        bool isAuthorized = ServerDeviceRegistry.IsDeviceAuthorized(context.WorldState, fingerprint, out _);
+
+                        isAuthorized |= context.WorldState.AuthorizedClients != null &&
+                            context.WorldState.AuthorizedClients.Values.Any(c =>
+                                string.Equals(c.ClientToken, fingerprint, StringComparison.OrdinalIgnoreCase) ||
+                                string.Equals(c.Alias, fingerprint, StringComparison.OrdinalIgnoreCase));
+
+                        isAuthorized |= context.WorldState.Players.Values.Any(p =>
+                            string.Equals(p.OwnerToken, fingerprint, StringComparison.OrdinalIgnoreCase));
+
+                        if (!isAuthorized)
+                        {
+                            var activeInvite = ClientPairingLogic.FindActiveInviteForIp(context.WorldState, remoteIp, DateTimeOffset.UtcNow);
+                            if (activeInvite != null)
+                            {
+                                context.WorldState.PendingEnrollments ??= new Dictionary<string, DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
+                                if (!context.WorldState.PendingEnrollments.TryGetValue(fingerprint, out var enroll))
+                                {
+                                    enroll = new DeviceEnrollmentRequest
+                                    {
+                                        Fingerprint = fingerprint,
+                                        PublicKeyBase64 = Convert.ToBase64String(pubKeySpki),
+                                        Alias = activeInvite.Alias,
+                                        RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp),
+                                        InviteCode = activeInvite.Code,
+                                        RequestedAtUtc = DateTimeOffset.UtcNow,
+                                        ExpiresAtUtc = activeInvite.ExpiresAtUtc,
+                                        Attempts = 1
+                                    };
+                                    context.WorldState.PendingEnrollments[fingerprint] = enroll;
+                                }
+                                else
+                                {
+                                    enroll.Attempts++;
+                                    enroll.RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp);
+                                }
+
+                                SavePairingSidecar();
+                                string shortFp = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
+                                context.Monitor.Log($"[ClientSecurity] Solicitud de alta registrada para '{activeInvite.Alias}' (huella: {shortFp}...) desde IP {remoteIp}.", LogLevel.Info);
+                                DisconnectConnectionById(connectionId, $"Dispositivo registrado para aprobación. Huella: {shortFp}. Solicita al propietario que apruebe tu acceso en Discord.");
+                                return false;
+                            }
+
+                            string fpShort = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
+                            context.Monitor.Log($"[ClientSecurity] Dispositivo válido con huella {fpShort}... pero no autorizado ni con invitación activa.", LogLevel.Info);
+                            DisconnectConnectionById(connectionId, "Servidor protegido por lista blanca. Solicita una invitación al propietario en Discord.");
+                            return false;
+                        }
+
+                        verifiedToken = fingerprint;
+                        verifiedConnections.Add(connection, new VerifiedConnection { Fingerprint = fingerprint, PublicKeySpki = pubKeySpki });
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                context.Monitor.Log($"[ClientSecurity] No se pudo verificar el desafío de conexión: {ex.GetType().Name}.", LogLevel.Warn);
+            }
+            return false;
         }
 
         private static string ResolveRemoteIpByPlayerId(long playerId)
@@ -1010,6 +1284,13 @@ namespace Pelican4Ever.Modules
             PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.Steam.SteamNetClient"));
             PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.GogGalaxy.GalaxyNetClient"));
 
+            TryPatch("LidgrenServer.sendVersionInfo", () => harmony.Patch(
+                original: AccessTools.Method(typeof(LidgrenServer), "sendVersionInfo"),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendVersionInfo))));
+            TryPatch("LidgrenClient.receiveHandshake", () => harmony.Patch(
+                original: AccessTools.Method(typeof(LidgrenClient), "receiveHandshake"),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_ReceiveHandshake))));
+
             // 3. Sincronización proactiva de tokens y filtro de lista blanca por IP antes de enviar la lista de peones
             TryPatch("GameServer.sendAvailableFarmhands", () => harmony.Patch(
                 original: AccessTools.Method(typeof(GameServer), nameof(GameServer.sendAvailableFarmhands)),
@@ -1048,25 +1329,98 @@ namespace Pelican4Ever.Modules
 
         public static void Prefix_Client_SendPlayerIntroduction(Client __instance)
         {
-            string token = ClientIdentity.CurrentToken;
-            if (!string.IsNullOrWhiteSpace(token) && Game1.player != null)
+            if (Game1.player == null)
+                return;
+
+            // Si el peón seleccionado ya tiene asignado nuestro token de cliente legado, lo preservamos
+            // para permitir el juego transparente con servidores que aún no han completado la migración de ranura.
+            if (!string.IsNullOrEmpty(ClientIdentity.CurrentToken) &&
+                string.Equals(Game1.player.userID.Value, ClientIdentity.CurrentToken, StringComparison.OrdinalIgnoreCase))
             {
-                Game1.player.userID.Value = token;
+                Game1.player.userID.Value = ClientIdentity.CurrentToken;
+                return;
+            }
+
+            string publicId = !string.IsNullOrEmpty(ClientIdentity.DeviceFingerprint)
+                ? ClientIdentity.DeviceFingerprint
+                : ClientIdentity.CurrentToken;
+            if (!string.IsNullOrWhiteSpace(publicId))
+            {
+                Game1.player.userID.Value = publicId;
             }
         }
 
         public static bool Prefix_Client_GetUserID(ref string __result)
         {
-            string token = ClientIdentity.CurrentToken;
-            if (!string.IsNullOrWhiteSpace(token))
+            if (Game1.player != null &&
+                !string.IsNullOrEmpty(ClientIdentity.CurrentToken) &&
+                string.Equals(Game1.player.userID.Value, ClientIdentity.CurrentToken, StringComparison.OrdinalIgnoreCase))
             {
-                __result = token;
+                __result = ClientIdentity.CurrentToken;
+                return false;
+            }
+
+            string publicId = !string.IsNullOrEmpty(ClientIdentity.DeviceFingerprint)
+                ? ClientIdentity.DeviceFingerprint
+                : ClientIdentity.CurrentToken;
+            if (!string.IsNullOrWhiteSpace(publicId))
+            {
+                __result = publicId;
                 return false;
             }
             return true;
         }
 
         public static bool Prefix_LidgrenClient_GetUserID(ref string __result) => Prefix_Client_GetUserID(ref __result);
+
+        public static bool Prefix_SendVersionInfo(LidgrenServer __instance, NetIncomingMessage message)
+        {
+            if (context == null || !Context.IsMainPlayer || !context.Config.RequirePairingWhitelist)
+                return true;
+
+            string clientIp = message.SenderEndPoint.Address.ToString();
+            string endpoint = $"{message.SenderEndPoint.Address}:{message.SenderEndPoint.Port}";
+            var challenge = serverChallenges.Issue(clientIp, DateTimeOffset.UtcNow, endpoint);
+            byte[] challengePayload = DeviceAuthWire.PackDiscoveryChallenge(challenge);
+
+            NetOutgoingMessage response = __instance.server.CreateMessage();
+            response.Write(Multiplayer.protocolVersion);
+            response.Write("StardewValley");
+            response.Write(challengePayload);
+            __instance.server.SendDiscoveryResponse(response, message.SenderEndPoint);
+            return false;
+        }
+
+        public static bool Prefix_ReceiveHandshake(LidgrenClient __instance, NetIncomingMessage msg)
+        {
+            int remaining = msg.LengthBytes - (int)(msg.Position / 8);
+            if (remaining != DeviceAuthWire.DiscoveryChallengePayloadLength)
+                return true;
+
+            byte[] rawPayload = msg.ReadBytes(DeviceAuthWire.DiscoveryChallengePayloadLength);
+            string endpoint = $"{msg.SenderEndPoint.Address}:{msg.SenderEndPoint.Port}";
+
+            if (!DeviceAuthWire.TryParseDiscoveryChallenge(rawPayload, endpoint, out DeviceAuthChallenge? challenge) || challenge == null)
+                return true;
+
+            DeviceKeyPair? keyPair = ClientIdentity.DeviceKey;
+            if (keyPair == null && context != null)
+            {
+                keyPair = ClientIdentity.InitializeDeviceKey(context.Helper);
+            }
+
+            if (keyPair == null)
+                return true;
+
+            byte[] signBytes = challenge.BuildSignBytes();
+            byte[] signature = keyPair.Sign(signBytes);
+            byte[] hailPayload = DeviceAuthWire.PackHailPayload(challenge.Nonce, challenge.TimestampUtc, keyPair.ExportPublicKeySpki(), signature);
+
+            NetOutgoingMessage hail = __instance.client.CreateMessage();
+            hail.Write(hailPayload);
+            __instance.client.Connect(msg.SenderEndPoint.Address.ToString(), msg.SenderEndPoint.Port, hail);
+            return false;
+        }
 
         public static bool Prefix_SendAvailableFarmhands(
             string userId,
@@ -1077,18 +1431,23 @@ namespace Pelican4Ever.Modules
             if (context != null && Context.IsMainPlayer && context.Config.RequirePairingWhitelist)
             {
                 string remoteIp = ResolveRemoteIpByConnectionId(connectionId);
-                LobbyAccessResult access = ClientPairingLogic.EvaluateLobbyAccess(
-                    context.WorldState,
-                    context.Config.RequirePairingWhitelist,
-                    userId,
-                    remoteIp,
-                    DateTimeOffset.UtcNow);
+                bool isLoopback = ClientPairingLogic.IsLoopbackIp(remoteIp);
 
-                if (access == LobbyAccessResult.DeniedNoInvite)
+                if (!isLoopback)
                 {
-                    RecordBlockedAttempt(remoteIp, userId);
-                    DisconnectConnectionById(connectionId, "Servidor protegido por lista blanca. Solicita acceso y código de pairing en Discord.");
-                    return false;
+                    if (!HasValidEarlyProof(connectionId, remoteIp, out string verifiedFingerprint))
+                    {
+                        RecordBlockedAttempt(remoteIp, userId);
+                        DisconnectConnectionById(connectionId, "Acceso denegado: debes contar con un cliente actualizado y dispositivo autorizado.");
+                        return false;
+                    }
+
+                    if (!FarmhandAuthLogic.CanAccessFarmhandList(context.WorldState, true, isLoopback, verifiedFingerprint, out string failureReason))
+                    {
+                        RecordBlockedAttempt(remoteIp, verifiedFingerprint);
+                        DisconnectConnectionById(connectionId, failureReason);
+                        return false;
+                    }
                 }
             }
 
@@ -1118,94 +1477,57 @@ namespace Pelican4Ever.Modules
 
             if (context != null)
             {
-                string incomingToken = !string.IsNullOrWhiteSpace(farmer.Value.userID.Value)
-                    ? farmer.Value.userID.Value
-                    : (userId ?? string.Empty);
                 string remoteIp = ResolveRemoteIpByConnectionId(connectionId);
-                if (!string.IsNullOrEmpty(remoteIp))
+                bool isLoopback = ClientPairingLogic.IsLoopbackIp(remoteIp);
+
+                if (context.Config.RequirePairingWhitelist && !isLoopback)
                 {
-                    playerRemoteIps[farmhandId] = remoteIp;
-                }
-
-                LobbyAccessResult lobbyAccess = ClientPairingLogic.EvaluateLobbyAccess(
-                    context.WorldState,
-                    context.Config.RequirePairingWhitelist,
-                    incomingToken,
-                    remoteIp,
-                    DateTimeOffset.UtcNow);
-
-                if (lobbyAccess == LobbyAccessResult.DeniedNoInvite)
-                {
-                    RecordBlockedAttempt(remoteIp, incomingToken);
-                    DisconnectConnectionById(connectionId, "Servidor protegido por lista blanca. Solicita acceso y código de pairing en Discord.");
-                    return false;
-                }
-
-                var playerRecord = context.WorldState.GetOrCreatePlayer(farmhandId, serverFarmer.Name);
-
-                // Si el peón tiene OwnerToken en WorldState (la fuente de verdad), sincronizar serverFarmer.userID
-                if (!string.IsNullOrEmpty(playerRecord.OwnerToken))
-                {
-                    serverFarmer.userID.Value = playerRecord.OwnerToken;
-                }
-
-                if (lobbyAccess == LobbyAccessResult.AllowedPendingPairing)
-                {
-                    // El cliente entra por invitación de IP pero aún debe introducir el código de pairing:
-                    // no puede entrar en un peón ya reclamado por otro jugador, y no se reclama definitivamente hasta validar el código.
-                    if (PlayerAuthLogic.IsClaimed(playerRecord) &&
-                        !string.Equals(playerRecord.OwnerToken, incomingToken.Trim(), StringComparison.Ordinal))
+                    if (!HasValidEarlyProof(connectionId, remoteIp, out string verifiedFingerprint))
                     {
-                        context.Monitor.Log(
-                            $"[ClientSecurity] RECHAZADO: Conexión en emparejamiento {connectionId} ({remoteIp}) intentó usar el peón ya reclamado {farmhandId}.",
-                            LogLevel.Warn);
+                        context.Monitor.Log("[ClientSecurity] Rechazado intento de selección de ranura sin prueba de posesión de clave válida.", LogLevel.Warn);
+                        DisconnectConnectionById(connectionId, "No se ha verificado la identidad del dispositivo.");
+                        return false;
+                    }
+
+                    if (!string.IsNullOrEmpty(remoteIp))
+                    {
+                        playerRemoteIps[farmhandId] = remoteIp;
+                    }
+
+                    var slotAuth = FarmhandAuthLogic.AuthorizeSlotSelection(
+                        context.WorldState,
+                        farmhandId,
+                        verifiedFingerprint,
+                        out string slotMessage);
+
+                    if (slotAuth == SlotSelectionResult.DeniedBelongsToAnother ||
+                        slotAuth == SlotSelectionResult.DeniedAlreadyHasBoundPlayer ||
+                        slotAuth == SlotSelectionResult.DeniedDeviceNotAuthorized ||
+                        slotAuth == SlotSelectionResult.DeniedNoIdentity)
+                    {
+                        context.Monitor.Log($"[ClientSecurity] RECHAZADO: Conexión {connectionId} ({verifiedFingerprint[..12]}...) no puede acceder a ranura {farmhandId}: {slotMessage}", LogLevel.Warn);
                         __instance.sendAvailableFarmhands(userId, connectionId, sendMessage);
                         return false;
                     }
 
-                    pendingPairingSessions[farmhandId] = new PendingPairingSession
+                    var playerRecord = context.WorldState.GetOrCreatePlayer(farmhandId, serverFarmer.Name);
+
+                    if (slotAuth == SlotSelectionResult.AllowedClaimedNew)
                     {
-                        PlayerId = farmhandId,
-                        ClientToken = incomingToken.Trim(),
-                        RemoteIp = remoteIp,
-                        StartedAtUtc = DateTimeOffset.UtcNow,
-                        RemainingAttempts = ClientPairingLogic.MaxPairingAttempts
-                    };
+                        if (context.WorldState.AuthorizedDevices.TryGetValue(verifiedFingerprint, out AuthorizedDevice? dev) && dev != null)
+                        {
+                            dev.BoundPlayerId = farmhandId;
+                        }
+                        playerRecord.OwnerToken = verifiedFingerprint;
+                        serverFarmer.userID.Value = verifiedFingerprint;
+                        SavePairingSidecar();
+                        PersistenceModule.FlushToSaveData(context, "SlotClaimed");
+                        context.Monitor.Log($"[ClientSecurity] Peón libre {farmhandId} ('{serverFarmer.Name}') reclamado por el dispositivo {verifiedFingerprint[..12]}...", LogLevel.Info);
+                    }
 
-                    context.Monitor.Log(
-                        $"[ClientSecurity] Conexión {connectionId} ({remoteIp}) admitida en fase de emparejamiento para el peón {farmhandId}; esperando código de pairing.",
-                        LogLevel.Info);
-
-                    userId = incomingToken;
+                    userId = verifiedFingerprint;
                     return true;
                 }
-
-                pendingPairingSessions.Remove(farmhandId);
-
-                var authResult = PlayerAuthLogic.ValidateOrClaim(playerRecord, incomingToken);
-                if (authResult == AuthResult.DeniedMismatch || authResult == AuthResult.DeniedNoToken)
-                {
-                    context.Monitor.Log(
-                        $"[ClientSecurity] RECHAZADO: Conexión {connectionId} intentó entrar al peón {farmhandId} ('{serverFarmer.Name}') " +
-                        $"con token '{PlayerAuthLogic.MaskToken(incomingToken)}', pero pertenece a '{PlayerAuthLogic.MaskToken(playerRecord.OwnerToken)}'.",
-                        LogLevel.Warn);
-
-                    __instance.sendAvailableFarmhands(userId, connectionId, sendMessage);
-                    return false;
-                }
-
-                if (authResult == AuthResult.Claimed)
-                {
-                    serverFarmer.userID.Value = incomingToken;
-                    ClientPairingLogic.EnsureExistingClaimsAuthorized(context.WorldState, DateTimeOffset.UtcNow);
-                    SavePairingSidecar();
-                    context.Monitor.Log(
-                        $"[ClientSecurity] Peón {farmhandId} ('{serverFarmer.Name}') reclamado y vinculado al dispositivo {PlayerAuthLogic.MaskToken(incomingToken)}.",
-                        LogLevel.Info);
-                }
-
-                // Propagar el token al argumento userId
-                userId = incomingToken;
             }
 
             return true;
@@ -1213,11 +1535,13 @@ namespace Pelican4Ever.Modules
 
         public static void Postfix_FarmhandSlot_Ctor(FarmhandMenu.FarmhandSlot __instance, Farmer farmer)
         {
-            string myToken = ClientIdentity.CurrentToken;
             if (farmer != null)
             {
-                string slotToken = farmer.userID.Value ?? string.Empty;
-                bool belongsToAnother = PlayerAuthLogic.BelongsToAnotherClient(slotToken, myToken);
+                string slotIdentifier = farmer.userID.Value ?? string.Empty;
+                bool belongsToAnother = PlayerAuthLogic.BelongsToAnotherClient(
+                    slotIdentifier,
+                    ClientIdentity.DeviceFingerprint,
+                    ClientIdentity.CurrentToken);
 
                 // Sobrescribe el valor calculado por el juego nativo (que comparó contra GetUserID() de Steam/GOG)
                 AccessTools.Field(typeof(FarmhandMenu.FarmhandSlot), "_belongsToAnotherPlayer")?.SetValue(__instance, belongsToAnother);

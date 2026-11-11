@@ -8,6 +8,20 @@ Features customizable private residences accessible via the Central Plaza and a 
 
 ---
 
+## 🚀 Preview Server & Playtester Access
+
+The **Pelican 4Ever Preview Server** is now live for playtesters and collaborators!
+
+Server access is protected via cryptographic device authentication and prior pairing whitelist (`P4E\x02`). To join the playtesting phase:
+
+1. **Join the Discord server:** [https://discord.gg/2x5RuvvQB](https://discord.gg/2x5RuvvQB)
+2. **Send a direct message (DM) to Dextrure** to request your **pairing code** and provide your initial public IP address.
+3. Once authorized and connected for the first time with the updated mod, your device will be permanently linked, allowing subsequent logins from any IP address.
+
+For detailed instructions on setup and requirements, see the [Playtester Guide](docs/plan-despliegue-y-guia-testers-identidad.md).
+
+---
+
 ## 🌟 Key Features
 
 ### 1. 1:1 Real-Time Clock & Persistent 24/7 Daily Cycle
@@ -56,6 +70,8 @@ Features customizable private residences accessible via the Central Plaza and a 
 
 ## 📚 Technical Documentation
 
+* [Playtester Guide & Identity Deployment Plan (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
+* [Device Identity Protocol & Threat Model (`docs/protocolo-identidad-y-modelo-amenazas.md`)](docs/protocolo-identidad-y-modelo-amenazas.md)
 * [Game Design (`design.md`)](design.md)
 * [Technical Architecture (`architecture.md`)](architecture.md)
 * [Iterations & Roadmap Backlog (`backlog.md`)](backlog.md)
@@ -87,7 +103,7 @@ Pelican4Ever.sln
 ├── Pelican4Ever/           # SMAPI Mod (.NET 6, compiled assembly with Harmony patches)
 │   ├── Framework/          # ModContext, IModule, spatial routing, and map cloning helpers
 │   └── Modules/            # 31 decoupled SMAPI modules with defensive registration
-└── Pelican4Ever.Tests/     # Test suite with 1,235 unit and contract tests in xUnit (.NET 8)
+└── Pelican4Ever.Tests/     # Test suite with 1,313 unit and integration tests in xUnit (.NET 8)
 ```
 
 ---

@@ -78,7 +78,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 5;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -102,6 +102,12 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Puntuaciones de minijuegos en festivales asíncronos (TASK-701).</summary>
         public List<FestivalScoreEntry> FestivalScores { get; set; } = new();
+
+        /// <summary>Dispositivos de clientes autorizados en la lista blanca por huella digital pública (TASK-1802).</summary>
+        public Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice> AuthorizedDevices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Solicitudes de alta de nuevos dispositivos pendientes de aprobación por el propietario (TASK-1803).</summary>
+        public Dictionary<string, Pelican4Ever.Core.Security.DeviceEnrollmentRequest> PendingEnrollments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Dispositivos de clientes emparejados y autorizados en la lista blanca (clave: ClientToken).</summary>
         public Dictionary<string, AuthorizedClient> AuthorizedClients { get; set; } = new(StringComparer.Ordinal);
@@ -309,6 +315,15 @@ namespace Pelican4Ever.Core.World
                 changed = true;
             }
 
+            // v4 → v5: soporte para dispositivos autorizados por clave pública asimétrica (TASK-1802).
+            if (SchemaVersion < 5)
+            {
+                AuthorizedDevices ??= new Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice>(StringComparer.OrdinalIgnoreCase);
+                Pelican4Ever.Core.Security.ServerDeviceRegistry.MigrateLegacyClients(this, DateTimeOffset.UtcNow);
+                SchemaVersion = 5;
+                changed = true;
+            }
+
             if (PendingMarketDeliveries == null)
             {
                 PendingMarketDeliveries = new Dictionary<string, PendingMarketDelivery>();
@@ -330,6 +345,18 @@ namespace Pelican4Ever.Core.World
             if (Annexes == null)
             {
                 Annexes = new Dictionary<string, AnnexAssignment>();
+                changed = true;
+            }
+
+            if (AuthorizedDevices == null)
+            {
+                AuthorizedDevices = new Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice>(StringComparer.OrdinalIgnoreCase);
+                changed = true;
+            }
+
+            if (PendingEnrollments == null)
+            {
+                PendingEnrollments = new Dictionary<string, Pelican4Ever.Core.Security.DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
                 changed = true;
             }
 

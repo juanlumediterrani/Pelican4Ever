@@ -80,18 +80,40 @@ namespace Pelican4Ever.Core.Players
         /// <summary>
         /// Determina si una ranura de peón pertenece a otro cliente distinto al cliente actual.
         /// Si la ranura no tiene token asignado (vacía o no reclamada), devuelve false (es libre).
+        /// Si tiene token y coincide con el identificador del cliente (huella o token legado secundario), devuelve false (es propia).
+        /// Si tiene token y no coincide con ninguno, devuelve true (es de otro jugador).
+        /// </summary>
+        public static bool BelongsToAnotherClient(string? slotOwnerToken, string? currentClientToken, string? secondaryToken)
+        {
+            if (string.IsNullOrWhiteSpace(slotOwnerToken))
+                return false;
+
+            string cleanSlot = slotOwnerToken.Trim();
+
+            if (!string.IsNullOrWhiteSpace(currentClientToken) &&
+                string.Equals(cleanSlot, currentClientToken.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (!string.IsNullOrWhiteSpace(secondaryToken) &&
+                string.Equals(cleanSlot, secondaryToken.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Determina si una ranura de peón pertenece a otro cliente distinto al cliente actual.
+        /// Si la ranura no tiene token asignado (vacía o no reclamada), devuelve false (es libre).
         /// Si tiene token y coincide con el del cliente, devuelve false (es propia).
         /// Si tiene token y no coincide (o el cliente no tiene token), devuelve true (es de otro jugador).
         /// </summary>
         public static bool BelongsToAnotherClient(string? slotOwnerToken, string? currentClientToken)
         {
-            if (string.IsNullOrWhiteSpace(slotOwnerToken))
-                return false;
-
-            if (string.IsNullOrWhiteSpace(currentClientToken))
-                return true;
-
-            return !string.Equals(slotOwnerToken.Trim(), currentClientToken.Trim(), StringComparison.Ordinal);
+            return BelongsToAnotherClient(slotOwnerToken, currentClientToken, null);
         }
 
         /// <summary>

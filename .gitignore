@@ -43,6 +43,9 @@ env/
 
 # Scratch & WIP experimental scripts
 scripts/retrodiffusion_generate.py
+scripts/retrodiffusion_experiments.py
+scripts/rd_styles_catalog.json
+scripts/test_walking_animation.py
 scripts/build_putre_*.py
 
 # Agent tooling & local metadata
