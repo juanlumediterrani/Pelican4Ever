@@ -141,8 +141,9 @@ namespace Pelican4Ever.Tests
                 return await queue.EnqueueWithThreadInfoAsync(() => $"ok-on-{Environment.CurrentManagedThreadId}");
             });
 
-            // Esperar a que la tarea esté en la cola
-            SpinWait.SpinUntil(() => queue.PendingCount == 1, TimeSpan.FromSeconds(2));
+            // Esperar sin acaparar la CPU (en una VM de 2 vCPU, SpinWait puede dejar sin hilo al ThreadPool de Task.Run)
+            for (int i = 0; i < 200 && queue.PendingCount == 0; i++)
+                await Task.Delay(10);
             Assert.Equal(1, queue.PendingCount);
 
             // Drenar desde un hilo dedicado que simula el hilo principal de UpdateTicked
