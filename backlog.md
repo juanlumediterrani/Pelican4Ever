@@ -1298,3 +1298,65 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de Aceptación:**
     1. Todas las pruebas pasan limpiamente con `dotnet test`.
   * **Resolución:** Implementados 26 nuevos casos de prueba en `NightHoldWorldLogicTests` (`Pelican4Ever.Tests/NightHoldWorldLogicTests.cs`), cubriendo umbrales de expiración (sub-60 min nunca expira, entre 60 y 180 min según fórmula nativa, >= 180 min garantizada), spawn de burbujas y batea (50 %), disolución de batea (10 %), curvas de suerte de monstruos nocturnos (-0.1, 0.0, +0.1) y distribución aérea/terrestre (25/75 %). Se verificó también la invariancia horaria de `GameClock.Read` (congelado en 2550 durante toda la madrugada) y el conteo limpio de `NightHoldTicksElapsed`. 1211 pruebas pasando con éxito en la suite completa.
+
+---
+
+### Iteración 18: Identidad de dispositivos y acceso seguro a la demo (Épica 18)
+
+> **Objetivo:** permitir que un dispositivo autorizado entre por IP aunque cambie su dirección, sin transmitir credenciales reutilizables ni volver a emparejarlo, y sin perder la relación con su personaje y residencia.
+>
+> **Alcance:** autenticación y autorización hasta la entrada al juego, alta, migración, revocación y operación desde Putre. El cifrado o la modificación del tráfico durante la partida quedan fuera de esta épica. El filtrado por IP sigue siendo una capa opcional para invitaciones nuevas, no la identidad permanente del dispositivo.
+>
+> **Estado de partida (2026-11-11):** `main`/`dev` incluyen la lista blanca por IP y pairing de 72 h. En conexión directa Lidgren llama a `sendAvailableFarmhands` con `userId` vacío; un cliente ya autorizado puede recibir «Connection Failed» antes de que el host vea su token. El host copia `OwnerToken` al `userID` de los personajes y el pairing actual envía código y token. El prototipo local de desafío HMAC aún no está publicado ni validado de extremo a extremo y depende de ese token expuesto: no es la solución definitiva ni evidencia de cierre de esta épica. Existe una invitación temporal para el acceso de mTx, sin que ello equivalga a una corrección permanente.
+>
+> **Invariantes:** mantener la privacidad de la interfaz de administración; no registrar ni enviar claves privadas, tokens heredados o códigos por el canal de juego; rechazar por defecto accesos que no se puedan verificar; no cambiar ni reclamar un slot hasta completar la autorización; preservar respaldos, progreso, ID del personaje y residencia. Se requiere mod actualizado en cliente y host; no habilitar una vía heredada insegura silenciosamente.
+
+#### Fase A — Diseño y prueba de viabilidad
+
+- [ ] **TASK-1801: Modelo de amenazas, protocolo y prueba del enlace con Lidgren**
+  * **Prioridad:** Crítica
+  * **Descripción:** documentar secuencia y límites exactos de descubrimiento, aprobación, lista de peones y selección de slot para Stardew 1.6.15/SMAPI. Diseñar desafío con nonce aleatorio, caducidad, un solo uso y firma mediante clave privada del dispositivo; incluir versión y contexto del servidor en los datos firmados. El host verifica contra la clave pública autorizada **antes** de entregar la lista. Definir también cómo se identifica el servidor y cómo se vincula la prueba a la conexión que realiza la selección, incluyendo reconexiones, paquetes duplicados y suplantación de origen UDP. Utilizar una biblioteca criptográfica revisada y disponible en Linux y Windows; no construir primitivas propias.
+  * **Criterios de aceptación:**
+    1. Un spike con host y cliente reales demuestra el desafío antes de la lista, prueba el vínculo con la conexión y documenta las limitaciones de Lidgren y las hipótesis de seguridad. No se da por garantizada la protección de paquetes posteriores.
+    2. El diseño cubre suplantación de servidor, replay, alta no aprobada, cliente admitido que intente reclamar otro slot, pérdida de clave, recursos limitados y degradación a versión antigua; fija cuándo se rechaza de forma segura.
+    3. La revisión identifica los datos y rutas actuales que exponen `OwnerToken` o el código, incluidos saves, sidecar, mensajes de mod, listas de peones, logs y backups, y define cómo retirarlos o protegerlos. El prototipo HMAC local se evalúa explícitamente; no se incorpora como autenticación definitiva.
+
+#### Fase B — Identidad, alta y migración
+
+- [ ] **TASK-1802: Identidad por dispositivo y registro del host**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1801.
+  * **Descripción:** generar y persistir en el cliente un par de claves de firma; proteger la clave privada con los mecanismos disponibles y documentar sus límites en Linux y Windows. En el host guardar únicamente clave pública, identificador, estado, alias y vínculo al personaje; tratar el identificador como público, no como credencial. Versionar el esquema y persistir los cambios de forma atómica e inmediata, con recuperación tras interrupción y sin escribir secretos en logs o backups del servidor.
+  * **Criterios de aceptación:** clave estable tras reiniciar o actualizar el mod; pérdida o corrupción de la privada no genera acceso silencioso; el servidor nunca recibe ni almacena claves privadas. Pruebas de persistencia, escritura interrumpida, duplicados y formatos inválidos.
+
+- [ ] **TASK-1803: Alta y aprobación asíncrona por el propietario**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1801, TASK-1802.
+  * **Descripción:** permitir una solicitud vinculada a una clave pública y a una invitación de 72 h; el propietario verifica y aprueba la huella o solicitud concreta por DM con Putre a través de un canal de confianza. Diseñar el primer contacto y la identificación del servidor sin enviar códigos reutilizables en claro por el canal de juego; usar un mecanismo de aprobación fuera de banda o un canal autenticado apropiado. La IP facilitada por DM puede limitar el alta, pero el dispositivo aprobado conserva el acceso si cambia de IP.
+  * **Criterios de aceptación:** ninguna solicitud o sustitución de clave se autoriza por sí sola; invitaciones caducan a los tres días y se consumen una sola vez; prueba de posesión de la clave, límite de intentos y sin espera activa. Otros usuarios no pueden ordenar ni aprobar altas en Putre; no se exponen códigos ni claves privadas en logs. La solicitud fallida o cancelada no reclama personaje ni residencia.
+
+- [ ] **TASK-1804: Migración explícita de jugadores existentes sin pérdida de progreso**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1801, TASK-1802, TASK-1803.
+  * **Descripción:** hacer copia verificable antes de migrar y vincular la nueva clave pública al `UniqueMultiplayerID` existente mediante aprobación explícita del propietario y prueba de posesión. Tratar los tokens antiguos como posiblemente comprometidos: poseer solo el token anterior no autoriza la migración. Conservar un plan documentado de restauración y ventana de compatibilidad sin convertir el protocolo antiguo en acceso alternativo silencioso.
+  * **Criterios de aceptación:** mTx mantiene personaje, residencia, inventario y progreso y puede entrar desde otra IP con el cliente actualizado; un tercero con solo el token legado no puede asociar una clave nueva. La migración es idempotente y recuperable ante corte; se conserva copia verificable y se retira la credencial antigua tras validación. La restauración no activa accesos obsoletos inadvertidamente.
+
+#### Fase C — Acceso, administración y verificación
+
+- [ ] **TASK-1805: Sustituir credenciales en lista de peones y autenticar la conexión**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1801, TASK-1802.
+  * **Descripción:** integrar el protocolo acordado antes de `sendAvailableFarmhands`, asociar el resultado verificado a la conexión correspondiente y autorizar la selección del slot desde ese estado de servidor. Sustituir `userID` y otros campos serializados por identificadores públicos cuando sea necesario para la UI; eliminar el envío de `ClientToken` y códigos por mensajes de mod. Eliminar rutas alternativas que acepten una identidad aportada por el cliente sin verificarla, y limpiar el estado al desconectar o revocar.
+  * **Criterios de aceptación:** cliente autorizado entra sin invitación tras cambiar de IP; desconocido, prueba falsa, caducada o repetida y clave revocada quedan fuera antes de obtener la lista; un dispositivo autorizado no puede seleccionar el personaje de otro. Un cliente antiguo recibe un fallo claro y no activa un fallback inseguro. Una captura o inspección de todos los mensajes de acceso y lista de peones no revela credenciales privadas ni códigos reutilizables.
+
+- [ ] **TASK-1806: Operación desde Putre, revocación y recuperación**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1802, TASK-1803, TASK-1804, TASK-1805.
+  * **Descripción:** adaptar catálogo y comandos de Pelican/`putre_ops`/`hermes` para consultar solicitudes, aprobar la clave concreta, listar, revocar y recuperar dispositivos por DM del propietario. Conservar los niveles de riesgo y aprobación de operaciones sensibles. Al revocar, invalidar invitaciones y sesiones aplicables y expulsar al dispositivo sin borrar el personaje ni su residencia.
+  * **Criterios de aceptación:** propietario puede completar alta asíncrona y recuperar un equipo perdido; otros usuarios y canales no pueden aprobar ni ejecutar acciones; revocar impide reconectar incluso tras reinicio y la recuperación exige nueva aprobación. Auditoría con identificadores públicos y resultados, sin secretos; actualizados corpus y documentación de los tres proyectos afectados según corresponda.
+
+- [ ] **TASK-1807: Pruebas de integración, actualización coordinada y despliegue seguro**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-1803, TASK-1804, TASK-1805, TASK-1806.
+  * **Descripción:** validar primero en partidas de prueba con clientes Linux/Windows y dos jugadores; después preparar versiones compatibles de host y cliente, copias verificadas, instrucciones para testers, plan de despliegue y recuperación. Activar en la demo únicamente después de pasar las pruebas y proteger el progreso mediante checkpoint o rollover verificado.
+  * **Criterios de aceptación:** pruebas reales de alta, migración de mTx, reconexión tras cambio de IP, restauración, revocación, incompatibilidad de versión y dos jugadores con aislamiento de slots; tests negativos de replay, suplantación, manipulación y fallos de red/persistencia. Compilación y suite en verde en VM y cliente. El despliegue conserva partida y puede volver atrás sin reactivar secretos heredados inadvertidamente; registrar límites conocidos del tráfico durante la partida, que sigue fuera del alcance.
