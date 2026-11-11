@@ -170,7 +170,7 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 
 ## 5. Registro de Decisiones de Arquitectura (ADRs)
 
-Las decisiones arquitectónicas clave y sus alternativas descartadas están documentadas en [`docs/adr/`](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/adr):
+Las decisiones arquitectónicas clave y sus alternativas descartadas están documentadas en [`docs/adr/`](docs/adr/):
 
 * **ADR-0001:** Rollover diario mediante el pipeline nativo `NewDay` + `Save` a las `06:00 AM`.
 * **ADR-0002:** Reloj 1:1 (`0600–2550`) con congelación en Madrugada (`NightHold`) y calendario derivado de `CalendarEpoch`.

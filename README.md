@@ -1,119 +1,138 @@
 # Pelican 4Ever (`SV-RTMP`)
 
-Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijugador en un **mundo persistente en tiempo real (1:1)** diseñado para servidores dedicados 24/7 de **hasta 16 jugadores**, con residencias privadas accesibles desde la Plaza Central y la cadena de puentes, anexos temáticos ampliables, economía comunitaria y supervisión DevOps remota.
+🌐 **Languages:** English | [Español](README.es.md)
+
+A mod for **Stardew Valley 1.6.15** (SMAPI 4.1+) that transforms cooperative multiplayer into a **persistent, real-time world (1:1 scale)** tailored for 24/7 dedicated servers supporting **up to 16 players**.
+
+Features customizable private residences accessible via the Central Plaza and a deterministic bridge network, 8 authentic farm types with canonical miniature annexes (40×32), a persistent community economy, asynchronous rest without forced collapses, DevOps remote administration via REST API & web dashboard, and native autonomous agent support.
 
 ---
 
-## 🌟 Características Principales
+## 🌟 Key Features
 
-1. **Reloj 1:1 y Ciclo Diario Persistente (24/7):**
-   - El reloj del juego avanza al mismo ritmo que la hora real (`600.000 ms` por cada 10 minutos de juego).
-   - **Madrugada continua (*NightHold*):** Entre las 01:50 y las 06:00 reales, el reloj se congela en `2550`, permitiendo jugar de madrugada sin desmayos forzados por horario.
-   - **Fecha y ciclo desacoplados:** La fecha de calendario cambia a las `02:00 AM`; antes del cierre se guarda y verifica un backup SHA-256, se solicitan cierres a los peers y solo entonces se inicia el nuevo día nativo. Aviso a 10 minutos.
-   - **Amanecer y horarios:** El reloj, la luz y los horarios de Pelican siguen comenzando a las `06:00 AM`; el cambio de fecha no los adelanta.
+### 1. 1:1 Real-Time Clock & Persistent 24/7 Daily Cycle
+- **Real-Time Progression:** The in-game clock advances in lockstep with real time (`600,000 ms` per 10 game minutes; 1 real day equals 1 game day).
+- **Continuous Dawn (*NightHold*):** Between 01:50 AM and 06:00 AM real time, the clock freezes at `2550` (never reaching the forced `2600` collapse), allowing nocturnal gameplay without pass-outs. Nighttime ambience is simulated smoothly, and craftables/machines process materials continuously.
+- **Decoupled Date Rollover:** The calendar date advances at `02:00 AM`. Before advancing, an automated backup with SHA-256 integrity verification is generated, connected peers are synchronized, and players receive a 10-minute warning broadcast.
+- **Natural Daylight and Schedules:** Daylight illumination and Pelican Town NPC schedules still trigger at `06:00 AM`; the 02:00 AM date rollover does not prematurely skip morning schedules.
+- **Epoch-Based Perpetual Calendar:** Seasons last 28 real days (exactly 4 weeks), ensuring that Day 1 is always a real-world Monday and Day 7 is always a Sunday.
 
-2. **Hasta 16 Residencias Privadas y Anexos Temáticos:**
-   - **Catálogo de Portales:** 16 residencias individuales distribuidas en la Plaza Central (`Farm`) y una cadena de puentes deterministas (`Pelican4Ever_Bridge_1..3`), con políticas de acceso configurables (`Locked`, `Friends`, `Public`) y protección anti-griefing.
-   - **Variedad de Granjas:** Elección de 7 tipos de granja (Estándar, Fluvial, Bosque, Colinas, Salvaje, Cuatro Esquinas y Playa) con forraje, estanques, minerales y criaturas activas por residencia.
-   - **Anexos Adquiribles (40×32):** Minimapas temáticos ampliables acoplados a las salidas perimetrales libres, adquiribles con oro desde un diálogo de compra con soporte de carteras separadas.
-   - **Culling Dinámico de Red:** Las residencias y anexos vacíos no consumen ancho de banda ni saturan la red de los clientes.
+### 2. Up to 16 Private Residences & Thematic 40×32 Annexes
+- **Portal & Bridge Network:** 16 private residences distributed across the Central Plaza (`Farm`) and a deterministic bridge chain (`Pelican4Ever_Bridge_1..3`).
+- **8 Authentic Farm Types:** Choose among Standard, Riverland, Forest, Hilltop, Wilderness, Four Corners, Beach, and Meadowlands (Ranching), featuring active foraging, fishing pools, quarry ore respawns, and nocturnal monster spawning tailored to each biotope.
+- **Individual Private Caves:** Each resident independently chooses whether their private cave produces Fruit Bats or Mushrooms.
+- **Canonical Miniature Annexes (40×32):** Expandable thematic farmland expansions constructed 100% using authentic vanilla tilesets (ADR 0007 / Epic 9.1), featuring single-entrance variants, natural cliff/water perimeter barriers, and automated debris sanitization on save reload (MapVersion 3).
+- **Access Policies & Anti-Griefing:** Granular per-residence security (`Locked`, `Friends`, `Public`) with dynamic friend lists and visitor building permission toggles via the `/residencia` command.
+- **Dynamic Network Culling:** Vacant residences and annexes consume zero client bandwidth or network overhead.
 
-3. **Sueño Asíncrono y Balance de Energía:**
-   - **Descansar y Desconectar:** Cada jugador puede acostarse en su cama y salir al menú principal de forma individual sin pausar ni desconectar a los demás.
-   - **Energía por sesiones:** Saciedad que se vacía en 4 h reales y limita la energía instantánea de la comida, buff *Bien Comido* de los platos cocinados que permite recuperar energía sentado, y buff diario del Spa (120 de energía y salud en 2 h).
-   - **Minas Persistentes:** Turnos mineros regenerados cada 12 horas (06:00 y 18:00) para repartir recursos equitativamente.
+### 3. Asynchronous Sleep & Energy Balance
+- **Individual Rest & Disconnect:** Each farmer can sleep in their bed and exit to the title screen or disconnect individually without pausing the world or kicking others.
+- **Satiety System & «Well-Fed» Buff:** Satiety depletes gradually over 4 real hours. Reaching 1/4 satiety from eating any food or cooked meal activates the *Well-Fed* buff, enabling passive energy regeneration while sitting on chairs or the ground (`GroundSitModule`).
+- **Daily Spa Regeneration:** A relaxing visit to the Railroad Spa restores up to 120 Energy and Health over 2 real hours.
+- **Equitable Mining Shifts:** Mine floor states and ores regenerate every 12 real hours (at 06:00 and 18:00) to ensure fair resource distribution across player time zones.
 
-4. **Inmersión y Vida Comunitaria:**
-   - **Buzones Vecinales:** Envío y recepción de cartas vecinales junto al portal de cada residencia.
-   - **Chat Multicanal y de Proximidad:** Canales global (`/g`), local con atenuación por distancia espacial (`/l`) y susurros privados (`/w`).
-   - **Mercado Vecinal Asíncrono:** Tablón comunitario para compraventa de objetos y excedentes entre granjeros conectados o desconectados.
-   - **Festivales Desacoplados:** Entrada y salida libre sin salto de cámara ni reseteos de hora; minijuegos competitivos por tandas con premios oficiales a las 23:50 y ceremonias comunitarias en vivo (Luau y Medusas Lunares).
+### 4. Community Life & Social Immersion
+- **Neighborhood Mailboxes:** Send and receive neighborly letters right outside each farm portal with synchronized visual indicators.
+- **Multi-channel & Spatial Proximity Chat:** Global channel (`/g`), local proximity chat with spatial distance volume attenuation (`/l`), and private direct whispers (`/w`).
+- **Asynchronous Community Market:** Community bulletin board for buying and selling surplus goods, crops, and artisan goods between online and offline farmers, backed by secure escrow and delivery confirmation.
+- **Decoupled Live Festivals:** Seamless entry and exit without camera cuts or clock freezes; multi-heat competitive minigames with official prizes awarded at 23:50, plus live community ceremonies (Luau, Dance of the Moonlight Jellies).
 
-5. **Panel DevOps y API de Anfitrión v1:**
-   - **Dashboard Web Integrado:** SPA ligera en puerto `8085` para monitorizar estado, jugadores conectados y residencias.
-   - **API REST Versionada (`/api/v1/host/`):** Contrato HTTP local seguro para control del reloj, jugadores, anuncios, tandas festivas y registro de sucesos incremental (`events?since=N`).
-   - **Modo `AgentHost` y Reinicio Seguro:** Permite al anfitrión (humano o agente autónomo como Stardew Voyager) registrar descansos diarios sin desconectarse, y programar reinicios limpios (`p4e_safe_restart`) con cálculo de progreso no guardado en riesgo.
+### 5. DevOps Panel, Host REST API v1 & Headless Mode
+- **Integrated Web Dashboard (SPA):** Lightweight web interface served on port `8085` displaying real-time server metrics, an interactive world map, connected players, and residence occupancy.
+- **Versioned REST API (`/api/v1/host/`):** Secure local HTTP endpoints to manage the clock, broadcast announcements, manage players, coordinate festival heats, and poll incremental event streams (`events?since=N`).
+- **Remote Console Commands:** Execute whitelisted administrative console commands remotely and securely via the REST API.
+- **Scheduled Safe Restart (`p4e_safe_restart`):** Calculates unsaved player progress at risk and orchestrates graceful server restarts with guaranteed persistence.
+- **Headless Server Mode:** Dedicated host servers can run on Linux without graphical rendering, drastically reducing CPU and RAM footprint.
 
-### Apariencia opcional para agentes
+### 6. Autonomous Agent Support & Cosmetics
+- **`AgentHost` Mode:** Tailored for autonomous AI hosts (such as Stardew Voyager or Putre), enabling automated sleep logging without closing the host network session.
+- **Dr4co Dragon Cosmetic Pack (Fashion Sense 7.5.0+):** Full custom body with 4-directional walk cycles, 16×32 alignment with vanilla shadow, and claw tool offset correction (`AgentCosmeticsModule` / `AgentToolOffset`).
+- **`p4e_dr4co_sprite` Command:** Instantly toggle dragon appearances from console or chat without requiring the in-game Fashion Sense mirror.
 
-El pack cosmético de Dr4co está en [`agents/Dr4co.FashionSense`](agents/Dr4co.FashionSense/). Requiere **Fashion Sense 7.5.0+** (`PeacefulEnd.FashionSense`) para mostrar el cuerpo del jugador; es una dependencia opcional de ese recurso visual, no de Pelican 4Ever. El servidor y el mod funcionan sin Fashion Sense ni el pack. Consulta [`agents/README.md`](agents/README.md) para instalarlo.
-
----
-
-## 📚 Documentación Técnica
-
-* [Diseño del Juego (`design.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/design.md)
-* [Arquitectura Técnica (`architecture.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/architecture.md)
-* [Backlog de Iteraciones y Épicas (`backlog.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/backlog.md)
-* [Especificación de la API de Anfitrión (`docs/host-api.md`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/host-api.md)
-* [Guía del Modpack persistente (`docs/modpack.md`)](docs/modpack.md)
-* [Servidor persistente desatendido (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
-* [Arquitectura de Producción con Hermes (`docs/arquitectura-produccion-hermes.md`)](docs/arquitectura-produccion-hermes.md)
-* [Decisiones de Arquitectura (`docs/adr/`)](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docs/adr)
+### 7. Modpack Integrity Verification
+- **Strict Client Verification (`RequiredClientMods`):** The server validates connected clients during the SMAPI initial handshake, ensuring that the full modpack is present with matching versions to prevent missing items, desynchronization, and visual errors.
 
 ---
 
-## 🏗️ Estructura de la Solución
+## 📚 Technical Documentation
+
+* [Game Design (`design.md`)](design.md)
+* [Technical Architecture (`architecture.md`)](architecture.md)
+* [Iterations & Roadmap Backlog (`backlog.md`)](backlog.md)
+* [Host REST API Specification (`docs/host-api.md`)](docs/host-api.md)
+* [Persistent Modpack Guide (`docs/modpack.md`)](docs/modpack.md)
+* [Unattended Persistent Server Guide (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
+* [Production Architecture with Hermes (`docs/arquitectura-produccion-hermes.md`)](docs/arquitectura-produccion-hermes.md)
+* [Architecture Decision Records (`docs/adr/`)](docs/adr/)
+* [Agent Sprite & Cosmetics Guide (`agents/README.md`)](agents/README.md)
+* [Pixel Art Generation Pipeline (`docs/pixel_art_pipeline.md`)](docs/pixel_art_pipeline.md)
+
+---
+
+## 🏗️ Solution Structure
 
 ```text
 Pelican4Ever.sln
-├── Pelican4Ever.Core/      # Lógica de dominio pura (.NET 6, cero dependencias de SMAPI ni MonoGame)
-│   ├── Admin/              # API de anfitrión, cola en hilo principal, eventos y reinicio seguro
-│   ├── Config/             # ServerConfig con validación determinista estricta
-│   ├── Economy/            # Saciedad, descanso, spa, multiplicadores y mercado vecinal
-│   ├── Festivals/          # Tandas de inscripción, ceremonias, puntuaciones y premios
-│   ├── Players/            # PlayerRecord, derivación de SleepState y SleepPolicy
-│   ├── Time/               # GameClock, ServerCalendar, ServerTime y CatchUpPlan
-│   └── World/              # ServerWorldState, puertas, anexos, interiores y culling
-├── Pelican4Ever/           # Mod SMAPI (.NET 6, ensamblado con parches Harmony)
-│   ├── Framework/          # ModContext, IModule, routing espacial y clonación de mapas
-│   └── Modules/            # 16 módulos SMAPI desacoplados con registro defensivo
-└── Pelican4Ever.Tests/     # Suite de 379 pruebas unitarias y de contrato en xUnit (.NET 8)
+├── Pelican4Ever.Core/      # Pure domain logic (.NET 6, zero dependencies on SMAPI or MonoGame)
+│   ├── Admin/              # Host API, main-thread action queue, events, and safe restart
+│   ├── Chat/               # Multi-channel routing, command parsing, and spatial proximity
+│   ├── Config/             # ServerConfig with strict deterministic validation
+│   ├── Economy/            # Satiety, rest, spa, multipliers, and community market escrow
+│   ├── Festivals/          # Registration heats, ceremonies, scoring, and rewards
+│   ├── Networking/         # Client modpack enforcement and network culling
+│   ├── Players/            # PlayerRecord, SleepState derivation, SleepPolicy, and agent tool offsets
+│   ├── Server/             # ServerWorldState and server lifecycle management
+│   ├── Time/               # GameClock, ServerCalendar, ServerTime, and CatchUpPlan
+│   └── World/              # Residences, portals, thematic annexes, farm types, and private caves
+├── Pelican4Ever/           # SMAPI Mod (.NET 6, compiled assembly with Harmony patches)
+│   ├── Framework/          # ModContext, IModule, spatial routing, and map cloning helpers
+│   └── Modules/            # 31 decoupled SMAPI modules with defensive registration
+└── Pelican4Ever.Tests/     # Test suite with 1,205 unit and contract tests in xUnit (.NET 8)
 ```
 
 ---
 
-## ⚙️ Compilación y Pruebas
+## ⚙️ Compilation & Testing
 
-### Requisitos
+### Prerequisites
 * **.NET SDK 8.0**
-* **Stardew Valley 1.6.15** y **SMAPI 4.1+**
+* **Stardew Valley 1.6.15** and **SMAPI 4.1+**
 
-### Pasos
-1. Si tu instalación de Steam o Stardew Valley está en una ruta personalizada, copia `local.props.example` como `local.props` y ajusta `<GamePath>`:
+### Build Steps
+1. If your Steam or Stardew Valley installation resides in a custom path, copy `local.props.example` to `local.props` and configure `<GamePath>`:
    ```bash
    cp local.props.example local.props
    ```
-2. Compila la solución completa. El paquete se compilará con `TreatWarningsAsErrors = true`, desplegando el mod directamente en tu directorio `Mods/Pelican4Ever` y generando el archivo ZIP de release:
+2. Build the complete solution. The package compiles with `TreatWarningsAsErrors = true`, deploying the mod directly to your `Mods/Pelican4Ever` directory and creating the release ZIP:
    ```bash
    dotnet build Pelican4Ever.sln
    ```
-3. Ejecuta la suite de pruebas unitarias:
+3. Run the comprehensive unit and integration test suite:
    ```bash
    dotnet test Pelican4Ever.Tests
    ```
 
 ---
 
-## 🐳 Despliegue con Docker Compose (Servidor Dedicado 24/7)
+## 🐳 Docker Compose Deployment (24/7 Dedicated Server)
 
-El proyecto incluye soporte para ejecución desatendida mediante [docker-compose.yml](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/docker-compose.yml) apoyado sobre la imagen de `JunimoServer`:
+The repository provides out-of-the-box support for unattended server hosting using [docker-compose.yml](docker-compose.yml) based on `JunimoServer`:
 
-1. Crea tu archivo de variables de entorno a partir de la plantilla:
+1. Create your environment configuration from the template:
    ```bash
    cp .env.example .env
-   # Edita .env con tus credenciales de Steam para el Host dedicado
+   # Edit .env with your Steam credentials for the dedicated host
    ```
-2. Configura tu token de administración seguro en `config.json` a partir de [config.example.json](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/config.example.json):
+2. Configure your secure administration token in `config.json` using [config.example.json](config.example.json):
    ```bash
    cp config.example.json config.json
-   # Asegúrate de cambiar AdminApiToken por una clave secreta propia
+   # Be sure to replace AdminApiToken with your own secure secret key
    ```
-3. Levanta el contenedor en segundo plano:
+3. Launch the container in detached mode:
    ```bash
    docker compose up -d
    ```
-4. El servidor expondrá los puertos configurados:
-   - `24642/udp`: Puerto multijugador nativo (Lidgren/Galaxy).
-   - `8085`: API REST y Dashboard web de administración (`http://localhost:8085/`).
-   - `5900`: VNC opcional para inspección visual.
+4. The server will expose the configured ports:
+   - `24642/udp`: Native multiplayer game port (Lidgren/Galaxy).
+   - `8085`: REST API & Web Administration Dashboard (`http://localhost:8085/`).
+   - `5900`: Optional VNC for remote visual inspection.
