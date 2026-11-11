@@ -1,6 +1,6 @@
 # Backlog Técnico y de Producto — *Pelican 4Ever* (`SV-RTMP`)
 
-Basado en las especificaciones revisadas de [design.md](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/design.md) y [architecture.md](file:///home/mtx/Documentos/Projects/Stardew%20Valley%20MORPG/architecture.md), y verificado sobre el código decompilado de **Stardew Valley 1.6.15** y **SMAPI 4.5.2**.
+Basado en las especificaciones revisadas de [design.md](design.md) y [architecture.md](architecture.md), y verificado sobre el código decompilado de **Stardew Valley 1.6.15** y **SMAPI 4.5.2**.
 
 ---
 
