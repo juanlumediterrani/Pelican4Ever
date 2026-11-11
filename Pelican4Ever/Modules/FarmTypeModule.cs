@@ -51,7 +51,7 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>Comportamientos de la residencia o anexo, o null si la ubicación no es ninguno. Un hueco libre cuenta como estándar.</summary>
-        private static FarmTypeBehavior? BehaviorOf(GameLocation location)
+        public static FarmTypeBehavior? BehaviorOf(GameLocation location)
         {
             if (context == null)
                 return null;

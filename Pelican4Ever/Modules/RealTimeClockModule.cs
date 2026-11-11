@@ -383,6 +383,7 @@ namespace Pelican4Ever.Modules
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
             NightHoldTicksSimulated = 0;
+            NightHoldWorldSimulator.ResetForNewDay();
             if (Context.IsMainPlayer)
             {
                 Game1.realMilliSecondsPerGameTenMinutes = 600_000;
@@ -464,9 +465,10 @@ namespace Pelican4Ever.Modules
                     for (int i = 0; i < ticksToRun; i++)
                     {
                         PassTimeForNightHold(10);
+                        NightHoldWorldSimulator.SimulateTick(context, NightHoldTicksSimulated);
                         NightHoldTicksSimulated++;
                     }
-                    context.Monitor.Log($"[RealTimeClockModule] Madrugada: procesados {ticksToRun * 10} min en máquinas (total noche: {NightHoldTicksSimulated * 10} min).", LogLevel.Trace);
+                    context.Monitor.Log($"[RealTimeClockModule] Madrugada: procesados {ticksToRun * 10} min en máquinas y entorno (total noche: {NightHoldTicksSimulated * 10} min).", LogLevel.Trace);
                 }
                 else if (targetTicks < NightHoldTicksSimulated)
                 {
