@@ -524,10 +524,11 @@ namespace Pelican4Ever.Modules
                     new[] { playerId }
                 );
 
-                context.Helper.Events.GameLoop.UpdateTicked += KickNextTick;
+                var gameLoop = context.Helper.Events.GameLoop;
+                gameLoop.UpdateTicked += KickNextTick;
                 void KickNextTick(object? s, UpdateTickedEventArgs args)
                 {
-                    context.Helper.Events.GameLoop.UpdateTicked -= KickNextTick;
+                    gameLoop.UpdateTicked -= KickNextTick;
                     Game1.server?.kick(playerId);
                 }
             }
