@@ -1196,3 +1196,105 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de Aceptación:**
     1. Sin `RestartAfterCheckpoint`, el reinicio seguro se comporta como hoy.
     2. `ProgressAtRiskDto.Summary` indica la hora del último checkpoint.
+
+
+---
+
+### Épica 12: Simulación del Mundo Nocturno en Madrugada (NightHold) (rama `feat/nighthold-world-simulation`)
+> **Objetivo:** Transformar el tramo de Madrugada (`NightHold` entre las 01:50 y las 06:00) de un estado ambientalmente estático a un ecosistema activo y reactivo mediante ticks periódicos de simulación desacoplados en el Host, manteniendo la hora del motor fija en `2550` para evitar el desmayo de los jugadores conectados.
+
+- [x] **TASK-1701: Motor desacoplado de ticks ambientales nocturnos (`NightHoldWorldSimulator`)**
+  * **Análisis Técnico:**
+    - Actualmente, `RealTimeClockModule.OnUpdateTicked` detecta `reading.IsNightHold` y corre cada 10 min reales `PassTimeForNightHold(10)`, el cual avanza solo objetos, muebles y edificios construidos (`building.performTenMinuteAction`), pero no los mapas ni su entorno exterior.
+    - `Game1.performTenMinuteClockUpdate()` no puede llamarse directamente porque incrementaría `timeOfDay` hacia `2600`, forzando el desmayo masivo de clientes nativos (`UpdateOther`) y rompiendo las tablas de pesca nocturna (`TIME 1800 2600`).
+    - Diseñar una clase/servicio de host `NightHoldWorldSimulator` invocado desde el bucle de ticks simulados en `RealTimeClockModule`:
+      ```csharp
+      for (int i = 0; i < ticksToRun; i++)
+      {
+          PassTimeForNightHold(10);
+          NightHoldWorldSimulator.SimulateTick(context, NightHoldTicksSimulated);
+          NightHoldTicksSimulated++;
+      }
+      ```
+    - Mantener un contador determinista de ticks nocturnos transcurridos para calcular probabilidades de spawn y expiración sin depender del avance numérico de `Game1.timeOfDay`.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-003, GAP-17.
+  * **Criterios de Aceptación:**
+    1. Se ejecuta una vez cada 10 minutos reales durante `NightHold` en el Host.
+    2. `Game1.timeOfDay` permanece estrictamente fijo en `2550` en memoria y red.
+    3. Ningún cliente sufre desmayo ni interrupción forzada de herramientas.
+  * **Resolución:** Implementado en `NightHoldWorldSimulator` (`Pelican4Ever/Framework/NightHoldWorldSimulator.cs`), invocado desde `RealTimeClockModule.OnUpdateTicked` en cada tick simulado de 10 min reales durante `NightHold`. Mantiene `Game1.timeOfDay` estrictamente congelado en `2550` (o hora tope), ejecutando la simulación desacoplada de burbujas, bateo, monstruos, fauna y mantenimiento de minas sin disparar el desmayo en los clientes.
+
+- [x] **TASK-1702: Ciclo de vida de burbujas de pesca (`fishSplashPoint`) en mapas exteriores y residencias**
+  * **Análisis Técnico:**
+    - En vanilla (`GameLocation.performTenMinuteUpdate`), si `fishSplashPoint == Point.Zero`, hay un 50% de probabilidad de buscar dos intentos de casillas de agua abierta transitable (`isOpenWater`, sin propiedad `NoFishing` y con `distanceToLand` entre 2 y 4).
+    - Para la expiración, vanilla evalúa `random.NextDouble() < 0.1 + (num / 1800f)` tras al menos 60 minutos transcurridos (`num > 60`).
+    - En `NightHold`, registrar en un diccionario interno o metadata la duración en ticks de cada burbuja generada. Tras 6 ticks (60 min reales), evaluar expiración nativa y retirar limpiando `fishSplashPoint.Value = Point.Zero`.
+    - Integrar soporte para residencias fluviales de jugadores (`FarmTypeModule.Postfix_TenMinuteUpdate` con `behavior.RiverFishSplashes`), garantizando que los anexos con agua sigan renovando sus burbujas privadas.
+    - Como `fishSplashPoint` es un `NetPoint` nativo, su sincronización a clientes es automática e inmediata.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1701, TASK-916.
+  * **Criterios de Aceptación:**
+    1. Aparecen nuevas burbujas de pesca durante la madrugada en mapas exteriores con agua y en residencias fluviales.
+    2. Las burbujas existentes expiran de forma natural tras 60–120 minutos reales en lugar de quedar congeladas.
+    3. Los clientes en red ven las burbujas, escuchan el sonido `waterSlosh` si están presentes y obtienen el bonus de picada rápida al pescar en ellas.
+  * **Resolución:** Implementado en `NightHoldWorldSimulator.SimulateFishBubbles`. Monitorea el diccionario `BubbleSpawnTicks`, aplica `NightHoldWorldLogic.ShouldBubbleExpire` con expiración a los 60–180 min reales, replica los 2 intentos en agua navegable a distancia 2..4 de tierra (`isOpenWater` y sin `NoFishing`), reproduce `waterSlosh` a los clientes presentes y soporta tanto mapas exteriores como residencias fluviales con `FarmTypeModule.BehaviorOf(farm)?.RiverFishSplashes`. `ResetForNewDay()` limpia el diccionario en cada Rollover.
+
+- [x] **TASK-1703: Ciclo de vida de puntos de bateo de minerales (`orePanPoint`)**
+  * **Análisis Técnico:**
+    - Vanilla ejecuta `performOrePanTenMinuteUpdate(r)`: si el jugador maestro tiene la batea desbloqueada (`ccFishTank`), no es playa y no hay punto activo, 50% de probabilidad de generar brillo de bateo adyacente a la orilla (`distanceToLand <= 1`).
+    - Si ya hay brillo, 10% de probabilidad de disolverse cada 10 min.
+    - `orePanPoint` es también un `NetPoint` replicado automáticamente. Invocar la lógica de bateo nativa sobre ubicaciones de río/lago (Montaña, Bosque, Pueblo, Granja, Isla Norte).
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1701.
+  * **Criterios de Aceptación:**
+    1. Aparecen brillos de bateo en orillas durante la noche si el jugador tiene el bateo desbloqueado.
+    2. Los brillos expiran con la probabilidad nativa del 10% por tick.
+  * **Resolución:** Implementado en `NightHoldWorldSimulator.SimulateOrePanning`. Invoca `performOrePanTenMinuteUpdate(random)` sobre todas las ubicaciones exteriores (excluyendo playas) y reproduce el sonido `"slosh"` si hay jugadores presentes.
+
+- [x] **TASK-1704: Generación de monstruos nocturnos en granjas y residencias de combate (`NightMonsters`)**
+  * **Análisis Técnico:**
+    - En la granja Host (con granja Salvaje o activación de monstruos) y en residencias de combate (`behavior.NightMonsters`), los monstruos dejan de aparecer a la 01:50.
+    - Replicar la evaluación nativa de combate nocturno en `NightHoldWorldSimulator`: probabilidad `0.25 - AverageDailyLuck() / 2.0`. Si triunfa, 25% monstruo volador fuera de pantalla (`spawnFlyingMonstersOffScreen`) y 75% monstruo terrestre (`spawnGroundMonsterOffScreen`), pasando por `Prefix_SpawnGroundMonster` de `FarmTypeModule` para escalar con el nivel de combate del dueño de la residencia.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1701, TASK-601.
+  * **Criterios de Aceptación:**
+    1. En residencias de combate y granja salvaje se mantiene la tensión nocturna con aparición de murciélagos y monstruos terrestres.
+    2. Las residencias estándar o no de combate permanecen protegidas y seguras.
+  * **Resolución:** Implementado en `NightHoldWorldSimulator.SimulateNightMonsters`. Aplica `NightHoldWorldLogic.ShouldSpawnNightMonster(luck, roll)` y `IsFlyingMonster(roll)`. En la granja principal comprueba `Game1.spawnMonstersAtNight`; en residencias evalúa `FarmTypeModule.BehaviorOf(farm)?.NightMonsters` y enruta los monstruos terrestres a través de `Prefix_SpawnGroundMonster` según el nivel de combate del dueño.
+
+- [x] **TASK-1705: Mantenimiento y limpieza de minas y mazmorras (`MineShaft` y `VolcanoDungeon`)**
+  * **Análisis Técnico:**
+    - Durante la madrugada, los jugadores pueden seguir explorando Minas, Caverna Calavera o Volcán.
+    - `MineShaft.UpdateMines10Minutes(timeOfDay)` realiza dos tareas cruciales: `clearInactiveMines()` (libera de memoria RAM los niveles abandonados sin jugadores) y llama al tick de niveles ocupados.
+    - `VolcanoDungeon.UpdateLevels10Minutes(timeOfDay)` actualiza los niveles del volcán con jugadores.
+    - Invocar `MineShaft.UpdateMines10Minutes(2550)` y `VolcanoDungeon.UpdateLevels10Minutes(2550)` en cada tick de `NightHold` para evitar fugas de memoria por niveles huérfanos.
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-1701.
+  * **Criterios de Aceptación:**
+    1. Los niveles de minas sin jugadores son limpiados y liberados de la memoria periódicamente durante la noche.
+    2. Los granjeros en el interior de la mina o volcán continúan experimentando la actualización ambiental periódica.
+  * **Resolución:** Implementado en `NightHoldWorldSimulator.SimulateDungeons`. Invoca `MineShaft.UpdateMines10Minutes(2550)` y `VolcanoDungeon.UpdateLevels10Minutes(2550)` en cada tick nocturno, garantizando la recolección de niveles de mina inactivos y el refresco ambiental en niveles con granjeros.
+
+- [x] **TASK-1706: Fauna ambiental nocturna y criaturas decorativas (`tryToAddCritters`)**
+  * **Análisis Técnico:**
+    - En cada tick de 10 min, `GameLocation.tryToAddCritters(onlyIfOnScreen: true)` evalúa la adición de búhos, murciélagos lejanos y ranas en la pantalla de los jugadores conectados.
+    - Durante `NightHold`, invocar `tryToAddCritters` para las ubicaciones activas con jugadores mejora la inmersión visual nocturna.
+  * **Prioridad:** Baja
+  * **Dependencias:** TASK-1701.
+  * **Criterios de Aceptación:**
+    1. Se renuevan las criaturas nocturnas de fondo en la pantalla de los jugadores activos.
+  * **Resolución:** Implementado en `NightHoldWorldSimulator.SimulateCritters` y `SimulateBugLand`. Obtiene el delegado de `tryToAddCritters` vía `AccessTools` para invocarlo en ubicaciones exteriores con jugadores, y evalúa el spawn de moscas mutantes en `BugLand` (20 % prob.).
+
+- [x] **TASK-1707: Suite de pruebas unitarias y de integración (`Pelican4Ever.Tests`)**
+  * **Análisis Técnico:**
+    - Cobertura con tests en `Pelican4Ever.Tests`:
+      1. `NightHoldWorldSimulatorTests`: verificación de que el reloj `Game1.timeOfDay` no se altera y sigue en `2550`.
+      2. Determinismo y ciclo de vida de burbujas: spawn probabilístico, verificación de tiles válidos de pesca y expiración tras 60–120 min.
+      3. No duplicación de máquinas: verificar que `location.passTimeForObjects` no se llame por partida doble.
+      4. Limpieza de minas: confirmación de invocación de `clearInactiveMines()`.
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1701, TASK-1702, TASK-1703, TASK-1704, TASK-1705.
+  * **Criterios de Aceptación:**
+    1. Todas las pruebas pasan limpiamente con `dotnet test`.
+  * **Resolución:** Implementados 26 nuevos casos de prueba en `NightHoldWorldLogicTests` (`Pelican4Ever.Tests/NightHoldWorldLogicTests.cs`), cubriendo umbrales de expiración (sub-60 min nunca expira, entre 60 y 180 min según fórmula nativa, >= 180 min garantizada), spawn de burbujas y batea (50 %), disolución de batea (10 %), curvas de suerte de monstruos nocturnos (-0.1, 0.0, +0.1) y distribución aérea/terrestre (25/75 %). Se verificó también la invariancia horaria de `GameClock.Read` (congelado en 2550 durante toda la madrugada) y el conteo limpio de `NightHoldTicksElapsed`. 1211 pruebas pasando con éxito en la suite completa.
