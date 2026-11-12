@@ -285,6 +285,7 @@
   "cave.selected_bats": "Tu cueva ha sido preparada para atraer murciélagos de la fruta.",
 
   "location.host_farm": "Granja Host",
+  "location.host_farm_named": "Granja {{name}}",
   "location.bridge": "Puente {{number}}",
   "location.farm_slot": "Granja {{number}} ({{type}})",
   "location.cave_slot": "Cueva Parcela {{slot}}",

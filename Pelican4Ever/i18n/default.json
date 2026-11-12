@@ -285,6 +285,7 @@
   "cave.selected_bats": "Your cave has been prepared to attract fruit bats.",
 
   "location.host_farm": "Host Farm",
+  "location.host_farm_named": "{{name}} Farm",
   "location.bridge": "Bridge {{number}}",
   "location.farm_slot": "Farm {{number}} ({{type}})",
   "location.cave_slot": "Plot {{slot}} Cave",

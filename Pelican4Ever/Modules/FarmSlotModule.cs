@@ -134,6 +134,18 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        /// <summary>Etiqueta de ubicación para menús: la granja del host usa el nombre real de su granja ("Nombre Farm").</summary>
+        private static string GetPlazaLocationLabel(string? locationName)
+        {
+            bool isHostFarm = string.IsNullOrWhiteSpace(locationName)
+                || string.Equals(locationName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase);
+            string? farmName = Game1.MasterPlayer?.farmName.Value;
+            if (isHostFarm && !string.IsNullOrWhiteSpace(farmName))
+                return I18n.Get("location.host_farm_named", new { name = farmName });
+
+            return PlazaCatalogFormatter.GetLocationDisplayName(locationName);
+        }
+
         public static string GetDoorDescription(DoorModel door)
         {
             string key = $"door.{door.DoorId}.description";
@@ -3735,7 +3747,7 @@ namespace Pelican4Ever.Modules
                 };
 
                 QuestionDialog.Ask(
-                    I18n.Get("residence.owner_menu_prompt", new { location = PlazaCatalogFormatter.GetLocationDisplayName(door.LocationName), type = assignment.FarmType }),
+                    I18n.Get("residence.owner_menu_prompt", new { location = GetPlazaLocationLabel(door.LocationName), type = assignment.FarmType }),
                     choices,
                     (who, whichAnswer) =>
                     {
