@@ -156,7 +156,7 @@ namespace Pelican4Ever.Tests
         {
             var assignment = new AnnexAssignment();
             Assert.Equal(1, assignment.MapVersion);
-            Assert.Equal(3, AnnexAssignment.CurrentMapVersion);
+            Assert.Equal(4, AnnexAssignment.CurrentMapVersion);
 
             var door = new DoorAssignment { DoorId = "door_01", FarmSlotId = "Farm_01", OwnerId = 12345 };
             var worldState = new ServerWorldState();
