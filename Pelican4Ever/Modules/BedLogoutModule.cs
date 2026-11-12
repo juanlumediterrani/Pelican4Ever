@@ -10,12 +10,14 @@ using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Locations;
+using StardewValley.Menus;
 
 namespace Pelican4Ever.Modules
 {
     /// <summary>
     /// Permite al jugador meterse en la cama, seleccionar "Descansar y Desconectar",
-    /// registrar su estado Rested en el Host y salir al menú sin bloquear al resto (TASK-102 / ADR-0004).
+    /// resolver subidas de nivel/profesiones pendientes, registrar su estado Rested en el Host
+    /// y salir al menú sin bloquear al resto (TASK-102 / ADR-0004).
     /// En modo <c>AgentHost</c> (TASK-804), el anfitrión registra su descanso sin desconectarse.
     /// </summary>
     public sealed class BedLogoutModule : IModule
@@ -23,6 +25,12 @@ namespace Pelican4Ever.Modules
         private static ModContext? context;
         private static int pendingOfflineStaminaGain = 0;
         public const string BedLogoutMessageType = "BedLogoutRequest";
+
+        private static BedLogoutPayload? pendingBedLogoutPayload;
+        private static bool isBedLogoutPendingAfterLevels;
+        private static bool isHostRestPendingAfterLevels;
+        private static bool hasCheckedLoginLevelUps;
+        private static Point? lastPresentedLevel;
 
         public string Name => "BedLogout";
 
@@ -36,6 +44,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
+            ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
 
             // En el Host gestionamos conexiones y desconexiones
             if (Context.IsMainPlayer)
@@ -48,9 +57,20 @@ namespace Pelican4Ever.Modules
             ApplyHarmonyPatches(ctx.Harmony);
         }
 
+        private void OnDayStarted(object? sender, StardewModdingAPI.Events.DayStartedEventArgs e)
+        {
+            hasCheckedLoginLevelUps = false;
+            lastPresentedLevel = null;
+        }
+
         private void OnReturnedToTitle(object? sender, StardewModdingAPI.Events.ReturnedToTitleEventArgs e)
         {
             pendingOfflineStaminaGain = 0;
+            pendingBedLogoutPayload = null;
+            isBedLogoutPendingAfterLevels = false;
+            isHostRestPendingAfterLevels = false;
+            hasCheckedLoginLevelUps = false;
+            lastPresentedLevel = null;
         }
 
         private void OnUpdateTicked(object? sender, StardewModdingAPI.Events.UpdateTickedEventArgs e)
@@ -60,6 +80,126 @@ namespace Pelican4Ever.Modules
                 int gained = pendingOfflineStaminaGain;
                 pendingOfflineStaminaGain = 0;
                 ApplyOfflineStaminaToLocalPlayer(gained);
+            }
+
+            if (!Context.IsWorldReady || Game1.player == null)
+                return;
+
+            // En modo anfitrión agente (headless), no mostramos menús interactivos
+            if (Context.IsMainPlayer && context?.Config.AgentHost == true)
+                return;
+
+            // 1. Proceso de subida de nivel durante BedLogout (en la cama para cliente)
+            if (isBedLogoutPendingAfterLevels)
+            {
+                if (Game1.activeClickableMenu == null)
+                {
+                    if (Game1.player.newLevels.Count > 0)
+                    {
+                        Point next = Game1.player.newLevels[0];
+                        if (lastPresentedLevel.HasValue && lastPresentedLevel.Value.Equals(next))
+                        {
+                            Game1.player.newLevels.RemoveAt(0);
+                            if (Game1.player.newLevels.Count == 0)
+                            {
+                                isBedLogoutPendingAfterLevels = false;
+                                lastPresentedLevel = null;
+                                if (pendingBedLogoutPayload != null)
+                                {
+                                    var payload = pendingBedLogoutPayload;
+                                    pendingBedLogoutPayload = null;
+                                    ExecuteClientBedLogout(payload);
+                                }
+                                return;
+                            }
+                            next = Game1.player.newLevels[0];
+                        }
+
+                        lastPresentedLevel = next;
+                        context?.Monitor.Log($"[BedLogoutModule] Mostrando menú de nivel (cama) para {Game1.player.Name}: habilidad {next.X}, nivel {next.Y}.", LogLevel.Info);
+                        Game1.activeClickableMenu = new LevelUpMenu(next.X, next.Y);
+                    }
+                    else
+                    {
+                        isBedLogoutPendingAfterLevels = false;
+                        lastPresentedLevel = null;
+                        if (pendingBedLogoutPayload != null)
+                        {
+                            var payload = pendingBedLogoutPayload;
+                            pendingBedLogoutPayload = null;
+                            ExecuteClientBedLogout(payload);
+                        }
+                    }
+                }
+                return;
+            }
+
+            // 1b. Proceso de subida de nivel durante descanso del Host (jugador humano)
+            if (isHostRestPendingAfterLevels)
+            {
+                if (Game1.activeClickableMenu == null)
+                {
+                    if (Game1.player.newLevels.Count > 0)
+                    {
+                        Point next = Game1.player.newLevels[0];
+                        if (lastPresentedLevel.HasValue && lastPresentedLevel.Value.Equals(next))
+                        {
+                            Game1.player.newLevels.RemoveAt(0);
+                            if (Game1.player.newLevels.Count == 0)
+                            {
+                                isHostRestPendingAfterLevels = false;
+                                lastPresentedLevel = null;
+                                ExecuteHostRest();
+                                return;
+                            }
+                            next = Game1.player.newLevels[0];
+                        }
+
+                        lastPresentedLevel = next;
+                        context?.Monitor.Log($"[BedLogoutModule] Mostrando menú de nivel (cama host) para {Game1.player.Name}: habilidad {next.X}, nivel {next.Y}.", LogLevel.Info);
+                        Game1.activeClickableMenu = new LevelUpMenu(next.X, next.Y);
+                    }
+                    else
+                    {
+                        isHostRestPendingAfterLevels = false;
+                        lastPresentedLevel = null;
+                        ExecuteHostRest();
+                    }
+                }
+                return;
+            }
+
+            // 2. Al entrar a la partida o tras un rollover diario, comprobar si quedaron niveles o profesiones pendientes
+            if (!hasCheckedLoginLevelUps)
+            {
+                if (!Game1.fadeToBlack && !Game1.globalFade && Game1.activeClickableMenu == null && !Game1.eventUp)
+                {
+                    LevelUpMenu.AddMissedProfessionChoices(Game1.player);
+                    if (Game1.player.newLevels.Count > 0)
+                    {
+                        Point next = Game1.player.newLevels[0];
+                        if (lastPresentedLevel.HasValue && lastPresentedLevel.Value.Equals(next))
+                        {
+                            Game1.player.newLevels.RemoveAt(0);
+                            if (Game1.player.newLevels.Count == 0)
+                            {
+                                hasCheckedLoginLevelUps = true;
+                                lastPresentedLevel = null;
+                                return;
+                            }
+                            next = Game1.player.newLevels[0];
+                        }
+
+                        lastPresentedLevel = next;
+                        context?.Monitor.Log($"[BedLogoutModule] Mostrando menú de nivel pendiente (inicio sesión) para {Game1.player.Name}: habilidad {next.X}, nivel {next.Y}.", LogLevel.Info);
+                        Game1.activeClickableMenu = new LevelUpMenu(next.X, next.Y);
+                    }
+                    else
+                    {
+                        hasCheckedLoginLevelUps = true;
+                        lastPresentedLevel = null;
+                    }
+                }
             }
         }
 
@@ -377,17 +517,24 @@ namespace Pelican4Ever.Modules
                 // Si es el propio Host quien duerme en la cama (TASK-804)
                 if (Context.IsMainPlayer)
                 {
-                    HostRestResult hostRest = RestHostPlayer(triggeredFromApi: false);
-                    Game1.addHUDMessage(new HUDMessage(hostRest.Message, HUDMessage.newQuest_type));
-
-                    if (hostRest.ShouldDisconnectSession)
+                    if (context.Config.AgentHost)
                     {
-                        DelayedAction.functionAfterDelay(() =>
-                        {
-                            Game1.ExitToTitle();
-                        }, 1500);
+                        ExecuteHostRest();
+                        return false;
                     }
 
+                    LevelUpMenu.AddMissedProfessionChoices(Game1.player);
+                    if (Game1.player.newLevels.Count > 0)
+                    {
+                        isHostRestPendingAfterLevels = true;
+                        Point p = Game1.player.newLevels[0];
+                        lastPresentedLevel = p;
+                        context.Monitor.Log($"[BedLogoutModule] Mostrando menú de nivel (cama host) para {Game1.player.Name}: habilidad {p.X}, nivel {p.Y}.", LogLevel.Info);
+                        Game1.activeClickableMenu = new LevelUpMenu(p.X, p.Y);
+                        return false;
+                    }
+
+                    ExecuteHostRest();
                     return false; // Cancela el startSleep() nativo
                 }
 
@@ -401,26 +548,59 @@ namespace Pelican4Ever.Modules
                     PositionY = Game1.player.Position.Y
                 };
 
-                // Cliente granjero: enviar mensaje al Host para registrar el descanso y salir al título
-                context.Helper.Multiplayer.SendMessage(
-                    message: payload,
-                    messageType: BedLogoutMessageType,
-                    modIDs: new[] { context.Manifest.UniqueID },
-                    playerIDs: new[] { Game1.MasterPlayer.UniqueMultiplayerID }
-                );
-
-                Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.disconnecting"), HUDMessage.newQuest_type));
-
-                // Salir al menú principal limpiamente tras 1.5s
-                DelayedAction.functionAfterDelay(() =>
+                // Comprobar si hay niveles o profesiones pendientes antes de desconectar al cliente
+                LevelUpMenu.AddMissedProfessionChoices(Game1.player);
+                if (Game1.player.newLevels.Count > 0)
                 {
-                    Game1.ExitToTitle();
-                }, 1500);
+                    pendingBedLogoutPayload = payload;
+                    isBedLogoutPendingAfterLevels = true;
+                    Point p = Game1.player.newLevels[0];
+                    lastPresentedLevel = p;
+                    context.Monitor.Log($"[BedLogoutModule] Mostrando menú de nivel (cama) para {Game1.player.Name}: habilidad {p.X}, nivel {p.Y}.", LogLevel.Info);
+                    Game1.activeClickableMenu = new LevelUpMenu(p.X, p.Y);
+                    return false;
+                }
 
+                ExecuteClientBedLogout(payload);
                 return false; // Cancela el startSleep() nativo que pausaría/cerraría la sesión para todos
             }
 
             return true;
+        }
+
+        private static void ExecuteHostRest()
+        {
+            HostRestResult hostRest = RestHostPlayer(triggeredFromApi: false);
+            Game1.addHUDMessage(new HUDMessage(hostRest.Message, HUDMessage.newQuest_type));
+
+            if (hostRest.ShouldDisconnectSession)
+            {
+                DelayedAction.functionAfterDelay(() =>
+                {
+                    Game1.ExitToTitle();
+                }, 1500);
+            }
+        }
+
+        private static void ExecuteClientBedLogout(BedLogoutPayload payload)
+        {
+            if (context == null) return;
+
+            // Cliente granjero: enviar mensaje al Host para registrar el descanso y salir al título
+            context.Helper.Multiplayer.SendMessage(
+                message: payload,
+                messageType: BedLogoutMessageType,
+                modIDs: new[] { context.Manifest.UniqueID },
+                playerIDs: new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+            );
+
+            Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.disconnecting"), HUDMessage.newQuest_type));
+
+            // Salir al menú principal limpiamente tras 1.5s
+            DelayedAction.functionAfterDelay(() =>
+            {
+                Game1.ExitToTitle();
+            }, 1500);
         }
     }
 }
