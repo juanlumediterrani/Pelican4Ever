@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Pelican4Ever.Core.Localization;
+using Pelican4Ever.Core.World;
 using Xunit;
 
 namespace Pelican4Ever.Tests
@@ -161,6 +162,79 @@ namespace Pelican4Ever.Tests
             // Security
             Assert.Equal("Device paired successfully as 'Alex'!", en.Get("security.pairing_success", new { alias = "Alex" }));
             Assert.Equal("¡Dispositivo emparejado correctamente como 'Alex'!", es.Get("security.pairing_success", new { alias = "Alex" }));
+
+            // Badges & World UI (TASK-1906)
+            Assert.Equal("[E / Click or Walk] Claim Farm Slot", en.Get("badge.claim_slot"));
+            Assert.Equal("[E / Clic o Caminar] Fundar Parcela", es.Get("badge.claim_slot"));
+            Assert.Equal("🏠 My Plot (Walk to enter)", en.Get("badge.my_slot"));
+            Assert.Equal("🏠 Mi Parcela (Caminar para entrar)", es.Get("badge.my_slot"));
+            Assert.Equal("🏠 Robin's Plot", en.Get("badge.neighbor_slot", new { owner = "Robin" }));
+            Assert.Equal("🏠 Parcela de Robin", es.Get("badge.neighbor_slot", new { owner = "Robin" }));
+            Assert.Equal("🌲 River Bend (Walk to enter)", en.Get("badge.annex_enter", new { name = "River Bend" }));
+            Assert.Equal("🌲 Remanso Fluvial (Caminar para entrar)", es.Get("badge.annex_enter", new { name = "Remanso Fluvial" }));
+            Assert.Equal("[E / Click or Walk] Purchase Annex", en.Get("badge.annex_purchase"));
+            Assert.Equal("[E / Clic o Caminar] Adquirir Anexo", es.Get("badge.annex_purchase"));
+            Assert.Equal("🚫 Expansion unavailable", en.Get("badge.annex_unavailable"));
+            Assert.Equal("🚫 Ampliación no disponible", es.Get("badge.annex_unavailable"));
+
+            // Annex Rejections & HUD (TASK-1906)
+            Assert.Equal("You don't have enough money to acquire this annex.", en.Get("annex.rejection.insufficient_funds"));
+            Assert.Equal("No dispones de suficiente dinero para adquirir este anexo.", es.Get("annex.rejection.insufficient_funds"));
+            Assert.Equal("Only the residence owner can acquire annexes.", en.Get("annex.rejection.not_residence_owner"));
+            Assert.Equal("Solo el propietario de la residencia puede adquirir anexos.", es.Get("annex.rejection.not_residence_owner"));
+            Assert.Equal("An annex has already been acquired at this entrance.", en.Get("annex.rejection.already_exists"));
+            Assert.Equal("Ya existe un anexo adquirido en este acceso.", es.Get("annex.rejection.already_exists"));
+
+            // Cave Selection (TASK-1906)
+            Assert.Equal("How would you like to prepare your private cave?", en.Get("cave.dialog_prompt"));
+            Assert.Equal("¿Cómo te gustaría preparar tu cueva privada?", es.Get("cave.dialog_prompt"));
+            Assert.Equal("Mushrooms", en.Get("cave.choice_mushrooms"));
+            Assert.Equal("Champiñones", es.Get("cave.choice_mushrooms"));
+            Assert.Equal("Fruit Bats", en.Get("cave.choice_bats"));
+            Assert.Equal("Murciélagos de la fruta", es.Get("cave.choice_bats"));
+            Assert.Equal("Your cave has been prepared with mushroom boxes.", en.Get("cave.selected_mushrooms"));
+            Assert.Equal("Tu cueva ha sido preparada con cajas de champiñones.", es.Get("cave.selected_mushrooms"));
+
+            // Location Names (TASK-1906)
+            Assert.Equal("Host Farm", en.Get("location.host_farm"));
+            Assert.Equal("Granja Host", es.Get("location.host_farm"));
+            Assert.Equal("Bridge 2", en.Get("location.bridge", new { number = 2 }));
+            Assert.Equal("Puente 2", es.Get("location.bridge", new { number = 2 }));
+            Assert.Equal("Plot 01 Cave", en.Get("location.cave_slot", new { slot = "01" }));
+            Assert.Equal("Cueva Parcela 01", es.Get("location.cave_slot", new { slot = "01" }));
+            Assert.Equal("Plot 01 Cellar", en.Get("location.cellar_slot", new { slot = "01" }));
+            Assert.Equal("Bodega Parcela 01", es.Get("location.cellar_slot", new { slot = "01" }));
+            Assert.Equal("Plot 01 Greenhouse", en.Get("location.greenhouse_slot", new { slot = "01" }));
+            Assert.Equal("Invernadero Parcela 01", es.Get("location.greenhouse_slot", new { slot = "01" }));
+            Assert.Equal("Annex East (River Bend)", en.Get("location.annex_slot", new { side = "East", type = "River Bend" }));
+            Assert.Equal("Anexo Este (Remanso Fluvial)", es.Get("location.annex_slot", new { side = "Este", type = "Remanso Fluvial" }));
+        }
+
+        [Fact]
+        public void PlazaCatalogFormatter_ResolvesDynamicLanguageForLocationsAndDoors()
+        {
+            var original = CoreI18n.Current;
+            try
+            {
+                var en = new DictionaryTranslationProvider(LoadJson("default.json"));
+                var es = new DictionaryTranslationProvider(LoadJson("es.json"));
+
+                CoreI18n.Current = en;
+                Assert.Equal("Host Farm", PlazaCatalogFormatter.GetLocationDisplayName("Farm"));
+                Assert.Equal("Bridge 1", PlazaCatalogFormatter.GetLocationDisplayName("Pelican4Ever_Bridge_1"));
+                Assert.Equal("Plot 01 (Host Farm - North West)", PlazaCatalogFormatter.GetDoorDescription("Farm_Portal_01"));
+                Assert.Equal("Plot 05 (Bridge 1 - North Left)", PlazaCatalogFormatter.GetDoorDescription("Farm_Portal_05"));
+
+                CoreI18n.Current = es;
+                Assert.Equal("Granja Host", PlazaCatalogFormatter.GetLocationDisplayName("Farm"));
+                Assert.Equal("Puente 1", PlazaCatalogFormatter.GetLocationDisplayName("Pelican4Ever_Bridge_1"));
+                Assert.Equal("Parcela 01 (Granja Host - Norte Oeste)", PlazaCatalogFormatter.GetDoorDescription("Farm_Portal_01"));
+                Assert.Equal("Parcela 05 (Puente 1 - Norte Izquierda)", PlazaCatalogFormatter.GetDoorDescription("Farm_Portal_05"));
+            }
+            finally
+            {
+                CoreI18n.Current = original;
+            }
         }
     }
 }

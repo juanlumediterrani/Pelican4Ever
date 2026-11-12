@@ -27,18 +27,27 @@ namespace Pelican4Ever.Core.World
         public static string GetLocationDisplayName(string? locationName)
         {
             if (string.IsNullOrWhiteSpace(locationName))
-                return "Granja Host";
+                return CoreI18n.Get("location.host_farm");
 
             if (string.Equals(locationName, HostPlazaLayout.HostFarm, StringComparison.OrdinalIgnoreCase))
-                return "Granja Host";
+                return CoreI18n.Get("location.host_farm");
 
             for (int i = 1; i <= HostPlazaLayout.MaxBridges; i++)
             {
                 if (string.Equals(locationName, HostPlazaLayout.BridgeName(i), StringComparison.OrdinalIgnoreCase))
-                    return $"Puente {i}";
+                    return CoreI18n.Get("location.bridge", new { number = i });
             }
 
             return locationName;
+        }
+
+        public static string GetDoorDescription(string doorId, string? fallbackDescription = null)
+        {
+            string key = $"door.{doorId}.description";
+            string localized = CoreI18n.Get(key);
+            return string.Equals(localized, key, StringComparison.OrdinalIgnoreCase)
+                ? (fallbackDescription ?? string.Empty)
+                : localized;
         }
 
         public static int ExtractSlotNumber(string defaultSlotId)
@@ -86,6 +95,7 @@ namespace Pelican4Ever.Core.World
             {
                 var (isClaimed, ownerName, farmType, desc) = statusLookup(d.DoorId);
                 string locDisp = GetLocationDisplayName(d.LocationName);
+                string resolvedDesc = GetDoorDescription(d.DoorId, desc);
                 entries.Add(new CatalogEntry(
                     d.DoorId,
                     d.LocationName,
@@ -93,7 +103,7 @@ namespace Pelican4Ever.Core.World
                     d.X,
                     d.Y,
                     d.DefaultSlotId,
-                    desc ?? string.Empty,
+                    resolvedDesc,
                     isClaimed,
                     ownerName,
                     farmType

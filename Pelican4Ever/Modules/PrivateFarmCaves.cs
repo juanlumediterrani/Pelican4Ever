@@ -23,7 +23,6 @@ namespace Pelican4Ever.Modules
         private const string MushroomsInstalledKey = "Pelican4Ever.CaveMushroomsInstalled";
         private const string ChooseCaveMessage = "ChoosePrivateFarmCave";
         private const string CaveSuffix = "_Cave";
-        private const string EventStrings = "Strings\\StringsFromCSFiles:Event.cs.";
 
         private readonly ModContext context;
         private readonly PerScreen<FarmCave?> promptedCave = new();
@@ -66,16 +65,19 @@ namespace Pelican4Ever.Modules
 
             promptedCave.Value = cave;
             QuestionDialog.Ask(
-                Game1.content.LoadString(EventStrings + "1223"),
+                I18n.Get("cave.dialog_prompt"),
                 new[]
                 {
-                    new Response(nameof(FarmCaveChoice.Mushrooms), Game1.content.LoadString(EventStrings + "1220")),
-                    new Response(nameof(FarmCaveChoice.FruitBats), Game1.content.LoadString(EventStrings + "1222"))
+                    new Response(nameof(FarmCaveChoice.Mushrooms), I18n.Get("cave.choice_mushrooms")),
+                    new Response(nameof(FarmCaveChoice.FruitBats), I18n.Get("cave.choice_bats"))
                 },
                 (who, answer) =>
                 {
                     if (!ReferenceEquals(Game1.currentLocation, cave) || !Enum.TryParse(answer, out FarmCaveChoice selected))
                         return;
+
+                    string feedbackKey = selected == FarmCaveChoice.Mushrooms ? "cave.selected_mushrooms" : "cave.selected_bats";
+                    Game1.addHUDMessage(new HUDMessage(I18n.Get(feedbackKey), HUDMessage.newQuest_type));
 
                     var request = new CaveChoiceRequest { CaveName = cave.NameOrUniqueName, Choice = selected };
                     if (Context.IsMainPlayer)

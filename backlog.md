@@ -1467,6 +1467,26 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Localizado `CheckpointModule.cs`: aviso de guardado intradía preventivo tanto local como transmitido por red a los peones en su respectivo idioma (`checkpoint.saving_soon`).
     4. Localizados `ClientSecurityModule.cs` y `ClientPairingLogic.cs`: títulos y prompts del diálogo `NamingMenu` de emparejamiento (genérico o personalizado con alias), mensaje HUD durante la verificación, mensajes de error específicos (dispositivo inválido, código vacío, invitación expirada o inexistente, discrepancia de IP, intentos restantes decrementales) y notificación de emparejamiento exitoso.
 
+- [x] **TASK-1906: Limpieza y completitud de cadenas hardcodeadas (Badges en mundo, cuevas privadas, anexos y nombres de ubicaciones)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1901, TASK-1902.
+  * **Descripción:** Extraer todos los textos residuales hardcodeados en castellano hacia los catálogos `default.json` y `es.json`:
+    1. **Badges de mundo (`OnRenderedWorld`):** Sustituir `"[E / Clic o Caminar] Fundar Parcela"`, `"🏠 Mi Parcela (Caminar para entrar)"`, `"🏠 Parcela de {owner}"`, `"🌲 {template.DisplayName} (Caminar para entrar)"`, `"[E / Clic o Caminar] Adquirir Anexo"` y `"🚫 Ampliación no disponible"` por claves i18n (`badge.*`).
+    2. **Rechazos y feedback de anexos (`HandleBuyAnnex`):** Localizar las razones de rechazo (`annex.rejection.*`) y traducir el nombre dinámico del anexo adquirido en el mensaje HUD.
+    3. **Selección de cueva privada (`PrivateFarmCaves.cs`):** Sustituir las referencias de evento vanilla por claves propias (`cave.dialog_prompt`, `cave.choice_mushrooms`, `cave.choice_bats`, `cave.selected_mushrooms`, `cave.selected_bats`).
+    4. **Nombres de ubicaciones y descripciones de portales:** Localizar `PlazaCatalogFormatter.GetLocationDisplayName` (`location.host_farm`, `location.bridge`), los nombres de ubicaciones en `Data/Locations` (`location.cave_slot`, `location.cellar_slot`, `location.greenhouse_slot`, `location.farm_slot`, `location.annex_slot`), los nombres cortos de plantillas de granja (`farm_template.*.name`) y las descripciones de los 16 portales de residencia (`door.Farm_Portal_XX.description`).
+    5. **Paridad y respaldo:** Actualizar `FallbackTranslationProvider.cs`, verificar paridad 1:1 en `LocalizationTests.cs` y añadir pruebas unitarias de resolución en inglés y castellano.
+  * **Criterios de aceptación:**
+    1. Cero cadenas de texto de interfaz hardcodeadas en castellano en los módulos de residencias, anexos, cuevas y badges de mundo.
+    2. Cuando el jugador tiene el juego en inglés, todos los indicadores sobre portales y anexos, selección de cuevas y menús de rechazo aparecen en inglés.
+    3. Paridad total de claves y tokens entre `default.json` y `es.json` validada por `dotnet test`.
+  * **Resolución:**
+    1. Localizados los indicadores flotantes en `FarmSlotModule.OnRenderedWorld` mediante claves `badge.claim_slot`, `badge.my_slot`, `badge.neighbor_slot`, `badge.annex_enter`, `badge.annex_purchase` y `badge.annex_unavailable`.
+    2. Localizados todos los motivos de rechazo de compra de anexos en `FarmSlotModule.HandleBuyAnnex` (`annex.rejection.*`) y el nombre dinámico del anexo en la notificación HUD (`annex_template.*`).
+    3. Rediseñado el diálogo interactivo de `PrivateFarmCaves.cs` utilizando `I18n.Get("cave.dialog_prompt")` con opciones traducidas de champiñones/murciélagos y confirmación inmediata por HUD.
+    4. Localizado `PlazaCatalogFormatter.GetLocationDisplayName` y los nombres inyectados en `Data/Locations` para puentes, parcelas, cuevas, bodegas e invernaderos, junto con las descripciones de los 16 portales de residencia (`door.Farm_Portal_XX.description`).
+    5. Actualizado `FallbackTranslationProvider.cs` y ampliada la suite `LocalizationTests.cs` con pruebas dinámicas de conmutación en tiempo real; 1338 pruebas unitarias pasando al 100%.
+
 ### Épica 20: Adopción y Evento de Mascota para Clientes por Compra de Cuenco (rama `feat/client-pet-adoption`)
 > **Objetivo:** Permitir que los jugadores clientes (*farmhands*) desbloqueen su propio evento de adopción canónico (perro/gato de Marnie) de forma inmersiva al comprar un cuenco para mascotas (`Pet Bowl`) en su parcela/residencia, recibiendo al día siguiente la carta de Marnie en su buzón y desencadenando la cinemática de entrega vinculada a su jugador y mapa específico.
 

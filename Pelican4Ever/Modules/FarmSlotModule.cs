@@ -134,6 +134,13 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        public static string GetDoorDescription(DoorModel door)
+        {
+            string key = $"door.{door.DoorId}.description";
+            string localized = I18n.Get(key);
+            return string.Equals(localized, key, StringComparison.OrdinalIgnoreCase) ? door.Description : localized;
+        }
+
         private void OnAssetRequested(object? sender, AssetRequestedEventArgs e)
         {
             // Inyectar huecos de granja en Data/Locations con su plantilla asignada
@@ -189,7 +196,7 @@ namespace Pelican4Ever.Modules
                             bridgeData = new LocationData();
                             data[name] = bridgeData;
                         }
-                        bridgeData.DisplayName = $"Puente {n}";
+                        bridgeData.DisplayName = I18n.Get("location.bridge", new { number = n });
                         bridgeData.CanPlantHere = false;
                         bridgeData.CreateOnLoad ??= new CreateLocationData();
                         bridgeData.CreateOnLoad.MapPath = $"Maps/{name}";
@@ -222,7 +229,8 @@ namespace Pelican4Ever.Modules
                             data[slotId] = slotData;
                         }
 
-                        slotData.DisplayName ??= $"Granja {i} ({template.DisplayName})";
+                        string farmTypeName = I18n.Get($"farm_template.{template.Id}.name");
+                        slotData.DisplayName ??= I18n.Get("location.farm_slot", new { number = i, type = farmTypeName });
                         slotData.CanPlantHere = true;
                         if (slotData.CreateOnLoad == null)
                         {
@@ -281,7 +289,7 @@ namespace Pelican4Ever.Modules
                             caveData = new LocationData();
                             data[caveId] = caveData;
                         }
-                        caveData.DisplayName ??= $"Cueva Parcela {i:D2}";
+                        caveData.DisplayName ??= I18n.Get("location.cave_slot", new { slot = i.ToString("D2") });
                         caveData.CustomFields ??= new Dictionary<string, string>();
                         caveData.CustomFields["Nature.NIV.Underground"] = "true";
                         if (caveData.CreateOnLoad == null)
@@ -307,7 +315,7 @@ namespace Pelican4Ever.Modules
                             cellarData = new LocationData();
                             data[cellarId] = cellarData;
                         }
-                        cellarData.DisplayName ??= $"Bodega Parcela {i:D2}";
+                        cellarData.DisplayName ??= I18n.Get("location.cellar_slot", new { slot = i.ToString("D2") });
                         if (cellarData.CreateOnLoad == null)
                         {
                             cellarData.CreateOnLoad = new CreateLocationData
@@ -331,7 +339,7 @@ namespace Pelican4Ever.Modules
                             ghData = new LocationData();
                             data[greenhouseId] = ghData;
                         }
-                        ghData.DisplayName ??= $"Invernadero Parcela {i:D2}";
+                        ghData.DisplayName ??= I18n.Get("location.greenhouse_slot", new { slot = i.ToString("D2") });
                         ghData.CanPlantHere = true;
                         if (ghData.CreateOnLoad == null)
                         {
@@ -365,7 +373,9 @@ namespace Pelican4Ever.Modules
                                 data[annex.AnnexId] = annexData;
                             }
 
-                            annexData.DisplayName ??= $"Anexo {annex.Side} ({annexTemplate.DisplayName})";
+                            string sideStr = I18n.Get($"side.{annex.Side.ToString().ToLowerInvariant()}");
+                            string annexTypeName = I18n.Get($"annex_template.{annexTemplate.Id}");
+                            annexData.DisplayName ??= I18n.Get("location.annex_slot", new { side = sideStr, type = annexTypeName });
                             annexData.CanPlantHere = true;
                             if (annexData.CreateOnLoad == null)
                             {
@@ -2902,10 +2912,10 @@ namespace Pelican4Ever.Modules
                     if (context.WorldState.Players.TryGetValue(assignment.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
                         owner = rec.PlayerName;
                     else
-                        owner = "Vecino";
+                        owner = I18n.Get("common.neighbor");
                 }
                 var dModel = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
-                return (isClaimed, owner, farmType, dModel?.Description);
+                return (isClaimed, owner, farmType, dModel != null ? GetDoorDescription(dModel) : null);
             });
 
             foreach (string line in PlazaCatalogFormatter.FormatChatSummary(entries))
@@ -2941,7 +2951,7 @@ namespace Pelican4Ever.Modules
                         owner = assignment.OwnerId.ToString();
                 }
                 var dModel = RegisteredDoors.FirstOrDefault(d => d.DoorId == doorId);
-                return (isClaimed, owner, farmType, dModel?.Description);
+                return (isClaimed, owner, farmType, dModel != null ? GetDoorDescription(dModel) : null);
             });
 
             context.Monitor.Log($"=== RESIDENCIAS EN LA PLAZA CENTRAL ({entries.Count} activas para FarmSlotCount={slotCount}) ===", LogLevel.Info);
@@ -3446,12 +3456,12 @@ namespace Pelican4Ever.Modules
             {
                 string reason = result.Rejection switch
                 {
-                    AnnexPurchaseRejection.InsufficientFunds => "No dispones de suficiente dinero para adquirir este anexo.",
-                    AnnexPurchaseRejection.NotResidenceOwner => "Solo el propietario de la residencia puede adquirir anexos.",
-                    AnnexPurchaseRejection.AnnexAlreadyExists => "Ya existe un anexo adquirido en este acceso.",
-                    AnnexPurchaseRejection.SideNotFree => "Este acceso no admite un anexo.",
-                    AnnexPurchaseRejection.MaxAnnexesReached => "Has alcanzado el límite máximo de anexos para esta residencia.",
-                    _ => "No se pudo adquirir el anexo."
+                    AnnexPurchaseRejection.InsufficientFunds => I18n.Get("annex.rejection.insufficient_funds"),
+                    AnnexPurchaseRejection.NotResidenceOwner => I18n.Get("annex.rejection.not_residence_owner"),
+                    AnnexPurchaseRejection.AnnexAlreadyExists => I18n.Get("annex.rejection.already_exists"),
+                    AnnexPurchaseRejection.SideNotFree => I18n.Get("annex.rejection.side_not_free"),
+                    AnnexPurchaseRejection.MaxAnnexesReached => I18n.Get("annex.rejection.max_reached"),
+                    _ => I18n.Get("annex.rejection.default")
                 };
 
                 context.Monitor.Log($"[FarmSlotModule] Compra de anexo {residenceSlotId}_{side} ({templateId}) rechazada para {playerId} ({result.Rejection}).", LogLevel.Warn);
@@ -3483,7 +3493,8 @@ namespace Pelican4Ever.Modules
 
             if (playerId == Game1.player.UniqueMultiplayerID)
             {
-                Game1.addHUDMessage(new HUDMessage(I18n.Get("annex.acquired", new { name = template.DisplayName }), HUDMessage.newQuest_type));
+                string annexName = I18n.Get($"annex_template.{template.Id}");
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("annex.acquired", new { name = annexName }), HUDMessage.newQuest_type));
             }
 
             BroadcastDoorsSync();
@@ -3598,7 +3609,7 @@ namespace Pelican4Ever.Modules
                 if (existingAssignment != null)
                 {
                     var existingDoor = RegisteredDoors.FirstOrDefault(d => d.DoorId == existingAssignment.DoorId);
-                    string desc = existingDoor?.Description ?? existingAssignment.DoorId;
+                    string desc = existingDoor != null ? GetDoorDescription(existingDoor) : existingAssignment.DoorId;
                     Game1.drawObjectDialogue(I18n.Get("residence.claim.already_owner", new { description = desc }));
                     return;
                 }
@@ -3618,7 +3629,7 @@ namespace Pelican4Ever.Modules
                 };
 
                 QuestionDialog.Ask(
-                    I18n.Get("residence.claim.choose_farm_type", new { description = door.Description }),
+                    I18n.Get("residence.claim.choose_farm_type", new { description = GetDoorDescription(door) }),
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -5293,20 +5304,20 @@ namespace Pelican4Ever.Modules
 
                 if (!isClaimed)
                 {
-                    badgeText = "[E / Clic o Caminar] Fundar Parcela";
+                    badgeText = I18n.Get("badge.claim_slot");
                     badgeColor = Color.LightGreen;
                 }
                 else if (isMine)
                 {
-                    badgeText = "🏠 Mi Parcela (Caminar para entrar)";
+                    badgeText = I18n.Get("badge.my_slot");
                     badgeColor = Color.Cyan;
                 }
                 else
                 {
-                    string owner = "Vecino";
+                    string owner = I18n.Get("common.neighbor");
                     if (context.WorldState.Players.TryGetValue(assignment!.OwnerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
                         owner = rec.PlayerName;
-                    badgeText = $"🏠 Parcela de {owner}";
+                    badgeText = I18n.Get("badge.neighbor_slot", new { owner });
                     badgeColor = Color.LightGoldenrodYellow;
                 }
 
@@ -5348,17 +5359,18 @@ namespace Pelican4Ever.Modules
                         if (annex != null)
                         {
                             var template = AnnexTemplateCatalog.GetTemplate(annex.TemplateId);
-                            badgeText = $"🌲 {template.DisplayName} (Caminar para entrar)";
+                            string annexName = I18n.Get($"annex_template.{template.Id}");
+                            badgeText = I18n.Get("badge.annex_enter", new { name = annexName });
                             badgeColor = Color.Cyan;
                         }
                         else if (isMine)
                         {
-                            badgeText = "[E / Clic o Caminar] Adquirir Anexo";
+                            badgeText = I18n.Get("badge.annex_purchase");
                             badgeColor = Color.LightGreen;
                         }
                         else
                         {
-                            badgeText = "🚫 Ampliación no disponible";
+                            badgeText = I18n.Get("badge.annex_unavailable");
                             badgeColor = Color.LightGray;
                         }
 
