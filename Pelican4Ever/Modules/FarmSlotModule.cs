@@ -181,6 +181,24 @@ namespace Pelican4Ever.Modules
                         FarmTemplateCatalog.ApplyNitvCustomFields(hostFarmData.CustomFields, "Standard");
                     }
 
+                    // La Granja Host conserva la cueva vanilla compartida (FarmCave). Algunas partidas antiguas
+                    // o configuraciones de contenido no la registran en Data/Locations; sin ella, el warp vanilla
+                    // del mapa host falla al entrar como cliente porque el servidor no encuentra la ubicación.
+                    if (!data.TryGetValue("FarmCave", out LocationData? hostCaveData) || hostCaveData == null)
+                    {
+                        hostCaveData = new LocationData();
+                        data["FarmCave"] = hostCaveData;
+                    }
+                    if (hostCaveData.CreateOnLoad == null)
+                    {
+                        hostCaveData.CreateOnLoad = new CreateLocationData
+                        {
+                            MapPath = "Maps/FarmCave",
+                            Type = "StardewValley.Locations.FarmCave, Stardew Valley",
+                            AlwaysActive = true
+                        };
+                    }
+
                     int slotCount = context?.Config.FarmSlotCount ?? 16;
 
                     // TASK-ArtifactLoot: Excluir las residencias y anexos de la tirada global de libros perdidos (LOST_BOOK_OR_ITEM)
@@ -1587,6 +1605,9 @@ namespace Pelican4Ever.Modules
 
                     // Aprovisionar portales físicos continuos de 2 tiles y aceras en la granja del anfitrión
                     EnsureHostFarmPortals(hostFarm);
+
+                    // Restaurar la cueva compartida vanilla si el guardado antiguo no la incluía.
+                    EnsureHostFarmCave();
                 }
 
                 // Reparar asignaciones heredadas de reclamos múltiples o de un catálogo de puertas anterior
@@ -2157,6 +2178,42 @@ namespace Pelican4Ever.Modules
             if (farm == null || context == null || farm.NameOrUniqueName != "Farm") return;
 
             EnsureAllPlazaPortals();
+        }
+
+        /// <summary>
+        /// Asegura que la Granja Host conserve su cueva compartida vanilla (FarmCave) y sus warps.
+        /// Las partidas creadas por versiones antiguas del mod no incluyen esta ubicación en el guardado,
+        /// pero el mapa de la Granja Host sigue teniendo el warp vanilla hacia ella. Si falta, el servidor
+        /// lanza <see cref="KeyNotFoundException"/> al recibir la petición de warp de un cliente.
+        /// </summary>
+        public static void EnsureHostFarmCave()
+        {
+            if (!Context.IsMainPlayer || Game1.locations == null)
+                return;
+
+            Farm? hostFarm = Game1.getFarm();
+            if (hostFarm == null)
+                return;
+
+            // Conservar la casilla de entrada del warp vanilla del mapa host; si no existe, usar la canónica.
+            Warp? entrance = hostFarm.warps.FirstOrDefault(w =>
+                string.Equals(w.TargetName, "FarmCave", StringComparison.OrdinalIgnoreCase));
+            int entranceX = entrance?.X ?? 34;
+            int entranceY = entrance?.Y ?? 5;
+
+            GameLocation? cave = Game1.getLocationFromName("FarmCave");
+            if (cave == null)
+            {
+                cave = new FarmCave("Maps/FarmCave", "FarmCave");
+                Game1.locations.Add(cave);
+                context?.Monitor.Log("[FarmSlotModule] Cueva compartida de la Granja Host (FarmCave) restaurada.", LogLevel.Info);
+            }
+
+            cave.isAlwaysActive.Value = true;
+
+            // Mantener el ciclo completo entrada/salida por si el mapa host o la cueva se regeneraron.
+            UpdateOrCreateWarp(hostFarm, entranceX, entranceY, "FarmCave", 8, 11);
+            UpdateOrCreateWarp(cave, 8, 12, hostFarm.NameOrUniqueName, entranceX, entranceY + 1);
         }
 
         public static void EnsureAllPlazaPortals()
@@ -4065,6 +4122,13 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_WarpFarmer))
                 );
 
+                // Red de seguridad del servidor: si una petición de warp de un cliente apunta a la cueva
+                // compartida de la Granja Host y la ubicación no existe, crearla antes de resolverla.
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(Game1), nameof(Game1.RequireLocation), new[] { typeof(string), typeof(bool) }),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation))
+                );
+
                 // Parches anti-griefing en granjas ajenas: bloquear herramientas destructivas y cofres
                 harmony.Patch(
                     original: AccessTools.Method(typeof(Farmer), "performBeginUsingTool"),
@@ -4719,6 +4783,15 @@ namespace Pelican4Ever.Modules
                 }
             }
             return true;
+        }
+
+        public static void Prefix_RequireLocation(string name, bool isStructure)
+        {
+            if (!Context.IsMainPlayer || !Context.IsWorldReady || isStructure
+                || !string.Equals(name, "FarmCave", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            EnsureHostFarmCave();
         }
 
         public static bool Prefix_WarpFarmer(ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
