@@ -546,23 +546,17 @@ namespace Pelican4Ever.Modules
                         hostMap.Properties["Warp"] = string.IsNullOrWhiteSpace(existingWarps) ? westWarps : $"{existingWarps} {westWarps}";
                     }
 
-                    // Reubicar las losas de madera y el cuenco del perro a (53, 7) fuera del vallado
+                    // Épica 20 / TASK-2006: el cuenco de mascota inicial desaparece de la Granja Host.
+                    // El hueco que deja junto a la valla se repinta con las baldosas vanilla del terreno
+                    // (tierra lisa bajo la valla, borde del campo a su derecha y hierba del corral),
+                    // de modo que no queda ninguna franja de tierra ni un borde de hierba recortado.
                     hostMap.Properties["PetBowlLocation"] = "53 7";
                     var sheetOutdoorsFarm = MapCloneHelper.GetOutdoorsTileSheet(hostMap);
                     if (sheetOutdoorsFarm != null)
                     {
                         ClearTile(bldLayer, 53, 7);
                         ClearTile(frontLayer, 53, 6);
-                        if (backLayer != null)
-                        {
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 53, 6, 175);
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 53, 7, 612);
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 53, 8, 612);
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 54, 7, 256);
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 54, 8, 256);
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 56, 7, 256);
-                            SetTileIfValid(backLayer, sheetOutdoorsFarm, 56, 8, 256);
-                        }
+                        RestoreHostFarmPetBowlGround(backLayer, sheetOutdoorsFarm);
                         SetTileIfValid(bldLayer, sheetOutdoorsFarm, 56, 9, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
                         SetTileIfValid(frontLayer, sheetOutdoorsFarm, 56, 8, VerticalMultiTileClassifier.FenceMidTopTileIndex);
                     }
@@ -2240,19 +2234,39 @@ namespace Pelican4Ever.Modules
             {
                 ClearTile(bld, 53, 7);
                 ClearTile(front, 53, 6);
-                if (back != null)
-                {
-                    SetTileIfValid(back, sheetOutdoors, 53, 6, 175);
-                    SetTileIfValid(back, sheetOutdoors, 53, 7, 612);
-                    SetTileIfValid(back, sheetOutdoors, 53, 8, 612);
-                    SetTileIfValid(back, sheetOutdoors, 54, 7, 256);
-                    SetTileIfValid(back, sheetOutdoors, 54, 8, 256);
-                    SetTileIfValid(back, sheetOutdoors, 56, 7, 256);
-                    SetTileIfValid(back, sheetOutdoors, 56, 8, 256);
-                }
+                RestoreHostFarmPetBowlGround(back, sheetOutdoors);
                 SetTileIfValid(bld, sheetOutdoors, 56, 9, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
                 SetTileIfValid(front, sheetOutdoors, 56, 8, VerticalMultiTileClassifier.FenceMidTopTileIndex);
             }
+        }
+
+        /// <summary>
+        /// Baldosas vanilla del terreno de la Granja Host alrededor del cuenco de mascota retirado (Épica 20).
+        /// Son las mismas que usa <c>Maps/Farm</c>, así que el solar del cuenco queda fundido con el
+        /// campo de tierra y con el borde de hierba del corral, sin franjas ni recortes visibles.
+        /// </summary>
+        private const int HostFarmGroundShadowTileIndex = 567; // hierba con sombra de tierra (bajo la valla)
+        private const int HostFarmGroundDirtTileIndex = 587;    // tierra lisa del campo
+        private const int HostFarmGroundDirtEdgeTileIndex = 612; // tierra con el borde del campo
+        private const int HostFarmGroundGrassTileIndex = 401;  // hierba del corral
+        private const int HostFarmGroundShadedGrassTileIndex = 256; // hierba sombreada del corral
+
+        /// <summary>
+        /// Repinta el suelo donde la Granja Host tenía el cuenco de mascota inicial para que su retirada
+        /// no deje un hueco visible junto a la valla del corral.
+        /// </summary>
+        private static void RestoreHostFarmPetBowlGround(xTile.Layers.Layer? back, xTile.Tiles.TileSheet sheet)
+        {
+            if (back == null)
+                return;
+
+            SetTileIfValid(back, sheet, 53, 6, HostFarmGroundShadowTileIndex);
+            SetTileIfValid(back, sheet, 53, 7, HostFarmGroundDirtTileIndex);
+            SetTileIfValid(back, sheet, 53, 8, HostFarmGroundDirtTileIndex);
+            SetTileIfValid(back, sheet, 54, 7, HostFarmGroundDirtEdgeTileIndex);
+            SetTileIfValid(back, sheet, 54, 8, HostFarmGroundDirtEdgeTileIndex);
+            SetTileIfValid(back, sheet, 56, 7, HostFarmGroundGrassTileIndex);
+            SetTileIfValid(back, sheet, 56, 8, HostFarmGroundShadedGrassTileIndex);
         }
 
         public static void EnsureLocationPortals(GameLocation location)
