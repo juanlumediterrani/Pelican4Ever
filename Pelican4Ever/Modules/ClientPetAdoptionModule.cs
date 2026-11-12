@@ -118,7 +118,7 @@ namespace Pelican4Ever.Modules
                     PetAdoptionLogic.MarkLetterDelivered(playerRecord.PetAdoption);
                     changed = true;
 
-                    Farmer? farmer = Game1.getFarmerMaybeOffline(playerId);
+                    Farmer? farmer = Game1.GetPlayer(playerId, false);
                     if (farmer != null)
                     {
                         if (!farmer.mailbox.Contains(PetAdoptionLogic.MarnieMailKey) && !farmer.mailReceived.Contains(PetAdoptionLogic.MarnieMailKey))
@@ -219,9 +219,8 @@ namespace Pelican4Ever.Modules
                 farm.NameOrUniqueName,
                 2,
                 "Marnie",
-                false,
-                null,
-                Game1.content.Load<Texture2D>("Portraits\\Marnie")
+                Game1.content.Load<Texture2D>("Portraits\\Marnie"),
+                true
             );
 
             Pet petPreview = new Pet((int)petTile.X, (int)petTile.Y, petBreed, petType);
@@ -237,7 +236,8 @@ namespace Pelican4Ever.Modules
                 : (LocalizedContentManager.CurrentLanguageCode == LocalizedContentManager.LanguageCode.es ? "perro" : "dog");
 
             // Diálogo de introducción de Marnie
-            Game1.drawDialogue(marnie, I18n.Get("marnie.pet_event.intro", new { player = Game1.player.Name }));
+            marnie.CurrentDialogue.Push(new Dialogue(marnie, null, I18n.Get("marnie.pet_event.intro", new { player = Game1.player.Name })));
+            Game1.drawDialogue(marnie);
 
             // Pregunta de adopción al finalizar el diálogo
             QuestionDialog.Ask(
@@ -454,7 +454,7 @@ namespace Pelican4Ever.Modules
             string slotName = ___TargetLocation.NameOrUniqueName;
             long playerId = Game1.player.UniqueMultiplayerID;
             int gameDay = Game1.Date.TotalDays;
-            string petType = Game1.player.whichPetType.Value;
+            string petType = Game1.player.whichPetType;
             if (string.IsNullOrWhiteSpace(petType))
                 petType = Game1.player.catPerson ? "Cat" : "Dog";
             string petBreed = Game1.player.whichPetBreed.ToString();
