@@ -1470,7 +1470,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 ### Épica 20: Adopción y Evento de Mascota para Clientes por Compra de Cuenco (rama `feat/client-pet-adoption`)
 > **Objetivo:** Permitir que los jugadores clientes (*farmhands*) desbloqueen su propio evento de adopción canónico (perro/gato de Marnie) de forma inmersiva al comprar un cuenco para mascotas (`Pet Bowl`) en su parcela/residencia, recibiendo al día siguiente la carta de Marnie en su buzón y desencadenando la cinemática de entrega vinculada a su jugador y mapa específico.
 
-- [ ] **TASK-2001: Detección y Registro Autoritativo de Compra de `Pet Bowl` por Clientes**
+- [x] **TASK-2001: Detección y Registro Autoritativo de Compra de `Pet Bowl` por Clientes**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-1901, TASK-906.
   * **Descripción:** Interceptar la colocación o compra del edificio `Pet Bowl` en la carpintería de Robin (`CarpenterMenu`) cuando es ejecutada por un jugador cliente en su residencia o anexo (`FarmSlotModule.Prefix_CarpenterMenu_Placement`). Registrar en el estado autoritativo del servidor (`ServerWorldState` / `PlayerRecord`) la solicitud de adopción pendiente, vinculando: `Farmer.UniqueMultiplayerID`, identificador de mapa de la residencia (`targetLocName`), posición del cuenco y fecha del juego en la que se completó la compra. Garantizar que este estado persista ante reinicios, checkpoints y rollovers diarios, y que no se duplique si el jugador interactúa repetidas veces con el cuenco.
@@ -1478,8 +1478,12 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Al construir un `Pet Bowl` en una parcela residencial de cliente, el servidor detecta y persiste la solicitud de mascota pendiente vinculada al `UniqueMultiplayerID` y al `slotId`/nombre del mapa.
     2. La compra de cuencos en mapas ajenos o en la granja host no sobreescribe ni corrompe el registro de otros jugadores.
     3. El estado sobrevive al ciclo de vida del servidor y guardados en disco.
+  * **Resolución:**
+    1. Creados los modelos de dominio puro [`PetAdoptionModels.cs`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionModels.cs) con el enum `PetAdoptionState` y la clase `PetAdoptionRecord`, e integrados en `PlayerRecord.PetAdoption`.
+    2. Implementada la lógica de negocio desacoplada en [`PetAdoptionLogic.RecordPurchase`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) para registrar slot, coordenadas, día de juego y preferencias de tipo/raza.
+    3. Implementado el parche Harmony `Postfix_CarpenterMenu_TryToBuild` en [`ClientPetAdoptionModule.cs`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever/Modules/ClientPetAdoptionModule.cs) que intercepta la construcción de `Pet Bowl`, enviando el mensaje `Pelican4Ever.PetBowlPurchased` al host y persistiendo autoritativamente en `ServerWorldState`.
 
-- [ ] **TASK-2002: Despacho de Carta de Marnie al Día Siguiente (`TownMailbox` y Buzón Residencial)**
+- [x] **TASK-2002: Despacho de Carta de Marnie al Día Siguiente (`TownMailbox` y Buzón Residencial)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2001, TASK-1901.
   * **Descripción:** Integrar en el ciclo de cambio de día (`DailyRolloverModule.OnDayStarted` / `DayEnding`) un evaluador que revise las solicitudes pendientes de compra de cuencos. Si un cliente adquirió un `Pet Bowl` el día previo y aún no ha recibido la notificación, despachar la carta personalizada de Marnie a su buzón (`farmer.mailReceived` / `farmer.mailbox`). La carta debe estar completamente internacionalizada en `default.json` y `es.json` (`marnie.pet_letter.title` y `marnie.pet_letter.body`), avisándole de que Marnie se enteró de que preparó un cuenco de agua y que pasará a visitarle con un animalito que busca hogar.
@@ -1488,8 +1492,12 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Se puede leer tanto desde el buzón de la cabina como desde el buzón del pueblo / plaza (`TownMailboxModule`).
     3. Los textos respetan el idioma local del jugador receptor (inglés o castellano).
     4. La carta no se envía de forma repetida ni a jugadores que no hayan adquirido el cuenco.
+  * **Resolución:**
+    1. Implementada la evaluación temporal en [`PetAdoptionLogic.ShouldDeliverLetter`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) garantizando que la carta solo se despacha cuando `currentGameDay > PurchaseGameDay`.
+    2. En `ClientPetAdoptionModule.OnDayStarted`, el host evalúa todos los registros de jugadores, marca `LetterDelivered`, inyecta `Pelican4Ever_MarniePetLetter` en `farmer.mailbox` y sincroniza por red al cliente (`Pelican4Ever.PetAdoptionSync`).
+    3. Inyectado el contenido de la carta en `Data/Mail` mediante `AssetRequested` con títulos y cuerpos en inglés y castellano (`marnie.pet_letter.title` y `marnie.pet_letter.body`), accesible tanto desde la cabina como en la plaza vía `TownMailboxModule`.
 
-- [ ] **TASK-2003: Disparador y Adaptación del Evento de Adopción de Mascota en Ranuras de Granja**
+- [x] **TASK-2003: Disparador y Adaptación del Evento de Adopción de Mascota en Ranuras de Granja**
   * **Prioridad:** Crítica
   * **Dependencias:** TASK-2002.
   * **Descripción:** Adaptar la cinemática canónica de presentación de mascota de Marnie (evento canónico `1590166` / `897405` o evento customizado desacoplado de `"Farm"`) para ejecutarse en el mapa de ranura del cliente (`Farm_slot_X` / anexo) cuando el jugador sale de su cabina/residencia en un día soleado tras haber recibido la carta. Resolver dinámicamente las coordenadas de la puerta de la cabina y la posición del `Pet Bowl` de ese mapa específico para situar a Marnie y a la mascota. Permitir al cliente elegir el nombre y confirmar la adopción (respetando la preferencia perro/gato del personaje o dándole a elegir).
@@ -1498,8 +1506,12 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. La cinemática no interrumpe ni bloquea a otros jugadores conectados en el servidor.
     3. Marnie y la mascota aparecen situadas correctamente frente a la entrada de la cabina y cuenco del cliente.
     4. El jugador puede seleccionar el nombre y aceptar la adopción mediante la interfaz nativa del juego.
+  * **Resolución:**
+    1. Implementadas las reglas de activación en [`PetAdoptionLogic.CanTriggerAdoptionEvent`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) exigiendo estado `LetterDelivered`, coincidencia estricta de ranura de residencia, horario diurno y tiempo despejado.
+    2. Diseñada la secuencia cinemática en `ClientPetAdoptionModule.StartAdoptionEvent` resolviendo dinámicamente la puerta de la cabina con `farm.GetMainFarmHouseEntry()` e instanciando a Marnie y la previsualización de la mascota en frente de la residencia.
+    3. Integrado el flujo interactivo con `QuestionDialog.Ask` para aceptar o rechazar la adopción, y el diálogo nativo `NamingMenu` para elegir el nombre oficial de la mascota con soporte para nombres aleatorios.
 
-- [ ] **TASK-2004: Instanciación de Mascota, Vinculación al `PetBowl` y Sincronización en Red**
+- [x] **TASK-2004: Instanciación de Mascota, Vinculación al `PetBowl` y Sincronización en Red**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2003.
   * **Descripción:** Tras la confirmación de la adopción en el evento, instanciar la entidad correspondiente (`Cat` o `Dog`) en la ubicación del cliente (`targetLoc.characters.Add`), vinculando su referencia y comportamiento de descanso al edificio `Pet Bowl` de su mapa particular. Asegurar que los datos de la mascota (nombre, tipo, raza, amistad individual) se sincronicen autoritativamente vía SMAPI / net fields a todos los clientes que visiten la parcela y se preserven en el guardado (`saveGame`). Evitar que la mascota sea eliminada o teletransportada a las coordenadas `(0,0)` de la granja host al cambiar de mapa.
@@ -1507,8 +1519,12 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. La mascota reside permanentemente en el mapa de residencia del cliente y usa el cuenco de su parcela para beber y dormir.
     2. Los visitantes autorizados a la parcela ven a la mascota, pueden acariciarla y escuchar sus sonidos.
     3. Tras guardar la partida o reiniciar el servidor, la mascota reaparece fielmente en el mapa y ranura del cliente.
+  * **Resolución:**
+    1. Al confirmar la adopción, el cliente despacha `Pelican4Ever.PetAdopted` con slot, nombre, tipo, raza y coordenadas del cuenco.
+    2. En el host, `ProcessPetAdoption` instancia la entidad `Pet`, fija `pet.homeLocationName.Value = loc.NameOrUniqueName`, localiza el `PetBowl` y ejecuta `petBowl.AssignPet(pet)`, añadiendo el animal a `loc.characters`.
+    3. Actualizado `FarmSlotModule.Prefix_Utility_GetAllPets` para recopilar también las mascotas presentes en las ranuras de residencia exteriores, asegurando que el motor de Stardew Valley actualice su cariño, cuencos y comportamiento diario.
 
-- [ ] **TASK-2005: Pruebas Unitarias de Ciclo de Vida de Mascota, Aislamiento y Paridad i18n**
+- [x] **TASK-2005: Pruebas Unitarias de Ciclo de Vida de Mascota, Aislamiento y Paridad i18n**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2001, TASK-2002, TASK-2003, TASK-2004.
   * **Descripción:** Implementar la suite de pruebas unitarias en `Pelican4Ever.Tests` (`ClientPetAdoptionTests.cs`) que valide la lógica de negocio pura:
@@ -1519,5 +1535,9 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. La suite de pruebas unitarias pasa al 100% con `dotnet test`.
     2. Cero regresiones en los tests existentes de la solución.
     3. Paridad total de claves entre `default.json` y `es.json`.
+  * **Resolución:**
+    1. Creada la suite [`ClientPetAdoptionTests.cs`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Tests/ClientPetAdoptionTests.cs) con 9 casos de prueba validando máquina de estados, retardo de 1 día para la carta, aislamiento de ranuras y jugadores, condiciones climáticas/horarias y resolución de cadenas i18n con tokens.
+    2. Verificada la paridad 1:1 de claves y tokens entre `default.json` y `es.json` con `LocalizationTests.cs`.
+    3. Suite completa ejecutada con éxito: 1327 pruebas pasando sin errores ni regresiones.
 
 
