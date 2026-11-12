@@ -100,6 +100,9 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Premios de festival ganados y aún no confirmados por su cliente (claves de <c>FestivalPrizeLogic.PrizeKey</c>).</summary>
         public List<string> PendingFestivalPrizes { get; set; } = new();
 
+        /// <summary>Registro del ciclo de adopción de mascota de ranura (Épica 20).</summary>
+        public Pelican4Ever.Core.Pets.PetAdoptionRecord PetAdoption { get; set; } = new();
+
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;
 

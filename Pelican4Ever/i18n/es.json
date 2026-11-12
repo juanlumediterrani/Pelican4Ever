@@ -250,5 +250,15 @@
   "security.pairing_incorrect_remaining": "{{message}} Te quedan {{remaining}} intento(s).",
   "security.pairing_exhausted": "Has agotado los intentos de emparejamiento. Desconectando...",
   "security.pairing_ip_mismatch": "Este código de emparejamiento está vinculado a otra dirección IP.",
-  "security.pairing_success": "¡Dispositivo emparejado correctamente como '{{alias}}'!"
+  "security.pairing_success": "¡Dispositivo emparejado correctamente como '{{alias}}'!",
+
+  "marnie.pet_letter.title": "Un animalito busca hogar",
+  "marnie.pet_letter.body": "Querido/a {{player}}:^^Me he enterado de que hace poco preparaste un cuenco de agua junto a tu residencia. Da la casualidad de que estos días ha aparecido un animalito callejero sin hogar cerca de mi rancho.^^Me pasaré por tu parcela muy pronto para que lo conozcas. ¡Espero que tengas un hueco para él!^^   -Marnie",
+  "marnie.pet_event.intro": "¡Hola, {{player}}! Mira a quién te he traído. Encontré a este animalito callejero rondando cerca de mi rancho y, al ver que habías colocado un cuenco de agua fuera, me acordé enseguida de ti.",
+  "marnie.pet_event.question": "¿Te gustaría adoptar a este {{petType}} y darle un hogar?",
+  "marnie.pet_event.adopt_yes": "¡Sí, me encantaría!",
+  "marnie.pet_event.adopt_no": "No, lo siento.",
+  "marnie.pet_event.naming_title": "Elige un nombre para tu {{petType}}:",
+  "marnie.pet_event.accepted": "¡Maravilloso! Trata con mucho cariño a {{petName}} y no olvides llenar su cuenco de agua todos los días. ¡Hasta pronto!",
+  "marnie.pet_event.declined": "Entiendo... No te preocupes, le buscaré otro buen hogar. ¡Que tengas un buen día!"
 }
