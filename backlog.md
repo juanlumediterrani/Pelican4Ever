@@ -1561,3 +1561,11 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Suite completa ejecutada con éxito: 1327 pruebas pasando sin errores ni regresiones.
 
 
+- [x] **TASK-2006: Retirar el cuenco de mascota inicial de granjas y residencias**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2001.
+  * **Descripción:** Como el cuenco se compra después a Robin (y eso desencadena la carta de Marnie), la granja del host y las residencias ya no deben nacer con el `Pet Bowl` inicial.
+  * **Criterios de aceptación:**
+    1. Ni la granja host ni las residencias nuevas o ya existentes conservan el cuenco inicial.
+    2. Un cuenco comprado después no se borra nunca.
+  * **Resolución:** `FarmSlotModule.RemoveStarterPetBowl` retira solo el cuenco de arranque (en su casilla inicial o en la canónica `(53, 7)` del host, y si no tiene mascota asignada). Deja una marca en el `modData` de la ubicación (`Pelican4Ever.StarterPetBowlRemoved`) para ejecutarse una sola vez. Se invoca desde `EnsureFarmSlotBuildings` (residencias), `CleanUpHostFarmLegacy` (host), la regeneración de plantilla y la migración de partidas, que ya no reubica el cuenco.
