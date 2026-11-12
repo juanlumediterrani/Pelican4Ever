@@ -4124,10 +4124,30 @@ namespace Pelican4Ever.Modules
 
                 // Red de seguridad del servidor: si una petición de warp de un cliente apunta a la cueva
                 // compartida de la Granja Host y la ubicación no existe, crearla antes de resolverla.
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.RequireLocation), new[] { typeof(string), typeof(bool) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation))
-                );
+                // Game1.RequireLocation tiene una sobrecarga genérica y otra no genérica con la misma firma;
+                // AccessTools.Method resulta ambiguo, así que resolvemos explícitamente la no genérica.
+                var requireLocation = typeof(Game1)
+                    .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                    .FirstOrDefault(m =>
+                    {
+                        if (m.Name != nameof(Game1.RequireLocation) || m.IsGenericMethodDefinition)
+                            return false;
+                        var parameters = m.GetParameters();
+                        return parameters.Length == 2
+                            && parameters[0].ParameterType == typeof(string)
+                            && parameters[1].ParameterType == typeof(bool);
+                    });
+                if (requireLocation != null)
+                {
+                    harmony.Patch(
+                        original: requireLocation,
+                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation))
+                    );
+                }
+                else
+                {
+                    context?.Monitor.Log("[FarmSlotModule] No se encontró Game1.RequireLocation(string, bool) para parchear.", LogLevel.Warn);
+                }
 
                 // Parches anti-griefing en granjas ajenas: bloquear herramientas destructivas y cofres
                 harmony.Patch(
