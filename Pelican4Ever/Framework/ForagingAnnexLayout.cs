@@ -7,7 +7,8 @@ namespace Pelican4Ever.Framework
 {
     /// <summary>
     /// Contiene los tiles retocados artesanalmente del Anexo Forestal (anexo-forestal-north.tmx)
-    /// y las adaptaciones direccionales para las tres entradas (North, South, East).
+    /// y las adaptaciones direccionales para las tres entradas (North, South, East),
+    /// garantizando entradas orgánicas con paso bajo el dosel y cierre total de accesos inactivos con bosque denso.
     /// </summary>
     internal static class ForagingAnnexLayout
     {
@@ -80,50 +81,50 @@ namespace Pelican4Ever.Framework
             (1, 37, 19, 386), (1, 38, 19, 16), (1, 39, 19, 16), (1, 37, 20, 386), (1, 38, 20, 16), (1, 39, 20, 16), (1, 37, 21, 386), (1, 38, 21, 16),
             (1, 39, 21, 16), (1, 37, 22, 386), (1, 38, 22, 16), (1, 39, 22, 16), (1, 37, 23, 386), (1, 38, 23, 16), (1, 39, 23, 16), (1, 37, 24, 386),
             (1, 38, 24, 16), (1, 39, 24, 16), (1, 37, 25, 386), (1, 38, 25, 16), (1, 39, 25, 16), (1, 37, 26, 386), (1, 38, 26, 16), (1, 39, 26, 16),
-            (1, 29, 27, 358), (1, 30, 27, 359), (1, 31, 27, 359), (1, 32, 27, 359), (1, 33, 27, 359), (1, 34, 27, 359), (1, 35, 27, 359), (1, 36, 27, 360),
-            (1, 37, 27, 411), (1, 38, 27, -1), (1, 39, 27, 16), (1, 25, 28, 386), (1, 28, 28, 386), (1, 29, 28, 383), (1, 30, 28, 384), (1, 31, 28, 384),
-            (1, 32, 28, 384), (1, 33, 28, 384), (1, 34, 28, 384), (1, 35, 28, 384), (1, 36, 28, 385), (1, 37, 28, 411), (1, 39, 28, 16), (1, 28, 29, 16),
-            (1, 29, 29, 16), (1, 30, 29, 16), (1, 31, 29, 16), (1, 32, 29, 16), (1, 34, 29, 16), (1, 35, 29, 16), (1, 36, 29, 16), (1, 37, 29, 16),
-            (1, 39, 29, 16), (1, 28, 30, 16), (1, 29, 30, 16), (1, 30, 30, 16), (1, 31, 30, 16), (1, 32, 30, 16), (1, 33, 30, 16), (1, 34, 30, 16),
-            (1, 35, 30, 16), (1, 36, 30, 16), (1, 37, 30, 16), (1, 38, 30, 16), (1, 39, 30, 16), (1, 18, 31, -1), (1, 19, 31, 1144), (1, 20, 31, 1145),
-            (1, 21, 31, 1144), (1, 22, 31, 1145), (1, 28, 31, 16), (1, 29, 31, 16), (1, 30, 31, 16), (1, 31, 31, 16), (1, 32, 31, 16), (1, 33, 31, 16),
-            (1, 34, 31, 16), (1, 35, 31, 16), (1, 36, 31, 16), (1, 37, 31, 16), (1, 38, 31, 16), (1, 39, 31, 16), (2, 23, 2, 938), (2, 24, 2, 938),
-            (2, 25, 2, 938), (2, 23, 3, 938), (2, 24, 3, 938), (2, 37, 4, 361), (2, 37, 5, 361), (2, 37, 6, 361), (2, 37, 7, 361), (2, 37, 8, 361),
-            (2, 37, 9, 361), (2, 37, 10, 361), (2, 37, 11, 361), (2, 37, 12, 361), (2, 37, 13, 361), (2, 37, 14, 361), (2, 37, 15, 361), (2, 37, 16, 361),
-            (2, 37, 17, 361), (2, 37, 18, 361), (2, 37, 19, 361), (2, 37, 20, 361), (2, 37, 21, 361), (2, 37, 22, 361), (2, 37, 23, 361), (2, 37, 24, 361),
-            (2, 37, 25, 361), (2, 37, 26, 361), (2, 25, 27, 361), (2, 28, 27, 361), (2, 25, 28, 386), (2, 25, 29, 386), (2, 28, 29, 386), (2, 25, 30, 386),
-            (2, 28, 30, 386), (2, 25, 31, 386), (2, 28, 31, 386), (3, 8, 0, 971), (3, 9, 0, 946), (3, 10, 0, 941), (3, 11, 0, 941), (3, 12, 0, 941),
-            (3, 13, 0, 945), (3, 14, 0, 946), (3, 15, 0, 946), (3, 17, 0, 971), (3, 18, 0, 946), (3, 19, 0, 946), (3, 20, 0, 971), (3, 21, 0, 946),
-            (3, 22, 0, 971), (3, 23, 0, 946), (3, 24, 0, 946), (3, 25, 0, 971), (3, 26, 0, 946), (3, 27, 0, 946), (3, 28, 0, 940), (3, 29, 0, 941),
-            (3, 30, 0, 943), (3, 31, 0, 942), (3, 32, 0, 943), (3, 33, 0, 943), (3, 34, 0, 942), (3, 35, 0, 971), (3, 36, 0, 943), (3, 37, 0, 942),
-            (3, 38, 0, 971), (3, 39, 0, 946), (3, 9, 1, 965), (3, 10, 1, 966), (3, 11, 1, 967), (3, 12, 1, 967), (3, 13, 1, 969), (3, 17, 1, 996),
-            (3, 18, 1, 945), (3, 19, 1, 971), (3, 20, 1, 943), (3, 21, 1, 943), (3, 22, 1, 943), (3, 23, 1, 943), (3, 24, 1, 942), (3, 25, 1, 943),
-            (3, 26, 1, 942), (3, 27, 1, 943), (3, 28, 1, 966), (3, 29, 1, 967), (3, 30, 1, 968), (3, 31, 1, 967), (3, 32, 1, 967), (3, 33, 1, 968),
-            (3, 34, 1, 967), (3, 35, 1, 968), (3, 36, 1, 967), (3, 37, 1, 969), (3, 38, 1, 1020), (3, 39, 1, 971), (3, 9, 2, 965), (3, 16, 2, 971),
-            (3, 18, 2, 942), (3, 19, 2, 941), (3, 20, 2, 966), (3, 21, 2, 968), (3, 22, 2, 967), (3, 23, 2, 968), (3, 24, 2, 967), (3, 25, 2, 968),
-            (3, 26, 2, 967), (3, 27, 2, 968), (3, 28, 2, 992), (3, 31, 2, 964), (3, 32, 2, 964), (3, 33, 2, 964), (3, 34, 2, 964), (3, 35, 2, 964),
-            (3, 37, 2, 994), (3, 38, 2, 995), (3, 39, 2, 946), (3, 16, 3, 942), (3, 18, 3, 967), (3, 19, 3, 968), (3, 24, 3, 964), (3, 25, 3, 964),
-            (3, 26, 3, 964), (3, 27, 3, 964), (3, 33, 3, 964), (3, 34, 3, 964), (3, 37, 3, 994), (3, 38, 3, 1020), (3, 39, 3, 946), (3, 25, 4, 964),
-            (3, 26, 4, 964), (3, 33, 4, 964), (3, 37, 4, 994), (3, 38, 4, 995), (3, 39, 4, 946), (3, 37, 5, 1019), (3, 38, 5, 1020), (3, 39, 5, 946),
-            (3, 37, 6, 994), (3, 38, 6, 995), (3, 39, 6, 946), (3, 37, 7, 1019), (3, 38, 7, 1020), (3, 39, 7, 946), (3, 37, 8, 994), (3, 38, 8, 995),
-            (3, 39, 8, 946), (3, 37, 9, 1019), (3, 38, 9, 1020), (3, 39, 9, 946), (3, 37, 10, 994), (3, 38, 10, 995), (3, 39, 10, 946), (3, 37, 11, 1019),
-            (3, 38, 11, 1020), (3, 39, 11, 946), (3, 37, 12, 994), (3, 38, 12, 995), (3, 39, 12, 946), (3, 37, 13, 1019), (3, 38, 13, 1020), (3, 39, 13, 946),
-            (3, 37, 14, 994), (3, 38, 14, 995), (3, 39, 14, 946), (3, 37, 15, 1019), (3, 38, 15, 1020), (3, 39, 15, 946), (3, 37, 16, 994), (3, 38, 16, 995),
-            (3, 39, 16, 946), (3, 37, 17, 1019), (3, 38, 17, 1020), (3, 39, 17, 946), (3, 37, 18, 994), (3, 38, 18, 995), (3, 39, 18, 946), (3, 37, 19, 1019),
-            (3, 38, 19, 1020), (3, 39, 19, 946), (3, 37, 20, 994), (3, 38, 20, 995), (3, 39, 20, 946), (3, 37, 21, 1019), (3, 38, 21, 1020), (3, 39, 21, 946),
-            (3, 20, 22, 971), (3, 37, 22, 994), (3, 38, 22, 995), (3, 39, 22, 946), (3, 37, 23, 1019), (3, 38, 23, 1020), (3, 39, 23, 946), (3, 22, 24, 990),
-            (3, 37, 24, 994), (3, 38, 24, 995), (3, 39, 24, 946), (3, 37, 25, 1019), (3, 38, 25, 1020), (3, 39, 25, 946), (3, 21, 26, 971), (3, 22, 26, 990),
-            (3, 23, 26, 991), (3, 37, 26, 994), (3, 38, 26, 995), (3, 39, 26, 946), (3, 22, 27, 965), (3, 23, 27, 1016), (3, 37, 27, 1019), (3, 38, 27, 1020),
-            (3, 39, 27, 946), (3, 21, 28, 946), (3, 22, 28, 1065), (3, 23, 28, 1016), (3, 29, 28, 1018), (3, 30, 28, 1042), (3, 31, 28, 1043), (3, 32, 28, 1042),
-            (3, 33, 28, 1043), (3, 34, 28, 1042), (3, 35, 28, 1043), (3, 36, 28, 1042), (3, 37, 28, 1044), (3, 38, 28, 995), (3, 39, 28, 946), (3, 19, 29, 946),
-            (3, 20, 29, 946), (3, 21, 29, 946), (3, 22, 29, 1040), (3, 23, 29, 1041), (3, 24, 29, 1043), (3, 25, 29, 1042), (3, 26, 29, 1043), (3, 27, 29, 1042),
-            (3, 28, 29, 1043), (3, 29, 29, 1044), (3, 30, 29, 1068), (3, 31, 29, 1067), (3, 32, 29, 1068), (3, 33, 29, 1067), (3, 34, 29, 1068), (3, 35, 29, 1067),
-            (3, 36, 29, 1068), (3, 37, 29, 1067), (3, 38, 29, 1070), (3, 39, 29, 946), (3, 18, 30, 940), (3, 19, 30, 941), (3, 20, 30, 944), (3, 21, 30, 941),
-            (3, 22, 30, 1040), (3, 23, 30, 941), (3, 24, 30, 1068), (3, 25, 30, 1067), (3, 26, 30, 1068), (3, 27, 30, 1067), (3, 28, 30, 1068), (3, 29, 30, 946),
-            (3, 30, 30, 1070), (3, 31, 30, 946), (3, 32, 30, 946), (3, 33, 30, 946), (3, 34, 30, 946), (3, 35, 30, 946), (3, 36, 30, 946), (3, 37, 30, 946),
-            (3, 38, 30, 946), (3, 39, 30, 946), (3, 18, 31, 965), (3, 19, 31, 966), (3, 20, 31, 967), (3, 21, 31, 968), (3, 22, 31, 969), (3, 23, 31, 970),
-            (3, 24, 31, 971), (3, 25, 31, 946), (3, 26, 31, 971), (3, 27, 31, 946), (3, 28, 31, 971), (3, 29, 31, 946), (3, 30, 31, 946), (3, 31, 31, 946),
-            (3, 32, 31, 946), (3, 33, 31, 946), (3, 34, 31, 946), (3, 35, 31, 946), (3, 36, 31, 946), (3, 37, 31, 946), (3, 38, 31, 946), (3, 39, 31, 946),
+            (1, 29, 27, 358), (1, 30, 27, 359), (1, 31, 27, 359), (1, 32, 27, 359), (1, 33, 27, 359), (1, 34, 27, 359), (1, 37, 27, 411), (1, 38, 27, -1),
+            (1, 39, 27, 16), (1, 25, 28, 386), (1, 28, 28, 386), (1, 29, 28, 383), (1, 30, 28, 384), (1, 31, 28, 384), (1, 32, 28, 384), (1, 33, 28, 384),
+            (1, 34, 28, 384), (1, 37, 28, 411), (1, 39, 28, 16), (1, 28, 29, 16), (1, 29, 29, 16), (1, 30, 29, 16), (1, 31, 29, 16), (1, 32, 29, 16),
+            (1, 34, 29, 16), (1, 35, 29, 16), (1, 36, 29, 16), (1, 37, 29, 16), (1, 39, 29, 16), (1, 28, 30, 16), (1, 29, 30, 16), (1, 30, 30, 16),
+            (1, 31, 30, 16), (1, 32, 30, 16), (1, 33, 30, 16), (1, 34, 30, 16), (1, 35, 30, 16), (1, 36, 30, 16), (1, 37, 30, 16), (1, 38, 30, 16),
+            (1, 39, 30, 16), (1, 18, 31, -1), (1, 19, 31, 1144), (1, 20, 31, 1145), (1, 21, 31, 1144), (1, 22, 31, 1145), (1, 28, 31, 16), (1, 29, 31, 16),
+            (1, 30, 31, 16), (1, 31, 31, 16), (1, 32, 31, 16), (1, 33, 31, 16), (1, 34, 31, 16), (1, 35, 31, 16), (1, 36, 31, 16), (1, 37, 31, 16),
+            (1, 38, 31, 16), (1, 39, 31, 16), (2, 37, 4, 361), (2, 37, 5, 361), (2, 37, 6, 361), (2, 37, 7, 361), (2, 37, 8, 361), (2, 37, 9, 361),
+            (2, 37, 10, 361), (2, 37, 11, 361), (2, 37, 12, 361), (2, 37, 13, 361), (2, 37, 14, 361), (2, 37, 15, 361), (2, 37, 16, 361), (2, 37, 17, 361),
+            (2, 37, 18, 361), (2, 37, 19, 361), (2, 37, 20, 361), (2, 37, 21, 361), (2, 37, 22, 361), (2, 37, 23, 361), (2, 37, 24, 361), (2, 37, 25, 361),
+            (2, 37, 26, 361), (2, 25, 27, 361), (2, 28, 27, 361), (2, 25, 28, 386), (2, 25, 29, 386), (2, 28, 29, 386), (2, 25, 30, 386), (2, 28, 30, 386),
+            (2, 25, 31, 386), (2, 28, 31, 386), (3, 8, 0, 971), (3, 9, 0, 946), (3, 10, 0, 941), (3, 11, 0, 941), (3, 12, 0, 941), (3, 13, 0, 945),
+            (3, 14, 0, 946), (3, 15, 0, 946), (3, 17, 0, 971), (3, 18, 0, 946), (3, 19, 0, 946), (3, 20, 0, 971), (3, 21, 0, 946), (3, 22, 0, 971),
+            (3, 23, 0, 946), (3, 24, 0, 946), (3, 25, 0, 971), (3, 26, 0, 946), (3, 27, 0, 946), (3, 28, 0, 940), (3, 29, 0, 941), (3, 30, 0, 943),
+            (3, 31, 0, 942), (3, 32, 0, 943), (3, 33, 0, 943), (3, 34, 0, 942), (3, 35, 0, 971), (3, 36, 0, 943), (3, 37, 0, 942), (3, 38, 0, 971),
+            (3, 39, 0, 946), (3, 9, 1, 965), (3, 10, 1, 966), (3, 11, 1, 967), (3, 12, 1, 967), (3, 13, 1, 969), (3, 17, 1, 996), (3, 18, 1, 945),
+            (3, 19, 1, 971), (3, 20, 1, 943), (3, 21, 1, 943), (3, 22, 1, 943), (3, 23, 1, 943), (3, 24, 1, 942), (3, 25, 1, 943), (3, 26, 1, 942),
+            (3, 27, 1, 943), (3, 28, 1, 966), (3, 29, 1, 967), (3, 30, 1, 968), (3, 31, 1, 967), (3, 32, 1, 967), (3, 33, 1, 968), (3, 34, 1, 967),
+            (3, 35, 1, 968), (3, 36, 1, 967), (3, 37, 1, 969), (3, 38, 1, 1020), (3, 39, 1, 971), (3, 9, 2, 965), (3, 16, 2, 971), (3, 18, 2, 942),
+            (3, 19, 2, 941), (3, 20, 2, 966), (3, 21, 2, 968), (3, 22, 2, 967), (3, 23, 2, 968), (3, 24, 2, 967), (3, 25, 2, 968), (3, 26, 2, 967),
+            (3, 27, 2, 968), (3, 28, 2, 992), (3, 31, 2, 964), (3, 32, 2, 964), (3, 33, 2, 964), (3, 34, 2, 964), (3, 35, 2, 964), (3, 37, 2, 994),
+            (3, 38, 2, 995), (3, 39, 2, 946), (3, 16, 3, 942), (3, 18, 3, 967), (3, 19, 3, 968), (3, 24, 3, 964), (3, 25, 3, 964), (3, 26, 3, 964),
+            (3, 27, 3, 964), (3, 33, 3, 964), (3, 34, 3, 964), (3, 37, 3, 994), (3, 38, 3, 1020), (3, 39, 3, 946), (3, 25, 4, 964), (3, 26, 4, 964),
+            (3, 33, 4, 964), (3, 37, 4, 994), (3, 38, 4, 995), (3, 39, 4, 946), (3, 37, 5, 1019), (3, 38, 5, 1020), (3, 39, 5, 946), (3, 37, 6, 994),
+            (3, 38, 6, 995), (3, 39, 6, 946), (3, 37, 7, 1019), (3, 38, 7, 1020), (3, 39, 7, 946), (3, 37, 8, 994), (3, 38, 8, 995), (3, 39, 8, 946),
+            (3, 37, 9, 1019), (3, 38, 9, 1020), (3, 39, 9, 946), (3, 37, 10, 994), (3, 38, 10, 995), (3, 39, 10, 946), (3, 37, 11, 1019), (3, 38, 11, 1020),
+            (3, 39, 11, 946), (3, 37, 12, 994), (3, 38, 12, 995), (3, 39, 12, 946), (3, 37, 13, 1019), (3, 38, 13, 1020), (3, 39, 13, 946), (3, 37, 14, 994),
+            (3, 38, 14, 995), (3, 39, 14, 946), (3, 37, 15, 1019), (3, 38, 15, 1020), (3, 39, 15, 946), (3, 37, 16, 994), (3, 38, 16, 995), (3, 39, 16, 946),
+            (3, 37, 17, 1019), (3, 38, 17, 1020), (3, 39, 17, 946), (3, 37, 18, 994), (3, 38, 18, 995), (3, 39, 18, 946), (3, 37, 19, 1019), (3, 38, 19, 1020),
+            (3, 39, 19, 946), (3, 37, 20, 994), (3, 38, 20, 995), (3, 39, 20, 946), (3, 37, 21, 1019), (3, 38, 21, 1020), (3, 39, 21, 946), (3, 20, 22, 971),
+            (3, 37, 22, 994), (3, 38, 22, 995), (3, 39, 22, 946), (3, 37, 23, 1019), (3, 38, 23, 1020), (3, 39, 23, 946), (3, 22, 24, 990), (3, 37, 24, 994),
+            (3, 38, 24, 995), (3, 39, 24, 946), (3, 37, 25, 1019), (3, 38, 25, 1020), (3, 39, 25, 946), (3, 21, 26, 971), (3, 22, 26, 990), (3, 23, 26, 991),
+            (3, 37, 26, 994), (3, 38, 26, 995), (3, 39, 26, 946), (3, 22, 27, 965), (3, 23, 27, 1016), (3, 37, 27, 1019), (3, 38, 27, 1020), (3, 39, 27, 946),
+            (3, 21, 28, 946), (3, 22, 28, 1065), (3, 23, 28, 1016), (3, 29, 28, 1018), (3, 30, 28, 1042), (3, 31, 28, 1043), (3, 32, 28, 1042), (3, 33, 28, 1043),
+            (3, 34, 28, 1042), (3, 35, 28, 1043), (3, 36, 28, 1042), (3, 37, 28, 1044), (3, 38, 28, 995), (3, 39, 28, 946), (3, 19, 29, 946), (3, 20, 29, 946),
+            (3, 21, 29, 946), (3, 22, 29, 1040), (3, 23, 29, 1041), (3, 24, 29, 1043), (3, 25, 29, 1042), (3, 26, 29, 1043), (3, 27, 29, 1042), (3, 28, 29, 1043),
+            (3, 29, 29, 1044), (3, 30, 29, 1068), (3, 31, 29, 1067), (3, 32, 29, 1068), (3, 33, 29, 1067), (3, 34, 29, 1068), (3, 35, 29, 1067), (3, 36, 29, 1068),
+            (3, 37, 29, 1067), (3, 38, 29, 1070), (3, 39, 29, 946), (3, 18, 30, 940), (3, 19, 30, 941), (3, 20, 30, 944), (3, 21, 30, 941), (3, 22, 30, 1040),
+            (3, 23, 30, 941), (3, 24, 30, 1068), (3, 25, 30, 1067), (3, 26, 30, 1068), (3, 27, 30, 1067), (3, 28, 30, 1068), (3, 29, 30, 946), (3, 30, 30, 1070),
+            (3, 31, 30, 946), (3, 32, 30, 946), (3, 33, 30, 946), (3, 34, 30, 946), (3, 35, 30, 946), (3, 36, 30, 946), (3, 37, 30, 946), (3, 38, 30, 946),
+            (3, 39, 30, 946), (3, 18, 31, 965), (3, 19, 31, 966), (3, 20, 31, 967), (3, 21, 31, 968), (3, 22, 31, 969), (3, 23, 31, 970), (3, 24, 31, 971),
+            (3, 25, 31, 946), (3, 26, 31, 971), (3, 27, 31, 946), (3, 28, 31, 971), (3, 29, 31, 946), (3, 30, 31, 946), (3, 31, 31, 946), (3, 32, 31, 946),
+            (3, 33, 31, 946), (3, 34, 31, 946), (3, 35, 31, 946), (3, 36, 31, 946), (3, 37, 31, 946), (3, 38, 31, 946), (3, 39, 31, 946), (1, 37, 27, 386),
+            (2, 37, 27, 361), (1, 37, 28, 386), (2, 37, 28, 361),
         };
 
         public static void ApplyRetouchedNorthTiles(
@@ -154,13 +155,20 @@ namespace Pelican4Ever.Framework
                     }
                     else if (layerId == 1)
                     {
-                        tile.Properties["Passable"] = "F";
+                        // Sombras de copas (1142/1143) son 100% transitables en SDV; resto de obstáculos son sólidos:
+                        if (idx is 1142 or 1143)
+                            tile.Properties.Remove("Passable");
+                        else
+                            tile.Properties["Passable"] = "F";
                     }
                     targetLayer.Tiles[x, y] = tile;
                 }
             }
         }
 
+        /// <summary>
+        /// Cierra la entrada sur de forma natural y completa con bosque nativo denso (sin falsas vallas de parche).
+        /// </summary>
         public static void CloseSouthEntrance(
             Layer backLayer,
             Layer bldLayer,
@@ -168,42 +176,72 @@ namespace Pelican4Ever.Framework
             Layer alwaysFrontLayer,
             TileSheet outdoorsSheet)
         {
-            for (int lx = 26; lx <= 27; lx++)
+            // Eliminar postes y vallas residuales de la variante norte en lx = 24..28:
+            for (int ly = 26; ly < backLayer.LayerHeight; ly++)
             {
-                for (int ly = 26; ly <= 29; ly++)
+                for (int lx = 24; lx <= 28; lx++)
                 {
-                    var grassTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
-                    grassTile.Properties["Type"] = "Grass";
-                    backLayer.Tiles[lx, ly] = grassTile;
-                    bldLayer.Tiles[lx, ly] = null;
                     frontLayer.Tiles[lx, ly] = null;
+                    bldLayer.Tiles[lx, ly] = null;
+                }
+            }
+
+            // ly = 26..27: Pradera soleada limpia
+            for (int lx = 24; lx <= 28; lx++)
+            {
+                for (int ly = 26; ly <= 27; ly++)
+                {
+                    var gt = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
+                    gt.Properties["Type"] = "Grass";
+                    backLayer.Tiles[lx, ly] = gt;
                     alwaysFrontLayer.Tiles[lx, ly] = null;
                 }
+            }
 
-                // ly = 30: festón de copa
-                var g30 = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
-                g30.Properties["Type"] = "Grass";
-                backLayer.Tiles[lx, 30] = g30;
+            // ly = 28: Festón inferior de copa forestal (AlwaysFront 1042/1043 sobre césped soleado)
+            for (int lx = 24; lx <= 28; lx++)
+            {
+                var gt = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
+                gt.Properties["Type"] = "Grass";
+                backLayer.Tiles[lx, 28] = gt;
+                alwaysFrontLayer.Tiles[lx, 28] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (lx % 2 == 0) ? 1042 : 1043);
+            }
 
-                var bld30 = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 16);
-                bld30.Properties["Passable"] = "F";
-                bldLayer.Tiles[lx, 30] = bld30;
-                frontLayer.Tiles[lx, 30] = null;
-                alwaysFrontLayer.Tiles[lx, 30] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (lx % 2 == 0) ? 1042 : 1043);
+            // ly = 29: Sombra de copa y base de árbol (AlwaysFront 1067/1068, Back 326, Buildings 16 sólido)
+            for (int lx = 24; lx <= 28; lx++)
+            {
+                var b29 = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 326);
+                b29.Properties["Passable"] = "F";
+                backLayer.Tiles[lx, 29] = b29;
 
-                // ly = 31: base de tronco y dosel
-                var b31 = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 326);
-                b31.Properties["Passable"] = "F";
-                backLayer.Tiles[lx, 31] = b31;
+                var bld29 = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 16);
+                bld29.Properties["Passable"] = "F";
+                bldLayer.Tiles[lx, 29] = bld29;
 
-                var bld31 = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 16);
-                bld31.Properties["Passable"] = "F";
-                bldLayer.Tiles[lx, 31] = bld31;
-                frontLayer.Tiles[lx, 31] = null;
-                alwaysFrontLayer.Tiles[lx, 31] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (lx % 2 == 0) ? 1067 : 1068);
+                alwaysFrontLayer.Tiles[lx, 29] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (lx % 2 == 0) ? 1067 : 1068);
+            }
+
+            // ly = 30..31: Dosel profundo continuo de bosque (AlwaysFront 946/971, Back 351, Buildings 16 sólido)
+            for (int lx = 24; lx <= 28; lx++)
+            {
+                for (int ly = 30; ly < backLayer.LayerHeight; ly++)
+                {
+                    var b30 = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 351);
+                    b30.Properties["Passable"] = "F";
+                    backLayer.Tiles[lx, ly] = b30;
+
+                    var bld30 = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 16);
+                    bld30.Properties["Passable"] = "F";
+                    bldLayer.Tiles[lx, ly] = bld30;
+
+                    alwaysFrontLayer.Tiles[lx, ly] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, ((lx + ly) % 5 == 0) ? 971 : 946);
+                }
             }
         }
 
+        /// <summary>
+        /// Abre la entrada Norte de la Variante Sur (lx = 26..27, ly = 0..3) con sendero de tierra bajo dosel continuo.
+        /// </summary>
         public static void OpenNorthEntrance(
             Layer backLayer,
             Layer bldLayer,
@@ -211,9 +249,10 @@ namespace Pelican4Ever.Framework
             Layer alwaysFrontLayer,
             TileSheet outdoorsSheet)
         {
-            for (int lx = 26; lx <= 27; lx++)
+            // Sendero central de tierra en x = 26..27 con remates de tierra suave a los lados (x = 25, 28):
+            for (int ly = 0; ly <= 3; ly++)
             {
-                for (int ly = 0; ly <= 3; ly++)
+                for (int lx = 26; lx <= 27; lx++)
                 {
                     var dirtTile = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.DirtPlainTileIndex);
                     dirtTile.Properties["Type"] = "Dirt";
@@ -221,10 +260,27 @@ namespace Pelican4Ever.Framework
                     backLayer.Tiles[lx, ly] = dirtTile;
                     bldLayer.Tiles[lx, ly] = null;
                     frontLayer.Tiles[lx, ly] = null;
-                    alwaysFrontLayer.Tiles[lx, ly] = null;
                 }
+                var edgeL = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 225);
+                edgeL.Properties["Type"] = "Dirt";
+                backLayer.Tiles[25, ly] = edgeL;
+
+                var edgeR = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 228);
+                edgeR.Properties["Type"] = "Dirt";
+                backLayer.Tiles[28, ly] = edgeR;
             }
 
+            // Dosel superior continuo en AlwaysFront (el jugador camina por debajo de las copas):
+            alwaysFrontLayer.Tiles[26, 0] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
+            alwaysFrontLayer.Tiles[27, 0] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 971);
+            alwaysFrontLayer.Tiles[26, 1] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 942);
+            alwaysFrontLayer.Tiles[27, 1] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 943);
+            alwaysFrontLayer.Tiles[26, 2] = null;
+            alwaysFrontLayer.Tiles[27, 2] = null;
+            alwaysFrontLayer.Tiles[26, 3] = null;
+            alwaysFrontLayer.Tiles[27, 3] = null;
+
+            // Flanqueo de copas en AlwaysFront:
             for (int ly = 0; ly <= 1; ly++)
             {
                 alwaysFrontLayer.Tiles[25, ly] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (ly % 2 == 0) ? 995 : 1020);
@@ -233,6 +289,7 @@ namespace Pelican4Ever.Framework
             alwaysFrontLayer.Tiles[25, 2] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 1045);
             alwaysFrontLayer.Tiles[28, 2] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 1044);
 
+            // Postes rústicos de valla flanqueando el acceso:
             var postL = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 386);
             postL.Properties["Passable"] = "F";
             bldLayer.Tiles[25, 2] = postL;
@@ -244,6 +301,9 @@ namespace Pelican4Ever.Framework
             frontLayer.Tiles[28, 1] = new StaticTile(frontLayer, outdoorsSheet, BlendMode.Alpha, 361);
         }
 
+        /// <summary>
+        /// Abre la entrada Oeste de la Variante Este (lx = 0..4, ly = 14..15) conectando orgánicamente con el claro.
+        /// </summary>
         public static void OpenWestEntrance(
             Layer backLayer,
             Layer bldLayer,
@@ -251,21 +311,39 @@ namespace Pelican4Ever.Framework
             Layer alwaysFrontLayer,
             TileSheet outdoorsSheet)
         {
-            for (int lx = 0; lx <= 4; lx++)
+            for (int ly = 14; ly <= 15; ly++)
             {
-                for (int ly = 14; ly <= 15; ly++)
+                backLayer.Tiles[0, ly] = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 351);
+                backLayer.Tiles[0, ly].Properties.Remove("Passable");
+                backLayer.Tiles[1, ly] = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 351);
+                backLayer.Tiles[1, ly].Properties.Remove("Passable");
+                backLayer.Tiles[2, ly] = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 352);
+                backLayer.Tiles[2, ly].Properties.Remove("Passable");
+                backLayer.Tiles[3, ly] = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
+                backLayer.Tiles[3, ly].Properties["Type"] = "Grass";
+                backLayer.Tiles[4, ly] = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
+                backLayer.Tiles[4, ly].Properties["Type"] = "Grass";
+
+                for (int lx = 0; lx <= 4; lx++)
                 {
-                    int idx = (lx <= 1) ? 351 : ((lx == 2) ? 352 : TerrainTileClassifier.SunnyGrassTileIndex);
-                    var bt = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, idx);
-                    bt.Properties.Remove("Passable");
-                    bt.Properties["Type"] = "Grass";
-                    backLayer.Tiles[lx, ly] = bt;
                     bldLayer.Tiles[lx, ly] = null;
                     frontLayer.Tiles[lx, ly] = null;
-                    alwaysFrontLayer.Tiles[lx, ly] = null;
                 }
             }
 
+            // Dosel arqueado sobre el sendero en AlwaysFront:
+            alwaysFrontLayer.Tiles[0, 14] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
+            alwaysFrontLayer.Tiles[0, 15] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
+            alwaysFrontLayer.Tiles[1, 14] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
+            alwaysFrontLayer.Tiles[1, 15] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
+            alwaysFrontLayer.Tiles[2, 14] = null;
+            alwaysFrontLayer.Tiles[2, 15] = null;
+            alwaysFrontLayer.Tiles[3, 14] = null;
+            alwaysFrontLayer.Tiles[3, 15] = null;
+            alwaysFrontLayer.Tiles[4, 14] = null;
+            alwaysFrontLayer.Tiles[4, 15] = null;
+
+            // Festón de dosel superior e inferior:
             for (int lx = 0; lx <= 2; lx++)
             {
                 bool isEven = (lx % 2 == 0);
@@ -275,6 +353,7 @@ namespace Pelican4Ever.Framework
                 alwaysFrontLayer.Tiles[lx, 17] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, isEven ? 1067 : 1068);
             }
 
+            // Postes rústicos de entrada al claro en x = 2:
             var postTop = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 386);
             postTop.Properties["Passable"] = "F";
             bldLayer.Tiles[2, 13] = postTop;
