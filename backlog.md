@@ -1467,3 +1467,57 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Localizado `CheckpointModule.cs`: aviso de guardado intradía preventivo tanto local como transmitido por red a los peones en su respectivo idioma (`checkpoint.saving_soon`).
     4. Localizados `ClientSecurityModule.cs` y `ClientPairingLogic.cs`: títulos y prompts del diálogo `NamingMenu` de emparejamiento (genérico o personalizado con alias), mensaje HUD durante la verificación, mensajes de error específicos (dispositivo inválido, código vacío, invitación expirada o inexistente, discrepancia de IP, intentos restantes decrementales) y notificación de emparejamiento exitoso.
 
+### Épica 20: Adopción y Evento de Mascota para Clientes por Compra de Cuenco (rama `feat/client-pet-adoption`)
+> **Objetivo:** Permitir que los jugadores clientes (*farmhands*) desbloqueen su propio evento de adopción canónico (perro/gato de Marnie) de forma inmersiva al comprar un cuenco para mascotas (`Pet Bowl`) en su parcela/residencia, recibiendo al día siguiente la carta de Marnie en su buzón y desencadenando la cinemática de entrega vinculada a su jugador y mapa específico.
+
+- [ ] **TASK-2001: Detección y Registro Autoritativo de Compra de `Pet Bowl` por Clientes**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-1901, TASK-906.
+  * **Descripción:** Interceptar la colocación o compra del edificio `Pet Bowl` en la carpintería de Robin (`CarpenterMenu`) cuando es ejecutada por un jugador cliente en su residencia o anexo (`FarmSlotModule.Prefix_CarpenterMenu_Placement`). Registrar en el estado autoritativo del servidor (`ServerWorldState` / `PlayerRecord`) la solicitud de adopción pendiente, vinculando: `Farmer.UniqueMultiplayerID`, identificador de mapa de la residencia (`targetLocName`), posición del cuenco y fecha del juego en la que se completó la compra. Garantizar que este estado persista ante reinicios, checkpoints y rollovers diarios, y que no se duplique si el jugador interactúa repetidas veces con el cuenco.
+  * **Criterios de aceptación:**
+    1. Al construir un `Pet Bowl` en una parcela residencial de cliente, el servidor detecta y persiste la solicitud de mascota pendiente vinculada al `UniqueMultiplayerID` y al `slotId`/nombre del mapa.
+    2. La compra de cuencos en mapas ajenos o en la granja host no sobreescribe ni corrompe el registro de otros jugadores.
+    3. El estado sobrevive al ciclo de vida del servidor y guardados en disco.
+
+- [ ] **TASK-2002: Despacho de Carta de Marnie al Día Siguiente (`TownMailbox` y Buzón Residencial)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2001, TASK-1901.
+  * **Descripción:** Integrar en el ciclo de cambio de día (`DailyRolloverModule.OnDayStarted` / `DayEnding`) un evaluador que revise las solicitudes pendientes de compra de cuencos. Si un cliente adquirió un `Pet Bowl` el día previo y aún no ha recibido la notificación, despachar la carta personalizada de Marnie a su buzón (`farmer.mailReceived` / `farmer.mailbox`). La carta debe estar completamente internacionalizada en `default.json` y `es.json` (`marnie.pet_letter.title` y `marnie.pet_letter.body`), avisándole de que Marnie se enteró de que preparó un cuenco de agua y que pasará a visitarle con un animalito que busca hogar.
+  * **Criterios de aceptación:**
+    1. La carta llega al buzón del jugador cliente exactamente al día siguiente de la compra del cuenco.
+    2. Se puede leer tanto desde el buzón de la cabina como desde el buzón del pueblo / plaza (`TownMailboxModule`).
+    3. Los textos respetan el idioma local del jugador receptor (inglés o castellano).
+    4. La carta no se envía de forma repetida ni a jugadores que no hayan adquirido el cuenco.
+
+- [ ] **TASK-2003: Disparador y Adaptación del Evento de Adopción de Mascota en Ranuras de Granja**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2002.
+  * **Descripción:** Adaptar la cinemática canónica de presentación de mascota de Marnie (evento canónico `1590166` / `897405` o evento customizado desacoplado de `"Farm"`) para ejecutarse en el mapa de ranura del cliente (`Farm_slot_X` / anexo) cuando el jugador sale de su cabina/residencia en un día soleado tras haber recibido la carta. Resolver dinámicamente las coordenadas de la puerta de la cabina y la posición del `Pet Bowl` de ese mapa específico para situar a Marnie y a la mascota. Permitir al cliente elegir el nombre y confirmar la adopción (respetando la preferencia perro/gato del personaje o dándole a elegir).
+  * **Criterios de aceptación:**
+    1. El evento se dispara al salir de la residencia en el mapa propio del cliente, nunca en la granja del host ni en parcelas ajenas.
+    2. La cinemática no interrumpe ni bloquea a otros jugadores conectados en el servidor.
+    3. Marnie y la mascota aparecen situadas correctamente frente a la entrada de la cabina y cuenco del cliente.
+    4. El jugador puede seleccionar el nombre y aceptar la adopción mediante la interfaz nativa del juego.
+
+- [ ] **TASK-2004: Instanciación de Mascota, Vinculación al `PetBowl` y Sincronización en Red**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2003.
+  * **Descripción:** Tras la confirmación de la adopción en el evento, instanciar la entidad correspondiente (`Cat` o `Dog`) en la ubicación del cliente (`targetLoc.characters.Add`), vinculando su referencia y comportamiento de descanso al edificio `Pet Bowl` de su mapa particular. Asegurar que los datos de la mascota (nombre, tipo, raza, amistad individual) se sincronicen autoritativamente vía SMAPI / net fields a todos los clientes que visiten la parcela y se preserven en el guardado (`saveGame`). Evitar que la mascota sea eliminada o teletransportada a las coordenadas `(0,0)` de la granja host al cambiar de mapa.
+  * **Criterios de aceptación:**
+    1. La mascota reside permanentemente en el mapa de residencia del cliente y usa el cuenco de su parcela para beber y dormir.
+    2. Los visitantes autorizados a la parcela ven a la mascota, pueden acariciarla y escuchar sus sonidos.
+    3. Tras guardar la partida o reiniciar el servidor, la mascota reaparece fielmente en el mapa y ranura del cliente.
+
+- [ ] **TASK-2005: Pruebas Unitarias de Ciclo de Vida de Mascota, Aislamiento y Paridad i18n**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2001, TASK-2002, TASK-2003, TASK-2004.
+  * **Descripción:** Implementar la suite de pruebas unitarias en `Pelican4Ever.Tests` (`ClientPetAdoptionTests.cs`) que valide la lógica de negocio pura:
+    1. Máquina de estados de adopción: `None` -> `BowlPurchased` -> `LetterPending` -> `EventReady` -> `Adopted`.
+    2. Aislamiento estricto: la compra de un cuenco en una ranura nunca altera las banderas ni la cola de correo de otro jugador.
+    3. Verificación de paridad de claves i18n para los textos de la carta, diálogos de Marnie y notificaciones HUD en `default.json` y `es.json`.
+  * **Criterios de aceptación:**
+    1. La suite de pruebas unitarias pasa al 100% con `dotnet test`.
+    2. Cero regresiones en los tests existentes de la solución.
+    3. Paridad total de claves entre `default.json` y `es.json`.
+
+
