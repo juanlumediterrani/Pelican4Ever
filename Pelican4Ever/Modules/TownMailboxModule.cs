@@ -132,6 +132,12 @@ namespace Pelican4Ever.Modules
             if (Game1.currentLocation == null)
                 return;
 
+            // Con un menú abierto (p. ej. el propio diálogo del buzón) el botón de acción solo responde a ese menú.
+            // Sin esta guarda, la pulsación que elige "Entrar a mi granja" también reabría el menú del buzón
+            // (QuestionDialog.Ask lo difiere hasta cerrar el diálogo), mostrando un segundo menú tras el warp.
+            if (Game1.activeClickableMenu != null || Game1.dialogueUp || Game1.eventUp || Game1.player.UsingTool)
+                return;
+
             string currentLoc = Game1.currentLocation.NameOrUniqueName;
             Vector2 targetTile = e.Cursor.GrabTile;
             int targetX = (int)targetTile.X;
