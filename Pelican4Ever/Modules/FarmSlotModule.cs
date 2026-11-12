@@ -2211,6 +2211,9 @@ namespace Pelican4Ever.Modules
                 petBowl.tileY.Value = 7;
             }
 
+            // Épica 20: el cuenco inicial desaparece; se compra después a Robin.
+            RemoveStarterPetBowl(farmLoc);
+
             farmLoc.removeEverythingFromThisTile(53, 6);
             farmLoc.removeEverythingFromThisTile(53, 7);
             farmLoc.removeEverythingFromThisTile(53, 8);
@@ -2494,6 +2497,7 @@ namespace Pelican4Ever.Modules
                 MoveBuilding(farm, "Greenhouse", farm.GetGreenhouseStartLocation());
                 MoveBuilding(farm, "Shipping Bin", farm.GetStarterShippingBinLocation());
                 MoveBuilding(farm, "Pet Bowl", farm.GetStarterPetBowlLocation());
+                RemoveStarterPetBowl(farm, ignoreMarker: true);
                 farm.mainFarmhouseEntry = null;
 
                 farm.objects.Clear();
@@ -2536,6 +2540,42 @@ namespace Pelican4Ever.Modules
 
         private static readonly System.Reflection.FieldInfo? FishLocationOverrideField = AccessTools.Field(typeof(Farm), "_fishLocationOverride");
         private static readonly System.Reflection.FieldInfo? FishChanceOverrideField = AccessTools.Field(typeof(Farm), "_fishChanceOverride");
+
+        private const string StarterPetBowlRemovedKey = "Pelican4Ever.StarterPetBowlRemoved";
+
+        /// <summary>
+        /// Épica 20: el cuenco de mascota inicial ya no viene de serie; el jugador lo compra después a Robin y eso
+        /// dispara la carta de Marnie. Retira solo el cuenco de arranque (en su casilla inicial o en la canónica del
+        /// host) y deja constancia en el modData de la ubicación para no borrar nunca uno comprado más tarde.
+        /// </summary>
+        private static bool RemoveStarterPetBowl(Farm farm, bool ignoreMarker = false)
+        {
+            if (!Context.IsMainPlayer || farm == null)
+                return false;
+            if (!ignoreMarker && farm.modData.ContainsKey(StarterPetBowlRemovedKey))
+                return false;
+
+            farm.modData[StarterPetBowlRemovedKey] = "1";
+
+            Vector2 starter = farm.GetStarterPetBowlLocation();
+            var canonical = SaveMigrationLogic.CanonicalPetBowlLocation;
+            bool removed = false;
+            for (int i = farm.buildings.Count - 1; i >= 0; i--)
+            {
+                if (farm.buildings[i] is not PetBowl bowl || bowl.HasPet())
+                    continue;
+
+                bool atStarter = bowl.tileX.Value == (int)starter.X && bowl.tileY.Value == (int)starter.Y;
+                bool atCanonical = bowl.tileX.Value == canonical.X && bowl.tileY.Value == canonical.Y;
+                if (!atStarter && !atCanonical)
+                    continue;
+
+                farm.buildings.RemoveAt(i);
+                removed = true;
+            }
+
+            return removed;
+        }
 
         private static void MoveBuilding(Farm farm, string buildingType, Vector2 tile)
         {
@@ -2610,6 +2650,9 @@ namespace Pelican4Ever.Modules
                 farmhouse.load();
                 farm.buildings.Add(farmhouse);
             }
+
+            // Épica 20: sin cuenco de mascota de serie en las residencias (se compra después a Robin)
+            RemoveStarterPetBowl(farm);
 
             // 2. Quitar cualquier cabaña secundaria generada automáticamente por Stardew Valley
             for (int i = farm.buildings.Count - 1; i >= 0; i--)
@@ -2995,19 +3038,8 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // 2. Reubicar Pet Bowl canónicamente
-            bool petBowlMoved = false;
-            var petBowl = hostFarm.buildings.FirstOrDefault(b =>
-                b.buildingType.Value == "Pet Bowl" || b.GetType().Name == "PetBowl");
-            if (petBowl != null)
-            {
-                if (petBowl.tileX.Value != SaveMigrationLogic.CanonicalPetBowlLocation.X || petBowl.tileY.Value != SaveMigrationLogic.CanonicalPetBowlLocation.Y)
-                {
-                    petBowl.tileX.Value = SaveMigrationLogic.CanonicalPetBowlLocation.X;
-                    petBowl.tileY.Value = SaveMigrationLogic.CanonicalPetBowlLocation.Y;
-                    petBowlMoved = true;
-                }
-            }
+            // 2. Retirar el Pet Bowl inicial (Épica 20: se compra después a Robin)
+            bool petBowlMoved = RemoveStarterPetBowl(hostFarm, ignoreMarker: true);
             if (hostFarm.Map != null)
             {
                 hostFarm.Map.Properties["PetBowlLocation"] = $"{SaveMigrationLogic.CanonicalPetBowlLocation.X} {SaveMigrationLogic.CanonicalPetBowlLocation.Y}";
@@ -3061,7 +3093,7 @@ namespace Pelican4Ever.Modules
 
             context.Monitor.Log($"=== INFORME DE MIGRACIÓN P4E ({mode}) ===", LogLevel.Info);
             context.Monitor.Log($"  - Warps obsoletos purgados: {purgedWarps}", LogLevel.Info);
-            context.Monitor.Log($"  - Pet Bowl reubicado a ({SaveMigrationLogic.CanonicalPetBowlLocation.X}, {SaveMigrationLogic.CanonicalPetBowlLocation.Y}): {petBowlMoved}", LogLevel.Info);
+            context.Monitor.Log($"  - Pet Bowl inicial retirado: {petBowlMoved}", LogLevel.Info);
             context.Monitor.Log($"  - Casillas despejadas en corredor oeste y accesos: {clearedTiles}", LogLevel.Info);
             context.Monitor.Log($"  - Puertas mapeadas: {report.RemappedDoors.Count}", LogLevel.Info);
             foreach (var kvp in report.RemappedDoors)
