@@ -5866,6 +5866,15 @@ namespace Pelican4Ever.Modules
                     Collect(Game1.getLocationFromName(home));
             }
 
+            if (context?.WorldState != null)
+            {
+                foreach (var door in context.WorldState.Doors.Values)
+                {
+                    if (!string.IsNullOrEmpty(door.FarmSlotId))
+                        Collect(Game1.getLocationFromName(door.FarmSlotId));
+                }
+            }
+
             __result = pets;
             return false;
         }

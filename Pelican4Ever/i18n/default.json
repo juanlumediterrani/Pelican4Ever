@@ -250,5 +250,15 @@
   "security.pairing_incorrect_remaining": "{{message}} You have {{remaining}} attempt(s) remaining.",
   "security.pairing_exhausted": "You have exhausted pairing attempts. Disconnecting...",
   "security.pairing_ip_mismatch": "This pairing code is linked to another IP address.",
-  "security.pairing_success": "Device paired successfully as '{{alias}}'!"
+  "security.pairing_success": "Device paired successfully as '{{alias}}'!",
+
+  "marnie.pet_letter.title": "A Stray Animal Needs a Home",
+  "marnie.pet_letter.body": "Dear {{player}},^^I noticed that you recently placed a pet bowl outside your residence. As it turns out, a stray animal has been wandering near my ranch without a home.^^I will stop by your farm with them soon. Please have some love to spare!^^   -Marnie",
+  "marnie.pet_event.intro": "Hello, {{player}}! Look who I brought along with me. I found this little stray wandering near my ranch, and when I saw you set up a water bowl outside, I thought of you right away.",
+  "marnie.pet_event.question": "Would you like to adopt this {{petType}} and give it a loving home?",
+  "marnie.pet_event.adopt_yes": "Yes, I would love to!",
+  "marnie.pet_event.adopt_no": "No, I'm sorry.",
+  "marnie.pet_event.naming_title": "Choose a name for your new {{petType}}:",
+  "marnie.pet_event.accepted": "Wonderful! Take good care of {{petName}}, and don't forget to fill their water bowl every day. See you soon!",
+  "marnie.pet_event.declined": "I understand... Don't worry, I'll find another good home for them. Have a wonderful day!"
 }

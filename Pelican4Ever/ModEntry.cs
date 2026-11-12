@@ -62,7 +62,8 @@ namespace Pelican4Ever
                 new AgentCosmeticsModule(),
                 new AdminApiModule(),
                 new AutoHostModule(),
-                new HeadlessRenderModule()
+                new HeadlessRenderModule(),
+                new ClientPetAdoptionModule()
             );
 
             Monitor.Log($"Cargado (cambio de fecha {config.CalendarDayChangeTime}, inicio de reloj/horarios {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
