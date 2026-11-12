@@ -1379,8 +1379,7 @@ namespace Pelican4Ever.Modules
                 return true;
 
             string clientIp = message.SenderEndPoint.Address.ToString();
-            string endpoint = $"{message.SenderEndPoint.Address}:{message.SenderEndPoint.Port}";
-            var challenge = serverChallenges.Issue(clientIp, DateTimeOffset.UtcNow, endpoint);
+            var challenge = serverChallenges.Issue(clientIp, DateTimeOffset.UtcNow, string.Empty);
             byte[] challengePayload = DeviceAuthWire.PackDiscoveryChallenge(challenge);
 
             NetOutgoingMessage response = __instance.server.CreateMessage();
@@ -1398,9 +1397,8 @@ namespace Pelican4Ever.Modules
                 return true;
 
             byte[] rawPayload = msg.ReadBytes(DeviceAuthWire.DiscoveryChallengePayloadLength);
-            string endpoint = $"{msg.SenderEndPoint.Address}:{msg.SenderEndPoint.Port}";
 
-            if (!DeviceAuthWire.TryParseDiscoveryChallenge(rawPayload, endpoint, out DeviceAuthChallenge? challenge) || challenge == null)
+            if (!DeviceAuthWire.TryParseDiscoveryChallenge(rawPayload, string.Empty, out DeviceAuthChallenge? challenge) || challenge == null)
                 return true;
 
             DeviceKeyPair? keyPair = ClientIdentity.DeviceKey;
