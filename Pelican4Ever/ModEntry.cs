@@ -36,7 +36,7 @@ namespace Pelican4Ever
             RegisterModules(
                 new PersistenceModule(),
                 new ClientVersionGuardModule(),
-                new MaintenanceLockModule(),
+                new RolloverLockModule(),
                 new ClientSecurityModule(),
                 new StatusCommandModule(),
                 new DebugGiveModule(),

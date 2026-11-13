@@ -5,7 +5,6 @@
   "RolloverWarningMinutes": [
     10
   ],
-  "MaintenanceWindowMinutes": 25,
   "CalendarEpoch": "2026-10-26",
   "MaxCatchUpRollovers": 3,
   "TimeZoneId": "Europe/Madrid",

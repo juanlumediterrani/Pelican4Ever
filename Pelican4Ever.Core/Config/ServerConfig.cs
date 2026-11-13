@@ -33,12 +33,6 @@ namespace Pelican4Ever.Core.Config
         public int[] RolloverWarningMinutes { get; set; } = { 10 };
 
         /// <summary>
-        /// Minutos, desde el cambio de fecha (02:00), durante los que el host rechaza conexiones nuevas
-        /// (modo mantenimiento: guardado, copia, avance de día y actualización del runtime). 0 lo desactiva.
-        /// </summary>
-        public int MaintenanceWindowMinutes { get; set; } = 25;
-
-        /// <summary>
         /// Fecha real (yyyy-MM-dd, debe ser lunes) que corresponde al Día 1 de Primavera del Año 1.
         /// La fecha de juego se calcula siempre a partir de esta época, nunca se "incrementa".
         /// </summary>
@@ -309,9 +303,6 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(DayStartTime)} debe ser 06:00 (el motor arranca cada día a las 0600). Valor: '{DayStartTime}'.");
             if (ParsedCalendarDayChangeTime != new TimeSpan(2, 0, 0))
                 errors.Add($"{nameof(CalendarDayChangeTime)} debe ser 02:00 para separar la fecha del inicio de luz/horarios (06:00). Valor: '{CalendarDayChangeTime}'.");
-
-            if (MaintenanceWindowMinutes < 0 || MaintenanceWindowMinutes > Pelican4Ever.Core.Time.MaintenanceWindow.MaxMinutes)
-                errors.Add($"{nameof(MaintenanceWindowMinutes)} debe estar entre 0 y {Pelican4Ever.Core.Time.MaintenanceWindow.MaxMinutes}. Valor: {MaintenanceWindowMinutes}.");
 
             if (ParsedNightHoldStart < TimeSpan.Zero || ParsedNightHoldStart > new TimeSpan(1, 50, 0))
                 errors.Add($"{nameof(NightHoldStartTime)} debe estar entre 00:00 y 01:50 (equivale a 2400–2550). Valor: '{NightHoldStartTime}'.");
