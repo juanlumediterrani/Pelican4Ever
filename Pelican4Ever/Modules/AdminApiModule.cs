@@ -352,13 +352,6 @@ namespace Pelican4Ever.Modules
                     return;
                 }
 
-                // ── Panel Web Dashboard ──
-                if (method == "GET" && (normPath == "/" || normPath == "/dashboard"))
-                {
-                    ServeDashboard(res);
-                    return;
-                }
-
                 // ── Endpoints de /api/v1/host/ (TASK-803 y TASK-804) ──
                 if (normPath.StartsWith(HostApiCatalog.BasePath, StringComparison.OrdinalIgnoreCase))
                 {
@@ -1103,17 +1096,6 @@ namespace Pelican4Ever.Modules
                 Season        = Game1.currentSeason ?? "spring",
                 GameDay       = Game1.Date?.TotalDays ?? 0
             };
-        }
-
-        private void ServeDashboard(HttpListenerResponse res)
-        {
-            string html = AdminApiLogic.GetDashboardHtml("");
-            byte[] bytes = Encoding.UTF8.GetBytes(html);
-            res.ContentType = "text/html; charset=utf-8";
-            res.ContentLength64 = bytes.Length;
-            res.StatusCode = (int)HttpStatusCode.OK;
-            res.OutputStream.Write(bytes, 0, bytes.Length);
-            res.OutputStream.Close();
         }
 
         private void HandleFestivalReschedule(HttpListenerRequest req, HttpListenerResponse res)
