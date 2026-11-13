@@ -1385,22 +1385,67 @@ namespace Pelican4Ever.Modules
 
         public static bool Prefix_SendVersionInfo(LidgrenServer __instance, NetIncomingMessage message)
         {
-            if (context == null || !Context.IsMainPlayer || !context.Config.RequirePairingWhitelist)
+            try
+            {
+                if (context == null || !Context.IsMainPlayer || !context.Config.RequirePairingWhitelist)
+                    return true;
+
+                string clientIp = message?.SenderEndPoint?.Address?.ToString() ?? string.Empty;
+                System.Net.IPEndPoint? remoteEndPoint = message?.SenderEndPoint;
+                if (string.IsNullOrEmpty(clientIp) || __instance?.server == null || remoteEndPoint == null)
+                    return true;
+
+                var challenge = serverChallenges.Issue(clientIp, DateTimeOffset.UtcNow, string.Empty);
+                byte[] challengePayload = DeviceAuthWire.PackDiscoveryChallenge(challenge);
+
+                NetOutgoingMessage response = __instance.server.CreateMessage();
+                response.Write(Multiplayer.protocolVersion);
+                response.Write("StardewValley");
+                response.Write(challengePayload);
+                __instance.server.SendDiscoveryResponse(response, remoteEndPoint);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                // Fail-open hacia el handshake vanilla para no romper el descubrimiento en LAN/local.
+                LogHandshakeFailureOnce(ex);
                 return true;
+            }
+        }
 
-            string clientIp = message.SenderEndPoint.Address.ToString();
-            var challenge = serverChallenges.Issue(clientIp, DateTimeOffset.UtcNow, string.Empty);
-            byte[] challengePayload = DeviceAuthWire.PackDiscoveryChallenge(challenge);
+        private static long lastHandshakeErrorMs;
 
-            NetOutgoingMessage response = __instance.server.CreateMessage();
-            response.Write(Multiplayer.protocolVersion);
-            response.Write("StardewValley");
-            response.Write(challengePayload);
-            __instance.server.SendDiscoveryResponse(response, message.SenderEndPoint);
-            return false;
+        private static void LogHandshakeFailureOnce(Exception ex)
+        {
+            try
+            {
+                long now = Environment.TickCount64;
+                if (now - lastHandshakeErrorMs < 10_000)
+                    return;
+                lastHandshakeErrorMs = now;
+                context?.Monitor.Log($"[ClientSecurity] Fallo inesperado en sendVersionInfo (fail-open a vanilla): {ex.GetType().Name}: {ex.Message}", LogLevel.Warn);
+            }
+            catch
+            {
+                // Nunca romper el juego desde el propio manejador de errores.
+            }
         }
 
         public static bool Prefix_ReceiveHandshake(LidgrenClient __instance, NetIncomingMessage msg)
+        {
+            try
+            {
+                return Prefix_ReceiveHandshakeInner(__instance, msg);
+            }
+            catch (Exception ex)
+            {
+                // Fail-open hacia el handshake vanilla ante paquetes malformados o rarezas del runtime.
+                LogHandshakeFailureOnce(ex);
+                return true;
+            }
+        }
+
+        private static bool Prefix_ReceiveHandshakeInner(LidgrenClient __instance, NetIncomingMessage msg)
         {
             int remaining = msg.LengthBytes - (int)(msg.Position / 8);
             if (remaining != DeviceAuthWire.DiscoveryChallengePayloadLength)

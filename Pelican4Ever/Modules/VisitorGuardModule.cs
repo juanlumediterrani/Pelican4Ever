@@ -96,11 +96,39 @@ namespace Pelican4Ever.Modules
             return tool is Slingshot || tool is FishingRod || tool is Wand;
         }
 
+        private static long lastGuardErrorMs;
+
         public static bool Prefix_BeginUsingTool(Farmer __instance)
         {
-            if (!__instance.IsLocalPlayer || IsAllowedTool(__instance.CurrentTool) || !IsRestricted(__instance.currentLocation))
+            try
+            {
+                if (__instance is null || !__instance.IsLocalPlayer || IsAllowedTool(__instance.CurrentTool) || !IsRestricted(__instance.currentLocation))
+                    return true;
+                return Deny();
+            }
+            catch (Exception ex)
+            {
+                // Fail-open: ante cualquier fallo inesperado (despliegue a medias, rarezas del runtime)
+                // se conserva el comportamiento vanilla en lugar de romper el bucle del juego.
+                LogGuardFailureOnce(ex);
                 return true;
-            return Deny();
+            }
+        }
+
+        private static void LogGuardFailureOnce(Exception ex)
+        {
+            try
+            {
+                long now = Environment.TickCount64;
+                if (now - lastGuardErrorMs < 10_000)
+                    return;
+                lastGuardErrorMs = now;
+                context?.Monitor.Log($"[VisitorGuard] Fallo inesperado en guardia de herramientas (fail-open): {ex.GetType().Name}: {ex.Message}", LogLevel.Warn);
+            }
+            catch
+            {
+                // Nunca romper el juego desde el propio manejador de errores.
+            }
         }
 
         public static bool Prefix_TryToPlaceItem(GameLocation location, ref bool __result)
