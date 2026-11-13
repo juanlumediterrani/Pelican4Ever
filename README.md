@@ -75,12 +75,12 @@ For complete step-by-step instructions, see the [Preview Server Guide](docs/serv
 * [Host on a VPS](docs/despliegue/host-vps.en.md) — [中文](docs/despliegue/host-vps.zh-CN.md) · [ES](docs/despliegue/host-vps.md)
 * [Host on your own machine](docs/despliegue/host-local.en.md) — [中文](docs/despliegue/host-local.zh-CN.md) · [ES](docs/despliegue/host-local.md)
 * [Documentation index (`docs/README.md`)](docs/README.md)
-* [Game Design (`design.md`)](design.md)
-* [Technical Architecture (`architecture.md`)](architecture.md)
-* [Iterations & Roadmap Backlog (`backlog.md`)](backlog.md)
-* [Host REST API Specification (`docs/host-api.md`)](docs/host-api.md)
+* [Game Design](design.en.md) — [中文](design.zh-CN.md) · [ES](design.md)
+* [Technical Architecture](architecture.en.md) — [中文](architecture.zh-CN.md) · [ES](architecture.md)
+* [Iterations & Roadmap Backlog (`backlog.md`)](backlog.md) — Spanish only
+* [Host REST API Specification](docs/host-api.en.md) — [中文](docs/host-api.zh-CN.md) · [ES](docs/host-api.md)
 * [Architecture Decision Records (`docs/adr/`)](docs/adr/)
-* [Agent Sprite & Cosmetics Guide (`agents/README.md`)](agents/README.md)
+* [Agent Sprite & Cosmetics Guide (`agents/README.md`)](agents/README.md) — Spanish only
 
 ---
 

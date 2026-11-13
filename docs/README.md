@@ -19,16 +19,17 @@ idénticos en los tres idiomas.
 
 ## Referencia
 
-Los documentos de referencia (API, ADR, arquitectura, backlog) están **solo en español**.
+Cada documento de referencia existe en **español** (original), **inglés** (`*.en.md`) y **chino
+simplificado** (`*.zh-CN.md`).
 
-| Documento | Contenido |
-| --- | --- |
-| [`host-api.md`](host-api.md) | API REST de anfitrión v1: rutas, autenticación, comandos remotos permitidos y sucesos |
-| [`adr/`](adr/) | Registros de decisiones de arquitectura (ADR) |
-| [`../backlog.md`](../backlog.md) | Hoja de ruta técnica: épicas, tareas y su resolución |
-| [`../architecture.md`](../architecture.md) | Arquitectura técnica del sistema |
-| [`../design.md`](../design.md) | Diseño de juego |
-| [`../agents/README.md`](../agents/README.md) | Cosmética del host (sprite del dragón) y utilidades de pixel art |
+| Documento | Idiomas | Contenido |
+| --- | --- | --- |
+| API de anfitrión | [ES](host-api.md) · [EN](host-api.en.md) · [中文](host-api.zh-CN.md) | API REST de anfitrión v1: rutas, autenticación, comandos remotos permitidos y sucesos |
+| ADR | [índice](adr/) · [EN](adr/README.en.md) · [中文](adr/README.zh-CN.md) | Registros de decisiones de arquitectura, cada uno en los tres idiomas |
+| Arquitectura | [ES](../architecture.md) · [EN](../architecture.en.md) · [中文](../architecture.zh-CN.md) | Arquitectura técnica del sistema |
+| Diseño de juego | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Diseño de juego |
+| Backlog | [ES](../backlog.md) | Hoja de ruta técnica: épicas, tareas y su resolución (**solo en español**: es un registro histórico de 1.700 líneas) |
+| Cosmética del host | [ES](../agents/README.md) | Sprite del dragón y utilidades de pixel art (**solo en español**) |
 
 ## Reglas de la casa
 

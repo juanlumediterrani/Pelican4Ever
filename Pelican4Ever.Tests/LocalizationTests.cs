@@ -44,6 +44,9 @@ namespace Pelican4Ever.Tests
                 ?? throw new InvalidOperationException($"El archivo {fileName} no contiene un objeto JSON válido.");
         }
 
+        /// <summary>Ficheros de idioma que debe mantener el mod: inglés (default), español y chino simplificado.</summary>
+        private static readonly string[] LocaleFiles = { "default.json", "es.json", "zh-CN.json" };
+
         [Fact]
         public void DefaultAndEs_HaveIdenticalKeys()
         {
@@ -58,21 +61,35 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void DefaultAndEs_HaveMatchingTokens()
+        public void AllLocales_HaveIdenticalKeys()
         {
-            var en = LoadJson("default.json");
-            var es = LoadJson("es.json");
+            var reference = LoadJson(LocaleFiles[0]);
 
-            foreach (var kvp in en)
+            foreach (string file in LocaleFiles.Skip(1))
             {
-                string key = kvp.Key;
-                string enVal = kvp.Value;
-                string esVal = es[key];
+                var other = LoadJson(file);
 
-                var enTokens = TokenRegex.Matches(enVal).Select(m => m.Groups[1].Value).OrderBy(s => s).ToList();
-                var esTokens = TokenRegex.Matches(esVal).Select(m => m.Groups[1].Value).OrderBy(s => s).ToList();
+                Assert.Empty(reference.Keys.Except(other.Keys));
+                Assert.Empty(other.Keys.Except(reference.Keys));
+            }
+        }
 
-                Assert.Equal(enTokens, esTokens);
+        [Fact]
+        public void AllLocales_HaveMatchingTokens()
+        {
+            var reference = LoadJson(LocaleFiles[0]);
+
+            foreach (string file in LocaleFiles.Skip(1))
+            {
+                var other = LoadJson(file);
+
+                foreach (var kvp in reference)
+                {
+                    var expected = TokenRegex.Matches(kvp.Value).Select(m => m.Groups[1].Value).OrderBy(s => s).ToList();
+                    var actual = TokenRegex.Matches(other[kvp.Key]).Select(m => m.Groups[1].Value).OrderBy(s => s).ToList();
+
+                    Assert.Equal(expected, actual);
+                }
             }
         }
 
@@ -208,6 +225,24 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Invernadero Parcela 01", es.Get("location.greenhouse_slot", new { slot = "01" }));
             Assert.Equal("Annex East (River Bend)", en.Get("location.annex_slot", new { side = "East", type = "River Bend" }));
             Assert.Equal("Anexo Este (Remanso Fluvial)", es.Get("location.annex_slot", new { side = "Este", type = "Remanso Fluvial" }));
+        }
+
+        [Fact]
+        public void Zh_CN_ResolvesCoreStrings()
+        {
+            var zh = new DictionaryTranslationProvider(LoadJson("zh-CN.json"));
+
+            Assert.Equal("已关闭", zh.Get("residence.permission.closed"));
+            Assert.Equal("仅限好友", zh.Get("residence.permission.friends_only"));
+            Assert.Equal("开放", zh.Get("residence.permission.open"));
+            Assert.Equal("蘑菇", zh.Get("cave.choice_mushrooms"));
+            Assert.Equal("水果蝙蝠", zh.Get("cave.choice_bats"));
+            Assert.Equal("主机农场", zh.Get("location.host_farm"));
+            Assert.Equal("2 号桥梁", zh.Get("location.bridge", new { number = 2 }));
+            Assert.Equal("用法：/l <消息> 或 /local <消息>", zh.Get("chat.local_usage"));
+            Assert.Equal("提示：10 分钟后农场将被保存，连接将关闭以进行日切。", zh.Get("rollover.warning_10min"));
+            Assert.Equal("设备已成功配对，别名为 'Alex'！", zh.Get("security.pairing_success", new { alias = "Alex" }));
+            Assert.Equal("离线休息：恢复 +25 精力。", zh.Get("bed_logout.offline_rest", new { gained = 25 }));
         }
 
         [Fact]
