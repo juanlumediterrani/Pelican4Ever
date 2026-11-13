@@ -109,6 +109,25 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void CanTriggerAdoptionEvent_AcceptsNegativePlayerIds()
+        {
+            // Stardew genera UniqueMultiplayerID negativos para algunos jugadores: solo 0 es «desconocido».
+            var record = new PetAdoptionRecord
+            {
+                State = PetAdoptionState.BowlPurchased,
+                FarmSlotId = "Pelican4Ever_Farm_02"
+            };
+
+            long playerId = -1349064639806311618;
+
+            Assert.True(PetAdoptionLogic.CanTriggerAdoptionEvent(record, playerId, playerId, "Pelican4Ever_Farm_02", 920));
+
+            // Un propietario desconocido (0) sigue bloqueando la visita
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, playerId, 0, "Pelican4Ever_Farm_02", 920));
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 0, 0, "Pelican4Ever_Farm_02", 920));
+        }
+
+        [Fact]
         public void CanTriggerAdoptionEvent_EnforcesOwnerAndMapIsolation()
         {
             var record = new PetAdoptionRecord

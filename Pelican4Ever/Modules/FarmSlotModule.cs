@@ -4306,6 +4306,22 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved))
                 );
 
+                // TASK-2015: en vanilla el botón de demoler está reservado al anfitrión
+                // (demolishButton.visible = Game1.IsMasterGame y hasPermissionsToDemolish lo exige),
+                // así que un cliente no podía retirar edificios de su propia residencia ni de su anexo.
+                PatchSafe(
+                    harmony,
+                    "CarpenterMenu..ctor",
+                    AccessTools.Constructor(typeof(CarpenterMenu), new[] { typeof(string), typeof(GameLocation) }),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_Ctor))
+                );
+                PatchSafe(
+                    harmony,
+                    "CarpenterMenu.hasPermissionsToDemolish",
+                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToDemolish)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish))
+                );
+
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
                 harmony.Patch(
                     original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
@@ -5929,6 +5945,35 @@ namespace Pelican4Ever.Modules
         {
             if (__instance is IslandWest { NameOrUniqueName: SharedIslandFarmId })
                 building?.updateInteriorWarps();
+        }
+
+        /// <summary>
+        /// TASK-2015: vanilla oculta el botón de demoler a los clientes (<c>Game1.IsMasterGame</c>).
+        /// Se muestra cuando el menú apunta a una ubicación del jugador local.
+        /// </summary>
+        public static void Postfix_CarpenterMenu_Ctor(CarpenterMenu __instance)
+        {
+            if (Context.IsMainPlayer || __instance == null || __instance.readOnly)
+                return;
+
+            if (__instance.demolishButton != null && CanClientManageLocation(__instance.TargetLocation))
+                __instance.demolishButton.visible = true;
+        }
+
+        /// <summary>TASK-2015: permite demoler en la residencia o anexo propio (vanilla lo reservaba al anfitrión).</summary>
+        public static void Postfix_CarpenterMenu_HasPermissionsToDemolish(CarpenterMenu __instance, Building b, ref bool __result)
+        {
+            if (__result || Context.IsMainPlayer || __instance == null)
+                return;
+
+            if (CanClientManageLocation(__instance.TargetLocation))
+                __result = true;
+        }
+
+        /// <summary>Indica si el jugador local puede gestionar edificios (construir, mover, demoler) en una ubicación.</summary>
+        private static bool CanClientManageLocation(GameLocation? location)
+        {
+            return location != null && IsOwnedByLocalPlayer(location);
         }
 
         public static void Postfix_IsAlwaysActiveLocation(GameLocation location, ref bool __result)

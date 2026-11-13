@@ -96,7 +96,8 @@ namespace Pelican4Ever.Core.Pets
             if (!IsAwaitingAdoption(record))
                 return false;
 
-            if (playerId <= 0 || currentSlotOwnerId <= 0 || playerId != currentSlotOwnerId)
+            // Los UniqueMultiplayerID de Stardew pueden ser negativos: solo0 significa «desconocido».
+            if (playerId == 0 || currentSlotOwnerId == 0 || playerId != currentSlotOwnerId)
                 return false;
 
             if (string.IsNullOrWhiteSpace(record.FarmSlotId) || string.IsNullOrWhiteSpace(currentMapName))

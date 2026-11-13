@@ -1674,3 +1674,27 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       1. Postfix `Postfix_AnimalPage_FindAnimals` que, en clientes, retira las entradas cuya ubicación (o granja padre) no pertenece al jugador local.
       2. `IsOwnedByLocalPlayer` resuelve también los interiores de residencia (`_Home`, `_Cave`, `_Cellar`, `_Greenhouse`) por edificio padre o por nombre de hueco.
       3. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).
+
+- [x] **TASK-2015: La visita de Marnie no saltaba en clientes con ID de jugador negativo**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2013.
+  * **Descripción:** El registro de bloqueo añadido en TASK-2013 reveló la causa real: `CanTriggerAdoptionEvent` exigía `playerId <= 0` como «desconocido», pero los `UniqueMultiplayerID` de Stardew pueden ser negativos (el cliente registraba `-1349064639806311618`). Con el jugador y el propietario iguales, el mapa correcto y la hora en rango, la condición seguía devolviendo false y la visita nunca empezaba.
+  * **Criterios de aceptación:**
+      1. Un cliente con `UniqueMultiplayerID` negativo recibe la visita de Marnie al despertar o conectar.
+      2. Un propietario desconocido (0) sigue bloqueando la visita.
+  * **Resolución:**
+      1. La guarda pasa de `<= 0` a `== 0`: solo el cero significa «desconocido».
+      2. Nueva prueba `CanTriggerAdoptionEvent_AcceptsNegativePlayerIds` con un ID negativo real y con 0 como propietario. Suite en verde (1334 pruebas).
+
+- [x] **TASK-2016: Demoler edificios en la residencia o el anexo como cliente**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2011.
+  * **Descripción:** En vanilla el botón de demoler del `CarpenterMenu` está reservado al anfitrión: `demolishButton.visible = Game1.IsMasterGame` y `hasPermissionsToDemolish` devuelve false para cualquier cliente. Un cliente que construye en su residencia no podía retirar edificios (al pulsar en el hueco del martillo se acababa tocando la cancelación y el menú se cerraba).
+  * **Criterios de aceptación:**
+      1. Un cliente ve el botón de demoler cuando el menú apunta a su residencia o a uno de sus anexos.
+      2. Puede demoler allí; en ubicaciones ajenas sigue sin poder.
+      3. El anfitrión no cambia de comportamiento.
+  * **Resolución:**
+      1. `Postfix_CarpenterMenu_Ctor` muestra `demolishButton` cuando `TargetLocation` pertenece al jugador local.
+      2. `Postfix_CarpenterMenu_HasPermissionsToDemolish` concede permiso en las mismas ubicaciones. `GameLocation.destroyStructure` no tiene guarda de anfitrión, así que la eliminación se sincroniza igual que la construcción.
+      3. Compilación Debug desplegada sin errores y suite completa en verde (1334 pruebas).
