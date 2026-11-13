@@ -1,8 +1,25 @@
 using Pelican4Ever.Core.Admin;
 using System.Text.Json;
+
+// Localiza Pelican4Ever/assets/dashboard.html subiendo desde la carpeta de ejecución.
+string templatePath = null;
+string current = AppContext.BaseDirectory;
+while (!string.IsNullOrEmpty(current) && templatePath == null)
+{
+    string candidate = Path.Combine(current, "Pelican4Ever", "assets", "dashboard.html");
+    if (File.Exists(candidate))
+        templatePath = candidate;
+    else
+        current = Directory.GetParent(current)?.FullName;
+}
+
+if (templatePath == null)
+    throw new FileNotFoundException("No se encontró Pelican4Ever/assets/dashboard.html.");
+
+string template = File.ReadAllText(templatePath);
 string output = args.Length > 0 ? Path.GetFullPath(args[0]) : Path.Combine(Path.GetTempPath(), "p4e-web-panel-review");
 Directory.CreateDirectory(output);
-File.WriteAllText(Path.Combine(output, "dashboard.html"), AdminApiLogic.GetDashboardHtml());
+File.WriteAllText(Path.Combine(output, "dashboard.html"), AdminApiLogic.RenderDashboardHtml(template));
 File.WriteAllText(Path.Combine(output, "fixtures.json"), JsonSerializer.Serialize(new {
     status = new ServerStatusDto { OnlinePlayersCount=2, RegisteredPlayersCount=3, OccupiedDoorsCount=1, TotalDoorsCount=16, ActiveMarketListingsCount=4 },
     clock = new HostClockDto {Year=1, Season="fall", DayOfMonth=6, GameTimeOfDay=1430, TotalGameDays=61, IsMultiplayerServer=true, SaveFolderName="PanelTest", SecondsUntilNextRollover=900, NextRolloverLocalTime="02:00"},

@@ -34,6 +34,9 @@ namespace Pelican4Ever.Modules
         private Thread? listenerThread;
         private volatile bool isRunning;
 
+        /// <summary>Plantilla HTML del Dashboard web, cargada desde <c>assets/dashboard.html</c> (se cachea).</summary>
+        private static string? dashboardTemplate;
+
         /// <summary>Cola segura para ejecutar toda acción de la API en el hilo principal del juego (<c>UpdateTicked</c>) (TASK-803).</summary>
         public static MainThreadActionQueue ActionQueue { get; } = new();
 
@@ -1107,13 +1110,36 @@ namespace Pelican4Ever.Modules
 
         private void ServeDashboard(HttpListenerResponse res)
         {
-            string html = AdminApiLogic.GetDashboardHtml("");
+            string html = AdminApiLogic.RenderDashboardHtml(GetDashboardTemplate(), "");
             byte[] bytes = Encoding.UTF8.GetBytes(html);
             res.ContentType = "text/html; charset=utf-8";
             res.ContentLength64 = bytes.Length;
             res.StatusCode = (int)HttpStatusCode.OK;
             res.OutputStream.Write(bytes, 0, bytes.Length);
             res.OutputStream.Close();
+        }
+
+        /// <summary>
+        /// Carga (una sola vez) la plantilla del Dashboard web desde <c>assets/dashboard.html</c>.
+        /// Si el recurso no está disponible, se sirve una página mínima de error.
+        /// </summary>
+        private static string GetDashboardTemplate()
+        {
+            if (dashboardTemplate != null)
+                return dashboardTemplate;
+
+            try
+            {
+                string path = Path.Combine(context?.Helper.DirectoryPath ?? string.Empty, "assets", "dashboard.html");
+                dashboardTemplate = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor?.Log($"[AdminApi] No se pudo leer assets/dashboard.html: {ex.GetType().Name}.", LogLevel.Warn);
+                dashboardTemplate = string.Empty;
+            }
+
+            return dashboardTemplate;
         }
 
         private void HandleFestivalReschedule(HttpListenerRequest req, HttpListenerResponse res)

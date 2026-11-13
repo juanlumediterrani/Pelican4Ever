@@ -27,10 +27,36 @@ namespace Pelican4Ever.Tests
             Assert.Equal(expectedValid, valid);
         }
 
-        [Fact]
-        public void GetDashboardHtml_ContainsExpectedElements()
+        private static string FindAssetPath(string relativePath)
         {
-            string html = AdminApiLogic.GetDashboardHtml("test_token");
+            string current = AppContext.BaseDirectory;
+            while (!string.IsNullOrEmpty(current))
+            {
+                string candidate = Path.Combine(current, "Pelican4Ever", relativePath);
+                if (File.Exists(candidate))
+                    return candidate;
+
+                string candidateDirect = Path.Combine(current, "..", "..", "..", "..", "Pelican4Ever", relativePath);
+                if (File.Exists(candidateDirect))
+                    return Path.GetFullPath(candidateDirect);
+
+                DirectoryInfo? parent = Directory.GetParent(current);
+                if (parent == null) break;
+                current = parent.FullName;
+            }
+
+            throw new FileNotFoundException($"No se pudo encontrar {relativePath} para las pruebas del panel web.");
+        }
+
+        private static string LoadDashboardTemplate()
+        {
+            return File.ReadAllText(FindAssetPath(Path.Combine("assets", "dashboard.html")));
+        }
+
+        [Fact]
+        public void RenderDashboardHtml_ContainsExpectedElements()
+        {
+            string html = AdminApiLogic.RenderDashboardHtml(LoadDashboardTemplate(), "test_token");
             Assert.Contains("Pelican 4Ever — Panel de Control", html);
             Assert.Contains("/api/status", html);
             Assert.Contains("/api/rollover", html);
@@ -39,11 +65,17 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void GetDashboardHtml_EncodesTokenInTheHtmlAttribute()
+        public void RenderDashboardHtml_EncodesTokenInTheHtmlAttribute()
         {
-            string html = AdminApiLogic.GetDashboardHtml("\" onfocus=\"alert(1)\" <&");
+            string html = AdminApiLogic.RenderDashboardHtml(LoadDashboardTemplate(), "\" onfocus=\"alert(1)\" <&");
             Assert.Contains("&quot; onfocus=&quot;alert(1)&quot; &lt;&amp;", html);
             Assert.DoesNotContain("value=\"\" onfocus=", html);
+        }
+
+        [Fact]
+        public void RenderDashboardHtml_WithoutTemplate_ReturnsEmpty()
+        {
+            Assert.Equal(string.Empty, AdminApiLogic.RenderDashboardHtml(string.Empty, "token"));
         }
 
         [Fact]
