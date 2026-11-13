@@ -11,7 +11,7 @@
 | 指南 | 语言 | 面向谁 | 涵盖内容 |
 | --- | --- | --- | --- |
 | VPS 上的主机 | [ES](despliegue/host-vps.md) · [EN](despliegue/host-vps.en.md) · [中文](despliegue/host-vps.zh-CN.md) | 主机 | Linux VPS 上 7×24 全天候服务器：安装、`Xvfb`、systemd、防火墙、备份、更新与诊断 |
-| 本地主机 | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | 主机 | 在你自己的电脑上主持的存档：配置、玩家准入、Web 面板 |
+| 本地主机 | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | 主机 | 在你自己的电脑上主持的存档：配置、玩家准入 |
 | 客户端模式 | [ES](despliegue/cliente.md) · [EN](despliegue/cliente.en.md) · [中文](despliegue/cliente.zh-CN.md) | 玩家 | 安装模组、连接到服务器、按指纹配对、聊天命令 |
 | preview 服务器 | [ES](servidor-preview.md) · [EN](servidor-preview.en.md) · [中文](servidor-preview.zh-CN.md) | 测试者 | 进入**官方测试服务器**，以及它的模组包要求和设备批准 |
 
@@ -27,6 +27,20 @@
 | 游戏设计 | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | 游戏设计 |
 | 待办列表 | [ES](../backlog.md) | 技术路线图：史诗、任务及其解决情况（**仅有西班牙语**：这是一份 1700 行的历史记录） |
 | 主机外观 | [ES](../agents/README.md) | 龙头像素画与像素画工具（**仅有西班牙语**） |
+
+## Web 面板（不在 `main` 与 `dev` 中）
+
+Web 面板**不在** `main` 与 `dev` 中：它位于 `feat/web-panel` 分支，并且已被重构为从
+`assets/dashboard.html` 提供，而不是内嵌在 DLL 中的常量。REST API（`/api/v1/host/*` 与 `/api/*`）
+不依赖面板，保持不变。
+
+要恢复面板：
+
+```bash
+git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
+    Pelican4Ever.Core/Admin/AdminApiLogic.cs Pelican4Ever/Modules/AdminApiModule.cs \
+    Pelican4Ever.Tests/AdminApiLogicTests.cs scripts/
+```
 
 ## 规矩
 

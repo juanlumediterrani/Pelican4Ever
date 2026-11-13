@@ -260,7 +260,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/cloc
 | 端口 | 协议 | 是否对外开放 |
 | --- | --- | --- |
 | `24642` | UDP | **是**，游戏唯一的公开端口 |
-| `8085` | HTTP（API + Web 面板） | **否**：保持在回环地址，通过 SSH 隧道访问 |
+| `8085` | HTTP（主机 API） | **否**：保持在回环地址，通过 SSH 隧道访问 |
 | `5900` | TCP（VNC） | 此部署中不使用（Xvfb 带 `-nolisten tcp` 运行） |
 
 ```bash
@@ -277,11 +277,11 @@ curl -s -X POST http://127.0.0.1:8085/api/v1/host/render \
   -d '{"requester":"admin","minutes":15}'
 ```
 
-从你的笔记本通过 SSH 隧道访问 Web 面板（不要开放端口）：
+从你的笔记本通过 SSH 隧道访问 API（不要开放端口）：
 
 ```bash
 ssh -L 8085:127.0.0.1:8085 usuario@tu-vps
-# luego abre http://127.0.0.1:8085/ y pega el token en la cabecera
+# 然后在笔记本上：curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/clock
 ```
 
 **没有打开 Steam 就没有邀请码**：玩家直接通过 IP 连接 `24642` 端口

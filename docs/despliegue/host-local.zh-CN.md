@@ -110,7 +110,7 @@ Meadowlands）。保存存档并记下 `Saves/` 中出现的**确切文件夹名
 - **`RestartExitsProcess: false`**：受控重启会回到标题画面，随后自动载入
   在同一进程内重新打开存档（3 秒）。设为 `true` 时游戏会关闭，由重新拉起它的一方
   （systemd、脚本）用新模组再次打开。
-- **`AdminApiBindAllInterfaces: false`**：API 和 Web 面板只绑定 `127.0.0.1`。设为
+- **`AdminApiBindAllInterfaces: false`**：API 只绑定 `127.0.0.1`。设为
   `true` 时会在所有接口上监听：在没有防火墙的公共网络上不要这么做。
 - **`AdminApiToken`**：如果为空、仍为默认值
   `pelican4ever_secret_admin_token` 或为占位符 `CAMBIA-ESTE-TOKEN`，API **不会启动**。
@@ -173,16 +173,17 @@ Meadowlands）。保存存档并记下 `Saves/` 中出现的**确切文件夹名
 
 ---
 
-## 8. 本机的 Web 面板与 API
+## 8. 本机 API
 
-存档载入后，API 和 Web 面板即可使用：
+存档载入后，API 即可使用：
 
 ```bash
 TOKEN=TOKEN-LARGO-Y-ALEATORIO
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/clock
 ```
 
-打开 <http://127.0.0.1:8085/> 进入面板：包含摘要、玩家、居所、
+此版本没有 Web 面板：面板位于 `feat/web-panel` 分支，不在 `main` 或 `dev` 中。
+它原本能做的所有事情都通过 API（`/api/v1/host/`）完成。
 节庆、地图和操作等标签页。把 token 粘贴到「Bearer Token」请求头中。
 
 ---

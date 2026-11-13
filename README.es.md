@@ -4,7 +4,7 @@
 
 Mod para **Stardew Valley 1.6.15** (SMAPI 4.1+) que transforma el modo multijugador cooperativo en un **mundo persistente en tiempo real (escala 1:1)** diseñado para servidores dedicados 24/7 de **hasta 16 jugadores**.
 
-Incluye residencias privadas personalizables accesibles desde la Plaza Central y una red determinista de puentes, 8 tipos auténticos de granja con anexos temáticos en miniatura (40×32), economía comunitaria persistente, descanso asíncrono sin desmayos forzados, supervisión DevOps remota mediante API REST y panel web, y soporte nativo para agentes autónomos.
+Incluye residencias privadas personalizables accesibles desde la Plaza Central y una red determinista de puentes, 8 tipos auténticos de granja con anexos temáticos en miniatura (40×32), economía comunitaria persistente, descanso asíncrono sin desmayos forzados, supervisión DevOps remota mediante API REST, y soporte nativo para agentes autónomos.
 
 ---
 
@@ -51,8 +51,7 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servid
 - **Mercado Vecinal Asíncrono:** Tablón comunitario para compraventa de excedentes y cultivos entre granjeros conectados o desconectados, con depósito en garantía y confirmación de entrega segura.
 - **Festivales Desacoplados:** Entrada y salida libre a festivales sin salto forzado de cámara ni reseteos de reloj; minijuegos competitivos por tandas con premios oficiales otorgados a las 23:50 y ceremonias comunitarias en vivo (Luau, Medusas Lunares).
 
-### 5. Panel DevOps, API de Anfitrión v1 y Modo Headless
-- **Dashboard Web Integrado (SPA):** Interfaz ligera servida en el puerto `8085` para monitorizar el estado del servidor, mapa del mundo interactivo, jugadores conectados y residencias.
+### 5. API de Anfitrión v1 y operación headless
 - **API REST Versionada (`/api/v1/host/`):** Contrato HTTP local seguro para controlar el reloj, gestionar anuncios, expulsar infractores, organizar tandas festivas y consumir el flujo incremental de eventos (`events?since=N`).
 - **Comandos de Consola Remotos:** Ejecución remota y segura de comandos administrativos whitelisted a través de la API REST.
 - **Reinicio Seguro Programado (`p4e_safe_restart`):** Calcula el progreso en riesgo de los jugadores antes de programar reinicios limpios con persistencia garantizada.
@@ -149,7 +148,7 @@ El proyecto incluye un [docker-compose.yml](docker-compose.yml) listo para usar,
    ```
 4. El servidor expondrá los puertos configurados:
    - `24642/udp`: Puerto multijugador nativo (Lidgren/Galaxy).
-   - `8085`: API REST y Dashboard web de administración (`http://localhost:8085/`).
+   - `8085`: API REST de administración (`http://localhost:8085/api/v1/host/clock`).
    - `5900`: VNC opcional para inspección visual remota.
 
 > El `compose` monta la build de **Debug** y usa una imagen sin versión fijada: es una comodidad

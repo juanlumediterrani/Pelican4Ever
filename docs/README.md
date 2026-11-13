@@ -13,7 +13,7 @@ idénticos en los tres idiomas.
 | Guía | Idiomas | Para quién | Qué cubre |
 | --- | --- | --- | --- |
 | Anfitrión en un VPS | [ES](despliegue/host-vps.md) · [EN](despliegue/host-vps.en.md) · [中文](despliegue/host-vps.zh-CN.md) | Anfitrión | Servidor 24/7 en un VPS Linux: instalación, `Xvfb`, systemd, firewall, copias, actualizaciones y diagnóstico |
-| Anfitrión en local | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | Anfitrión | Partida anfitriona en tu propio equipo: configuración, altas de jugadores, panel web |
+| Anfitrión en local | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | Anfitrión | Partida anfitriona en tu propio equipo: configuración, altas de jugadores |
 | Modo cliente | [ES](despliegue/cliente.md) · [EN](despliegue/cliente.en.md) · [中文](despliegue/cliente.zh-CN.md) | Jugador | Instalar el mod, conectarse a un servidor, emparejamiento por huella, comandos de chat |
 | Servidor preview | [ES](servidor-preview.md) · [EN](servidor-preview.en.md) · [中文](servidor-preview.zh-CN.md) | Tester | Entrar en el **servidor oficial de pruebas**, con sus requisitos de modpack y la aprobación de dispositivo |
 
@@ -30,6 +30,20 @@ simplificado** (`*.zh-CN.md`).
 | Diseño de juego | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Diseño de juego |
 | Backlog | [ES](../backlog.md) | Hoja de ruta técnica: épicas, tareas y su resolución (**solo en español**: es un registro histórico de 1.700 líneas) |
 | Cosmética del host | [ES](../agents/README.md) | Sprite del dragón y utilidades de pixel art (**solo en español**) |
+
+## Panel web (fuera de `main` y `dev`)
+
+El Dashboard web **no está** en `main` ni en `dev`: vive en la rama `feat/web-panel`, donde además
+está refactorizado para servirse desde `assets/dashboard.html` en vez de una constante embebida en
+el DLL. La API REST (`/api/v1/host/*` y `/api/*`) no depende del panel y sigue igual.
+
+Para recuperar el panel:
+
+```bash
+git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
+    Pelican4Ever.Core/Admin/AdminApiLogic.cs Pelican4Ever/Modules/AdminApiModule.cs \
+    Pelican4Ever.Tests/AdminApiLogicTests.cs scripts/
+```
 
 ## Reglas de la casa
 

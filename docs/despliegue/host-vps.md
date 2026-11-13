@@ -263,7 +263,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/cloc
 | Puerto | Protocolo | ¿Se abre al exterior? |
 | --- | --- | --- |
 | `24642` | UDP | **Sí**, único puerto público del juego |
-| `8085` | HTTP (API + panel web) | **No**: déjalo en loopback y accede por túnel SSH |
+| `8085` | HTTP (API de anfitrión) | **No**: déjalo en loopback y accede por túnel SSH |
 | `5900` | TCP (VNC) | No se usa en este despliegue (Xvfb va con `-nolisten tcp`) |
 
 ```bash
@@ -280,11 +280,11 @@ curl -s -X POST http://127.0.0.1:8085/api/v1/host/render \
   -d '{"requester":"admin","minutes":15}'
 ```
 
-Acceso al panel web desde tu portátil, por túnel SSH (no abras el puerto):
+Acceso a la API desde tu portátil, por túnel SSH (no abras el puerto):
 
 ```bash
 ssh -L 8085:127.0.0.1:8085 usuario@tu-vps
-# luego abre http://127.0.0.1:8085/ y pega el token en la cabecera
+# luego, en el portátil: curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/clock
 ```
 
 **Sin Steam abierto no hay códigos de invitación**: los jugadores entran por IP directa al

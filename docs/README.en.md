@@ -13,7 +13,7 @@ languages.
 | Guide | Languages | Who it is for | What it covers |
 | --- | --- | --- | --- |
 | Hosting on a VPS | [ES](despliegue/host-vps.md) · [EN](despliegue/host-vps.en.md) · [中文](despliegue/host-vps.zh-CN.md) | Host | 24/7 server on a Linux VPS: installation, `Xvfb`, systemd, firewall, backups, updates and diagnostics |
-| Hosting locally | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | Host | Host save on your own machine: configuration, player registrations, web panel |
+| Hosting locally | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | Host | Host save on your own machine: configuration, player registrations |
 | Client mode | [ES](despliegue/cliente.md) · [EN](despliegue/cliente.en.md) · [中文](despliegue/cliente.zh-CN.md) | Player | Install the mod, connect to a server, pairing by fingerprint, chat commands |
 | Preview server | [ES](servidor-preview.md) · [EN](servidor-preview.en.md) · [中文](servidor-preview.zh-CN.md) | Tester | Join the **official test server**, with its modpack requirements and device approval |
 
@@ -30,6 +30,21 @@ Chinese** (`*.zh-CN.md`).
 | Game design | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Game design |
 | Backlog | [ES](../backlog.md) | Technical roadmap: epics, tasks and their resolution (**Spanish only**: it is a 1,700-line historical log) |
 | Host cosmetics | [ES](../agents/README.md) | Dragon sprite and pixel art utilities (**Spanish only**) |
+
+## Web panel (not in `main` or `dev`)
+
+The web dashboard is **not** in `main` or `dev`: it lives in the `feat/web-panel` branch, where it
+has also been refactored to be served from `assets/dashboard.html` instead of a constant embedded
+in the DLL. The REST API (`/api/v1/host/*` and `/api/*`) does not depend on the panel and is
+unchanged.
+
+To bring the panel back:
+
+```bash
+git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
+    Pelican4Ever.Core/Admin/AdminApiLogic.cs Pelican4Ever/Modules/AdminApiModule.cs \
+    Pelican4Ever.Tests/AdminApiLogicTests.cs scripts/
+```
 
 ## House rules
 

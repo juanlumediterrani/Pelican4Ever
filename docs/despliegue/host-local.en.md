@@ -112,7 +112,7 @@ Notes for the local case:
 - **`RestartExitsProcess: false`**: the controlled restart goes back to the title screen and
   the auto-loader reopens the save in the same process (3 s). With `true` the game closes and
   whatever relaunches it (systemd, a script) opens it again with the new mod.
-- **`AdminApiBindAllInterfaces: false`**: the API and the web panel stay on `127.0.0.1` only.
+- **`AdminApiBindAllInterfaces: false`**: the API stays on `127.0.0.1` only.
   With `true` they listen on every interface: do not do that on a public network without a
   firewall.
 - **`AdminApiToken`**: the API **does not start** if it is empty, if it keeps the default value
@@ -177,17 +177,17 @@ Support commands:
 
 ---
 
-## 8. Web panel and local API
+## 8. Local API
 
-With the save loaded, the API and the web panel are available:
+With the save loaded, the API is available:
 
 ```bash
 TOKEN=TOKEN-LARGO-Y-ALEATORIO
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/clock
 ```
 
-Open <http://127.0.0.1:8085/> for the panel: overview, players, residences, festival, map and
-actions tabs. Paste the token into the «Bearer Token» header.
+There is no web panel in this version: the panel lives in the `feat/web-panel` branch and is
+not in `main` or `dev`. Everything it did is done through the API (`/api/v1/host/`).
 
 ---
 

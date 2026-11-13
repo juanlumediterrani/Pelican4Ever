@@ -110,7 +110,7 @@ Notas para el caso local:
 - **`RestartExitsProcess: false`**: el reinicio controlado vuelve a la pantalla de título y la
   carga automática reabre la partida en el mismo proceso (3 s). Con `true` el juego se cierra y
   quien lo relance (systemd, un script) lo vuelve a abrir con el mod nuevo.
-- **`AdminApiBindAllInterfaces: false`**: la API y el panel web quedan solo en `127.0.0.1`. Con
+- **`AdminApiBindAllInterfaces: false`**: la API queda solo en `127.0.0.1`. Con
   `true` se escuchan en todas las interfaces: no lo hagas en una red pública sin firewall.
 - **`AdminApiToken`**: la API **no arranca** si está vacío, si conserva el valor por defecto
   `pelican4ever_secret_admin_token` o si es el marcador `CAMBIA-ESTE-TOKEN`.
@@ -173,17 +173,17 @@ Comandos de apoyo:
 
 ---
 
-## 8. Panel web y API en local
+## 8. API en local
 
-Con la partida cargada, la API y el panel web están disponibles:
+Con la partida cargada, la API está disponible:
 
 ```bash
 TOKEN=TOKEN-LARGO-Y-ALEATORIO
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8085/api/v1/host/clock
 ```
 
-Abre <http://127.0.0.1:8085/> para el panel: pestañas de resumen, jugadores, residencias,
-festival, mapa y acciones. Pega el token en la cabecera «Bearer Token».
+No hay panel web en esta versión: el panel vive en la rama `feat/web-panel` y no está en
+`main` ni en `dev`. Todo lo que hace se hace por la API (`/api/v1/host/`).
 
 ---
 

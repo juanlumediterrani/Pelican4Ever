@@ -23,9 +23,8 @@ this mod depends on Voyager nor Voyager on this mod.
    - If `AdminApiToken` is empty or keeps the default value `pelican4ever_secret_admin_token`,
      `AdminApiModule` **does not start** the `HttpListener` and logs an error in the SMAPI log.
 3. **Authentication required on every route:**
-   - Both the web panel (`GET /`, `GET /dashboard`) and any `/api/*` or `/api/v1/host/*` route
-     require `Authorization: Bearer <AdminApiToken>` (or `?token=<AdminApiToken>` for the web
-     panel).
+   - Every `/api/*` or `/api/v1/host/*` route requires `Authorization: Bearer <AdminApiToken>`
+     (or `?token=<AdminApiToken>`).
    - Without a valid token, the server answers `401 Unauthorized`.
 4. **Dispatch on the game's main thread (`UpdateTicked`):**
    - Every world query or mutating action queued from an HTTP thread runs on the Stardew Valley

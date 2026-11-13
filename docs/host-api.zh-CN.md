@@ -21,8 +21,8 @@
    - 如果 `AdminApiToken` 为空，或仍保留默认值 `pelican4ever_secret_admin_token`，
      `AdminApiModule` **不会启动** `HttpListener`，并在 SMAPI 日志中记录一条错误。
 3. **所有路由都必须认证：**
-   - 无论 Web 面板（`GET /`、`GET /dashboard`）还是任何 `/api/*` 和 `/api/v1/host/*` 路由，
-     都要求 `Authorization: Bearer <AdminApiToken>`（Web 面板也可以用 `?token=<AdminApiToken>`）。
+   - 所有 `/api/*` 与 `/api/v1/host/*` 路由都要求 `Authorization: Bearer <AdminApiToken>`
+     （也可以用 `?token=<AdminApiToken>`）。
    - 没有有效令牌时，服务器返回 `401 Unauthorized`。
 4. **在游戏主线程中派发（`UpdateTicked`）：**
    - 所有从 HTTP 线程入队的世界查询或状态变更操作，都在 Stardew Valley 的主线程中通过
