@@ -4,7 +4,7 @@
 
 A mod for **Stardew Valley 1.6.15** (SMAPI 4.1+) that transforms cooperative multiplayer into a **persistent, real-time world (1:1 scale)** tailored for 24/7 dedicated servers supporting **up to 16 players**.
 
-Features customizable private residences accessible via the Central Plaza and a deterministic bridge network, 8 authentic farm types with canonical miniature annexes (40×32), a persistent community economy, asynchronous rest without forced collapses, DevOps remote administration via REST API & web dashboard, and native autonomous agent support.
+Features customizable private residences accessible via the Central Plaza and a deterministic bridge network, 8 authentic farm types with canonical miniature annexes (40×32), a persistent community economy, asynchronous rest without forced collapses, DevOps remote administration via REST API, and native autonomous agent support.
 
 ---
 
@@ -51,8 +51,7 @@ For complete step-by-step instructions, see the [Playtester Guide](docs/guia-tes
 - **Asynchronous Community Market:** Community bulletin board for buying and selling surplus goods, crops, and artisan goods between online and offline farmers, backed by secure escrow and delivery confirmation.
 - **Decoupled Live Festivals:** Seamless entry and exit without camera cuts or clock freezes; multi-heat competitive minigames with official prizes awarded at 23:50, plus live community ceremonies (Luau, Dance of the Moonlight Jellies).
 
-### 5. DevOps Panel, Host REST API v1 & Headless Mode
-- **Integrated Web Dashboard (SPA):** Lightweight web interface served on port `8085` displaying real-time server metrics, an interactive world map, connected players, and residence occupancy.
+### 5. Host REST API v1 & Headless Operation
 - **Versioned REST API (`/api/v1/host/`):** Secure local HTTP endpoints to manage the clock, broadcast announcements, manage players, coordinate festival heats, and poll incremental event streams (`events?since=N`).
 - **Remote Console Commands:** Execute whitelisted administrative console commands remotely and securely via the REST API.
 - **Scheduled Safe Restart (`p4e_safe_restart`):** Calculates unsaved player progress at risk and orchestrates graceful server restarts with guaranteed persistence.
@@ -151,5 +150,5 @@ The repository provides out-of-the-box support for unattended server hosting usi
    ```
 4. The server will expose the configured ports:
    - `24642/udp`: Native multiplayer game port (Lidgren/Galaxy).
-   - `8085`: REST API & Web Administration Dashboard (`http://localhost:8085/`).
+   - `8085`: REST API (`http://localhost:8085/api/v1/host/clock`).
    - `5900`: Optional VNC for remote visual inspection.

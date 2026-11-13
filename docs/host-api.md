@@ -14,7 +14,7 @@ Contrato HTTP local para operar un servidor Pelican 4Ever desde fuera del juego.
 2. **Rechazo de arranque con el token por defecto:**
    - Si `AdminApiToken` está vacío o conserva el valor por defecto `pelican4ever_secret_admin_token`, `AdminApiModule` **no arranca** el `HttpListener` y registra un error en el log de SMAPI.
 3. **Autenticación obligatoria en todas las rutas:**
-   - Tanto el panel web (`GET /`, `GET /dashboard`) como cualquier ruta `/api/*` y `/api/v1/host/*` exigen `Authorization: Bearer <AdminApiToken>` (o `?token=<AdminApiToken>` para el panel web).
+   - Toda ruta `/api/*` y `/api/v1/host/*` exige `Authorization: Bearer <AdminApiToken>` (o `?token=<AdminApiToken>`).
    - Sin token válido, el servidor responde `401 Unauthorized`.
 4. **Despacho en el hilo principal del juego (`UpdateTicked`):**
    - Toda consulta del mundo o acción mutadora encolada desde un hilo HTTP se ejecuta en el hilo principal de Stardew Valley a través de `MainThreadActionQueue.Drain()` durante el evento `GameLoop.UpdateTicked`.
