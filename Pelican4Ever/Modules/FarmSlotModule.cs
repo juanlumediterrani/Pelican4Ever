@@ -36,6 +36,9 @@ namespace Pelican4Ever.Modules
         private static bool welcomeNotified;
         private static bool chatCommandsRegistered;
 
+        /// <summary>Granja compartida de Isla Jengibre, disponible para los servicios de Robin/Marnie una vez restaurada.</summary>
+        private const string SharedIslandFarmId = "IslandWest";
+
         /// <summary>Slot cuya residencia no estaba cargada en el cliente al despertar; se viaja a ella en cuanto se pueda.</summary>
         private static string? pendingResidenceWakeSlotId;
 
@@ -3242,6 +3245,35 @@ namespace Pelican4Ever.Modules
                     ClientSecurityModule.SendPairingChallengeToPlayer(e.FromPlayerID);
                 }
             }
+            else if (e.Type == ModMessages.RequestAnnexLocation && Context.IsMainPlayer)
+            {
+                // Un cliente pide la instancia completa de su anexo para poder construir o comprar animales
+                // en él sin haberlo visitado todavía en esta sesión.
+                var annex = context.WorldState.FindAnnexById(e.ReadAs<string>());
+                if (annex != null
+                    && annex.OwnerId == e.FromPlayerID
+                    && string.Equals(context.WorldState.FindResidenceOf(e.FromPlayerID)?.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase)
+                    && (Game1.getLocationFromName(annex.AnnexId) ?? EnsureAnnexLocation(annex, regenerate: false)) is Farm farm)
+                {
+                    var multiplayer = context.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                    byte[] snapshot = multiplayer.writeObjectFullBytes(multiplayer.locationRoot(farm), e.FromPlayerID);
+                    context.Helper.Multiplayer.SendMessage(snapshot, ModMessages.SyncAnnexLocation,
+                        new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                }
+            }
+            else if (e.Type == ModMessages.SyncAnnexLocation && !Context.IsMainPlayer
+                && Context.IsWorldReady && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
+            {
+                using var reader = new BinaryReader(new MemoryStream(e.ReadAs<byte[]>()));
+                // Registrar la raíz del host para recibir los deltas de edificios y animales incluso fuera del anexo.
+                var multiplayer = context.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                if (multiplayer.readObjectFull<GameLocation>(reader).Value is Farm farm
+                    && context.WorldState.FindAnnexById(farm.NameOrUniqueName)?.OwnerId == Game1.player.UniqueMultiplayerID
+                    && Game1.getLocationFromName(farm.NameOrUniqueName) == null)
+                {
+                    RetainSyncedOwnPrivateLocation(farm);
+                }
+            }
             else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
             {
@@ -3300,6 +3332,17 @@ namespace Pelican4Ever.Modules
 
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas, {context.WorldState.Annexes.Count} anexos).", LogLevel.Info);
                     RefreshSlotLocationData();
+
+                    // Los anexos propios que aún no existen en este cliente se piden al host para poder
+                    // construir o comprar animales en ellos (TASK-2011).
+                    foreach (var annex in context.WorldState.Annexes.Values)
+                    {
+                        if (annex.OwnerId == localId && Game1.getLocationFromName(annex.AnnexId) == null)
+                        {
+                            context.Helper.Multiplayer.SendMessage(annex.AnnexId, ModMessages.RequestAnnexLocation,
+                                new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                        }
+                    }
 
                     if (Game1.currentLocation != null && HostPlazaLayout.IsPlazaLocation(Game1.currentLocation.NameOrUniqueName))
                     {
@@ -4234,15 +4277,27 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions))
                 );
 
-                // TASK-906: Redirigir el menú de compra de animales de Marnie a la granja privada del jugador
-                var purchaseAnimalsCtors = typeof(PurchaseAnimalsMenu).GetConstructors();
-                if (purchaseAnimalsCtors.Length > 0)
-                {
-                    harmony.Patch(
-                        original: purchaseAnimalsCtors[0],
-                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PurchaseAnimalsMenu_Ctor))
-                    );
-                }
+                // TASK-906 / TASK-2011: el menú de animales de Marnie ofrece la residencia, sus anexos
+                // y la granja compartida de Isla Jengibre, en lugar de la granja del host.
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowAnimalShopMenu)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu))
+                );
+
+                // TASK-2011: permitir construir y mover edificios en la granja compartida de Isla Jengibre
+                // en cuanto el jugador haya restaurado la casa.
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding))
+                );
+                harmony.Patch(
+                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved))
+                );
 
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
                 harmony.Patch(
@@ -4458,20 +4513,171 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
+        /// <summary>
+        /// Abre el menú de construcción de forma defensiva: registra el contexto, evita que una excepción del
+        /// constructor deje al jugador sin menú y verifica un segundo después que nadie lo haya cerrado.
+        /// </summary>
+        private static void OpenConstructionMenu(string builder, string locationName, GameLocation? location, string origin)
+        {
+            string playerName = Game1.player?.Name ?? "<sin jugador>";
+            long playerId = Game1.player?.UniqueMultiplayerID ?? 0;
+
+            try
+            {
+                if (location == null)
+                {
+                    context?.Monitor.Log(
+                        $"[FarmSlotModule] No se pudo resolver la ubicación '{locationName}' para el menú de construcción ({origin}). Jugador={playerName} ({playerId}), host={Context.IsMainPlayer}.",
+                        LogLevel.Warn);
+                    Game1.drawObjectDialogue(Context.IsMainPlayer
+                        ? I18n.Get("carpenter.location_access_failed_host", new { location = locationName })
+                        : I18n.Get("carpenter.location_not_synced_client"));
+                    return;
+                }
+
+                int builderBlueprints = 0;
+                foreach (var pair in Game1.buildingData)
+                {
+                    if (string.Equals(pair.Value.Builder, builder, StringComparison.Ordinal))
+                        builderBlueprints++;
+                }
+
+                if (builderBlueprints == 0)
+                {
+                    context?.Monitor.Log(
+                        $"[FarmSlotModule] Data/Buildings no tiene entradas para el constructor '{builder}' en '{locationName}' ({origin}).",
+                        LogLevel.Warn);
+                    Game1.drawObjectDialogue(I18n.Get("carpenter.no_blueprints", new { location = locationName }));
+                    return;
+                }
+
+                context?.Monitor.Log(
+                    $"[FarmSlotModule] Abriendo CarpenterMenu ({origin}): jugador={playerName} ({playerId}), host={Context.IsMainPlayer}, constructor={builder}, ubicación={locationName} [{location.GetType().Name}], candidatos={builderBlueprints}.",
+                    LogLevel.Trace);
+
+                var menu = new StardewValley.Menus.CarpenterMenu(builder, location);
+                Game1.activeClickableMenu = menu;
+
+                context?.Monitor.Log(
+                    $"[FarmSlotModule] CarpenterMenu asignado para '{locationName}' con {menu.Blueprints.Count} planos disponibles.",
+                    LogLevel.Trace);
+
+                DelayedAction.functionAfterDelay(() =>
+                {
+                    bool stillOpen = ReferenceEquals(Game1.activeClickableMenu, menu);
+                    string activeMenu = Game1.activeClickableMenu?.GetType().Name ?? "null";
+                    context?.Monitor.Log(
+                        $"[FarmSlotModule] Verificación CarpenterMenu '{locationName}' tras 1s: sigueAbierto={stillOpen}, menúActivo={activeMenu}, dialogueUp={Game1.dialogueUp}, eventUp={Game1.eventUp}, fundido={Game1.IsFading()}.",
+                        stillOpen ? LogLevel.Trace : LogLevel.Warn);
+                }, 1000);
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log(
+                    $"[FarmSlotModule] Error al abrir CarpenterMenu para '{locationName}' ({origin}): {ex}",
+                    LogLevel.Error);
+                Game1.drawObjectDialogue(I18n.Get("carpenter.menu_failed", new { location = locationName }));
+            }
+        }
+
+        /// <summary>
+        /// Muestra la lista de ubicaciones de construcción después de que se cierre el cuadro de diálogo actual.
+        /// Si se mostrara de inmediato dentro del callback de otra pregunta, <c>GameLocation.afterQuestion</c>
+        /// seguiría apuntando a la pregunta anterior y se comería la respuesta del jugador.
+        /// </summary>
+        private static void DeferConstructionLocationList(GameLocation owner, string builder, List<KeyValuePair<string, string>> allowedLocations)
+        {
+            void ShowList()
+            {
+                try
+                {
+                    owner.ShowPagedResponses(
+                        Game1.content.LoadString("Strings\\Buildings:Construction_ChooseLocation"),
+                        allowedLocations,
+                        delegate(string chosenLocationName)
+                        {
+                            context?.Monitor.Log(
+                                $"[FarmSlotModule] Ubicación de construcción elegida: '{chosenLocationName}'.",
+                                LogLevel.Trace);
+                            GameLocation? loc = ResolveConstructionLocation(chosenLocationName);
+                            OpenConstructionMenu(builder, chosenLocationName, loc, "elegida");
+                        },
+                        auto_select_single_choice: true
+                    );
+                }
+                catch (Exception ex)
+                {
+                    context?.Monitor.Log($"[FarmSlotModule] Error al mostrar la lista de ubicaciones de construcción: {ex}", LogLevel.Error);
+                    Game1.drawObjectDialogue(I18n.Get("carpenter.menu_failed", new { location = allowedLocations.FirstOrDefault().Key ?? "?" }));
+                }
+            }
+
+            if (Game1.activeClickableMenu is DialogueBox)
+            {
+                Game1.afterFadeFunction? previous = Game1.afterDialogues;
+                Game1.afterDialogues = () =>
+                {
+                    previous?.Invoke();
+                    ShowList();
+                };
+                return;
+            }
+
+            ShowList();
+        }
+
+        /// <summary>
+        /// Resuelve la ubicación destino del menú de construcción. En el host puede crearla si falta;
+        /// en un cliente, una residencia o anexo recién sincronizado puede estar ya en <c>Data/Locations</c>
+        /// pero no haberse instanciado todavía en <c>Game1.locations</c>. En ese caso se crea desde los
+        /// datos frescos del asset (no desde la copia cacheada de <c>Game1.locationData</c>).
+        /// </summary>
+        private static GameLocation? ResolveConstructionLocation(string locationName)
+        {
+            GameLocation? loc = Game1.getLocationFromName(locationName)
+                ?? EnsureFarmSlotExists(locationName);
+            if (loc != null || context == null)
+                return loc;
+
+            try
+            {
+                var locationData = context.Helper.GameContent.Load<Dictionary<string, LocationData>>("Data/Locations");
+                if (locationData.TryGetValue(locationName, out LocationData? data) && data?.CreateOnLoad != null)
+                {
+                    loc = Game1.CreateGameLocation(locationName, data.CreateOnLoad);
+                    if (loc != null)
+                    {
+                        Game1.locations.Add(loc);
+                        context.Monitor.Log(
+                            $"[FarmSlotModule] Ubicación '{locationName}' instanciada en el cliente desde Data/Locations para el menú de construcción.",
+                            LogLevel.Info);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                context.Monitor.Log($"[FarmSlotModule] No se pudo instanciar la ubicación cliente '{locationName}': {ex}", LogLevel.Error);
+            }
+
+            return loc;
+        }
+
         public static bool Prefix_ShowConstructOptions(GameLocation __instance, string builder, int page)
         {
             if (context == null)
                 return true;
 
             Farmer who = Game1.player;
+            string playerName = who?.Name ?? "<sin jugador>";
+            long playerId = who?.UniqueMultiplayerID ?? 0;
 
             // Obtener el hueco de residencia asignado al jugador actual
             string? residenceSlotId = context.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID)?.FarmSlotId;
+                .FirstOrDefault(d => d.OwnerId == playerId)?.FarmSlotId;
 
             if (string.IsNullOrEmpty(residenceSlotId))
             {
-                if (context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var playerRec) && !string.IsNullOrEmpty(playerRec.FarmSlotId))
+                if (context.WorldState.Players.TryGetValue(playerId, out var playerRec) && !string.IsNullOrEmpty(playerRec.FarmSlotId))
                 {
                     residenceSlotId = playerRec.FarmSlotId;
                 }
@@ -4482,15 +4688,26 @@ namespace Pelican4Ever.Modules
                 : null;
 
             var allowedLocations = ConstructionLocationFilter.GetAllowedConstructionLocations(
-                who.UniqueMultiplayerID,
+                playerId,
                 Context.IsMainPlayer,
                 residenceSlotId,
                 annexes
             );
 
+            // TASK-2011: la granja compartida de Isla Jengibre también ofrece los servicios de Robin
+            // cuando el jugador ha restaurado su casa.
+            if (Game1.getLocationFromName(SharedIslandFarmId) is IslandWest island && island.farmhouseRestored.Value)
+            {
+                allowedLocations.Add(new KeyValuePair<string, string>(SharedIslandFarmId, I18n.Get("carpenter.island_shared")));
+            }
+
+            context.Monitor.Log(
+                $"[FarmSlotModule] Menú de construcción solicitado por {playerName} ({playerId}), host={Context.IsMainPlayer}: residencia={residenceSlotId ?? "<ninguna>"}, anexos={annexes?.Count ?? 0}, ubicacionesPermitidas={allowedLocations.Count}.",
+                LogLevel.Trace);
+
             if (allowedLocations.Count == 0)
             {
-                Game1.drawObjectDialogue(I18n.Get("annex.need_residence_first"));
+                Game1.drawObjectDialogue(I18n.Get("carpenter.need_destination"));
                 return false;
             }
 
@@ -4498,36 +4715,14 @@ namespace Pelican4Ever.Modules
             if (allowedLocations.Count == 1)
             {
                 string targetLocName = allowedLocations[0].Key;
-                GameLocation? targetLoc = Game1.getLocationFromName(targetLocName)
-                    ?? EnsureFarmSlotExists(targetLocName);
-                if (targetLoc != null)
-                {
-                    Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, targetLoc);
-                }
-                else
-                {
-                    Game1.drawObjectDialogue(Context.IsMainPlayer
-                        ? I18n.Get("carpenter.location_access_failed_host", new { location = targetLocName })
-                        : I18n.Get("carpenter.location_not_synced_client"));
-                }
+                GameLocation? targetLoc = ResolveConstructionLocation(targetLocName);
+                OpenConstructionMenu(builder, targetLocName, targetLoc, "única");
                 return false;
             }
 
             // Si tiene anexos, le permitimos elegir entre su granja principal y sus propios anexos (nunca el host ni granjas ajenas)
-            __instance.ShowPagedResponses(
-                Game1.content.LoadString("Strings\\Buildings:Construction_ChooseLocation"),
-                allowedLocations,
-                delegate(string chosenLocationName)
-                {
-                    GameLocation? loc = Game1.getLocationFromName(chosenLocationName)
-                        ?? EnsureFarmSlotExists(chosenLocationName);
-                    if (loc != null)
-                    {
-                        Game1.activeClickableMenu = new StardewValley.Menus.CarpenterMenu(builder, loc);
-                    }
-                },
-                auto_select_single_choice: true
-            );
+            GameLocation owner = __instance ?? Game1.currentLocation;
+            DeferConstructionLocationList(owner, builder, allowedLocations);
 
             return false;
         }
@@ -4820,8 +5015,22 @@ namespace Pelican4Ever.Modules
 
             string targetLoc = locationRequest.Name;
 
+            // Durante la colocación remota (menú de construcción), Game1.currentLocation es el mapa
+            // que se está editando y viewingLocation apunta a él, mientras que player.currentLocation
+            // sigue siendo el mapa real del jugador. El regreso al comercio debe conservar la solicitud
+            // y su callback de cierre en lugar de redirigirse a la residencia/anexo.
+            string? viewedLocation = Game1.player.viewingLocation.Value;
+            string hereLoc = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
+            string playerLoc = Game1.player.currentLocation?.NameOrUniqueName ?? string.Empty;
+            if (!string.IsNullOrEmpty(viewedLocation)
+                && string.Equals(hereLoc, viewedLocation, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(targetLoc, playerLoc, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
             // Control de acceso continuo a granjas privadas instanciadas (Opción B: Bloqueo si está Locked)
-            if (targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!locationRequest.IsStructure && targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 string baseSlot = targetLoc;
                 if (baseSlot.EndsWith("_Cave", StringComparison.OrdinalIgnoreCase))
@@ -4879,7 +5088,7 @@ namespace Pelican4Ever.Modules
                     }
                 }
             }
-            else if (targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
+            else if (!locationRequest.IsStructure && targetLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 if (Context.IsMainPlayer && locationRequest.Location == null)
                 {
@@ -5050,7 +5259,11 @@ namespace Pelican4Ever.Modules
             if (curLoc.StartsWith(LocationCullingLogic.AnnexPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 var annex = context?.WorldState.FindAnnexById(curLoc);
-                if (annex != null)
+                // Solo redirigir salidas reales hacia la residencia madre. Otros destinos
+                // (interiores de edificios, la casa de Robin al salir del menú de construcción)
+                // deben conservar su warp original.
+                if (annex != null && !locationRequest.IsStructure
+                    && string.Equals(targetLoc, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))
                 {
                     string? residenceFarmType = context?.WorldState.Doors.Values
                         .FirstOrDefault(d => string.Equals(d.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))?.FarmType;
@@ -5622,8 +5835,37 @@ namespace Pelican4Ever.Modules
             return true;
         }
 
+        /// <summary>TASK-2011: Isla Jengibre solo es edificable cuando su casa está restaurada.</summary>
+        public static void Postfix_IsBuildableLocation(GameLocation __instance, ref bool __result)
+        {
+            if (__instance is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+                __result = island.farmhouseRestored.Value;
+        }
+
+        /// <summary>TASK-2011: permite mover edificios de la granja compartida tras restaurar la casa.</summary>
+        public static void Postfix_CarpenterCanMoveIslandBuilding(Building building, ref bool __result)
+        {
+            if (building?.GetParentLocation() is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+                __result = island.farmhouseRestored.Value;
+        }
+
+        /// <summary>TASK-2011: recalcula los warps interiores al mover un edificio de la isla compartida.</summary>
+        public static void Postfix_OnIslandBuildingMoved(GameLocation __instance, Building building)
+        {
+            if (__instance is IslandWest { NameOrUniqueName: SharedIslandFarmId })
+                building?.updateInteriorWarps();
+        }
+
         public static void Postfix_IsAlwaysActiveLocation(GameLocation location, ref bool __result)
         {
+            // IslandWest es una granja compartida. Su estado viaja con las ubicaciones activas
+            // de vanilla y la restauración de la casa se sincroniza aunque nadie esté en la isla.
+            if (location is IslandWest { NameOrUniqueName: SharedIslandFarmId })
+            {
+                __result = true;
+                return;
+            }
+
             if (location == null || string.IsNullOrEmpty(location.NameOrUniqueName))
                 return;
 
@@ -6036,6 +6278,15 @@ namespace Pelican4Ever.Modules
                     if (!string.IsNullOrEmpty(door.FarmSlotId))
                         Collect(Game1.getLocationFromName(door.FarmSlotId));
                 }
+
+                if (context.WorldState.Annexes != null)
+                {
+                    foreach (var annex in context.WorldState.Annexes.Values)
+                    {
+                        if (!string.IsNullOrWhiteSpace(annex.AnnexId))
+                            Collect(Game1.getLocationFromName(annex.AnnexId));
+                    }
+                }
             }
 
             __result = pets;
@@ -6098,41 +6349,89 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// Obtiene la granja privada del jugador actual, creándola si aún no está instanciada.
-        /// Devuelve null si el jugador no tiene residencia asignada (en ese caso se usa la granja host).
+        /// Destinos donde el jugador puede usar los servicios de Robin y Marnie: su residencia,
+        /// sus anexos y, si la ha restaurado, la casa compartida de Isla Jengibre.
         /// </summary>
-        private static Farm? GetPlayerPrivateFarm()
+        private static List<KeyValuePair<string, string>> GetFarmServiceDestinations()
         {
-            if (context == null) return null;
-            Farmer who = Game1.player;
+            long playerId = Game1.player.UniqueMultiplayerID;
+            string? residenceId = context!.WorldState.ResolvePlayerResidenceSlot(playerId);
+            var annexes = string.IsNullOrEmpty(residenceId)
+                ? null
+                : context.WorldState.GetAnnexesForResidence(residenceId)
+                    .Where(annex => annex.OwnerId == playerId).ToList();
 
-            // Buscar el slotId asignado al jugador
-            string? slotId = context.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID)?.FarmSlotId;
+            var destinations = ConstructionLocationFilter.GetAllowedConstructionLocations(
+                playerId, Context.IsMainPlayer, residenceId, annexes);
 
-            if (string.IsNullOrEmpty(slotId))
-            {
-                if (context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var rec) && !string.IsNullOrEmpty(rec.FarmSlotId))
-                    slotId = rec.FarmSlotId;
-            }
+            if (Game1.getLocationFromName(SharedIslandFarmId) is IslandWest island && island.farmhouseRestored.Value)
+                destinations.Add(new KeyValuePair<string, string>(SharedIslandFarmId, I18n.Get("carpenter.island_shared")));
 
-            if (string.IsNullOrEmpty(slotId))
-                return null;
-
-            return (Game1.getLocationFromName(slotId) ?? EnsureFarmSlotExists(slotId)) as Farm;
+            return destinations;
         }
 
         /// <summary>
-        /// TASK-906: Antes de construir el PurchaseAnimalsMenu, sustituye la granja que se pasará
-        /// al menú por la granja privada del jugador, de modo que Marnie muestre los corrales
-        /// y gallineros correctos en lugar de los de la granja host.
-        /// El parámetro se llama 'targetLocation' en el ctor de PurchaseAnimalsMenu(List stock, GameLocation targetLocation).
+        /// Resuelve un destino de servicio creándolo si aún no está instanciado en este cliente.
         /// </summary>
-        public static void Prefix_PurchaseAnimalsMenu_Ctor(ref GameLocation? targetLocation)
+        private static GameLocation? ResolveFarmServiceDestination(string locationId)
         {
-            Farm? privateFarm = GetPlayerPrivateFarm();
-            if (privateFarm != null)
-                targetLocation = privateFarm;
+            if (context == null || !GetFarmServiceDestinations().Any(destination => destination.Key == locationId))
+                return null;
+
+            if (Game1.getLocationFromName(locationId) is GameLocation location)
+                return location;
+
+            if (context.WorldState.FindAnnexById(locationId) is AnnexAssignment annex)
+                return EnsureAnnexLocation(annex, regenerate: false);
+
+            return EnsureFarmSlotExists(locationId);
+        }
+
+        /// <summary>
+        /// TASK-906 / TASK-2011: intercepta el menú de compra de animales de Marnie para ofrecer
+        /// la residencia del jugador, sus anexos y la isla compartida, en lugar de la granja del host.
+        /// </summary>
+        public static bool Prefix_ShowAnimalShopMenu(Action<PurchaseAnimalsMenu>? onMenuOpened)
+        {
+            if (context == null)
+                return true;
+
+            var destinations = GetFarmServiceDestinations();
+            var farmsWithSpace = destinations.Where(destination =>
+                ResolveFarmServiceDestination(destination.Key)?.buildings.Any(building =>
+                    !building.isUnderConstruction()
+                    && building.GetIndoors() is AnimalHouse house
+                    && !house.isFull()) == true).ToList();
+
+            // Conservar el catálogo de animales como referencia aunque todavía no haya alojamiento libre.
+            var choices = farmsWithSpace.Count > 0
+                ? farmsWithSpace
+                : destinations.Where(destination => ResolveFarmServiceDestination(destination.Key) != null).Take(1).ToList();
+
+            if (choices.Count == 0)
+            {
+                Game1.drawObjectDialogue(destinations.Count == 0
+                    ? I18n.Get("marnie.need_destination")
+                    : I18n.Get("marnie.location_not_synced"));
+                return false;
+            }
+
+            Game1.currentLocation.ShowPagedResponses(
+                Game1.content.LoadString("Strings\\StringsFromCSFiles:PurchaseAnimalsMenu.ChooseLocation"),
+                choices,
+                locationId =>
+                {
+                    if (ResolveFarmServiceDestination(locationId) is not GameLocation farm)
+                        return;
+
+                    var menu = new PurchaseAnimalsMenu(Utility.getPurchaseAnimalStock(farm), farm);
+                    onMenuOpened?.Invoke(menu);
+                    Game1.activeClickableMenu = menu;
+                },
+                auto_select_single_choice: true
+            );
+
+            return false;
         }
     }
 }

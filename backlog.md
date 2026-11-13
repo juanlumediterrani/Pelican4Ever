@@ -1488,7 +1488,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     5. Actualizado `FallbackTranslationProvider.cs` y ampliada la suite `LocalizationTests.cs` con pruebas dinámicas de conmutación en tiempo real; 1338 pruebas unitarias pasando al 100%.
 
 ### Épica 20: Adopción y Evento de Mascota para Clientes por Compra de Cuenco (rama `feat/client-pet-adoption`)
-> **Objetivo:** Permitir que los jugadores clientes (*farmhands*) desbloqueen su propio evento de adopción canónico (perro/gato de Marnie) de forma inmersiva al comprar un cuenco para mascotas (`Pet Bowl`) en su parcela/residencia, recibiendo al día siguiente la carta de Marnie en su buzón y desencadenando la cinemática de entrega vinculada a su jugador y mapa específico.
+> **Objetivo:** Permitir que los jugadores clientes (*farmhands*) desbloqueen su propio evento de adopción canónico (perro/gato de Marnie) de forma inmersiva al comprar un cuenco para mascotas (`Pet Bowl`) en su parcela/residencia. Marnie se presenta en la puerta de la residencia en el siguiente despertar del jugador (sin carta de por medio) y la mascota queda vinculada de forma autoritativa a su jugador, cuenco y mapa.
 
 - [x] **TASK-2001: Detección y Registro Autoritativo de Compra de `Pet Bowl` por Clientes**
   * **Prioridad:** Alta
@@ -1503,31 +1503,31 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Implementada la lógica de negocio desacoplada en [`PetAdoptionLogic.RecordPurchase`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) para registrar slot, coordenadas, día de juego y preferencias de tipo/raza.
     3. Implementado el parche Harmony `Postfix_CarpenterMenu_TryToBuild` en [`ClientPetAdoptionModule.cs`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever/Modules/ClientPetAdoptionModule.cs) que intercepta la construcción de `Pet Bowl`, enviando el mensaje `Pelican4Ever.PetBowlPurchased` al host y persistiendo autoritativamente en `ServerWorldState`.
 
-- [x] **TASK-2002: Despacho de Carta de Marnie al Día Siguiente (`TownMailbox` y Buzón Residencial)**
+- [x] **TASK-2002: Visita de Marnie en la Puerta en el Siguiente Despertar (sin carta)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2001, TASK-1901.
-  * **Descripción:** Integrar en el ciclo de cambio de día (`DailyRolloverModule.OnDayStarted` / `DayEnding`) un evaluador que revise las solicitudes pendientes de compra de cuencos. Si un cliente adquirió un `Pet Bowl` el día previo y aún no ha recibido la notificación, despachar la carta personalizada de Marnie a su buzón (`farmer.mailReceived` / `farmer.mailbox`). La carta debe estar completamente internacionalizada en `default.json` y `es.json` (`marnie.pet_letter.title` y `marnie.pet_letter.body`), avisándole de que Marnie se enteró de que preparó un cuenco de agua y que pasará a visitarle con un animalito que busca hogar.
+  * **Descripción:** Sustituir el flujo de carta por correo por una visita directa: cuando un jugador compre un `Pet Bowl`, el host conserva la solicitud pendiente y, en el siguiente despertar del jugador (cualquier día posterior al de la compra), Marnie se presenta en la puerta de su residencia o anexo. No se inyecta ninguna carta en `Data/Mail` ni en `farmer.mailbox`.
   * **Criterios de aceptación:**
-    1. La carta llega al buzón del jugador cliente exactamente al día siguiente de la compra del cuenco.
-    2. Se puede leer tanto desde el buzón de la cabina como desde el buzón del pueblo / plaza (`TownMailboxModule`).
-    3. Los textos respetan el idioma local del jugador receptor (inglés o castellano).
-    4. La carta no se envía de forma repetida ni a jugadores que no hayan adquirido el cuenco.
+    1. Tras comprar el cuenco y dormir una vez, Marnie aparece en la puerta de la residencia del jugador sin necesidad de leer ninguna carta.
+    2. No se entrega correo nuevo ni se añade nada al buzón; la definición histórica de la carta se conserva solo para que las partidas antiguas puedan seguir leyéndola.
+    3. Funciona tanto para el host como para *farmhands*, y también si el cuenco está en un anexo (se usa el `FarmSlotId` registrado en la compra).
+    4. La visita no se repite tras adoptar o declinar, y las partidas antiguas con estado `LetterDelivered` siguen pudiendo completar la adopción.
   * **Resolución:**
-    1. Implementada la evaluación temporal en [`PetAdoptionLogic.ShouldDeliverLetter`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) garantizando que la carta solo se despacha cuando `currentGameDay > PurchaseGameDay`.
-    2. En `ClientPetAdoptionModule.OnDayStarted`, el host evalúa todos los registros de jugadores, marca `LetterDelivered`, inyecta `Pelican4Ever_MarniePetLetter` en `farmer.mailbox` y sincroniza por red al cliente (`Pelican4Ever.PetAdoptionSync`).
-    3. Inyectado el contenido de la carta en `Data/Mail` mediante `AssetRequested` con títulos y cuerpos en inglés y castellano (`marnie.pet_letter.title` y `marnie.pet_letter.body`), accesible tanto desde la cabina como en la plaza vía `TownMailboxModule`.
+    1. Eliminados el despacho de correo, `ShouldDeliverLetter`, `MarkLetterDelivered` y las comprobaciones de `mailbox`/`mailReceived`. Se conserva únicamente la entrada histórica de `Data/Mail` y sus textos para no romper cartas ya presentes en partidas antiguas.
+    2. [`PetAdoptionLogic.HasWokenSincePurchase`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) determina que ha pasado al menos un despertar desde la compra (`currentGameDay > PurchaseGameDay`), aceptando los estados `BowlPurchased` y `LetterDelivered` por compatibilidad.
+    3. `ClientPetAdoptionModule` registra `DayStarted` para host y clientes, refresca el estado autoritativo, activa `wakeTriggerPending` y dispara la visita en cuanto el jugador pisa su propia granja o anexo tras despertar.
 
 - [x] **TASK-2003: Disparador y Adaptación del Evento de Adopción de Mascota en Ranuras de Granja**
   * **Prioridad:** Crítica
   * **Dependencias:** TASK-2002.
-  * **Descripción:** Adaptar la cinemática canónica de presentación de mascota de Marnie (evento canónico `1590166` / `897405` o evento customizado desacoplado de `"Farm"`) para ejecutarse en el mapa de ranura del cliente (`Farm_slot_X` / anexo) cuando el jugador sale de su cabina/residencia en un día soleado tras haber recibido la carta. Resolver dinámicamente las coordenadas de la puerta de la cabina y la posición del `Pet Bowl` de ese mapa específico para situar a Marnie y a la mascota. Permitir al cliente elegir el nombre y confirmar la adopción (respetando la preferencia perro/gato del personaje o dándole a elegir).
+  * **Descripción:** Adaptar la cinemática canónica de presentación de mascota de Marnie (evento canónico `1590166` / `897405` o evento customizado desacoplado de `"Farm"`) para ejecutarse en el mapa de ranura del cliente (`Farm_slot_X` / anexo) en cuanto el jugador sale de su cabina/residencia tras despertar, sin exigir carta ni tiempo soleado. Resolver dinámicamente las coordenadas de la puerta de la cabina y la posición del `Pet Bowl` de ese mapa específico para situar a Marnie y a la mascota. Permitir al cliente elegir el nombre y confirmar la adopción (respetando la preferencia perro/gato del personaje o dándole a elegir).
   * **Criterios de aceptación:**
     1. El evento se dispara al salir de la residencia en el mapa propio del cliente, nunca en la granja del host ni en parcelas ajenas.
     2. La cinemática no interrumpe ni bloquea a otros jugadores conectados en el servidor.
     3. Marnie y la mascota aparecen situadas correctamente frente a la entrada de la cabina y cuenco del cliente.
     4. El jugador puede seleccionar el nombre y aceptar la adopción mediante la interfaz nativa del juego.
   * **Resolución:**
-    1. Implementadas las reglas de activación en [`PetAdoptionLogic.CanTriggerAdoptionEvent`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) exigiendo estado `LetterDelivered`, coincidencia estricta de ranura de residencia, horario diurno y tiempo despejado.
+    1. Implementadas las reglas de activación en [`PetAdoptionLogic.CanTriggerAdoptionEvent`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Core/Pets/PetAdoptionLogic.cs) exigiendo un estado pendiente (`BowlPurchased` o `LetterDelivered`), coincidencia estricta de ranura de residencia y horario diurno; la lluvia ya no bloquea la visita.
     2. Diseñada la secuencia cinemática en `ClientPetAdoptionModule.StartAdoptionEvent` resolviendo dinámicamente la puerta de la cabina con `farm.GetMainFarmHouseEntry()` e instanciando a Marnie y la previsualización de la mascota en frente de la residencia.
     3. Integrado el flujo interactivo con `QuestionDialog.Ask` para aceptar o rechazar la adopción, y el diálogo nativo `NamingMenu` para elegir el nombre oficial de la mascota con soporte para nombres aleatorios.
 
@@ -1541,7 +1541,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Tras guardar la partida o reiniciar el servidor, la mascota reaparece fielmente en el mapa y ranura del cliente.
   * **Resolución:**
     1. Al confirmar la adopción, el cliente despacha `Pelican4Ever.PetAdopted` con slot, nombre, tipo, raza y coordenadas del cuenco.
-    2. En el host, `ProcessPetAdoption` instancia la entidad `Pet`, fija `pet.homeLocationName.Value = loc.NameOrUniqueName`, localiza el `PetBowl` y ejecuta `petBowl.AssignPet(pet)`, añadiendo el animal a `loc.characters`.
+    2. En el host, `ProcessPetAdoption` instancia la entidad `Pet`, le asigna `pet.currentLocation = loc`, localiza el `PetBowl`, ejecuta primero `petBowl.AssignPet(pet)` y solo después fija `pet.homeLocationName.Value = loc.NameOrUniqueName` para que la vinculación autoritativa no quede sobrescrita por un `parentLocationName` vacío, añadiendo el animal a `loc.characters`.
     3. Actualizado `FarmSlotModule.Prefix_Utility_GetAllPets` para recopilar también las mascotas presentes en las ranuras de residencia exteriores, asegurando que el motor de Stardew Valley actualice su cariño, cuencos y comportamiento diario.
 
 - [x] **TASK-2005: Pruebas Unitarias de Ciclo de Vida de Mascota, Aislamiento y Paridad i18n**
@@ -1556,9 +1556,9 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Cero regresiones en los tests existentes de la solución.
     3. Paridad total de claves entre `default.json` y `es.json`.
   * **Resolución:**
-    1. Creada la suite [`ClientPetAdoptionTests.cs`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Tests/ClientPetAdoptionTests.cs) con 9 casos de prueba validando máquina de estados, retardo de 1 día para la carta, aislamiento de ranuras y jugadores, condiciones climáticas/horarias y resolución de cadenas i18n con tokens.
+    1. Creada la suite [`ClientPetAdoptionTests.cs`](file:///home/mtx/Documentos/Projects/Stardew Valley MORPG/Pelican4Ever.Tests/ClientPetAdoptionTests.cs) con casos de prueba validando la máquina de estados, la visita tras el siguiente despertar (sin carta), el aislamiento de ranuras y jugadores, las condiciones horarias/estado y la resolución de cadenas i18n con tokens.
     2. Verificada la paridad 1:1 de claves y tokens entre `default.json` y `es.json` con `LocalizationTests.cs`.
-    3. Suite completa ejecutada con éxito: 1327 pruebas pasando sin errores ni regresiones.
+    3. Suite completa ejecutada con éxito: 1337 pruebas pasando sin errores ni regresiones.
 
 
 - [x] **TASK-2006: Retirar el cuenco de mascota inicial de granjas y residencias**
@@ -1570,3 +1570,79 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Un cuenco comprado después no se borra nunca.
   * **Resolución:** `FarmSlotModule.RemoveStarterPetBowl` retira solo el cuenco de arranque (en su casilla inicial o en la canónica `(53, 7)` del host, y si no tiene mascota asignada). Deja una marca en el `modData` de la ubicación (`Pelican4Ever.StarterPetBowlRemoved`) para ejecutarse una sola vez. Se invoca desde `EnsureFarmSlotBuildings` (residencias), `CleanUpHostFarmLegacy` (host), la regeneración de plantilla y la migración de partidas, que ya no reubica el cuenco.
   * **Reparación visual (host):** la retirada del cuenco dejaba un hueco junto a la valla del corral, porque el host pintaba dos baldosas de borde de tierra (`612`) en `(53, 7)` y `(53, 8)` y recurría la hierba sombreada (`256`) en `(54, 7)` y `(54, 8)`, dejando una franja de tierra recortada y una línea de borde de hierba colgando en el aire. `FarmSlotModule.RestoreHostFarmPetBowlGround` repinta ahora ese solar con las baldosas vanilla del terreno de `Maps/Farm` (hierba con sombra `567` bajo la valla, tierra lisa `587` en `(53, 7-8)`, borde de campo `612` en `(54, 7-8)` y hierba `401`/`256` en el corral), tanto al generar `Maps/Pelican4Ever_HostFarm` como al limpiar la ubicación en tiempo de ejecución. El terreno resultante es idéntico al vanilla y la retirada del cuenco ya no deja ningún hueco visible.
+
+- [ ] **TASK-2007: Vinculación explícita mascota ↔ jugador propietario**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2004.
+  * **Descripción:** La entidad `Pet` de Stardew Valley no expone un propietario de jugador: hoy la pertenencia se infiere de `PetBowl.petId`, `homeLocationName`, `friendshipTowardFarmer` y del `PlayerRecord.PetAdoption`. En la prueba del host la mascota no quedó asociada a ningún jugador. Añadir una vinculación autoritativa explícita (por ejemplo `OwnerPlayerId` en el registro de adopción y en el estado del servidor, o un `modData` en la propia mascota) que sobreviva a guardados y se replique a los clientes, y usarla para decidir quién puede acariciar, renombrar o reclamar la mascota.
+  * **Criterios de aceptación:**
+    1. Cada mascota de residencia/anexo tiene un `UniqueMultiplayerID` propietario persistido y consultable.
+    2. Tras reiniciar el servidor o reconectar al cliente, la mascota sigue perteneciendo al mismo jugador y no se reasigna a otro.
+    3. Ningún otro jugador puede adoptar, reclamar ni duplicar la mascota vinculada a una ranura ajena.
+    4. Los visitantes autorizados pueden ver e interactuar con la mascota sin convertirse en propietarios.
+
+- [ ] **TASK-2008: Vinculación y persistencia mascota ↔ mapa/cuenco en ranuras privadas**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2004, TASK-2007.
+  * **Descripción:** Auditar y corregir la cadena completa de vinculación al mapa tras la adopción: `PetBowl.parentLocationName` ↔ `PetBowl.petId` ↔ `Pet.petId` ↔ `Pet.homeLocationName` ↔ `loc.characters` ↔ guardado. La prueba del host mostró que la mascota no quedaba vinculada ni al jugador ni al mapa. Revisar también `FarmSlotModule.Prefix_Utility_GetAllPets`, que recopila mascotas de la granja host y de las puertas de residencia, pero no de los anexos, y verificar que la sincronización de red hace visible la mascota en el cliente y en visitantes.
+  * **Criterios de aceptación:**
+    1. Tras adoptar, `petBowl.petId == pet.petId`, `pet.homeLocationName == slotId` y la mascota está en `loc.characters` de la ranura correcta.
+    2. Tras guardar y recargar, la mascota reaparece en su mapa, junto a su cuenco, sin teletransportarse a `(0,0)` ni a la granja host.
+    3. `Utility.getAllPets` incluye mascotas de residencias, anexos y granja host, y el comportamiento diario (cariño, cuenco, paseos) se ejecuta en el host.
+    4. El cliente propietario y los visitantes autorizados ven la mascota sincronizada; el log de diagnóstico indica slot, `petId`, `homeLocationName` y resultado de la vinculación.
+
+- [x] **TASK-2009: Corregir la selección de ubicación en el menú de construcción de Robin (clientes)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-201, TASK-2001.
+  * **Descripción:** Al elegir una ubicación (residencia principal o anexo) en el menú "Construir edificios de granja" de Robin, el diálogo se cerraba sin abrir el `CarpenterMenu`. Endurecer la ruta de apertura para clientes: resolver la ubicación desde `Game1.locations` o, si aún no se instanció, desde `Data/Locations`; diferir la lista de ubicaciones hasta que se cierre el cuadro de diálogo actual; capturar excepciones del constructor; y registrar diagnóstico suficiente para localizar el fallo.
+  * **Criterios de aceptación:**
+     1. Un *farmhand* con residencia y anexo puede elegir cualquiera de las dos ubicaciones y el menú de construcción se abre con sus planos.
+     2. Si una ubicación aún no está sincronizada, se instancia desde `Data/Locations` o se muestra un mensaje claro en lugar de cerrar el diálogo en silencio.
+     3. Cualquier excepción al construir el menú queda registrada en el log con jugador, rol, constructor, ubicación y número de planos.
+     4. El host con una sola ubicación sigue abriendo el menú directamente sin pasos extra.
+  * **Resolución:**
+     1. `FarmSlotModule.Prefix_ShowConstructOptions` delega en `ResolveConstructionLocation`, que intenta `Game1.getLocationFromName`, `EnsureFarmSlotExists` y, en clientes, crea la instancia desde el asset fresco `Data/Locations` con `Game1.CreateGameLocation` y la añade a `Game1.locations`.
+     2. La lista de ubicaciones se muestra mediante `DeferConstructionLocationList`, que la pospone a `Game1.afterDialogues` si hay un `DialogueBox` abierto para evitar que `GameLocation.afterQuestion` o el cierre del diálogo se coman la respuesta.
+     3. `OpenConstructionMenu` centraliza la apertura: valida la ubicación, cuenta planos del constructor, captura excepciones, asigna `Game1.activeClickableMenu` y programa una comprobación a 1 segundo que registra si el menú sigue abierto, el menú activo, `dialogueUp`, `eventUp` y el estado de fundido.
+     4. Añadidas las claves i18n `carpenter.no_blueprints` y `carpenter.menu_failed` en inglés y castellano. Compilación Debug desplegada y suite completa en verde (1337 pruebas).
+
+- [x] **TASK-2010: Conservar los warps ajenos a la residencia al salir de un anexo**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-903, TASK-2009.
+  * **Descripción:** Al construir en un anexo y salir del menú de construcción, el regreso al diálogo de Robin aparecía en la entrada del anexo de la residencia con el jugador dibujado como una sombra. `Prefix_WarpFarmer` redirigía a la residencia madre **cualquier** warp cuyo origen fuera un anexo, incluido el retorno al mapa del constructor y los interiores de edificios.
+  * **Criterios de aceptación:**
+      1. Tras construir en un anexo, al volver al diálogo de Robin el jugador sigue en el mapa del constructor, sin fundidos ni siluetas.
+      2. Entrar al interior de un edificio construido en un anexo conserva su warp original.
+      3. Salir del anexo hacia la residencia madre sigue devolviendo al jugador a la casilla de retorno del anexo.
+  * **Resolución:**
+      1. Portadas a `dev` las guardas de los commits `67ea3c8` y `de00795` (rama `codex/annex-construction-animals`), que nunca se habían integrado: durante la colocación remota (`Game1.currentLocation == viewingLocation` y el destino es el mapa real del jugador) se deja pasar el warp con su callback.
+      2. Las ramas de acceso a residencias y anexos ignoran las solicitudes de tipo estructura (`locationRequest.IsStructure`), y la salida del anexo solo redirige cuando el destino es exactamente la residencia madre (`annex.ResidenceSlotId`).
+      3. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).
+
+- [x] **TASK-2011: Servicios de Robin y Marnie en anexos e Isla Jengibre**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-904, TASK-906, TASK-2009.
+  * **Descripción:** La rama `codex/annex-construction-animals` añadía la compra de animales por residencia/anexo, la sincronización bajo demanda de anexos para clientes y los servicios compartidos de Isla Jengibre, pero partía de una versión anterior de `dev` y un merge directo revertía el menú de construcción actual. Había que integrar esas piezas manualmente sobre el código vigente.
+  * **Criterios de aceptación:**
+      1. Marnie ofrece elegir entre la residencia, cada anexo propio y la granja compartida de Isla Jengibre (si su casa está restaurada).
+      2. Un cliente que aún no ha visitado un anexo puede construir o comprar animales en él; el host le envía la ubicación bajo demanda.
+      3. Robin puede construir en Isla Jengibre cuando la casa está restaurada, y mover edificios allí conserva los warps interiores.
+      4. La entrada de los anexos no permite colocar edificios encima del corredor de acceso.
+  * **Resolución:**
+      1. Añadidos `RequestAnnexLocation`/`SyncAnnexLocation` y la petición automática de los anexos propios tras `SyncDoorsState`, reutilizando `RetainSyncedOwnPrivateLocation`.
+      2. `GetFarmServiceDestinations`/`ResolveFarmServiceDestination` y `Prefix_ShowAnimalShopMenu` sustituyen el parche del constructor de `PurchaseAnimalsMenu`, de modo que la granja elegida no se sobrescribe.
+      3. Añadidos `Postfix_IsBuildableLocation`, `Postfix_CarpenterCanMoveIslandBuilding`, `Postfix_OnIslandBuildingMoved` y `IslandWest` como ubicación siempre activa.
+      4. `MapCloneHelper` marca como no edificables las casillas de apertura y corredor del anexo. Nuevas claves i18n en inglés y castellano. Compilación y suite en verde.
+
+- [x] **TASK-2012: Las mascotas adoptadas se quedaban inmóviles junto al cuenco**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2004.
+  * **Descripción:** El gato adoptado no se movía: aparecía pegado al cuenco. La IA de `Pet` solo avanza si `CurrentBehavior` referencia un comportamiento válido de `Data/Pets`, y las mascotas creadas por el módulo no pasaban por el flujo vanilla (`PetLicense` → `warpToFarmHouse`) que inicializa ese campo. Además se creaban sobre la casilla del edificio del cuenco, que bloquea el movimiento.
+  * **Criterios de aceptación:**
+      1. Una mascota recién adoptada pasea por su residencia o anexo.
+      2. Las partidas con una mascota ya atascada se reparan al cargar o al empezar el día.
+      3. La mascota aparece en la casilla libre delante del cuenco, no dentro del edificio.
+  * **Resolución:**
+      1. `ProcessPetAdoption` usa `PetBowl.GetPetSpot()` para la posición inicial y llama a `EnsurePetBehavior`.
+      2. `HealStuckPets` recorre `Utility.getAllPets()` en `SaveLoaded` y `DayStarted` del host, inicializando a `Walk` cualquier comportamiento vacío o inexistente.
+      3. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).

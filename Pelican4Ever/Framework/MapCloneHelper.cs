@@ -665,6 +665,15 @@ namespace Pelican4Ever.Framework
                 }
             }
 
+            // 7.b Mantener la entrada y su corredor libres de edificios sin cambiar su transitabilidad.
+            var entranceTiles = new HashSet<(int X, int Y)>(openingBorderTiles);
+            foreach (var ct in corridorTiles) entranceTiles.Add(ct);
+            foreach (var (ex, ey) in entranceTiles)
+            {
+                if (ex >= 0 && ex < width && ey >= 0 && ey < height && backLayer.Tiles[ex, ey] is Tile entranceTile)
+                    entranceTile.Properties["Buildable"] = "F";
+            }
+
             // 8. Garantizar zonas de bonificación válidas y diseño meticuloso de cada minimapa (TASK-902)
             EnsureAnnexBonusZones(template, width, height, backLayer, bldLayer, frontLayer, pathsLayer, mainSheet, corridorTiles);
             SmoothThematicAnnexBordersAndEntrances(template, side, width, height, backLayer, bldLayer, frontLayer, alwaysFrontLayer, mainSheet, openingBorderTiles);

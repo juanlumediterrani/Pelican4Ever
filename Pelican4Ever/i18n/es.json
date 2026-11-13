@@ -80,6 +80,10 @@
 
   "carpenter.location_access_failed_host": "No se pudo acceder a la ubicación '{{location}}'. Inténtalo de nuevo.",
   "carpenter.location_not_synced_client": "Tu residencia aún no está sincronizada. Visítala una vez y vuelve a hablar conmigo.",
+  "carpenter.no_blueprints": "Ahora mismo no hay edificios disponibles para construir en '{{location}}'.",
+  "carpenter.menu_failed": "No se pudo abrir el menú de construcción de '{{location}}'. Inténtalo de nuevo.",
+  "carpenter.need_destination": "Debes reclamar una residencia o restaurar la casa de Isla Jengibre antes de encargar obras.",
+  "carpenter.island_shared": "Isla Jengibre (compartida)",
 
   "residence.friends_only_deny_visit": "Solo los amigos de {{owner}} pueden entrar.",
   "residence.door_locked": "La puerta está cerrada con llave.",
@@ -251,6 +255,9 @@
   "security.pairing_exhausted": "Has agotado los intentos de emparejamiento. Desconectando...",
   "security.pairing_ip_mismatch": "Este código de emparejamiento está vinculado a otra dirección IP.",
   "security.pairing_success": "¡Dispositivo emparejado correctamente como '{{alias}}'!",
+
+  "marnie.need_destination": "Debes reclamar una residencia o restaurar la casa de Isla Jengibre antes de comprar animales.",
+  "marnie.location_not_synced": "La granja aún no está sincronizada. Inténtalo de nuevo en unos segundos.",
 
   "marnie.pet_letter.title": "Un animalito busca hogar",
   "marnie.pet_letter.body": "Querido/a {{player}}:^^Me he enterado de que hace poco preparaste un cuenco de agua junto a tu residencia. Da la casualidad de que estos días ha aparecido un animalito callejero sin hogar cerca de mi rancho.^^Me pasaré por tu parcela muy pronto para que lo conozcas. ¡Espero que tengas un hueco para él!^^   -Marnie",

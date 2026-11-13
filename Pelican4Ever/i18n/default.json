@@ -80,6 +80,10 @@
 
   "carpenter.location_access_failed_host": "Could not access location '{{location}}'. Please try again.",
   "carpenter.location_not_synced_client": "Your residence is not synchronized yet. Visit it once and speak with me again.",
+  "carpenter.no_blueprints": "There are no buildings available to construct in '{{location}}' right now.",
+  "carpenter.menu_failed": "The construction menu for '{{location}}' could not be opened. Please try again.",
+  "carpenter.need_destination": "You must claim a residence or restore the Ginger Island house before commissioning construction work.",
+  "carpenter.island_shared": "Ginger Island (shared)",
 
   "residence.friends_only_deny_visit": "Only friends of {{owner}} may enter.",
   "residence.door_locked": "The door is locked.",
@@ -251,6 +255,9 @@
   "security.pairing_exhausted": "You have exhausted pairing attempts. Disconnecting...",
   "security.pairing_ip_mismatch": "This pairing code is linked to another IP address.",
   "security.pairing_success": "Device paired successfully as '{{alias}}'!",
+
+  "marnie.need_destination": "You must claim a residence or restore the Ginger Island house before buying animals.",
+  "marnie.location_not_synced": "The farm is not synchronized yet. Try again in a few seconds.",
 
   "marnie.pet_letter.title": "A Stray Animal Needs a Home",
   "marnie.pet_letter.body": "Dear {{player}},^^I noticed that you recently placed a pet bowl outside your residence. As it turns out, a stray animal has been wandering near my ranch without a home.^^I will stop by your farm with them soon. Please have some love to spare!^^   -Marnie",
