@@ -8,6 +8,10 @@ namespace Pelican4Ever.Core.Pets
     /// </summary>
     public static class PetAdoptionLogic
     {
+        /// <summary>
+        /// Clave histórica de la carta de Marnie. Se conserva para poder leer partidas antiguas,
+        /// pero el flujo actual ya no envía correo: Marnie se presenta en la puerta tras despertar.
+        /// </summary>
         public const string MarnieMailKey = "Pelican4Ever_MarniePetLetter";
 
         /// <summary>
@@ -44,48 +48,52 @@ namespace Pelican4Ever.Core.Pets
         }
 
         /// <summary>
-        /// Determina si Marnie debe despachar la carta de aviso al buzón del jugador.
-        /// La carta se despacha a partir del día siguiente al de la compra del cuenco.
+        /// Determina si ya ha pasado al menos un "despertar" (un día nuevo) desde la compra del cuenco.
+        /// La visita de Marnie no depende de una carta ni de que el día siguiente sea exactamente el inmediato:
+        /// basta con que el jugador haya dormido una vez desde la compra.
         /// </summary>
-        public static bool ShouldDeliverLetter(PetAdoptionRecord record, int currentGameDay)
+        public static bool HasWokenSincePurchase(PetAdoptionRecord record, int currentGameDay)
         {
             if (record == null)
                 return false;
 
-            return record.State == PetAdoptionState.BowlPurchased
-                && currentGameDay > record.PurchaseGameDay
-                && record.PurchaseGameDay >= 0;
+            if (!IsAwaitingAdoption(record))
+                return false;
+
+            if (record.PurchaseGameDay < 0)
+            {
+                // Partidas antiguas sin día de compra: si la carta ya se entregó, la visita puede completarse.
+                return record.State == PetAdoptionState.LetterDelivered;
+            }
+
+            return currentGameDay > record.PurchaseGameDay;
         }
 
         /// <summary>
-        /// Marca la carta de Marnie como entregada al buzón del cliente.
+        /// Indica si el registro sigue pendiente de la visita de Marnie (compra reciente o flujo antiguo de carta).
         /// </summary>
-        public static bool MarkLetterDelivered(PetAdoptionRecord record)
+        public static bool IsAwaitingAdoption(PetAdoptionRecord record)
         {
-            if (record == null || record.State != PetAdoptionState.BowlPurchased)
-                return false;
-
-            record.State = PetAdoptionState.LetterDelivered;
-            record.UpdatedAtUtc = DateTimeOffset.UtcNow;
-            return true;
+            return record != null
+                && (record.State == PetAdoptionState.BowlPurchased || record.State == PetAdoptionState.LetterDelivered);
         }
 
         /// <summary>
         /// Evalúa si se cumplen las condiciones contextuales para activar la cinemática de adopción.
-        /// Debe ocurrir en el mapa propio del jugador, con tiempo soleado y durante el día.
+        /// Debe ocurrir en el mapa propio del jugador y durante el día. La visita ya no espera a que
+        /// el tiempo sea soleado: Marnie acude igualmente el día en que el jugador despierta.
         /// </summary>
         public static bool CanTriggerAdoptionEvent(
             PetAdoptionRecord record,
             long playerId,
             long currentSlotOwnerId,
             string currentMapName,
-            bool isRaining,
             int timeOfDay)
         {
             if (record == null)
                 return false;
 
-            if (record.State != PetAdoptionState.LetterDelivered)
+            if (!IsAwaitingAdoption(record))
                 return false;
 
             if (playerId <= 0 || currentSlotOwnerId <= 0 || playerId != currentSlotOwnerId)
@@ -95,9 +103,6 @@ namespace Pelican4Ever.Core.Pets
                 return false;
 
             if (!string.Equals(record.FarmSlotId, currentMapName, StringComparison.OrdinalIgnoreCase))
-                return false;
-
-            if (isRaining)
                 return false;
 
             // Horario diurno canónico (entre 06:00 y 20:00)
@@ -116,7 +121,7 @@ namespace Pelican4Ever.Core.Pets
             string? petType = null,
             string? petBreed = null)
         {
-            if (record == null || record.State != PetAdoptionState.LetterDelivered)
+            if (record == null || !IsAwaitingAdoption(record))
                 return false;
 
             if (string.IsNullOrWhiteSpace(petName))
@@ -140,7 +145,7 @@ namespace Pelican4Ever.Core.Pets
         /// </summary>
         public static bool RecordDeclined(PetAdoptionRecord record)
         {
-            if (record == null || record.State != PetAdoptionState.LetterDelivered)
+            if (record == null || !IsAwaitingAdoption(record))
                 return false;
 
             record.State = PetAdoptionState.Declined;

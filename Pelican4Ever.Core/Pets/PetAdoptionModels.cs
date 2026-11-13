@@ -13,7 +13,7 @@ namespace Pelican4Ever.Core.Pets
         /// <summary>El cuenco para la mascota ha sido adquirido en la carpintería.</summary>
         BowlPurchased = 1,
 
-        /// <summary>Marnie ha enviado la carta al buzón del jugador avisando de su visita.</summary>
+        /// <summary>Estado heredado: la carta antigua de Marnie ya fue entregada. Se acepta para completar partidas guardadas antes del flujo de visita directa.</summary>
         LetterDelivered = 2,
 
         /// <summary>Mascota adoptada y vinculada autoritativamente a su cuenco en el mapa.</summary>

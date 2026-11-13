@@ -18,14 +18,15 @@ namespace Pelican4Ever.Modules
 {
     /// <summary>
     /// Gestiona la adopción de mascotas para jugadores clientes al construir un cuenco para mascotas (Épica 20).
-    /// Conecta la compra del cuenco en la carpintería con el despacho de la carta de Marnie al día siguiente
-    /// y la ejecución del evento de adopción en la residencia privada del cliente.
+    /// Conecta la compra del cuenco en la carpintería con la visita de Marnie a la puerta de la residencia
+    /// en el siguiente despertar del jugador (sin carta de por medio) y la vinculación autoritativa de la mascota.
     /// </summary>
     public sealed class ClientPetAdoptionModule : IModule
     {
         private static ModContext? context;
         private static PetAdoptionRecord localRecord = new();
         private static bool isAdoptionPromptActive = false;
+        private static bool wakeTriggerPending = false;
 
         public const string MsgBowlPurchased = "Pelican4Ever.PetBowlPurchased";
         public const string MsgPetAdoptionSync = "Pelican4Ever.PetAdoptionSync";
@@ -44,13 +45,9 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Content.AssetRequested += OnAssetRequested;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
             ctx.Helper.Events.Player.Warped += OnWarped;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
-
-            if (Context.IsMainPlayer)
-            {
-                ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
-            }
 
             try
             {
@@ -65,6 +62,10 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        /// <summary>
+        /// Mantiene la definición histórica de la carta de Marnie en <c>Data/Mail</c> para que las partidas
+        /// que ya la tuvieran en el buzón puedan seguir leyéndola. El flujo actual no vuelve a entregarla.
+        /// </summary>
         private void OnAssetRequested(object? sender, AssetRequestedEventArgs e)
         {
             if (e.NameWithoutLocale.IsEquivalentTo("Data/Mail"))
@@ -82,6 +83,9 @@ namespace Pelican4Ever.Modules
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
             isAdoptionPromptActive = false;
+            wakeTriggerPending = false;
+            localRecord = new PetAdoptionRecord();
+
             if (context == null) return;
 
             if (Context.IsMainPlayer)
@@ -90,6 +94,9 @@ namespace Pelican4Ever.Modules
                 {
                     localRecord = rec.PetAdoption;
                 }
+
+                UpdateWakeTriggerPending();
+                HealStuckPets("carga de partida");
             }
             else
             {
@@ -105,44 +112,80 @@ namespace Pelican4Ever.Modules
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
-            if (!Context.IsMainPlayer || context == null)
+            if (context == null)
                 return;
 
-            int currentGameDay = Game1.Date.TotalDays;
-            bool changed = false;
+            wakeTriggerPending = false;
 
-            foreach (var (playerId, playerRecord) in context.WorldState.Players)
+            if (Context.IsMainPlayer)
             {
-                if (PetAdoptionLogic.ShouldDeliverLetter(playerRecord.PetAdoption, currentGameDay))
+                if (context.WorldState.Players.TryGetValue(Game1.player.UniqueMultiplayerID, out var rec))
                 {
-                    PetAdoptionLogic.MarkLetterDelivered(playerRecord.PetAdoption);
-                    changed = true;
-
-                    Farmer? farmer = Game1.GetPlayer(playerId, false);
-                    if (farmer != null)
-                    {
-                        if (!farmer.mailbox.Contains(PetAdoptionLogic.MarnieMailKey) && !farmer.mailReceived.Contains(PetAdoptionLogic.MarnieMailKey))
-                        {
-                            farmer.mailbox.Add(PetAdoptionLogic.MarnieMailKey);
-                        }
-                    }
-
-                    // Sincronizar al jugador
-                    context.Helper.Multiplayer.SendMessage(
-                        playerRecord.PetAdoption,
-                        MsgPetAdoptionSync,
-                        new[] { context.Manifest.UniqueID },
-                        new[] { playerId }
-                    );
-
-                    context.Monitor.Log($"[ClientPetAdoption] Carta de Marnie despachada al buzón del jugador {playerRecord.PlayerName} ({playerId}).", LogLevel.Info);
+                    localRecord = rec.PetAdoption;
                 }
             }
-
-            if (changed)
+            else
             {
-                context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+                // El host es la autoridad; pedimos el estado actualizado al empezar el día.
+                context.Helper.Multiplayer.SendMessage(
+                    Game1.player.UniqueMultiplayerID,
+                    MsgQueryPetAdoption,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                );
             }
+
+            UpdateWakeTriggerPending();
+
+            if (Context.IsMainPlayer)
+            {
+                HealStuckPets("inicio del día");
+            }
+        }
+
+        /// <summary>
+        /// La IA de <see cref="Pet"/> solo se mueve si <c>CurrentBehavior</c> referencia un comportamiento
+        /// existente en <c>Data/Pets</c>. Las mascotas creadas por este módulo no pasan por
+        /// <c>PetLicense.warpToFarmHouse</c>, que es quien inicializa ese campo en el juego vanilla, así que
+        /// se quedaban inmóviles junto al cuenco. Esta rutina las repara también en partidas ya guardadas.
+        /// </summary>
+        private static void HealStuckPets(string origin)
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return;
+
+            foreach (Pet pet in Utility.getAllPets())
+            {
+                EnsurePetBehavior(pet, origin);
+            }
+        }
+
+        /// <summary>Garantiza que la mascota tenga un comportamiento válido de <c>Data/Pets</c>.</summary>
+        private static void EnsurePetBehavior(Pet pet, string origin)
+        {
+            if (!string.IsNullOrEmpty(pet.CurrentBehavior) && pet.GetCurrentPetBehavior() != null)
+                return;
+
+            pet.CurrentBehavior = "Walk";
+            context?.Monitor.Log(
+                $"[ClientPetAdoption] Comportamiento de la mascota '{pet.displayName}' inicializado a 'Walk' ({origin}).",
+                LogLevel.Trace);
+        }
+
+        /// <summary>
+        /// Marca que en este despertar debe producirse la visita de Marnie si el cuenco se compró antes de dormir.
+        /// </summary>
+        private static void UpdateWakeTriggerPending()
+        {
+            bool pending = PetAdoptionLogic.HasWokenSincePurchase(localRecord, Game1.Date.TotalDays);
+            if (pending && !wakeTriggerPending)
+            {
+                context?.Monitor.Log(
+                    $"[ClientPetAdoption] Visita de Marnie pendiente para {Game1.player?.Name ?? "<jugador>"} en '{localRecord.FarmSlotId}' (estado={localRecord.State}, compra día {localRecord.PurchaseGameDay}, hoy {Game1.Date.TotalDays}).",
+                    LogLevel.Info);
+            }
+
+            wakeTriggerPending = pending;
         }
 
         private void OnWarped(object? sender, WarpedEventArgs e)
@@ -166,10 +209,15 @@ namespace Pelican4Ever.Modules
             if (context == null || isAdoptionPromptActive || !Context.IsPlayerFree)
                 return;
 
-            if (localRecord == null || localRecord.State != PetAdoptionState.LetterDelivered)
+            if (!PetAdoptionLogic.IsAwaitingAdoption(localRecord))
                 return;
 
             if (Game1.currentLocation is not Farm farm)
+                return;
+
+            int today = Game1.Date.TotalDays;
+            bool wokenSincePurchase = PetAdoptionLogic.HasWokenSincePurchase(localRecord, today);
+            if (!wakeTriggerPending && !wokenSincePurchase)
                 return;
 
             string currentMap = farm.NameOrUniqueName;
@@ -178,22 +226,32 @@ namespace Pelican4Ever.Modules
             // Determinar si el jugador local es propietario de esta ranura
             long ownerId = 0;
             var assignment = context.WorldState?.Doors.Values.FirstOrDefault(d => string.Equals(d.FarmSlotId, currentMap, StringComparison.OrdinalIgnoreCase));
+            AnnexAssignment? annex = context.WorldState?.FindAnnexById(currentMap);
             if (assignment != null)
             {
                 ownerId = assignment.OwnerId;
+            }
+            else if (annex != null)
+            {
+                ownerId = annex.OwnerId;
             }
             else if (farm.modData.TryGetValue("Pelican4Ever.OwnerId", out string? ownerStr) && long.TryParse(ownerStr, out long parsedOwner))
             {
                 ownerId = parsedOwner;
             }
+            else if (Context.IsMainPlayer
+                && string.Equals(farm.NameOrUniqueName, "Farm", StringComparison.OrdinalIgnoreCase))
+            {
+                // La granja principal pertenece siempre al anfitrión.
+                ownerId = playerId;
+            }
 
-            if (!PetAdoptionLogic.CanTriggerAdoptionEvent(localRecord, playerId, ownerId, currentMap, Game1.isRaining, Game1.timeOfDay))
+            if (!PetAdoptionLogic.CanTriggerAdoptionEvent(localRecord, playerId, ownerId, currentMap, Game1.timeOfDay))
+            {
                 return;
+            }
 
-            // Validar que el jugador haya recibido la carta
-            if (!Game1.player.mailReceived.Contains(PetAdoptionLogic.MarnieMailKey) && !Game1.player.mailbox.Contains(PetAdoptionLogic.MarnieMailKey))
-                return;
-
+            wakeTriggerPending = false;
             StartAdoptionEvent(farm);
         }
 
@@ -275,7 +333,6 @@ namespace Pelican4Ever.Modules
             farm.characters.Remove(marnie);
             farm.characters.Remove(petPreview);
 
-            localRecord.State = PetAdoptionState.Adopted;
             localRecord.PetName = finalName;
             localRecord.PetType = petType;
             localRecord.PetBreed = petBreed;
@@ -296,6 +353,7 @@ namespace Pelican4Ever.Modules
             }
             else if (context != null)
             {
+                localRecord.State = PetAdoptionState.Adopted;
                 context.Helper.Multiplayer.SendMessage(
                     payload,
                     MsgPetAdopted,
@@ -303,6 +361,9 @@ namespace Pelican4Ever.Modules
                     new[] { Game1.MasterPlayer.UniqueMultiplayerID }
                 );
             }
+
+            if (localRecord.State != PetAdoptionState.Adopted)
+                localRecord.State = PetAdoptionState.Adopted;
 
             Game1.drawObjectDialogue(I18n.Get("marnie.pet_event.accepted", new { petName = finalName }));
             isAdoptionPromptActive = false;
@@ -312,8 +373,6 @@ namespace Pelican4Ever.Modules
         {
             farm.characters.Remove(marnie);
             farm.characters.Remove(petPreview);
-
-            localRecord.State = PetAdoptionState.Declined;
 
             if (Context.IsMainPlayer)
             {
@@ -333,6 +392,8 @@ namespace Pelican4Ever.Modules
                 );
             }
 
+            localRecord.State = PetAdoptionState.Declined;
+
             Game1.drawObjectDialogue(I18n.Get("marnie.pet_event.declined"));
             isAdoptionPromptActive = false;
         }
@@ -348,18 +409,35 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            // Instanciar mascota autoritativa
-            Pet pet = new Pet(payload.BowlTileX, payload.BowlTileY, payload.PetBreed, payload.PetType);
-            pet.Name = payload.PetName;
-            pet.displayName = payload.PetName;
-            pet.homeLocationName.Value = loc.NameOrUniqueName;
-
-            // Vincular al cuenco en el mapa
+            // Localizar el cuenco antes de crear la mascota: su casilla canónica es la de delante
+            // (PetBowl.GetPetSpot), no la del edificio, que bloquea el movimiento.
             var petBowl = loc.buildings.OfType<PetBowl>().FirstOrDefault(b => b.tileX.Value == payload.BowlTileX && b.tileY.Value == payload.BowlTileY)
                           ?? loc.buildings.OfType<PetBowl>().FirstOrDefault();
+            Point petSpot = petBowl?.GetPetSpot() ?? new Point(payload.BowlTileX, payload.BowlTileY);
+
+            // Instanciar mascota autoritativa
+            Pet pet = new Pet(petSpot.X, petSpot.Y, payload.PetBreed, payload.PetType);
+            pet.Name = payload.PetName;
+            pet.displayName = payload.PetName;
+            pet.currentLocation = loc;
+
+            // Vincular al cuenco en el mapa. AssignPet copia el nombre del mapa desde el cuenco,
+            // así que la asignación autoritativa se hace después para no quedar sobrescrita.
             if (petBowl != null)
             {
                 petBowl.AssignPet(pet);
+            }
+
+            pet.homeLocationName.Value = loc.NameOrUniqueName;
+            EnsurePetBehavior(pet, "adopción");
+
+            if (petBowl == null)
+            {
+                context.Monitor.Log($"[ClientPetAdoption] La mascota '{payload.PetName}' se creó sin cuenco asociado en {payload.SlotName} ({payload.BowlTileX}, {payload.BowlTileY}).", LogLevel.Warn);
+            }
+            else
+            {
+                context.Monitor.Log($"[ClientPetAdoption] Cuenco {payload.BowlTileX},{payload.BowlTileY} vinculado a petId {pet.petId.Value}.", LogLevel.Trace);
             }
 
             loc.characters.Add(pet);
@@ -433,6 +511,10 @@ namespace Pelican4Ever.Modules
                 if (e.Type == MsgPetAdoptionSync && e.ReadAs<PetAdoptionRecord>() is { } record)
                 {
                     localRecord = record;
+                    UpdateWakeTriggerPending();
+                    context.Monitor.Log(
+                        $"[ClientPetAdoption] Estado de adopción sincronizado desde el host: estado={record.State}, cuenco en '{record.FarmSlotId}' (compra día {record.PurchaseGameDay}).",
+                        LogLevel.Trace);
                 }
             }
         }

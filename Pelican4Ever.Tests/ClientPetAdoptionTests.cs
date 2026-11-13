@@ -49,7 +49,7 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void ShouldDeliverLetter_EvaluatesGameDayProgressionCorrectly()
+        public void HasWokenSincePurchase_RequiresANewDayAfterPurchase()
         {
             var record = new PetAdoptionRecord
             {
@@ -57,37 +57,34 @@ namespace Pelican4Ever.Tests
                 PurchaseGameDay = 5
             };
 
-            // Mismo día: no debe enviarse todavía
-            Assert.False(PetAdoptionLogic.ShouldDeliverLetter(record, 5));
+            // Mismo día: todavía no ha dormido desde la compra
+            Assert.False(PetAdoptionLogic.HasWokenSincePurchase(record, 5));
 
-            // Día siguiente: debe enviarse
-            Assert.True(PetAdoptionLogic.ShouldDeliverLetter(record, 6));
+            // Siguiente despertar: Marnie debe acudir
+            Assert.True(PetAdoptionLogic.HasWokenSincePurchase(record, 6));
 
-            // Días posteriores: sigue debiendo enviarse si aún no se marcó entregada
-            Assert.True(PetAdoptionLogic.ShouldDeliverLetter(record, 7));
+            // Despertares posteriores: sigue pendiente si aún no se resolvió
+            Assert.True(PetAdoptionLogic.HasWokenSincePurchase(record, 7));
 
-            // Si ya no está en BowlPurchased (ej. ya entregada o adoptada): false
+            // Compatibilidad con partidas antiguas que ya tenían la carta entregada
             record.State = PetAdoptionState.LetterDelivered;
-            Assert.False(PetAdoptionLogic.ShouldDeliverLetter(record, 6));
+            Assert.True(PetAdoptionLogic.HasWokenSincePurchase(record, 6));
 
+            // Estados ya resueltos no vuelven a disparar la visita
             record.State = PetAdoptionState.Adopted;
-            Assert.False(PetAdoptionLogic.ShouldDeliverLetter(record, 6));
-        }
+            Assert.False(PetAdoptionLogic.HasWokenSincePurchase(record, 6));
 
-        [Fact]
-        public void MarkLetterDelivered_TransitionsStateCorrectly()
-        {
-            var record = new PetAdoptionRecord
-            {
-                State = PetAdoptionState.BowlPurchased
-            };
+            record.State = PetAdoptionState.Declined;
+            Assert.False(PetAdoptionLogic.HasWokenSincePurchase(record, 6));
 
-            bool result = PetAdoptionLogic.MarkLetterDelivered(record);
-            Assert.True(result);
-            Assert.Equal(PetAdoptionState.LetterDelivered, record.State);
+            // Sin día de compra válido no se puede determinar el despertar en el flujo nuevo
+            record.State = PetAdoptionState.BowlPurchased;
+            record.PurchaseGameDay = -1;
+            Assert.False(PetAdoptionLogic.HasWokenSincePurchase(record, 6));
 
-            // Intentar marcar de nuevo sobre estado entregado
-            Assert.False(PetAdoptionLogic.MarkLetterDelivered(record));
+            // Los registros heredados con carta entregada pero sin día de compra sí pueden completarse
+            record.State = PetAdoptionState.LetterDelivered;
+            Assert.True(PetAdoptionLogic.HasWokenSincePurchase(record, 6));
         }
 
         [Fact]
@@ -95,17 +92,20 @@ namespace Pelican4Ever.Tests
         {
             var record = new PetAdoptionRecord
             {
-                State = PetAdoptionState.LetterDelivered,
+                State = PetAdoptionState.BowlPurchased,
                 FarmSlotId = "Pelican4Ever_Farm_03"
             };
 
             long playerId = 1001;
             long slotOwnerId = 1001;
             string map = "Pelican4Ever_Farm_03";
-            bool isRaining = false;
             int timeOfDay = 800; // 08:00 AM
 
-            Assert.True(PetAdoptionLogic.CanTriggerAdoptionEvent(record, playerId, slotOwnerId, map, isRaining, timeOfDay));
+            Assert.True(PetAdoptionLogic.CanTriggerAdoptionEvent(record, playerId, slotOwnerId, map, timeOfDay));
+
+            // El flujo antiguo (carta ya entregada) también puede completarse
+            record.State = PetAdoptionState.LetterDelivered;
+            Assert.True(PetAdoptionLogic.CanTriggerAdoptionEvent(record, playerId, slotOwnerId, map, timeOfDay));
         }
 
         [Fact]
@@ -113,26 +113,26 @@ namespace Pelican4Ever.Tests
         {
             var record = new PetAdoptionRecord
             {
-                State = PetAdoptionState.LetterDelivered,
+                State = PetAdoptionState.BowlPurchased,
                 FarmSlotId = "Pelican4Ever_Farm_03"
             };
 
             // Jugador distinto al dueño de la ranura
-            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1002, 1001, "Pelican4Ever_Farm_03", false, 800));
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1002, 1001, "Pelican4Ever_Farm_03", 800));
 
             // Mapa distinto a la residencia del jugador
-            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Farm", false, 800));
-            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_01", false, 800));
-
-            // Lluvia
-            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_03", true, 800));
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Farm", 800));
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_01", 800));
 
             // Fuera de horario (de noche)
-            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_03", false, 2200));
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_03", 2200));
 
-            // Si la carta aún no fue entregada
-            record.State = PetAdoptionState.BowlPurchased;
-            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_03", false, 800));
+            // Un estado ya resuelto no dispara la visita
+            record.State = PetAdoptionState.Adopted;
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_03", 800));
+
+            record.State = PetAdoptionState.Declined;
+            Assert.False(PetAdoptionLogic.CanTriggerAdoptionEvent(record, 1001, 1001, "Pelican4Ever_Farm_03", 800));
         }
 
         [Fact]
@@ -140,7 +140,7 @@ namespace Pelican4Ever.Tests
         {
             var record = new PetAdoptionRecord
             {
-                State = PetAdoptionState.LetterDelivered,
+                State = PetAdoptionState.BowlPurchased,
                 FarmSlotId = "Pelican4Ever_Farm_02"
             };
 
@@ -152,8 +152,12 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Dog", record.PetType);
             Assert.Equal("2", record.PetBreed);
 
-            // No permite nombres vacíos o solo espacios
+            // Compatibilidad con registros antiguos que venían de la carta
             record.State = PetAdoptionState.LetterDelivered;
+            Assert.True(PetAdoptionLogic.RecordAdoption(record, "Luna"));
+
+            // No permite nombres vacíos o solo espacios
+            record.State = PetAdoptionState.BowlPurchased;
             Assert.False(PetAdoptionLogic.RecordAdoption(record, ""));
             Assert.False(PetAdoptionLogic.RecordAdoption(record, "   "));
         }
@@ -163,7 +167,7 @@ namespace Pelican4Ever.Tests
         {
             var record = new PetAdoptionRecord
             {
-                State = PetAdoptionState.LetterDelivered,
+                State = PetAdoptionState.BowlPurchased,
                 FarmSlotId = "Pelican4Ever_Farm_02"
             };
 
@@ -171,6 +175,9 @@ namespace Pelican4Ever.Tests
 
             Assert.True(result);
             Assert.Equal(PetAdoptionState.Declined, record.State);
+
+            // El flujo antiguo ya no puede declinarse dos veces
+            Assert.False(PetAdoptionLogic.RecordDeclined(record));
         }
 
         [Fact]
@@ -178,25 +185,20 @@ namespace Pelican4Ever.Tests
         {
             var enDict = new Dictionary<string, string>
             {
-                ["marnie.pet_letter.title"] = "A Stray Animal Needs a Home",
-                ["marnie.pet_letter.body"] = "Dear {{player}}, Marnie here.",
+                ["marnie.pet_event.intro"] = "Hello, {{player}}! Look who I brought along.",
                 ["marnie.pet_event.accepted"] = "Take care of {{petName}}!"
             };
             var esDict = new Dictionary<string, string>
             {
-                ["marnie.pet_letter.title"] = "Un animalito busca hogar",
-                ["marnie.pet_letter.body"] = "Querido/a {{player}}, te escribe Marnie.",
+                ["marnie.pet_event.intro"] = "¡Hola, {{player}}! Mira a quién te he traído.",
                 ["marnie.pet_event.accepted"] = "¡Cuida de {{petName}}!"
             };
 
             var enProvider = new Pelican4Ever.Core.Localization.DictionaryTranslationProvider(enDict);
             var esProvider = new Pelican4Ever.Core.Localization.DictionaryTranslationProvider(esDict);
 
-            Assert.Equal("A Stray Animal Needs a Home", enProvider.Get("marnie.pet_letter.title"));
-            Assert.Equal("Un animalito busca hogar", esProvider.Get("marnie.pet_letter.title"));
-
-            Assert.Equal("Dear Alex, Marnie here.", enProvider.Get("marnie.pet_letter.body", new { player = "Alex" }));
-            Assert.Equal("Querido/a Alex, te escribe Marnie.", esProvider.Get("marnie.pet_letter.body", new { player = "Alex" }));
+            Assert.Equal("Hello, Alex! Look who I brought along.", enProvider.Get("marnie.pet_event.intro", new { player = "Alex" }));
+            Assert.Equal("¡Hola, Alex! Mira a quién te he traído.", esProvider.Get("marnie.pet_event.intro", new { player = "Alex" }));
 
             Assert.Equal("Take care of Luna!", enProvider.Get("marnie.pet_event.accepted", new { petName = "Luna" }));
             Assert.Equal("¡Cuida de Luna!", esProvider.Get("marnie.pet_event.accepted", new { petName = "Luna" }));
