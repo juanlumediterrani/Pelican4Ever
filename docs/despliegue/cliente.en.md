@@ -4,7 +4,7 @@ How to install the mod on your PC or Steam Deck and join a Pelican 4Ever server 
 playtest server or one you host yourself.
 
 Related: [servidor-preview.en.md](../servidor-preview.en.md) (joining the official playtest
-server) · [host-local.md](host-local.md) · [host-vps.md](host-vps.md)
+server) · [host-local.md](host-local.en.md) · [host-vps.md](host-vps.en.md)
 
 ---
 
@@ -15,37 +15,26 @@ server) · [host-local.md](host-local.md) · [host-vps.md](host-vps.md)
 | Stardew Valley | 1.6.15 (Steam or GOG) |
 | SMAPI | 4.1 or newer (4.1.10+ recommended) |
 | Pelican 4Ever | 0.2.0 (same *major.minor* as the server) |
-| Modpack | **Exact** versions used by the server (below) |
+| Modpack | The same modpack and **the same versions** the server runs |
 
 Always launch the game through **SMAPI**, never through the plain game executable.
 
 ---
 
-## 2. Required modpack (exact versions)
+## 2. Required modpack
 
-During the initial handshake the server verifies that the client declares every mod of the modpack
-**at the exact version the server runs**. If anything is missing or mismatched, the server kicks
-the client during the handshake.
+During the initial handshake the server verifies that the client declares **the full modpack at the
+exact version the server has installed**. If a mod is missing or the version does not match, the
+server kicks the client during the handshake and there is no way in.
 
-| Mod | UniqueID | Reference version |
-| --- | --- | --- |
-| Content Patcher | `Pathoschild.ContentPatcher` | 2.9.1 |
-| SpaceCore | `spacechase0.SpaceCore` | 1.28.4 |
-| Fashion Sense | `PeacefulEnd.FashionSense` | 7.5.0 |
-| Dr4co Dragon Body | `Dr4co.Stardew.FashionSenseBody` | 0.5.0 |
-| Nature In The Valley | `Nature.NatureInTheValley` | 1.3.4 |
-| Nature In The Valley Content | `Nature.NatureInValleyContent` | 1.3.4 |
-| SH's Wild Animals In The Valley | `SmolHooman.WildAnimalsInTheValley` | 1.2.1 |
-| Pelican 4Ever NITV Compat | `Pelican4Ever.NITVCompat` | 1.0.0 |
-| **Pelican 4Ever** | `Pelican4Ever.SVRTMP` | 0.2.0 |
-
-> These are the versions of the reference server. The rule is always the one of the server you are
-> joining: if the host updates a mod in the pack, you must update to the same exact version or you
-> will not get in. The server log says exactly what is missing or mismatched (for example
-> `falta spacechase0.SpaceCore 1.28.4`).
-
-Mods the server does **not** have installed are not required (the ID is ignored with a warning).
-Extra mods on your side are not checked.
+- Ask the host for the modpack they use (or for the list of mods and their versions) and install it
+  **with those exact versions**: the comparison is on the full version string, not *major.minor*.
+- If the host updates a mod in the pack, you must update to the same exact version or you will
+  stop being able to join.
+- Mods the server does **not** have installed are not required; extra mods on your side are not
+  checked.
+- Which mods make up the modpack, and their versions, is listed in
+  [../servidor-preview.en.md](../servidor-preview.en.md).
 
 ---
 
@@ -55,7 +44,8 @@ Extra mods on your side are not checked.
    - **Linux / Steam Deck:** `~/.steam/steam/steamapps/common/Stardew Valley/Mods/`
      (or `~/.local/share/Steam/steamapps/common/Stardew Valley/Mods/`)
    - **Windows:** `C:\Program Files (x86)\Steam\steamapps\common\Stardew Valley\Mods\`
-2. Install the rest of the modpack in the same `Mods/` folder (one folder per mod).
+2. Install the rest of the modpack in the same `Mods/` folder (one folder per mod), at the exact
+   versions the server runs.
 3. Verify that `.../Mods/Pelican4Ever/manifest.json` exists.
 4. **Do not copy the server's `config.json`**: on a client you can delete the generated one and
    SMAPI will rebuild it with the defaults. Only the networking options matter on a client; host

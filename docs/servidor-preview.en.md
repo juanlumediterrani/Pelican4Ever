@@ -7,8 +7,7 @@ day rolls over on its own at 02:00, and the world keeps running when you disconn
 > **The preview server requires the full modpack, at the exact versions.** It is not an "open"
 > server: if a mod is missing or the version does not match, you are kicked on join.
 
-Related: [despliegue/cliente.en.md](despliegue/cliente.en.md) (full client guide) ·
-[despliegue/cliente.md](despliegue/cliente.md)
+Related: [despliegue/cliente.en.md](despliegue/cliente.en.md) (full client guide)
 
 ---
 

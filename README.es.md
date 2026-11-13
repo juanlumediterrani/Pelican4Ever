@@ -18,7 +18,7 @@ El acceso al servidor está protegido mediante autenticación criptográfica de 
 2. **Instala el mod y conecta:** Sigue los pasos de instalación en tu cliente e introduce la IP directa del servidor.
 3. **Solicita aprobación:** Envía tu huella digital pública corta por mensaje directo (DM) a **Dextrure** en Discord para autorizar tu dispositivo permanentemente.
 
-Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servidor preview](docs/servidor-preview.md) (EN: [servidor-preview.en.md](docs/servidor-preview.en.md)).
+Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servidor preview](docs/servidor-preview.md) ([EN](docs/servidor-preview.en.md) · [中文](docs/servidor-preview.zh-CN.md)).
 
 ---
 
@@ -70,10 +70,10 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servid
 
 ## 📚 Documentación Técnica
 
-* [Guía del servidor preview (`docs/servidor-preview.md`)](docs/servidor-preview.md)
-* [Guía de modo cliente (`docs/despliegue/cliente.md`)](docs/despliegue/cliente.md)
-* [Anfitrión en un VPS (`docs/despliegue/host-vps.md`)](docs/despliegue/host-vps.md)
-* [Anfitrión en local (`docs/despliegue/host-local.md`)](docs/despliegue/host-local.md)
+* [Guía del servidor preview](docs/servidor-preview.md) — [EN](docs/servidor-preview.en.md) · [中文](docs/servidor-preview.zh-CN.md)
+* [Guía de modo cliente](docs/despliegue/cliente.md) — [EN](docs/despliegue/cliente.en.md) · [中文](docs/despliegue/cliente.zh-CN.md)
+* [Anfitrión en un VPS](docs/despliegue/host-vps.md) — [EN](docs/despliegue/host-vps.en.md) · [中文](docs/despliegue/host-vps.zh-CN.md)
+* [Anfitrión en local](docs/despliegue/host-local.md) — [EN](docs/despliegue/host-local.en.md) · [中文](docs/despliegue/host-local.zh-CN.md)
 * [Índice de documentación (`docs/README.md`)](docs/README.md)
 * [Diseño del Juego (`design.md`)](design.md)
 * [Arquitectura Técnica (`architecture.md`)](architecture.md)

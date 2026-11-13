@@ -6,16 +6,20 @@ o procedimientos que ya han sido sustituidos por estas guías.
 
 ## Guías de despliegue
 
-| Guía | Para quién | Qué cubre |
-| --- | --- | --- |
-| [`despliegue/host-vps.md`](despliegue/host-vps.md) | Anfitrión | Servidor 24/7 en un VPS Linux: instalación, `Xvfb`, systemd, firewall, copias, actualizaciones y diagnóstico |
-| [`despliegue/host-local.md`](despliegue/host-local.md) | Anfitrión | Partida anfitriona en tu propio equipo: configuración, altas de jugadores, panel web |
-| [`despliegue/cliente.md`](despliegue/cliente.md) | Jugador | Instalar el mod y el modpack, conectarse a un servidor, emparejamiento, comandos de chat |
-| [`despliegue/cliente.en.md`](despliegue/cliente.en.md) | Jugador | The same guide, in English |
-| [`servidor-preview.md`](servidor-preview.md) | Tester | Entrar en el **servidor oficial de pruebas**, con sus requisitos de modpack y la aprobación de dispositivo |
-| [`servidor-preview.en.md`](servidor-preview.en.md) | Tester | The same guide, in English |
+Cada guía existe en **español** (original), **inglés** (`*.en.md`) y **chino simplificado**
+(`*.zh-CN.md`). Los nombres de fichero, comandos, claves de configuración y rutas se mantienen
+idénticos en los tres idiomas.
+
+| Guía | Idiomas | Para quién | Qué cubre |
+| --- | --- | --- | --- |
+| Anfitrión en un VPS | [ES](despliegue/host-vps.md) · [EN](despliegue/host-vps.en.md) · [中文](despliegue/host-vps.zh-CN.md) | Anfitrión | Servidor 24/7 en un VPS Linux: instalación, `Xvfb`, systemd, firewall, copias, actualizaciones y diagnóstico |
+| Anfitrión en local | [ES](despliegue/host-local.md) · [EN](despliegue/host-local.en.md) · [中文](despliegue/host-local.zh-CN.md) | Anfitrión | Partida anfitriona en tu propio equipo: configuración, altas de jugadores, panel web |
+| Modo cliente | [ES](despliegue/cliente.md) · [EN](despliegue/cliente.en.md) · [中文](despliegue/cliente.zh-CN.md) | Jugador | Instalar el mod, conectarse a un servidor, emparejamiento por huella, comandos de chat |
+| Servidor preview | [ES](servidor-preview.md) · [EN](servidor-preview.en.md) · [中文](servidor-preview.zh-CN.md) | Tester | Entrar en el **servidor oficial de pruebas**, con sus requisitos de modpack y la aprobación de dispositivo |
 
 ## Referencia
+
+Los documentos de referencia (API, ADR, arquitectura, backlog) están **solo en español**.
 
 | Documento | Contenido |
 | --- | --- |

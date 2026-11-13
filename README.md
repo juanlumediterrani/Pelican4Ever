@@ -18,7 +18,7 @@ Server access is protected via cryptographic device authentication (`P4E\x02`). 
 2. **Install the mod and connect:** Follow the client installation steps and enter the server's direct IP.
 3. **Request approval:** Send your short public fingerprint via direct message (DM) to **Dextrure** on Discord to permanently authorize your device.
 
-For complete step-by-step instructions, see the [Preview Server Guide](docs/servidor-preview.en.md) (ES: [servidor-preview.md](docs/servidor-preview.md)).
+For complete step-by-step instructions, see the [Preview Server Guide](docs/servidor-preview.en.md) ([ES](docs/servidor-preview.md) · [中文](docs/servidor-preview.zh-CN.md)).
 
 ---
 
@@ -70,10 +70,10 @@ For complete step-by-step instructions, see the [Preview Server Guide](docs/serv
 
 ## 📚 Technical Documentation
 
-* [Preview Server Guide (`docs/servidor-preview.en.md`)](docs/servidor-preview.en.md)
-* [Client Guide (`docs/despliegue/cliente.en.md`)](docs/despliegue/cliente.en.md)
-* [Host on a VPS (`docs/despliegue/host-vps.md`)](docs/despliegue/host-vps.md) — Spanish
-* [Host on your own machine (`docs/despliegue/host-local.md`)](docs/despliegue/host-local.md) — Spanish
+* [Preview Server Guide](docs/servidor-preview.en.md) — [中文](docs/servidor-preview.zh-CN.md) · [ES](docs/servidor-preview.md)
+* [Client Guide](docs/despliegue/cliente.en.md) — [中文](docs/despliegue/cliente.zh-CN.md) · [ES](docs/despliegue/cliente.md)
+* [Host on a VPS](docs/despliegue/host-vps.en.md) — [中文](docs/despliegue/host-vps.zh-CN.md) · [ES](docs/despliegue/host-vps.md)
+* [Host on your own machine](docs/despliegue/host-local.en.md) — [中文](docs/despliegue/host-local.zh-CN.md) · [ES](docs/despliegue/host-local.md)
 * [Documentation index (`docs/README.md`)](docs/README.md)
 * [Game Design (`design.md`)](design.md)
 * [Technical Architecture (`architecture.md`)](architecture.md)
