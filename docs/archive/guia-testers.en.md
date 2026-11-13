@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: English version of the old playtester guide. Superseded by [despliegue/cliente.en.md](../despliegue/cliente.en.md) and [servidor-preview.en.md](../servidor-preview.en.md).
+>
+> Se conserva como registro histórico.
+
 # Playtester Guide: Connection and Testing in Pelican 4Ever
 
 🌐 **Languages:** [Español](guia-testers.md) | English

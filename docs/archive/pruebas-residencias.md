@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Referencia de los comandos de prueba de residencias (`p4e_farm_*`, `p4e_skill`…), que solo funcionan con `EnableTestCommands: true`. El catálogo de comandos vive en [host-api.md](../host-api.md) y en el backlog.
+>
+> Se conserva como registro histórico.
+
 # Pruebas en vivo de los tipos de residencia
 
 Comandos del host para comprobar en partida las mecánicas por tipo de granja de TASK-607 sin esperar días reales ni subir habilidades a mano.

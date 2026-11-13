@@ -38,6 +38,15 @@ p4e_dr4co_sprite off          # vuelve al granjero normal
 p4e_dr4co_sprite on Pepe      # a otro jugador conectado (nombre o id)
 ```
 
+El pack de Putre (`Putre.Stardew.FashionSenseBody`, en `agents/`) se activa igual, con su
+propio comando:
+
+```
+p4e_putre_sprite              # pone el cuerpo de Putre al host
+p4e_putre_sprite off
+p4e_putre_sprite on Pepe
+```
+
 Para otro jugador, el host le envía un mensaje y es su propio cliente quien lo
 aplica (cada cliente es dueño de su granjero), así que tiene que estar
 conectado y con Pelican 4Ever instalado. El cambio queda en el `modData` del

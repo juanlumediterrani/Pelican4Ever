@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Guía del servidor persistente. Sustituida por [despliegue/host-vps.md](../despliegue/host-vps.md) (VPS) y [despliegue/host-local.md](../despliegue/host-local.md) (local).
+>
+> Se conserva como registro histórico.
+
 # Servidor persistente desatendido
 
 Cómo dejar una partida de Pelican 4Ever siempre disponible en una máquina con sesión gráfica (el juego
@@ -12,7 +16,7 @@ cargando la partida desde «Cooperativo → Anfitrión» como siempre.
 | `RestartExitsProcess` (`config.json`) | El reinicio controlado (`p4e_safe_restart`, `POST /api/v1/host/restart`) cierra el juego al llegar al título, para que systemd lo relance con el mod actualizado. Sin esta opción, vuelve al título y la carga automática reabre la partida en el mismo proceso. Requiere `AutoHostSaveName`. |
 | `RolloverLock` (módulo) | Mientras dura la secuencia diaria (guardado pre-cierre, cierre ordenado de peers, avance de día y guardado posterior) el host rechaza las conexiones nuevas (`RolloverLockModule`, aviso en el log, evento `player.rejected` y expulsión al siguiente tick). Es un bloqueo por evento, no por reloj: no hay ventana de mantenimiento fija. La actualización del runtime la gestiona el supervisor parando el servicio (`RestartExitsProcess`), que mientras tanto no acepta conexiones. |
 | `HeadlessRendering` (`config.json`, `true` por defecto) | Con `AutoHostSaveName`, el host deja de dibujar con el mundo cargado: la simulación sigue a 60 Hz y cada cliente dibuja lo suyo. Sin GPU, dibujar por CPU ocupa núcleos enteros aunque nadie mire. Dibuja igualmente en el título, con la pantalla de guardado abierta (el juego la necesita) y mientras haya un préstamo de dibujado (`POST /api/v1/host/render`, `p4e_render <minutos>`, API de mod). Sin efecto si un humano hace de host. |
-| `RequiredClientMods` (`config.json`) | Resto del modpack que se exige a cada cliente, en la versión exacta del servidor (ver `docs/modpack.md`). Vacío = solo Pelican 4Ever. |
+| `RequiredClientMods` (`config.json`) | Resto del modpack que se exige a cada cliente, en la versión exacta del servidor (ver `docs/servidor-preview.md`). Vacío = solo Pelican 4Ever. |
 | `AgentHost` (`config.json`) | Si el host se acuesta, registra el descanso sin salir al título. Imprescindible si el host es un agente. |
 | `deploy/systemd/pelican4ever-host.service` | Lanza SMAPI y lo relanza tras una caída o un reinicio controlado (30 s de espera, como mucho 5 veces en 15 min). No convive con `stardew-voyager-live.service`. |
 

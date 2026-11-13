@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Especificación criptográfica y modelo de amenazas de `P4E\x02`. La decisión vive en [ADR 0007](../adr/0007-dispositivo-identidad-y-acceso-seguro.md).
+>
+> Se conserva como registro histórico.
+
 # Protocolo de Identidad por Dispositivo, Modelo de Amenazas y Prueba Lidgren (TASK-1801)
 
 Este documento establece la arquitectura criptográfica, el modelo de amenazas, la auditoría de fugas de credenciales heredadas y el análisis del enlace con Lidgren para la Épica 18 de Pelican 4Ever.

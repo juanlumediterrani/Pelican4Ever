@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Propuesta de arquitectura de producción (contenedores Hermes + Voyager) que **no se ha implementado**: los `Dockerfile` y el `docker-compose.prod.yml` que describe no existen. La guía de despliegue real está en [despliegue/host-vps.md](../despliegue/host-vps.md).
+>
+> Se conserva como registro histórico.
+
 # Arquitectura de Producción: Pelican 4Ever + Stardew Voyager + Hermes (Nivel C)
 
 Este documento define la arquitectura objetivo para empaquetar y desplegar en una **VPS de producción (mediante contenedores Docker)** el ecosistema completo de servidor persistente multijugador: **Stardew Valley 1.6.15 (Headless)**, **Pelican 4Ever**, **Stardew Voyager** y **Hermes Agent** en **Nivel C** (administración autónoma del contenedor, rol de anfitrión y jugador físico con planificación cognitiva), manteniendo compatibilidad total con el entorno actual de pruebas sobre **OpenClaw**.
@@ -74,7 +78,7 @@ flowchart TB
 
 ### Motivos para separar `pelican-runtime` y `pelican-hermes`
 1. **Cero interrupciones a los jugadores:** Stardew Valley solo guarda al cambiar de día (`02:00 AM`). Si es necesario actualizar Hermes, ajustar una skill, cambiar de modelo LLM o reiniciar el bucle de Capa 2, se puede reiniciar `pelican-hermes` en caliente sin tocar el proceso `StardewModdingAPI`.
-2. **Aislamiento de datos:** `pelican-hermes` no monta la carpeta `Saves/`; solo interactúa con el servidor mediante los comandos autorizados de `voyager` y la [API de Anfitrión v1](host-api.md).
+2. **Aislamiento de datos:** `pelican-hermes` no monta la carpeta `Saves/`; solo interactúa con el servidor mediante los comandos autorizados de `voyager` y la [API de Anfitrión v1](../host-api.md).
 
 ---
 

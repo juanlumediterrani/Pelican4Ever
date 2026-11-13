@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Post-mortem de un fallo puntual de SMAPI 4.5.2 (entradas obsoletas en `SMultiplayer.Peers`). Corregido en `ClientVersionGuardModule`.
+>
+> Se conserva como registro histórico.
+
 # Reconexión y contexto obsoleto en SMAPI 4.5.2
 
 El log del host del 6 de noviembre de 2026 muestra una conexión correcta a

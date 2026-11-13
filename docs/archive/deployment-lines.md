@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Líneas de despliegue internas de la máquina de desarrollo (rutas y ramas concretas de ese equipo). Sustituido por las guías de [despliegue/](../despliegue/).
+>
+> Se conserva como registro histórico.
+
 # Líneas de despliegue: preproducción y desarrollo
 
 Dos líneas Git locales por proyecto, cada una en su worktree, y dos instancias del juego en la misma

@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Guía de testers anterior a la identidad de dispositivo. Sustituida por [despliegue/cliente.md](../despliegue/cliente.md) y [servidor-preview.md](../servidor-preview.md).
+>
+> Se conserva como registro histórico.
+
 # Guía para Testers: Conexión y Pruebas en Pelican 4Ever
 
 🌐 **Idiomas:** Español | [English](guia-testers.en.md)

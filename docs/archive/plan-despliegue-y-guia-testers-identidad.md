@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Plan de despliegue de la Épica 18 (identidad de dispositivo), ya cerrada. La decisión vive en [ADR 0007](../adr/0007-dispositivo-identidad-y-acceso-seguro.md); el procedimiento, en las guías de despliegue.
+>
+> Se conserva como registro histórico.
+
 # Plan de Despliegue y Guía para Testers: Identidad de Dispositivos (Épica 18 / TASK-1807)
 
 > **Documento de Operaciones y Pruebas**  

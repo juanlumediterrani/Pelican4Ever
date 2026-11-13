@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Duplicado de cinco líneas de `deployment-lines.md`. Sin valor propio.
+>
+> Se conserva como registro histórico.
+
 # Development line
 
 `pelican/desarrollo` is the active implementation line. It is separate from `main`, which is the preproduction line; never point this worktree’s deploy target at the preproduction game. The default ModBuildConfig deployment can mutate `GamePath`, so developers must use the development install or pass `-p:EnableModDeploy=false`.

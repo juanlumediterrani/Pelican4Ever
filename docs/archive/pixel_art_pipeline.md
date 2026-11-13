@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Resumen del pipeline de pixel art. La versión vigente es la habilidad `.agents/skills/pixel-art/` y [agents/README.md](../../agents/README.md).
+>
+> Se conserva como registro histórico.
+
 # Pipeline de Creación y Desescalado de Pixel Art para Stardew Valley (Fashion Sense)
 
 Este documento resume la arquitectura integrada para generar, desescalar, auditar y empaquetar skins de personajes 16-bit compatibles con Stardew Valley.
@@ -41,7 +45,7 @@ flowchart LR
 ## 2. Herramientas Interactivas Disponibles
 
 - **Visor interactivo en el navegador:**
-  - Abre en tu navegador [`agents/sprite_viewer.html`](../agents/sprite_viewer.html) para probar cualquier skin en las 4 direcciones, pausar, avanzar paso a paso y ajustar zoom y velocidad.
+  - Abre en tu navegador `agents/sprite_viewer.html` (fichero retirado del repositorio) para probar cualquier skin en las 4 direcciones, pausar, avanzar paso a paso y ajustar zoom y velocidad.
 - **Auditoría por comando:**
   ```bash
   python3 .agents/skills/pixel-art/scripts/quality_audit.py --image agents/Putre/body.png --grid 8

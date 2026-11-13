@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Procedimiento de una migración puntual (un jugador de la beta cerrada al sistema de claves). No se repite: el flujo actual está en [despliegue/host-local.md](../despliegue/host-local.md) § Dar de alta a los vecinos.
+>
+> Se conserva como registro histórico.
+
 # Plan de Migración de Identidad y Restauración Segura (TASK-1804)
 
 > **Documento de Referencia Técnica y Operativa**  

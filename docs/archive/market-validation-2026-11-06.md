@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Informe de validación con fecha fija. El arreglo descrito ya está en el código (0.2.0).
+>
+> Se conserva como registro histórico.
+
 # Mercado: entrega a jugadores remotos · 2026-11-06
 
 ## Problema reproducido

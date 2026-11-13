@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Procedimiento de migración de partidas de una versión anterior (residencias incrustadas en la granja del host) a la Plaza Central y los puentes. De un solo uso; el script sigue en `scripts/migrate_save_to_plaza.py`.
+>
+> Se conserva como registro histórico.
+
 # Guía de Migración de Partidas Guardadas: `origin/main` a Plaza Central y Puentes
 
 Esta guía documenta el procedimiento oficial para migrar una partida guardada creada bajo la arquitectura previa de `origin/main` (donde los 16 accesos a residencias estaban incrustados exclusivamente en el mapa de la Granja Host) a la nueva arquitectura canónica de **Plaza Central y Puentes** (`refactor/residence-entrances`).

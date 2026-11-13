@@ -1,0 +1,37 @@
+# Pelican 4Ever · servidor 24/7 en VPS (ver docs/despliegue/host-vps.md).
+# Unidad de SISTEMA (no de usuario): no depende de una sesión gráfica.
+# El juego necesita un contexto gráfico aunque no dibuje: Xvfb se encarga.
+# Requisitos en config.json: AutoHostSaveName, RestartExitsProcess: true, AdminApiToken propio.
+[Unit]
+Description=Pelican 4Ever · servidor persistente en VPS (SMAPI)
+Requires=pelican4ever-vps-xvfb.service
+After=pelican4ever-vps-xvfb.service network-online.target
+# Si el juego o el mod fallan al arrancar, no entrar en un bucle de relanzamientos
+StartLimitIntervalSec=900
+StartLimitBurst=5
+
+[Service]
+Type=exec
+# El juego y las partidas nunca como root
+User=pelican4ever
+Group=pelican4ever
+Environment=STARDEW_DIR=/opt/pelican4ever/game
+Environment=HOME=/var/lib/pelican4ever
+Environment=XDG_CONFIG_HOME=/var/lib/pelican4ever/.config
+Environment=XDG_DATA_HOME=/var/lib/pelican4ever/.local/share
+Environment=XDG_CACHE_HOME=/var/lib/pelican4ever/.cache
+Environment=DISPLAY=:99
+Environment=TZ=Europe/Madrid
+EnvironmentFile=-/etc/pelican4ever/host.env
+WorkingDirectory=/opt/pelican4ever/game
+ExecStart=/bin/sh -c 'cd "$STARDEW_DIR" && exec ./StardewModdingAPI'
+# Relanzar tras una caída y tras un reinicio controlado (que cierra el proceso con código 0)
+Restart=always
+RestartSec=30
+# El guardado del cambio de día puede tardar: dar margen antes de matar el proceso
+TimeoutStopSec=120
+# SMAPI termina con 143 al recibir SIGTERM en una parada ordenada: no es un fallo
+SuccessExitStatus=143
+
+[Install]
+WantedBy=multi-user.target

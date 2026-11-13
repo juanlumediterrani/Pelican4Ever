@@ -18,7 +18,7 @@ El acceso al servidor está protegido mediante autenticación criptográfica de 
 2. **Instala el mod y conecta:** Sigue los pasos de instalación en tu cliente e introduce la IP directa del servidor.
 3. **Solicita aprobación:** Envía tu huella digital pública corta por mensaje directo (DM) a **Dextrure** en Discord para autorizar tu dispositivo permanentemente.
 
-Para ver las instrucciones detalladas paso a paso, consulta la [Guía para Testers](docs/guia-testers.md).
+Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servidor preview](docs/servidor-preview.md) (EN: [servidor-preview.en.md](docs/servidor-preview.en.md)).
 
 ---
 
@@ -35,7 +35,7 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía para Teste
 - **Red de Portales:** 16 residencias individuales distribuidas entre la Plaza Central (`Farm`) y una cadena determinista de puentes (`Pelican4Ever_Bridge_1..3`).
 - **8 Tipos de Granja Oficiales:** Elección entre Estándar, Fluvial, Bosque, Colinas, Salvaje, Cuatro Esquinas, Playa y Pradera (Meadowlands), con forraje activo, estanques de pesca, minerales y criaturas nocturnas adaptadas a cada bioma.
 - **Cueva Privada Individual:** Cada granjero elige de forma independiente si desea murciélagos de fruta o setas para su cueva personal.
-- **Anexos Temáticos en Miniatura (40×32):** Expansiones de terreno adquiribles compuestas al 100% con piezas y tilesets vanilla (ADR 0007 / Épica 9.1), con variantes de entrada única, cierres perimetrales naturales de agua/acantilado y saneamiento automático de despojos al recargar la partida (MapVersion 3).
+- **Anexos Temáticos en Miniatura (40×32):** Expansiones de terreno adquiribles compuestas al 100% con piezas y tilesets vanilla (ADR 0003 / ADR 0005), con variantes de entrada única, cierres perimetrales naturales de agua/acantilado y saneamiento automático de despojos al recargar la partida (MapVersion 3).
 - **Políticas de Acceso y Anti-Griefing:** Seguridad configurable por residencia (`Locked`, `Friends`, `Public`) con gestión dinámica de listas de amigos y permisos de construcción para visitantes mediante el comando `/residencia`.
 - **Culling Dinámico de Red:** Las residencias y anexos sin jugadores presentes no consumen ancho de banda ni saturan la red de los clientes.
 
@@ -56,7 +56,7 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía para Teste
 - **API REST Versionada (`/api/v1/host/`):** Contrato HTTP local seguro para controlar el reloj, gestionar anuncios, expulsar infractores, organizar tandas festivas y consumir el flujo incremental de eventos (`events?since=N`).
 - **Comandos de Consola Remotos:** Ejecución remota y segura de comandos administrativos whitelisted a través de la API REST.
 - **Reinicio Seguro Programado (`p4e_safe_restart`):** Calcula el progreso en riesgo de los jugadores antes de programar reinicios limpios con persistencia garantizada.
-- **Modo Servidor Headless:** Permite al servidor dedicado ejecutarse sin dibujado gráfico en Linux, minimizando el consumo de CPU y RAM.
+- **Operación Headless:** Un anfitrión dedicado puede funcionar en Linux sin dibujado gráfico, reduciendo mucho el consumo de CPU y RAM. El juego sigue necesitando una pantalla virtual (`Xvfb`): lo que se suprime es el *dibujado*, no la simulación.
 
 ### 6. Integración con Agentes Autónomos y Cosméticos
 - **Modo `AgentHost`:** Diseñado para anfitriones autónomos (como Stardew Voyager o Putre), permitiendo registrar descansos diarios sin cerrar la sesión de red.
@@ -70,19 +70,17 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía para Teste
 
 ## 📚 Documentación Técnica
 
-* [Guía para Testers (`docs/guia-testers.md`)](docs/guia-testers.md)
-* [Plan de Despliegue de Identidad y Operaciones (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
-* [Protocolo de Identidad y Modelo de Amenazas (`docs/protocolo-identidad-y-modelo-amenazas.md`)](docs/protocolo-identidad-y-modelo-amenazas.md)
+* [Guía del servidor preview (`docs/servidor-preview.md`)](docs/servidor-preview.md)
+* [Guía de modo cliente (`docs/despliegue/cliente.md`)](docs/despliegue/cliente.md)
+* [Anfitrión en un VPS (`docs/despliegue/host-vps.md`)](docs/despliegue/host-vps.md)
+* [Anfitrión en local (`docs/despliegue/host-local.md`)](docs/despliegue/host-local.md)
+* [Índice de documentación (`docs/README.md`)](docs/README.md)
 * [Diseño del Juego (`design.md`)](design.md)
 * [Arquitectura Técnica (`architecture.md`)](architecture.md)
 * [Backlog de Iteraciones y Épicas (`backlog.md`)](backlog.md)
 * [Especificación de la API de Anfitrión (`docs/host-api.md`)](docs/host-api.md)
-* [Guía del Modpack persistente (`docs/modpack.md`)](docs/modpack.md)
-* [Servidor persistente desatendido (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
-* [Arquitectura de Producción con Hermes (`docs/arquitectura-produccion-hermes.md`)](docs/arquitectura-produccion-hermes.md)
 * [Decisiones de Arquitectura (`docs/adr/`)](docs/adr/)
 * [Guía de Sprites y Cosméticos para Agentes (`agents/README.md`)](agents/README.md)
-* [Pipeline de Generación Pixel Art (`docs/pixel_art_pipeline.md`)](docs/pixel_art_pipeline.md)
 
 ---
 
@@ -103,8 +101,8 @@ Pelican4Ever.sln
 │   └── World/              # Residencias, portales, anexos temáticos, tipos de granja y cuevas
 ├── Pelican4Ever/           # Mod SMAPI (.NET 6, ensamblado con parches Harmony)
 │   ├── Framework/          # ModContext, IModule, routing espacial y clonación de mapas
-│   └── Modules/            # 31 módulos SMAPI desacoplados con registro defensivo
-└── Pelican4Ever.Tests/     # Suite de 1.313 pruebas unitarias y de integración en xUnit (.NET 8)
+│   └── Modules/            # 30 módulos SMAPI desacoplados con registro defensivo
+└── Pelican4Ever.Tests/     # Suite de más de 1.300 pruebas unitarias y de integración en xUnit (.NET 8)
 ```
 
 ---
@@ -133,7 +131,7 @@ Pelican4Ever.sln
 
 ## 🐳 Despliegue con Docker Compose (Servidor Dedicado 24/7)
 
-El proyecto incluye soporte para ejecución desatendida mediante [docker-compose.yml](docker-compose.yml) apoyado sobre la imagen de `JunimoServer`:
+El proyecto incluye un [docker-compose.yml](docker-compose.yml) listo para usar, apoyado sobre la imagen de `JunimoServer`, para probar un servidor desatendido:
 
 1. Crea tu archivo de variables de entorno a partir de la plantilla:
    ```bash
@@ -153,3 +151,7 @@ El proyecto incluye soporte para ejecución desatendida mediante [docker-compose
    - `24642/udp`: Puerto multijugador nativo (Lidgren/Galaxy).
    - `8085`: API REST y Dashboard web de administración (`http://localhost:8085/`).
    - `5900`: VNC opcional para inspección visual remota.
+
+> El `compose` monta la build de **Debug** y usa una imagen sin versión fijada: es una comodidad
+> para probar, no un montaje de producción. Para un despliegue 24/7 de verdad (systemd, `Xvfb`,
+> firewall, copias y actualizaciones) sigue la guía **[Anfitrión en un VPS](docs/despliegue/host-vps.md)**.

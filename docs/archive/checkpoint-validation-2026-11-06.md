@@ -1,3 +1,7 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Informe de validación con fecha fija (SHAs de commits y binarios concretos). Su conclusión de bloqueo fue superada por el arreglo del mercado. Procedimiento vivo: [despliegue/host-vps.md](../despliegue/host-vps.md) § Copias de seguridad.
+>
+> Se conserva como registro histórico.
+
 # Validación local de checkpoints · 2026-11-06
 
 > Actualización posterior: el usuario autorizó la promoción conservando los checkpoints automáticos desactivados. Se publicaron `main` (`280802e`) y `dev` (`c16679a`). Este documento conserva los resultados de la primera validación; la corrección posterior del mercado se documenta en [su informe](market-validation-2026-11-06.md).

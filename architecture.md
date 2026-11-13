@@ -61,7 +61,7 @@ Pelican4Ever.sln
 │       ├── EconomyModule.cs             # (Iteración 3) SatietyBudget, Spa, precios y minas 12h
 │       ├── GroundSitModule.cs           # Sentarse en el suelo (tecla GroundSitKey), pose sincronizada entre jugadores
 │       └── WorldLifeModule.cs           # (Iteración 4) Micro-wandering de NPCs y festivales
-└── Pelican4Ever.Tests/                  # Suite xUnit (.NET 8) sobre Pelican4Ever.Core (793 tests)
+└── Pelican4Ever.Tests/                  # Suite xUnit (.NET 8) sobre Pelican4Ever.Core (1.300+ tests)
 ```
 
 ---
@@ -107,8 +107,10 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 * **Tiempo continuo sin pausas:**
   * Se parchea `Game1.shouldTimePass` (y en modo servidor dedicado se impide que `DedicatedServer.Tick` fije `Game1.netWorldState.Value.IsPaused = true` cuando no hay jugadores conectados y que los menús/eventos individuales pausen `IsTimePaused`).
 
-#### C. Rollover Diario Nativo a las `06:00 AM` (`DailyRolloverModule`)
-* A las `06:00:00` reales, el Host sincroniza la fecha objetivo con `ServerCalendar` y fuerza la transición diaria nativa (`Game1.NewDay(0f)` / `ReadyCheck` de sueño automático), dejando que `_newDayAfterFade()` ejecute todo el pipeline de cambio de día y `SaveGame.Save()`.
+#### C. Rollover Diario Nativo a las `02:00 AM` (`DailyRolloverModule`)
+* A las `02:00:00` reales (`CalendarDayChangeTime`), el Host sincroniza la fecha objetivo con `ServerCalendar` y fuerza la transición diaria nativa (`Game1.NewDay(0f)` / `ReadyCheck` de sueño automático), dejando que `_newDayAfterFade()` ejecute todo el pipeline de cambio de día y `SaveGame.Save()`.
+* A las `06:00` reales (`DayStartTime`) arranca el reloj del juego y los horarios de los NPC: el cambio de fecha de madrugada no adelanta las rutinas diurnas.
+* Antes del cierre se avisa a los jugadores (`RolloverWarningMinutes`, 10 por defecto), se genera una copia de seguridad con firma SHA-256 y se cierran los peers de forma ordenada; si el backup o la desconexión no se verifican, el día **no** avanza.
 * En `DayStarted`:
   * Evalúa `SleepPolicy.Evaluate` sobre cada `PlayerRecord` del día que acaba de cerrarse.
   * Aplica `SleepPolicy.WakeUpEnergy` y `SleepPolicy.MedicalFee` sobre el `Farmer` correspondiente (usando carteras separadas `useSeparateWallets`).
@@ -151,7 +153,7 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 1. **Saciedad en `Farmer.doneEating` (líneas 8851–8945, ADR-0006):**
    * En `Farmer.doneEating()`, el motor suma `Stamina = Math.Min(MaxStamina, Stamina + @object.staminaRecoveredOnConsumption())` y `health = Math.Min(maxHealth, health + @object.healthRecoveredOnConsumption())` y aplica los `GetFoodOrDrinkBuffs()`.
    * `Prefix` guarda `float prevStamina = __instance.Stamina`.
-   * `Postfix` aplica primero el vaciado continuo (`PlayerRecord.UpdateSatietyDecay`), calcula `int requestedGain = (int)Math.Round(__instance.Stamina - prevStamina)`, consulta `SatietyBudget.AllowedGain(requestedGain, record.Satiety, capacidad)` y fija `__instance.Stamina = prevStamina + allowedGain` (respetando casos especiales como `Stardrop (O)434`). Si el ítem es un plato cocinado (`Category == Object.CookingCategory`) y quedan huecos en `MaxDailyWellFedBuffs`, activa "Bien comido" (`PlayerRecord.TryActivateWellFed`), que permite recuperar energía sentado (`SittingRegenLogic`, `1 punto / 5 s`) durante 60 min.
+   * `Postfix` aplica primero el vaciado continuo (`PlayerRecord.UpdateSatietyDecay`), calcula `int requestedGain = (int)Math.Round(__instance.Stamina - prevStamina)`, consulta `SatietyBudget.AllowedGain(requestedGain, record.Satiety, capacidad)` y fija `__instance.Stamina = prevStamina + allowedGain` (respetando casos especiales como `Stardrop (O)434`). Con **cualquier comida** (no solo platos cocinados) y si la saciedad llega al umbral `WellFedSatietyThresholdFraction` (1/4) y quedan huecos en `MaxDailyWellFedBuffs`, activa "Bien comido" (`PlayerRecord.TryActivateWellFed`), que permite recuperar energía sentado (`SittingRegenLogic`, `1 punto / 5 s`) durante 60 min.
    * En `OneSecondUpdateTicked`, 30 s quieto en el agua activan una vez al día el buff del Spa (`PlayerRecord.TryActivateSpaBuff`), que reparte `120` de energía y `120` de salud en 120 min (`PassiveRegenLogic`).
 2. **Persistencia de Minas por Turnos de 12h (`06:00` y `18:00`):**
    * En `MineShaft.UpdateMines10Minutes` (línea 4788), el motor llama en cada tick de 10 minutos a `MineShaft.clearInactiveMines()` (privado estático, línea 4704), que descarga todos los niveles donde no hay jugadores. Al cambiar de día (`Game1.cs` línea 7925) llama a `MineShaft.clearActiveMines()`.
@@ -172,9 +174,10 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 
 Las decisiones arquitectónicas clave y sus alternativas descartadas están documentadas en [`docs/adr/`](docs/adr/):
 
-* **ADR-0001:** Rollover diario mediante el pipeline nativo `NewDay` + `Save` a las `06:00 AM`.
+* **ADR-0001:** Rollover diario mediante el pipeline nativo `NewDay` + `Save` a las `02:00 AM` (amanecer a las `06:00 AM`).
 * **ADR-0002:** Reloj 1:1 (`0600–2550`) con congelación en Madrugada (`NightHold`) y calendario derivado de `CalendarEpoch`.
-* **ADR-0003:** 4 huecos de granja declarativos (`Data/Locations`) con plantilla Estándar para el MVP.
+* **ADR-0003:** Huecos de granja declarativos (`Data/Locations`) con plantilla Estándard para el MVP.
 * **ADR-0004:** Autoridad en el Host (`ServerWorldState`), mod obligatorio en clientes y registro modular aislado (`IModule`).
 * **ADR-0005:** Plaza Central en la Granja Host y Mapas Puente Declarativos (`Data/Locations`) para el escalado de hasta 16 residencias privadas.
 * **ADR-0006:** Energía por sesiones: Saciedad con vaciado continuo, "Bien comido" que activa el descanso sentado y buff diario del Spa.
+* **ADR-0007:** Identidad asimétrica por dispositivo (ECDSA P-256) y desafío `P4E\x02` en el saludo de Lidgren.

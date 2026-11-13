@@ -15,7 +15,7 @@ El motor de Stardew Valley codifica el reloj en formato entero (`0600` a `2600`)
 
 * **Inicio del día (`06:00` real = `0600` juego):** El día de juego comienza a las **06:00 AM** de la zona horaria del servidor (ej. `Europe/Madrid`).
 * **Avance 1:1 (`06:00` a `01:50` real → `0600` a `2550` juego):** Cada 10 minutos reales el reloj avanza 10 minutos de juego (`600` → `2400` a medianoche → `2550` a las `01:50 AM`).
-* **Tramo de Madrugada (`01:50` a `06:00` real → congelado en `2550`):** A partir de las `01:50 AM` reales, el reloj entra en estado **`NightHold`** (congelado en `2550`, nunca llega a `2600`). Los jugadores noctámbulos pueden seguir pescando, minando o decorando sin sufrir desmayo por horario; al llegar el Rollover de las `06:00 AM`, el motor procesa automáticamente los minutos restantes de madrugada (`2550 → 0600`) sobre hornos y máquinas mediante `Utility.CalculateMinutesUntilMorning`.
+* **Tramo de Madrugada (`01:50` a `06:00` real → congelado en `2550`):** A partir de las `01:50 AM` reales, el reloj entra en estado **`NightHold`** (congelado en `2550`, nunca llega a `2600`). Los jugadores noctámbulos pueden seguir pescando, minando o decorando sin sufrir desmayo por horario; al llegar el Rollover de las `02:00 AM` el motor procesa los minutos restantes de madrugada (`2550 → 0600`) sobre hornos y máquinas.
 * **Iluminación ambiental continua:** Interpolada suavemente en cada tramo de 10 minutos reales (`MillisecondsIntoSlot` sobre `600.000 ms`).
 
 ### 2.2. Calendario Perpetuo Basado en Época (`CalendarEpoch`)
@@ -25,13 +25,14 @@ El motor de Stardew Valley codifica el reloj en formato entero (`0600` a `2600`)
   * El Día 1 de cada estación es siempre **Lunes real** y el Día 7 es siempre **Domingo real**.
   * Si el servidor sufre una caída durante la noche, al arrancar compara `Game1.Date.TotalDays` con la fecha derivada del calendario real y aplica el plan de recuperación (`CatchUpPlan`: ejecuta hasta `MaxCatchUpRollovers` seguidos o salta a la fecha actual).
 
-### 2.3. El "Rollover" Diario Nativo (`06:00 AM`)
+### 2.3. El "Rollover" Diario Nativo (`02:00 AM`)
 
-Todos los días a las **06:00 AM (hora del servidor)** se ejecuta la transición diaria apoyándose en el **flujo nativo del motor (`Game1.NewDay` + `SaveGame.Save`)**:
+Todos los días a las **02:00 AM (hora del servidor)** se ejecuta la transición diaria apoyándose en el **flujo nativo del motor (`Game1.NewDay` + `SaveGame.Save`)**:
 
-1. **Avisos previos:** Se notifican avisos en el HUD a los jugadores conectados **15, 5 y 1 minuto** antes del corte (`05:45`, `05:55`, `05:59`).
-2. **Transición nativa segura:** Si hay jugadores conectados a las `06:00 AM`, verán la pantalla nativa de fin de día y guardado (10–25 segundos). Forzar el flujo nativo garantiza que se ejecuten sin fisuras todas las rutinas de Stardew Valley 1.6 (crecimiento de cultivos, `Shipping Bins` personales, correo, clima, suerte, animales, amistad, `netWorldState` y serialización XML).
-3. **Resolución de descanso y copia de seguridad:** Al completarse el cambio de día se evalúa la política de sueño de cada jugador registrado y se guarda un backup rotativo de la carpeta del save.
+1. **Aviso previo:** Se notifica un aviso en el HUD a los jugadores conectados **10 minutos** antes del corte (`01:50`, `RolloverWarningMinutes`).
+2. **Transición nativa segura:** Si hay jugadores conectados a las `02:00 AM`, verán la pantalla nativa de fin de día y guardado (10–25 segundos). Forzar el flujo nativo garantiza que se ejecuten sin fisuras todas las rutinas de Stardew Valley 1.6 (crecimiento de cultivos, `Shipping Bins` personales, correo, clima, suerte, animales, amistad, `netWorldState` y serialización XML).
+3. **Resolución de descanso y copia de seguridad:** Antes de cerrar los peers se genera una **copia de seguridad con firma SHA-256**; al completarse el cambio de día se evalúa la política de sueño de cada jugador registrado. Si el backup o la desconexión ordenada no se verifican, el día **no** avanza.
+4. **Amanecer a las `06:00 AM`:** El reloj del juego y los horarios de los NPC arrancan a las `06:00 AM` reales; el cambio de fecha de madrugada no adelanta las rutinas diurnas.
 
 ---
 
@@ -39,9 +40,9 @@ Todos los días a las **06:00 AM (hora del servidor)** se ejecuta la transición
 
 El estado autoritativo de cada jugador reside únicamente en el servidor (`ServerWorldState.Players[UID]`). Los estados `SleepState` se **derivan** a partir de `LastActiveGameDay`, `RestedOnGameDay` y `LastOutcome`:
 
-| Estado Derivado | Condición | Efecto al cerrar el día en el Rollover (`06:00 AM`) |
+| Estado Derivado | Condición | Efecto al cerrar el día en el Rollover (`02:00 AM`) |
 | --- | --- | --- |
-| **`Awake`** | Conectado hoy (`isOnline` o `LastActiveGameDay == hoy`) y aún no ha usado la cama (`RestedOnGameDay != hoy`). | Si llega el Rollover de las `06:00 AM` sin haber descansado (o sigue conectado fuera de la cama), **sufre penalización única** (`RolloverOutcome.Penalized`) y pasa a `OfflinePenalized`. |
+| **`Awake`** | Conectado hoy (`isOnline` o `LastActiveGameDay == hoy`) y aún no ha usado la cama (`RestedOnGameDay != hoy`). | Si llega el Rollover de las `02:00 AM` sin haber descansado (o sigue conectado fuera de la cama), **sufre penalización única** (`RolloverOutcome.Penalized`) y pasa a `OfflinePenalized`. |
 | **`Rested`** | El jugador se mete en su cama, selecciona *"Descansar y Desconectar"* (`RestedOnGameDay == hoy`) y sale al menú. | Sin penalización (`RolloverOutcome.Rested`). Despierta con el **100% de su Energía** y pasa a `OfflineSafe`. |
 | **`OfflineSafe`** | No ha entrado en el día en curso y su último resultado fue `Rested` o `Untouched`. | Permanece intacto (`RolloverOutcome.Untouched`) aunque pase días o semanas sin conectarse. |
 | **`OfflinePenalized`** | No ha entrado en el día en curso y su último resultado fue `Penalized`. | La penalización (10% del oro personal hasta `1.000g` y **50% de Energía**) se aplica **una sola vez**. En días posteriores sin conectarse devuelve `Untouched` y no vuelve a penalizar. |
@@ -56,7 +57,7 @@ El estado autoritativo de cada jugador reside únicamente en el servidor (`Serve
    * **Barra base:** El jugador empieza la jornada con su barra de energía (`270` base + *Stardrops*).
    * **Ritmo de sesiones:** una sesión dura entre 30 min y 1 h 30 min. El punto dulce es conectarse 30–45 min varias veces al día: tras 4 h desconectado, la barra está llena (`OfflineRegenFullBarHours = 4`) y la Saciedad, vacía. Quien quiera seguir jugando se sienta a descansar; el jugador intensivo puede continuar, pero a un ritmo más relajado.
    * **Saciedad (Comida con sentido):** Comer alimentos **sí restaura Energía instantánea**, además de Salud (*Health*) y *Buffs*, hasta llenar una **capacidad de Saciedad** equivalente al **50% de su energía máxima** (`DailySatietyFraction = 0.5`, es decir, `135` en una barra de 270). La Saciedad se **vacía de forma continua en 4 horas reales** (`SatietyDrainHours = 4`), conectado o no, y no se reinicia al cambiar de día ni al reconectar. Con la Saciedad llena se puede seguir comiendo para curar Vida o mantener *Buffs*, pero sin ganar Energía instantánea.
-   * **Platos Cocinados ("Bien comido"):** Hasta **2 veces al día** (`MaxDailyWellFedBuffs = 2`), comer un plato cocinado activa "Bien comido" durante 60 minutos. Mientras dura, **sentarse** en un banco, silla o la taberna, o **en el suelo** (tecla `GroundSitKey`, por defecto `.`), recupera `1 punto de Energía cada 5 segundos` (`SittingRegenSeconds = 5`, `12/min`). Sin "Bien comido", sentarse no recupera nada.
+   * **"Bien comido" (cualquier comida):** Hasta **2 veces al día** (`MaxDailyWellFedBuffs = 2`), comer cualquier alimento con la saciedad por encima del umbral (`WellFedSatietyThresholdFraction = 1/4`) activa "Bien comido" durante 60 minutos. Mientras dura, **sentarse** en un banco, silla o la taberna, o **en el suelo** (tecla `GroundSitKey`, por defecto `.`), recupera `1 punto de Energía cada 5 segundos` (`SittingRegenSeconds = 5`, `12/min`). Sin "Bien comido", sentarse no recupera nada.
    * **Spa (una vez al día):** Quedarse **30 segundos quieto** dentro del agua del Spa o de la piscina activa un buff de **recuperación pasiva de `120` de Energía y `120` de Salud en 2 horas** (`1 punto/min` de cada uno), aunque luego se salga del agua. Solo se puede activar una vez al día.
 
 2. **Persistencia de Minas por Turnos (12 Horas):**
@@ -118,7 +119,7 @@ El estado autoritativo de cada jugador reside únicamente en el servidor (`Serve
 
 ## 8. Riesgos Conocidos y Límites de Alcance
 
-* **Pérdida máxima en caso de crash del host:** Como Stardew Valley solo serializa el guardado completo en `NewDay`, una caída abrupta del contenedor antes de las `06:00 AM` puede perder el progreso del día en curso. Se mitiga con contenedor supervisado (`restart: unless-stopped`), backups automáticos tras cada Rollover y comando de guardado de emergencia (`p4e_rollover_now`) para administradores.
+* **Pérdida máxima en caso de crash del host:** Como Stardew Valley solo serializa el guardado completo en `NewDay`, una caída abrupta antes de las `02:00 AM` puede perder el progreso del día en curso. Se mitiga con un supervisor (`systemd` con `Restart=always` o contenedor con `restart: unless-stopped`), backups automáticos con SHA-256 tras cada Rollover, checkpoints intradía (`CheckpointIntervalMinutes`) y el reinicio controlado (`POST /api/v1/host/restart`), que espera al próximo guardado antes de cerrar el proceso.
 * **Fuera de alcance del MVP:**
   * Anti-cheat criptográfico contra clientes que modifiquen la DLL local (se asume servidor privado con comprobación de versión en `ClientVersionGuardModule`).
   * Reglas específicas de `Game1.whichFarm` por jugador (en el MVP las 4 granjas usan la plantilla Estándar).

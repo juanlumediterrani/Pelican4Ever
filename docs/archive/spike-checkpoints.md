@@ -1,6 +1,10 @@
+> **Documento archivado (2026-11-13).** No lo actualices: Informe del spike de checkpoints intradía, con fecha y resultados de una máquina concreta. El procedimiento vive en [despliegue/host-vps.md](../despliegue/host-vps.md) § Copias de seguridad.
+>
+> Se conserva como registro histórico.
+
 # Spike de checkpoints intradía (TASK-1601)
 
-Guía para comprobar en partida si se puede guardar a mitad de día sin perder ni duplicar nada. Cierra los gaps G1–G5 y G10 de la Épica 11 de [backlog.md](../backlog.md). Los resultados se apuntan en la tabla del final y luego en cada gap del backlog.
+Guía para comprobar en partida si se puede guardar a mitad de día sin perder ni duplicar nada. Cierra los gaps G1–G5 y G10 de la Épica 11 de [backlog.md](../../backlog.md). Los resultados se apuntan en la tabla del final y luego en cada gap del backlog.
 
 ## Qué hace `p4e_checkpoint_spike`
 

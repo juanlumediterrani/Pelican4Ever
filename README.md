@@ -18,7 +18,7 @@ Server access is protected via cryptographic device authentication (`P4E\x02`). 
 2. **Install the mod and connect:** Follow the client installation steps and enter the server's direct IP.
 3. **Request approval:** Send your short public fingerprint via direct message (DM) to **Dextrure** on Discord to permanently authorize your device.
 
-For complete step-by-step instructions, see the [Playtester Guide](docs/guia-testers.en.md).
+For complete step-by-step instructions, see the [Preview Server Guide](docs/servidor-preview.en.md) (ES: [servidor-preview.md](docs/servidor-preview.md)).
 
 ---
 
@@ -35,7 +35,7 @@ For complete step-by-step instructions, see the [Playtester Guide](docs/guia-tes
 - **Portal & Bridge Network:** 16 private residences distributed across the Central Plaza (`Farm`) and a deterministic bridge chain (`Pelican4Ever_Bridge_1..3`).
 - **8 Authentic Farm Types:** Choose among Standard, Riverland, Forest, Hilltop, Wilderness, Four Corners, Beach, and Meadowlands (Ranching), featuring active foraging, fishing pools, quarry ore respawns, and nocturnal monster spawning tailored to each biotope.
 - **Individual Private Caves:** Each resident independently chooses whether their private cave produces Fruit Bats or Mushrooms.
-- **Canonical Miniature Annexes (40×32):** Expandable thematic farmland expansions constructed 100% using authentic vanilla tilesets (ADR 0007 / Epic 9.1), featuring single-entrance variants, natural cliff/water perimeter barriers, and automated debris sanitization on save reload (MapVersion 3).
+- **Canonical Miniature Annexes (40×32):** Expandable thematic farmland expansions constructed 100% using authentic vanilla tilesets (ADR 0003 / ADR 0005), featuring single-entrance variants, natural cliff/water perimeter barriers, and automated debris sanitization on save reload (MapVersion 3).
 - **Access Policies & Anti-Griefing:** Granular per-residence security (`Locked`, `Friends`, `Public`) with dynamic friend lists and visitor building permission toggles via the `/residencia` command.
 - **Dynamic Network Culling:** Vacant residences and annexes consume zero client bandwidth or network overhead.
 
@@ -56,7 +56,7 @@ For complete step-by-step instructions, see the [Playtester Guide](docs/guia-tes
 - **Versioned REST API (`/api/v1/host/`):** Secure local HTTP endpoints to manage the clock, broadcast announcements, manage players, coordinate festival heats, and poll incremental event streams (`events?since=N`).
 - **Remote Console Commands:** Execute whitelisted administrative console commands remotely and securely via the REST API.
 - **Scheduled Safe Restart (`p4e_safe_restart`):** Calculates unsaved player progress at risk and orchestrates graceful server restarts with guaranteed persistence.
-- **Headless Server Mode:** Dedicated host servers can run on Linux without graphical rendering, drastically reducing CPU and RAM footprint.
+- **Headless Operation:** A dedicated host can run on Linux without graphical rendering, drastically reducing CPU and RAM footprint. The game still needs a virtual display (`Xvfb`); what is suppressed is the *drawing*, not the simulation.
 
 ### 6. Autonomous Agent Support & Cosmetics
 - **`AgentHost` Mode:** Tailored for autonomous AI hosts (such as Stardew Voyager or Putre), enabling automated sleep logging without closing the host network session.
@@ -70,19 +70,17 @@ For complete step-by-step instructions, see the [Playtester Guide](docs/guia-tes
 
 ## 📚 Technical Documentation
 
-* [Playtester Guide (`docs/guia-testers.en.md`)](docs/guia-testers.en.md)
-* [Identity Deployment Plan & Operations (`docs/plan-despliegue-y-guia-testers-identidad.md`)](docs/plan-despliegue-y-guia-testers-identidad.md)
-* [Device Identity Protocol & Threat Model (`docs/protocolo-identidad-y-modelo-amenazas.md`)](docs/protocolo-identidad-y-modelo-amenazas.md)
+* [Preview Server Guide (`docs/servidor-preview.en.md`)](docs/servidor-preview.en.md)
+* [Client Guide (`docs/despliegue/cliente.en.md`)](docs/despliegue/cliente.en.md)
+* [Host on a VPS (`docs/despliegue/host-vps.md`)](docs/despliegue/host-vps.md) — Spanish
+* [Host on your own machine (`docs/despliegue/host-local.md`)](docs/despliegue/host-local.md) — Spanish
+* [Documentation index (`docs/README.md`)](docs/README.md)
 * [Game Design (`design.md`)](design.md)
 * [Technical Architecture (`architecture.md`)](architecture.md)
 * [Iterations & Roadmap Backlog (`backlog.md`)](backlog.md)
 * [Host REST API Specification (`docs/host-api.md`)](docs/host-api.md)
-* [Persistent Modpack Guide (`docs/modpack.md`)](docs/modpack.md)
-* [Unattended Persistent Server Guide (`docs/servidor-persistente.md`)](docs/servidor-persistente.md)
-* [Production Architecture with Hermes (`docs/arquitectura-produccion-hermes.md`)](docs/arquitectura-produccion-hermes.md)
 * [Architecture Decision Records (`docs/adr/`)](docs/adr/)
 * [Agent Sprite & Cosmetics Guide (`agents/README.md`)](agents/README.md)
-* [Pixel Art Generation Pipeline (`docs/pixel_art_pipeline.md`)](docs/pixel_art_pipeline.md)
 
 ---
 
@@ -103,8 +101,8 @@ Pelican4Ever.sln
 │   └── World/              # Residences, portals, thematic annexes, farm types, and private caves
 ├── Pelican4Ever/           # SMAPI Mod (.NET 6, compiled assembly with Harmony patches)
 │   ├── Framework/          # ModContext, IModule, spatial routing, and map cloning helpers
-│   └── Modules/            # 31 decoupled SMAPI modules with defensive registration
-└── Pelican4Ever.Tests/     # Test suite with 1,313 unit and integration tests in xUnit (.NET 8)
+│   └── Modules/            # 30 decoupled SMAPI modules with defensive registration
+└── Pelican4Ever.Tests/     # Test suite with 1,300+ unit and integration tests in xUnit (.NET 8)
 ```
 
 ---
@@ -133,7 +131,7 @@ Pelican4Ever.sln
 
 ## 🐳 Docker Compose Deployment (24/7 Dedicated Server)
 
-The repository provides out-of-the-box support for unattended server hosting using [docker-compose.yml](docker-compose.yml) based on `JunimoServer`:
+The repository ships a ready-to-use [docker-compose.yml](docker-compose.yml) based on `JunimoServer` for trying out an unattended server:
 
 1. Create your environment configuration from the template:
    ```bash
@@ -153,3 +151,7 @@ The repository provides out-of-the-box support for unattended server hosting usi
    - `24642/udp`: Native multiplayer game port (Lidgren/Galaxy).
    - `8085`: REST API & Web Administration Dashboard (`http://localhost:8085/`).
    - `5900`: Optional VNC for remote visual inspection.
+
+> The compose file mounts the **Debug** build output and an unpinned image: it is a convenience for
+> trying the server out, not a production setup. For a real 24/7 deployment (systemd, `Xvfb`,
+> firewall, backups, updates) follow the **[Host on a VPS](docs/despliegue/host-vps.md)** guide.
