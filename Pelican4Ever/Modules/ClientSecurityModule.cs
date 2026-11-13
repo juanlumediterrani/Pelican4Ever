@@ -1098,30 +1098,33 @@ namespace Pelican4Ever.Modules
 
                         if (!isAuthorized)
                         {
-                            var activeInvite = ClientPairingLogic.FindActiveInviteForIp(context.WorldState, remoteIp, DateTimeOffset.UtcNow);
+                            context.WorldState.PendingEnrollments ??= new Dictionary<string, DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
+                            if (context.WorldState.PendingEnrollments.TryGetValue(fingerprint, out var existingEnroll))
+                            {
+                                existingEnroll.Attempts++;
+                                existingEnroll.RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp);
+                                SavePairingSidecar();
+                                string existingShort = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
+                                context.Monitor.Log($"[ClientSecurity] Solicitud de alta pendiente reiterada para '{existingEnroll.Alias}' (huella: {existingShort}...) desde IP {remoteIp}.", LogLevel.Info);
+                                DisconnectConnectionById(connectionId, $"Dispositivo registrado para aprobación. Huella: {existingShort}. Solicita al propietario que apruebe tu acceso en Discord.");
+                                return false;
+                            }
+
+                            var activeInvite = ClientPairingLogic.FindUnclaimedInviteForIp(context.WorldState, remoteIp, DateTimeOffset.UtcNow, fingerprint);
                             if (activeInvite != null)
                             {
-                                context.WorldState.PendingEnrollments ??= new Dictionary<string, DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
-                                if (!context.WorldState.PendingEnrollments.TryGetValue(fingerprint, out var enroll))
+                                var enroll = new DeviceEnrollmentRequest
                                 {
-                                    enroll = new DeviceEnrollmentRequest
-                                    {
-                                        Fingerprint = fingerprint,
-                                        PublicKeyBase64 = Convert.ToBase64String(pubKeySpki),
-                                        Alias = activeInvite.Alias,
-                                        RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp),
-                                        InviteCode = activeInvite.Code,
-                                        RequestedAtUtc = DateTimeOffset.UtcNow,
-                                        ExpiresAtUtc = activeInvite.ExpiresAtUtc,
-                                        Attempts = 1
-                                    };
-                                    context.WorldState.PendingEnrollments[fingerprint] = enroll;
-                                }
-                                else
-                                {
-                                    enroll.Attempts++;
-                                    enroll.RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp);
-                                }
+                                    Fingerprint = fingerprint,
+                                    PublicKeyBase64 = Convert.ToBase64String(pubKeySpki),
+                                    Alias = activeInvite.Alias,
+                                    RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp),
+                                    InviteCode = activeInvite.Code,
+                                    RequestedAtUtc = DateTimeOffset.UtcNow,
+                                    ExpiresAtUtc = activeInvite.ExpiresAtUtc,
+                                    Attempts = 1
+                                };
+                                context.WorldState.PendingEnrollments[fingerprint] = enroll;
 
                                 SavePairingSidecar();
                                 string shortFp = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
@@ -1131,6 +1134,13 @@ namespace Pelican4Ever.Modules
                             }
 
                             string fpShort = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
+                            if (ClientPairingLogic.FindActiveInviteForIp(context.WorldState, remoteIp, DateTimeOffset.UtcNow) != null)
+                            {
+                                context.Monitor.Log($"[ClientSecurity] Dispositivo válido con huella {fpShort}... pero todas las invitaciones para IP {remoteIp} están reservadas por otras solicitudes pendientes.", LogLevel.Info);
+                                DisconnectConnectionById(connectionId, "Todas las invitaciones para tu IP están reservadas por otras solicitudes pendientes. Pide al propietario que apruebe o cree otra invitación en Discord.");
+                                return false;
+                            }
+
                             context.Monitor.Log($"[ClientSecurity] Dispositivo válido con huella {fpShort}... pero no autorizado ni con invitación activa.", LogLevel.Info);
                             DisconnectConnectionById(connectionId, "Servidor protegido por lista blanca. Solicita una invitación al propietario en Discord.");
                             return false;

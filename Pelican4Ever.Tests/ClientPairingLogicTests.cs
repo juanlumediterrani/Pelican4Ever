@@ -10,7 +10,7 @@ namespace Pelican4Ever.Tests
         private static readonly DateTimeOffset BaseTime = new(2026, 11, 11, 18, 0, 0, TimeSpan.Zero);
 
         [Fact]
-        public void CreateInvite_SetsThreeDayExpirationAndReplacesExistingForSameAliasOrIp()
+        public void CreateInvite_SetsThreeDayExpirationAndReplacesExistingForSameAliasOnly()
         {
             var state = new ServerWorldState();
 
@@ -25,6 +25,19 @@ namespace Pelican4Ever.Tests
             var invite2 = ClientPairingLogic.CreateInvite(state, "dextrure", "83.44.12.99", TimeSpan.FromHours(72), BaseTime.AddHours(1));
             Assert.Single(state.PairingInvites);
             Assert.Equal("83.44.12.99", invite2.AllowedIp);
+        }
+
+        [Fact]
+        public void CreateInvite_AllowsMultipleInvitesForSameIp_DifferentAlias()
+        {
+            var state = new ServerWorldState();
+
+            ClientPairingLogic.CreateInvite(state, "Jugador1", "83.44.12.34", TimeSpan.FromHours(72), BaseTime, "AAA111");
+            ClientPairingLogic.CreateInvite(state, "Jugador2", "83.44.12.34", TimeSpan.FromHours(72), BaseTime, "BBB222");
+
+            // Mismo hogar/NAT: dos invitaciones coexisten para la misma IP
+            Assert.Equal(2, state.PairingInvites.Count);
+            Assert.Equal(2, ClientPairingLogic.FindActiveInvitesForIp(state, "83.44.12.34", BaseTime).Count);
         }
 
         [Fact]

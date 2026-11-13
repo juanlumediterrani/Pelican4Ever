@@ -338,5 +338,69 @@ namespace Pelican4Ever.Tests.Security
             Assert.False(ok);
             Assert.Contains("No se encontró", msg, StringComparison.OrdinalIgnoreCase);
         }
+
+        [Fact]
+        public void TwoPlayers_SameIp_GetDifferentInvites_AndApprovalsDoNotInterfere()
+        {
+            var state = new ServerWorldState();
+            var challengeManager = new ServerChallengeManager();
+            using var key1 = DeviceKeyPair.Generate();
+            using var key2 = DeviceKeyPair.Generate();
+            string sameIp = "83.44.12.34";
+
+            // Dos invitaciones distintas para la misma IP (mismo hogar/NAT)
+            ClientPairingLogic.CreateInvite(state, "Jugador1", sameIp, TimeSpan.FromHours(72), BaseTime, "AAA111");
+            ClientPairingLogic.CreateInvite(state, "Jugador2", sameIp, TimeSpan.FromHours(72), BaseTime, "BBB222");
+            Assert.Equal(2, state.PairingInvites.Count);
+
+            // Jugador1 conecta primero -> reserva AAA111
+            var ch1 = challengeManager.Issue(sameIp, BaseTime, "host:24642");
+            Assert.Equal(
+                EnrollmentResult.PendingApproval,
+                DeviceEnrollmentLogic.ProcessEnrollment(
+                    state, ch1.Nonce, key1.ExportPublicKeySpki(), key1.Sign(ch1.BuildSignBytes()),
+                    sameIp, BaseTime.AddSeconds(1), challengeManager, out var enroll1, out _));
+            Assert.Equal("Jugador1", enroll1!.Alias);
+            Assert.Equal("AAA111", enroll1.InviteCode);
+
+            // Jugador2 conecta desde la misma IP -> debe reservar BBB222, no duplicar AAA111
+            var ch2 = challengeManager.Issue(sameIp, BaseTime.AddSeconds(2), "host:24642");
+            Assert.Equal(
+                EnrollmentResult.PendingApproval,
+                DeviceEnrollmentLogic.ProcessEnrollment(
+                    state, ch2.Nonce, key2.ExportPublicKeySpki(), key2.Sign(ch2.BuildSignBytes()),
+                    sameIp, BaseTime.AddSeconds(3), challengeManager, out var enroll2, out _));
+            Assert.Equal("Jugador2", enroll2!.Alias);
+            Assert.Equal("BBB222", enroll2.InviteCode);
+
+            // Aprobar Jugador1 solo consume AAA111; la invitación de Jugador2 sobrevive
+            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, key1.GetFingerprint(), out _, out _));
+            Assert.Single(state.PairingInvites);
+            Assert.Equal("BBB222", state.PairingInvites[0].Code);
+
+            // Aprobar Jugador2 consume la restante
+            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, key2.GetFingerprint(), out _, out _));
+            Assert.Empty(state.PairingInvites);
+        }
+
+        [Fact]
+        public void Revoke_ByIp_OnlyClearsInvites_DoesNotRevokeDevicesSharingIp()
+        {
+            var state = new ServerWorldState();
+            using var key1 = DeviceKeyPair.Generate();
+            using var key2 = DeviceKeyPair.Generate();
+            string sameIp = "83.44.12.34";
+
+            ServerDeviceRegistry.RegisterOrUpdateDevice(state, key1.GetPublicKeyBase64(), "Jugador1", 1001L, sameIp, BaseTime);
+            ServerDeviceRegistry.RegisterOrUpdateDevice(state, key2.GetPublicKeyBase64(), "Jugador2", 1002L, sameIp, BaseTime);
+            ClientPairingLogic.CreateInvite(state, "Pendiente", sameIp, TimeSpan.FromHours(72), BaseTime, "CCC333");
+
+            Assert.True(ClientPairingLogic.Revoke(state, sameIp, out _, out _));
+
+            // La invitación pendiente se limpia, pero ningún dispositivo autorizado cae por compartir IP
+            Assert.Empty(state.PairingInvites);
+            Assert.True(ServerDeviceRegistry.IsDeviceAuthorized(state, key1.GetFingerprint(), out _));
+            Assert.True(ServerDeviceRegistry.IsDeviceAuthorized(state, key2.GetFingerprint(), out _));
+        }
     }
 }

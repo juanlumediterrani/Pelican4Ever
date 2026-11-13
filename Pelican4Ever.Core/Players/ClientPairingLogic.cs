@@ -252,10 +252,10 @@ namespace Pelican4Ever.Core.Players
 
             string cleanAlias = alias.Trim();
 
-            // Si ya había una invitación pendiente para ese mismo alias o la misma IP, se reemplaza por la nueva
+            // Varias personas pueden compartir la misma IP pública (mismo hogar/NAT).
+            // Solo se reemplaza la invitación del mismo alias; las de la misma IP coexisten.
             state.PairingInvites.RemoveAll(i =>
-                string.Equals(i.Alias, cleanAlias, StringComparison.OrdinalIgnoreCase) ||
-                string.Equals(i.AllowedIp, normalizedIp, StringComparison.OrdinalIgnoreCase));
+                string.Equals(i.Alias, cleanAlias, StringComparison.OrdinalIgnoreCase));
 
             string code = string.IsNullOrWhiteSpace(explicitCode)
                 ? GeneratePairingCode()
@@ -334,17 +334,93 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Busca una invitación activa (no caducada) para la dirección IP indicada.</summary>
         public static PairingInvite? FindActiveInviteForIp(ServerWorldState state, string? remoteIp, DateTimeOffset nowUtc)
         {
+            return FindActiveInvitesForIp(state, remoteIp, nowUtc).FirstOrDefault();
+        }
+
+        /// <summary>
+        /// Lista todas las invitaciones activas (no caducadas) para la dirección IP indicada,
+        /// ordenadas por creación. Permite que varios jugadores compartan la misma IP pública (mismo hogar/NAT).
+        /// </summary>
+        public static List<PairingInvite> FindActiveInvitesForIp(ServerWorldState state, string? remoteIp, DateTimeOffset nowUtc)
+        {
+            var result = new List<PairingInvite>();
             if (state?.PairingInvites == null || string.IsNullOrWhiteSpace(remoteIp))
-                return null;
+                return result;
 
             string normIp = NormalizeIp(remoteIp);
             if (string.IsNullOrEmpty(normIp))
+                return result;
+
+            foreach (PairingInvite? i in state.PairingInvites)
+            {
+                if (i != null &&
+                    !i.IsExpired(nowUtc) &&
+                    string.Equals(NormalizeIp(i.AllowedIp), normIp, StringComparison.OrdinalIgnoreCase))
+                {
+                    result.Add(i);
+                }
+            }
+
+            result.Sort((a, b) => a.CreatedAtUtc.CompareTo(b.CreatedAtUtc));
+            return result;
+        }
+
+        /// <summary>
+        /// Busca una invitación activa para la IP que aún no esté reservada por otra solicitud pendiente.
+        /// Cada código solo puede ser reclamado por una huella pendiente, así dos jugadores con la misma
+        /// IP obtienen invitaciones distintas (alias distintos) en lugar de duplicar el primero.
+        /// </summary>
+        public static PairingInvite? FindUnclaimedInviteForIp(
+            ServerWorldState state,
+            string? remoteIp,
+            DateTimeOffset nowUtc,
+            string? requestingFingerprint = null)
+        {
+            List<PairingInvite> candidates = FindActiveInvitesForIp(state, remoteIp, nowUtc);
+            if (candidates.Count == 0)
                 return null;
 
-            return state.PairingInvites.FirstOrDefault(i =>
-                i != null &&
-                !i.IsExpired(nowUtc) &&
-                string.Equals(NormalizeIp(i.AllowedIp), normIp, StringComparison.OrdinalIgnoreCase));
+            // Si esta huella ya tiene una solicitud pendiente con un código válido, reutilizarla.
+            if (!string.IsNullOrWhiteSpace(requestingFingerprint) && state?.PendingEnrollments != null)
+            {
+                foreach (PairingInvite candidate in candidates)
+                {
+                    if (state.PendingEnrollments.TryGetValue(requestingFingerprint, out var own)
+                        && own != null
+                        && string.Equals(own.InviteCode, candidate.Code, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return candidate;
+                    }
+                }
+            }
+
+            foreach (PairingInvite candidate in candidates)
+            {
+                bool claimedByOther = false;
+                if (state?.PendingEnrollments != null)
+                {
+                    foreach (var kvp in state.PendingEnrollments)
+                    {
+                        if (!string.IsNullOrWhiteSpace(requestingFingerprint)
+                            && string.Equals(kvp.Key, requestingFingerprint, StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (kvp.Value != null
+                            && string.Equals(kvp.Value.InviteCode, candidate.Code, StringComparison.OrdinalIgnoreCase))
+                        {
+                            claimedByOther = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (!claimedByOther)
+                    return candidate;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -467,8 +543,9 @@ namespace Pelican4Ever.Core.Players
         }
 
         /// <summary>
-        /// Revoca invitaciones pendientes y/o dispositivos autorizados que coincidan con el alias, IP, código,
-        /// nombre de jugador o ID de jugador indicados.
+        /// Revoca invitaciones pendientes y/o dispositivos autorizados que coincidan con el alias, código,
+        /// nombre de jugador o ID de jugador indicados. Una IP solo limpia invitaciones pendientes para
+        /// esa IP; nunca revoca dispositivos por IP, ya que varios jugadores pueden compartirla (mismo hogar/NAT).
         /// </summary>
         public static bool Revoke(
             ServerWorldState state,
@@ -507,7 +584,6 @@ namespace Pelican4Ever.Core.Players
                     bool match =
                         string.Equals(d.Alias, clean, StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(d.Fingerprint, clean, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(normIp) && string.Equals(NormalizeIp(d.LastSeenIp), normIp, StringComparison.OrdinalIgnoreCase)) ||
                         (parsedId && d.BoundPlayerId == targetPlayerId);
 
                     if (match)
@@ -528,9 +604,6 @@ namespace Pelican4Ever.Core.Players
                     bool match =
                         string.Equals(c.Alias, clean, StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(c.ClientToken, clean, StringComparison.OrdinalIgnoreCase) ||
-                        (!string.IsNullOrEmpty(normIp) && (
-                            string.Equals(NormalizeIp(c.PairedIp), normIp, StringComparison.OrdinalIgnoreCase) ||
-                            string.Equals(NormalizeIp(c.LastSeenIp), normIp, StringComparison.OrdinalIgnoreCase))) ||
                         (parsedId && c.BoundPlayerId == targetPlayerId);
 
                     if (!match && c.BoundPlayerId != 0 && state.Players.TryGetValue(c.BoundPlayerId, out PlayerRecord? boundRec))

@@ -81,10 +81,20 @@ namespace Pelican4Ever.Core.Security
             ClientPairingLogic.PurgeExpiredInvites(state, nowUtc);
             PurgeExpiredEnrollments(state, nowUtc);
 
-            // 4. Buscar invitación activa (72h) compatible con la IP de origen
-            PairingInvite? activeInvite = ClientPairingLogic.FindActiveInviteForIp(state, remoteIp, nowUtc);
+            // 4. Buscar invitación activa (72h) compatible con la IP de origen.
+            // Varias invitaciones pueden coexistir para la misma IP (mismo hogar/NAT):
+            // se asigna la primera aún no reservada por otra huella pendiente.
+            PairingInvite? activeInvite = ClientPairingLogic.FindUnclaimedInviteForIp(state, remoteIp, nowUtc, fingerprint);
             if (activeInvite == null)
             {
+                // Sin invitación libre: o no hay ninguna para esta IP o todas están ya
+                // reservadas por otras solicitudes pendientes a la espera de aprobación.
+                if (ClientPairingLogic.FindActiveInviteForIp(state, remoteIp, nowUtc) != null)
+                {
+                    message = $"Existen invitaciones activas para {remoteIp}, pero todas están reservadas por otras solicitudes pendientes. Pide al propietario que apruebe las solicitudes existentes o que cree una invitación adicional.";
+                    return EnrollmentResult.DeniedNoInvite;
+                }
+
                 message = $"No existe ninguna invitación de emparejamiento activa para la conexión {remoteIp} o ha caducado.";
                 return EnrollmentResult.DeniedNoInvite;
             }
@@ -186,12 +196,13 @@ namespace Pelican4Ever.Core.Security
                 match.RemoteIp,
                 now);
 
-            // 2. Consumir la invitación asociada (un solo uso estricto)
+            // 2. Consumir solo la invitación exacta usada (un solo uso estricto).
+            // No se elimina por alias: varias invitaciones pueden compartir IP con alias
+            // distintos (mismo hogar/NAT) y deben sobrevivir a la aprobación de otra.
             if (state.PairingInvites != null && !string.IsNullOrEmpty(match.InviteCode))
             {
                 state.PairingInvites.RemoveAll(i =>
-                    string.Equals(i.Code, match.InviteCode, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(i.Alias, match.Alias, StringComparison.OrdinalIgnoreCase));
+                    string.Equals(i.Code, match.InviteCode, StringComparison.OrdinalIgnoreCase));
             }
 
             // 3. Eliminar de solicitudes pendientes
