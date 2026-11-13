@@ -81,4 +81,27 @@ public class AutoHostLogicTests
 
         Assert.Empty(config.Validate());
     }
+
+    [Theory]
+    [InlineData(true, 0)]
+    [InlineData(true, 600)]
+    public void PortGate_FreePort_Loads(bool available, int waited) =>
+        Assert.Equal(PortGateDecision.Load, AutoHostLogic.DecidePortGate(available, waited));
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(30)]
+    [InlineData(59)]
+    public void PortGate_BusyPort_WaitsWithinTheWindow(int waited) =>
+        Assert.Equal(PortGateDecision.KeepWaiting, AutoHostLogic.DecidePortGate(portAvailable: false, waitedSeconds: waited));
+
+    [Theory]
+    [InlineData(60)]
+    [InlineData(600)]
+    public void PortGate_BusyPort_GivesUpAfterTheWindow(int waited) =>
+        Assert.Equal(PortGateDecision.GiveUp, AutoHostLogic.DecidePortGate(portAvailable: false, waitedSeconds: waited));
+
+    [Fact]
+    public void PortGate_DefaultWindowIsSixtySeconds() =>
+        Assert.Equal(60, AutoHostLogic.PortWaitSeconds);
 }

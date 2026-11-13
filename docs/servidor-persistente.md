@@ -18,6 +18,8 @@ cargando la partida desde «Cooperativo → Anfitrión» como siempre.
 
 El tiempo no necesita supervisión: el reloj 1:1, la madrugada congelada y los horarios de luz/Pelican empiezan a las 06:00. La fecha cambia a las 02:00: aviso a las 01:50, guardado nativo y backup host SHA-256 antes del cierre ordenado de peers; si el backup o la desconexión no se verifican, el día no avanza. Los backups quedan archivados en `Pelican4Ever_Backups/`.
 
+Si el log reporta `Address already in use` al cargar la partida, es el puerto UDP `24642` (lo fija el motor y solo admite una instancia alojando por máquina): otra instancia de Stardew o un proceso anterior sin liberarlo. `AutoHost` espera hasta 60 s a que se libere, loguea quién lo ocupa (`PID …`) y, si lo ocupa el propio proceso con `RestartExitsProcess: true`, cierra el proceso para que systemd lo relance limpio. Para verlo a mano: `ss -lunp | grep 24642` y `pgrep -af Stardew`.
+
 ## Instalación
 
 1. Crea la partida persistente desde «Cooperativo → Anfitrión → Nueva granja» y anota el nombre de su
