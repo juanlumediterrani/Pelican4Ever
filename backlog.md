@@ -1662,3 +1662,15 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       3. Parcheados también `Farmer.hasPet`, `getPet`, `getPetName` y `getPetDisplayName`, que usan `getHomeOfFarmer` y podían lanzar igual.
       4. `CheckAndTriggerAdoptionEvent` registra una vez el motivo por el que la visita queda bloqueada (mapa, propietario, hora, día) y el evento retira a Marnie y la mascota de muestra si el jugador abandona la granja o empieza un día nuevo.
       5. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).
+
+- [x] **TASK-2014: La pestaña «Animales» del cliente listaba la mascota del anfitrión**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2013.
+  * **Descripción:** En el menú del jugador (1.6), la pestaña «Animales» usa `AnimalPage.FindAnimals`, que recorre todas las ubicaciones del juego con `Utility.ForEachLocation`. En un cliente eso incluye la granja del anfitrión, así que su mascota aparecía como la primera —y única— ficha del cliente.
+  * **Criterios de aceptación:**
+      1. Un cliente solo ve en «Animales» las mascotas, caballos y animales de su residencia, anexos e interiores.
+      2. El anfitrión sigue viendo todo (granja principal y residencias de los farmhands).
+  * **Resolución:**
+      1. Postfix `Postfix_AnimalPage_FindAnimals` que, en clientes, retira las entradas cuya ubicación (o granja padre) no pertenece al jugador local.
+      2. `IsOwnedByLocalPlayer` resuelve también los interiores de residencia (`_Home`, `_Cave`, `_Cellar`, `_Greenhouse`) por edificio padre o por nombre de hueco.
+      3. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).

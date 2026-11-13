@@ -4368,6 +4368,15 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName))
                 );
 
+                // El menú «Animales» de 1.6 recorre todas las ubicaciones del juego: en un cliente
+                // mostraba la mascota, el caballo y los animales del anfitrión como si fueran suyos.
+                PatchSafe(
+                    harmony,
+                    "AnimalPage.FindAnimals",
+                    AccessTools.Method(typeof(AnimalPage), nameof(AnimalPage.FindAnimals)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_AnimalPage_FindAnimals))
+                );
+
                 context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos y construcción en residencia aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
@@ -6407,6 +6416,38 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
+        /// TASK-2014: el menú «Animales» de 1.6 recorre todas las ubicaciones del juego, así que en un cliente
+        /// listaba la mascota, el caballo y los animales del anfitrión. Se conservan solo los que viven en
+        /// ubicaciones del jugador local (su residencia, anexos e interiores).
+        /// </summary>
+        public static void Postfix_AnimalPage_FindAnimals(ref List<AnimalPage.AnimalEntry> __result)
+        {
+            if (Context.IsMainPlayer || __result == null)
+                return;
+
+            __result.RemoveAll(entry => entry?.Animal == null || !IsAnimalOwnedByLocalPlayer(entry.Animal));
+        }
+
+        /// <summary>Indica si un animal o mascota vive en una ubicación del jugador local o su granja padre.</summary>
+        private static bool IsAnimalOwnedByLocalPlayer(Character animal)
+        {
+            GameLocation? location = animal.currentLocation;
+            for (int depth = 0; location != null && depth < 3; depth++)
+            {
+                if (IsOwnedByLocalPlayer(location))
+                    return true;
+
+                GameLocation? parent = location.ParentBuilding?.GetParentLocation();
+                if (parent == null || ReferenceEquals(parent, location))
+                    break;
+
+                location = parent;
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Indica si la residencia o anexo pertenece al jugador local. Usa el estado sincronizado y, si aún no
         /// ha llegado la sincronización de puertas, el propietario publicado por el host en el modData.
         /// </summary>
@@ -6424,7 +6465,26 @@ namespace Pelican4Ever.Modules
             if (context.WorldState.FindAnnexById(name)?.OwnerId == me)
                 return true;
 
-            return location.GetFarmOwnerId() == me;
+            if (location.GetFarmOwnerId() == me)
+                return true;
+
+            // Interiores de la residencia (Pelican4Ever_Farm_02_Home, _Cave, _Cellar, _Greenhouse):
+            // resolver el hueco desde el edificio padre o, si no está hidratado, desde el nombre.
+            if (location.ParentBuilding?.GetParentLocation() is GameLocation parent && !ReferenceEquals(parent, location))
+                return IsOwnedByLocalPlayer(parent);
+
+            foreach (string suffix in new[] { "_Home", "_Cave", "_Cellar", "_Greenhouse" })
+            {
+                if (!name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                string slotId = name.Substring(0, name.Length - suffix.Length);
+                if (context.WorldState.Doors.Values.Any(d => d.OwnerId == me && string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                    || context.WorldState.FindAnnexById(slotId)?.OwnerId == me)
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>
