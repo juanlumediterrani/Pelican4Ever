@@ -28,6 +28,14 @@ namespace Pelican4Ever.Modules
         private static bool isAdoptionPromptActive = false;
         private static bool wakeTriggerPending = false;
 
+        /// <summary>Último motivo registrado por el que la visita de Marnie no puede empezar (evita spam en el log).</summary>
+        private static string lastAdoptionGate = string.Empty;
+
+        /// <summary>Actores temporales de la visita en curso, para poder retirarlos si se interrumpe.</summary>
+        private static Farm? activeAdoptionFarm;
+        private static NPC? activeMarnie;
+        private static Pet? activePetPreview;
+
         public const string MsgBowlPurchased = "Pelican4Ever.PetBowlPurchased";
         public const string MsgPetAdoptionSync = "Pelican4Ever.PetAdoptionSync";
         public const string MsgPetAdopted = "Pelican4Ever.PetAdopted";
@@ -84,6 +92,7 @@ namespace Pelican4Ever.Modules
         {
             isAdoptionPromptActive = false;
             wakeTriggerPending = false;
+            lastAdoptionGate = string.Empty;
             localRecord = new PetAdoptionRecord();
 
             if (context == null) return;
@@ -116,6 +125,10 @@ namespace Pelican4Ever.Modules
                 return;
 
             wakeTriggerPending = false;
+            lastAdoptionGate = string.Empty;
+
+            if (isAdoptionPromptActive)
+                CancelAdoptionEvent();
 
             if (Context.IsMainPlayer)
             {
@@ -206,6 +219,11 @@ namespace Pelican4Ever.Modules
             if (!e.IsLocalPlayer)
                 return;
 
+            // Si el jugador abandona la granja a mitad de la visita, retirar los actores temporales
+            // para no dejarlos sueltos ni bloquear futuros intentos.
+            if (isAdoptionPromptActive && !ReferenceEquals(e.NewLocation, activeAdoptionFarm))
+                CancelAdoptionEvent();
+
             CheckAndTriggerAdoptionEvent();
         }
 
@@ -226,12 +244,20 @@ namespace Pelican4Ever.Modules
                 return;
 
             if (Game1.currentLocation is not Farm farm)
+            {
+                NoteAdoptionGate(
+                    $"la ubicación actual '{Game1.currentLocation?.NameOrUniqueName ?? "<null>"}' " +
+                    $"({Game1.currentLocation?.GetType().Name ?? "?"}) no es una granja");
                 return;
+            }
 
             int today = Game1.Date.TotalDays;
             bool wokenSincePurchase = PetAdoptionLogic.HasWokenSincePurchase(localRecord, today);
             if (!wakeTriggerPending && !wokenSincePurchase)
+            {
+                NoteAdoptionGate($"aún no ha dormido desde la compra (compra día {localRecord.PurchaseGameDay}, hoy {today})");
                 return;
+            }
 
             string currentMap = farm.NameOrUniqueName;
             long playerId = Game1.player.UniqueMultiplayerID;
@@ -261,16 +287,52 @@ namespace Pelican4Ever.Modules
 
             if (!PetAdoptionLogic.CanTriggerAdoptionEvent(localRecord, playerId, ownerId, currentMap, Game1.timeOfDay))
             {
+                NoteAdoptionGate(
+                    $"condiciones fuera de rango: jugador={playerId}, propietario={ownerId}, " +
+                    $"mapa='{currentMap}', esperado='{localRecord.FarmSlotId}', hora={Game1.timeOfDay}");
                 return;
             }
 
+            lastAdoptionGate = string.Empty;
             wakeTriggerPending = false;
             StartAdoptionEvent(farm);
+        }
+
+        /// <summary>Registra una sola vez el motivo por el que la visita de Marnie aún no puede empezar.</summary>
+        private static void NoteAdoptionGate(string gate)
+        {
+            if (string.Equals(lastAdoptionGate, gate, StringComparison.Ordinal))
+                return;
+
+            lastAdoptionGate = gate;
+            context?.Monitor.Log($"[ClientPetAdoption] Visita de Marnie pendiente; bloqueada por: {gate}.", LogLevel.Trace);
+        }
+
+        /// <summary>Retira a Marnie y a la mascota de muestra si la visita se interrumpe o queda obsoleta.</summary>
+        private static void CancelAdoptionEvent()
+        {
+            if (activeAdoptionFarm != null)
+            {
+                if (activeMarnie != null)
+                    activeAdoptionFarm.characters.Remove(activeMarnie);
+                if (activePetPreview != null)
+                    activeAdoptionFarm.characters.Remove(activePetPreview);
+            }
+
+            activeAdoptionFarm = null;
+            activeMarnie = null;
+            activePetPreview = null;
+            isAdoptionPromptActive = false;
         }
 
         private void StartAdoptionEvent(Farm farm)
         {
             isAdoptionPromptActive = true;
+            lastAdoptionGate = string.Empty;
+
+            context?.Monitor.Log(
+                $"[ClientPetAdoption] Marnie se presenta en la puerta de '{farm.NameOrUniqueName}' para {Game1.player.Name}.",
+                LogLevel.Info);
 
             Point entry = farm.GetMainFarmHouseEntry();
             Vector2 marnieTile = new Vector2(entry.X - 1, entry.Y + 1);
@@ -298,6 +360,10 @@ namespace Pelican4Ever.Modules
 
             farm.characters.Add(marnie);
             farm.characters.Add(petPreview);
+
+            activeAdoptionFarm = farm;
+            activeMarnie = marnie;
+            activePetPreview = petPreview;
 
             Game1.player.faceGeneralDirection(marnieTile * 64f);
             Game1.player.freezePause = 1000;
@@ -343,8 +409,7 @@ namespace Pelican4Ever.Modules
 
         private void CompleteAdoption(Farm farm, NPC marnie, Pet petPreview, string finalName, string petType, string petBreed)
         {
-            farm.characters.Remove(marnie);
-            farm.characters.Remove(petPreview);
+            CancelAdoptionEvent();
 
             localRecord.PetName = finalName;
             localRecord.PetType = petType;
@@ -384,8 +449,7 @@ namespace Pelican4Ever.Modules
 
         private void DeclineAdoption(Farm farm, NPC marnie, Pet petPreview)
         {
-            farm.characters.Remove(marnie);
-            farm.characters.Remove(petPreview);
+            CancelAdoptionEvent();
 
             if (Context.IsMainPlayer)
             {

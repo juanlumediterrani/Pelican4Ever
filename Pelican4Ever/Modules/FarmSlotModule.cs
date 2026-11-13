@@ -4285,17 +4285,24 @@ namespace Pelican4Ever.Modules
                 );
 
                 // TASK-2011: permitir construir y mover edificios en la granja compartida de Isla Jengibre
-                // en cuanto el jugador haya restaurado la casa.
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
+                // en cuanto el jugador haya restaurado la casa. Se registran con PatchSafe para que un
+                // fallo aislado (p. ej. un parámetro mal nombrado) no aborte el resto de parches.
+                PatchSafe(
+                    harmony,
+                    "GameLocation.IsBuildableLocation",
+                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation))
                 );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
+                PatchSafe(
+                    harmony,
+                    "CarpenterMenu.hasPermissionsToMove",
+                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding))
                 );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
+                PatchSafe(
+                    harmony,
+                    "GameLocation.OnBuildingMoved",
+                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved))
                 );
 
@@ -4326,9 +4333,39 @@ namespace Pelican4Ever.Modules
 
                 // Utility.getAllPets hace RequireLocation sobre la casa de cada granjero; en un farmhand las
                 // residencias ajenas no están cargadas y Marnie (animalShop) lanzaba KeyNotFoundException.
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
+                PatchSafe(
+                    harmony,
+                    "Utility.getAllPets",
+                    AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_GetAllPets))
+                );
+
+                // Los métodos de Farmer que buscan la mascota recorren la casa de TODOS los granjeros con
+                // Utility.getHomeOfFarmer → RequireLocation, y lanzaban en un cliente con residencias ajenas
+                // sin cargar. Se responden con la lista tolerante (en clientes, solo mascotas propias).
+                PatchSafe(
+                    harmony,
+                    "Farmer.hasPet",
+                    AccessTools.Method(typeof(Farmer), nameof(Farmer.hasPet)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_HasPet))
+                );
+                PatchSafe(
+                    harmony,
+                    "Farmer.getPet",
+                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPet)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPet))
+                );
+                PatchSafe(
+                    harmony,
+                    "Farmer.getPetName",
+                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetName)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetName))
+                );
+                PatchSafe(
+                    harmony,
+                    "Farmer.getPetDisplayName",
+                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetDisplayName)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName))
                 );
 
                 context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos y construcción en residencia aplicados.", LogLevel.Trace);
@@ -4336,6 +4373,35 @@ namespace Pelican4Ever.Modules
             catch (Exception ex)
             {
                 context?.Monitor.Log($"[FarmSlotModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
+            }
+        }
+
+        /// <summary>
+        /// Aplica un parche Harmony sin que un fallo aislado aborte el registro del resto. Harmony resuelve
+        /// los parámetros de los parches por nombre, así que un nombre equivocado lanza al aplicar el parche
+        /// y, sin esta protección, dejaba sin parchear todo lo registrado después.
+        /// </summary>
+        private static void PatchSafe(
+            Harmony harmony,
+            string label,
+            System.Reflection.MethodBase? original,
+            HarmonyMethod? prefix = null,
+            HarmonyMethod? postfix = null,
+            HarmonyMethod? transpiler = null)
+        {
+            if (original == null)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] No se encontró '{label}' para parchear.", LogLevel.Warn);
+                return;
+            }
+
+            try
+            {
+                harmony.Patch(original, prefix, postfix, transpiler);
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[FarmSlotModule] Error al parchear '{label}': {ex.Message}", LogLevel.Error);
             }
         }
 
@@ -5843,9 +5909,9 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>TASK-2011: permite mover edificios de la granja compartida tras restaurar la casa.</summary>
-        public static void Postfix_CarpenterCanMoveIslandBuilding(Building building, ref bool __result)
+        public static void Postfix_CarpenterCanMoveIslandBuilding(Building b, ref bool __result)
         {
-            if (building?.GetParentLocation() is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+            if (b?.GetParentLocation() is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
                 __result = island.farmhouseRestored.Value;
         }
 
@@ -6245,17 +6311,24 @@ namespace Pelican4Ever.Modules
 
         /// <summary>
         /// Versión tolerante de Utility.getAllPets: omite las casas de granjeros que no están cargadas en esta
-        /// instancia (residencias ajenas en un farmhand) en lugar de lanzar KeyNotFoundException.
+        /// instancia (residencias ajenas en un farmhand) en lugar de lanzar KeyNotFoundException. En un cliente
+        /// solo devuelve las mascotas que pertenecen al jugador local, para que las comprobaciones vanilla
+        /// (menú de Marnie, «¿tengo mascota?») no cuenten la mascota del anfitrión como propia.
         /// </summary>
         public static bool Prefix_Utility_GetAllPets(ref List<StardewValley.Characters.Pet> __result)
         {
             var pets = new List<StardewValley.Characters.Pet>();
             var visited = new HashSet<GameLocation>();
+            bool includeAll = Context.IsMainPlayer;
 
-            void Collect(GameLocation? location)
+            void Collect(GameLocation? location, bool force = false)
             {
                 if (location == null || !visited.Add(location))
                     return;
+
+                if (!includeAll && !force && !IsOwnedByLocalPlayer(location))
+                    return;
+
                 foreach (NPC character in location.characters)
                 {
                     if (character is StardewValley.Characters.Pet pet)
@@ -6263,12 +6336,23 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            Collect(Game1.getFarm());
+            if (includeAll)
+            {
+                Collect(Game1.getFarm());
+            }
+            else if (Game1.player != null)
+            {
+                // La casa propia siempre es del jugador local, aunque su cabaña aún no esté hidratada.
+                string? ownHome = Game1.player.homeLocation.Value;
+                if (!string.IsNullOrEmpty(ownHome))
+                    Collect(Game1.getLocationFromName(ownHome), force: true);
+            }
+
             foreach (Farmer farmer in Game1.getAllFarmers())
             {
                 string? home = farmer.homeLocation.Value;
                 if (!string.IsNullOrEmpty(home))
-                    Collect(Game1.getLocationFromName(home));
+                    Collect(Game1.getLocationFromName(home), force: includeAll);
             }
 
             if (context?.WorldState != null)
@@ -6290,6 +6374,35 @@ namespace Pelican4Ever.Modules
             }
 
             __result = pets;
+            return false;
+        }
+
+        /// <summary>TASK-2011: versión tolerante de <see cref="Farmer.hasPet"/> (sin <c>RequireLocation</c> de casas ajenas).</summary>
+        public static bool Prefix_Farmer_HasPet(ref bool __result)
+        {
+            __result = Utility.getAllPets().Count > 0;
+            return false;
+        }
+
+        /// <summary>TASK-2011: versión tolerante de <see cref="Farmer.getPet"/>.</summary>
+        public static bool Prefix_Farmer_GetPet(ref StardewValley.Characters.Pet? __result)
+        {
+            __result = Utility.getAllPets().FirstOrDefault();
+            return false;
+        }
+
+        /// <summary>TASK-2011: versión tolerante de <see cref="Farmer.getPetName"/>.</summary>
+        public static bool Prefix_Farmer_GetPetName(ref string __result)
+        {
+            __result = Utility.getAllPets().FirstOrDefault()?.Name ?? "your pet";
+            return false;
+        }
+
+        /// <summary>TASK-2011: versión tolerante de <see cref="Farmer.getPetDisplayName"/>.</summary>
+        public static bool Prefix_Farmer_GetPetDisplayName(ref string __result)
+        {
+            __result = Utility.getAllPets().FirstOrDefault()?.displayName
+                ?? Game1.content.LoadString("Strings\\StringsFromCSFiles:Farmer.cs.1972");
             return false;
         }
 

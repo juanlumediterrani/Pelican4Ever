@@ -1646,3 +1646,19 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       1. `ProcessPetAdoption` usa `PetBowl.GetPetSpot()` para la posición inicial y llama a `EnsurePetBehavior`.
       2. `HealStuckPets` recorre `Utility.getAllPets()` en `SaveLoaded` y `DayStarted` del host, inicializando a `Walk` cualquier comportamiento vacío o inexistente.
       3. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).
+
+- [x] **TASK-2013: Un parche de Isla Jengibre abortaba el registro Harmony y rompía las mascotas en clientes**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2011, TASK-2012.
+  * **Descripción:** Al hablar con Marnie en su tienda, el cliente lanzaba `KeyNotFoundException: Required location 'Pelican4Ever_Farm_03_Home' not found`. La causa no era la lógica de mascotas: `Postfix_CarpenterCanMoveIslandBuilding` declaraba el parámetro como `building` cuando Harmony lo resuelve por nombre y el original lo llama `b`. La excepción al aplicar ese parche abortaba el registro completo de `FarmSlotModule`, de modo que `Utility.getAllPets` (y todo lo registrado después) quedaba sin parchear y el cliente usaba la versión vanilla, que hace `RequireLocation` sobre casas de otros granjeros. Además, el prefijo de `getAllPets` devolvía las mascotas de todo el mundo, así que el cliente contaba la mascota del anfitrión como propia.
+  * **Criterios de aceptación:**
+      1. El cliente puede abrir el diálogo y la tienda de Marnie sin excepciones.
+      2. El cliente solo ve como propias las mascotas de su residencia y anexos; las del anfitrión no cuentan para sus comprobaciones vanilla (`hasPet`, menú de adopción).
+      3. Un parche con parámetros mal declarados no impide aplicar el resto.
+      4. La visita de Marnie registra en el log el motivo exacto si no llega a empezar.
+  * **Resolución:**
+      1. Corregido el nombre del parámetro (`b`) y añadido `PatchSafe`, que registra cada parche por separado y loguea el error sin abortar el bloque.
+      2. `Prefix_Utility_GetAllPets` filtra por propietario en clientes (residencia, anexos y casa propia) y en el host mantiene el barrido completo.
+      3. Parcheados también `Farmer.hasPet`, `getPet`, `getPetName` y `getPetDisplayName`, que usan `getHomeOfFarmer` y podían lanzar igual.
+      4. `CheckAndTriggerAdoptionEvent` registra una vez el motivo por el que la visita queda bloqueada (mapa, propietario, hora, día) y el evento retira a Marnie y la mascota de muestra si el jugador abandona la granja o empieza un día nuevo.
+      5. Compilación Debug desplegada sin errores y suite completa en verde (1333 pruebas).
