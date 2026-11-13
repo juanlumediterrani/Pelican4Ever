@@ -163,13 +163,26 @@ namespace Pelican4Ever.Modules
         /// <summary>Garantiza que la mascota tenga un comportamiento válido de <c>Data/Pets</c>.</summary>
         private static void EnsurePetBehavior(Pet pet, string origin)
         {
-            if (!string.IsNullOrEmpty(pet.CurrentBehavior) && pet.GetCurrentPetBehavior() != null)
-                return;
+            if (string.IsNullOrEmpty(pet.CurrentBehavior) || pet.GetCurrentPetBehavior() == null)
+            {
+                pet.CurrentBehavior = "Walk";
+                context?.Monitor.Log(
+                    $"[ClientPetAdoption] Comportamiento de la mascota '{pet.displayName}' inicializado a 'Walk' ({origin}).",
+                    LogLevel.Trace);
+            }
 
-            pet.CurrentBehavior = "Walk";
-            context?.Monitor.Log(
-                $"[ClientPetAdoption] Comportamiento de la mascota '{pet.displayName}' inicializado a 'Walk' ({origin}).",
-                LogLevel.Trace);
+            // Las primeras versiones la creaban sobre la casilla del cuenco, que es un edificio
+            // con colisión. Se recoloca delante para que pueda empezar a caminar sin esperar al próximo día.
+            PetBowl? bowl = pet.GetPetBowl();
+            if (bowl != null
+                && (int)pet.TilePoint.X == bowl.tileX.Value
+                && (int)pet.TilePoint.Y == bowl.tileY.Value)
+            {
+                pet.WarpToPetBowl();
+                context?.Monitor.Log(
+                    $"[ClientPetAdoption] Mascota '{pet.displayName}' recolocada delante del cuenco ({origin}).",
+                    LogLevel.Trace);
+            }
         }
 
         /// <summary>
