@@ -42,11 +42,14 @@ namespace Pelican4Ever.Modules
         /// <summary>Ticks consecutivos en los que la mascota propia no aparece en la copia local del cliente.</summary>
         private static int missingPetTicks;
 
-        /// <summary>Contador para emitir el diagnóstico de simulación cada 30 s.</summary>
-        private static int petSimulationTicks;
+        /// <summary>Muestras (1 s) en las que cada mascota quería pasear y no avanzaba, por petId.</summary>
+        private static readonly Dictionary<Guid, int> petStuckSamples = new();
 
-        /// <summary>Ticks consecutivos sin desplazarse de cada mascota (por petId), para reorientar el paso.</summary>
-        private static readonly Dictionary<Guid, int> petStuckTicks = new();
+        /// <summary>
+        /// Indica si el cliente ya recibió del anfitrión su registro de adopción. Hasta entonces
+        /// <see cref="localRecord"/> está vacío y no dice cuál es la mascota propia.
+        /// </summary>
+        private static bool localRecordSynced;
 
         public const string MsgBowlPurchased = "Pelican4Ever.PetBowlPurchased";
         public const string MsgPetAdoptionSync = "Pelican4Ever.PetAdoptionSync";
@@ -106,6 +109,8 @@ namespace Pelican4Ever.Modules
             wakeTriggerPending = false;
             lastAdoptionGate = string.Empty;
             localRecord = new PetAdoptionRecord();
+            localRecordSynced = false;
+            petStuckSamples.Clear();
 
             if (context == null) return;
 
@@ -185,45 +190,31 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        /// <summary>Garantiza que la mascota tenga un comportamiento válido de <c>Data/Pets</c>.</summary>
+        /// <summary>
+        /// Garantiza que la mascota tenga un comportamiento que la IA de vanilla sepa ejecutar.
+        /// «Sleep» es válido aunque no figure en <c>Data/Pets</c>: lo gestiona <c>Pet.RunState</c> directamente
+        /// (es el estado inicial y el nocturno), así que no debe tratarse como inexistente.
+        /// </summary>
         private static void EnsurePetBehavior(Pet pet, string origin)
         {
             string current = pet.CurrentBehavior;
+            if (string.Equals(current, "Sleep", StringComparison.Ordinal) || pet.GetCurrentPetBehavior() != null)
+                return;
 
-            // Estado inicial de vanilla: PetLicense crea la mascota y warpToFarmHouse la deja en «Sleep»;
-            // la propia IA (RunState) la despierta al pasear. Solo se corrige un estado inexistente.
-            if (string.IsNullOrEmpty(current)
-                || string.Equals(current, "None", StringComparison.OrdinalIgnoreCase)
-                || pet.GetCurrentPetBehavior() == null)
-            {
-                pet.CurrentBehavior = "Sleep";
-                context?.Monitor.Log(
-                    $"[ClientPetAdoption] Comportamiento inicial de la mascota '{pet.displayName}' ajustado a 'Sleep' (era '{current}', {origin}).",
-                    LogLevel.Trace);
-                Diagnostics.Write($"Mascota '{pet.displayName}': comportamiento '{current}' -> 'Sleep' ({origin}).");
-            }
-
-            // Las primeras versiones la creaban sobre la casilla del cuenco, que es un edificio
-            // con colisión. Se recoloca delante para que pueda empezar a caminar sin esperar al próximo día.
-            PetBowl? bowl = pet.GetPetBowl();
-            if (bowl != null
-                && (int)pet.TilePoint.X == bowl.tileX.Value
-                && (int)pet.TilePoint.Y == bowl.tileY.Value)
-            {
-                pet.WarpToPetBowl();
-                context?.Monitor.Log(
-                    $"[ClientPetAdoption] Mascota '{pet.displayName}' recolocada delante del cuenco ({origin}).",
-                    LogLevel.Trace);
-            }
+            pet.CurrentBehavior = "Sleep";
+            context?.Monitor.Log(
+                $"[ClientPetAdoption] Comportamiento de la mascota '{pet.displayName}' ajustado a 'Sleep' (era '{current}', {origin}).",
+                LogLevel.Trace);
+            Diagnostics.Write($"Mascota '{pet.displayName}': comportamiento '{current}' -> 'Sleep' ({origin}).");
         }
 
         /// <summary>
-        /// Reconcilia la mascota adoptada con la ubicación del jugador: se ejecuta en el host y en el
-        /// cliente. Las ubicaciones privadas se regeneran al cargar y sus entidades no siempre sobreviven,
-        /// así que la mascota se reconstruye a partir del registro autoritativo (nombre, tipo, raza y GUID).
-        /// También garantiza que haya una sola copia y que el cuenco apunte a ella.
+        /// Reconcilia en el anfitrión la mascota adoptada de un jugador. Las ubicaciones privadas se regeneran
+        /// al cargar y sus entidades no siempre sobreviven, así que la mascota se reconstruye a partir del
+        /// registro autoritativo (nombre, tipo, raza y GUID). También garantiza que haya una sola copia y
+        /// que el cuenco apunte a ella. No la mueve: de la posición se ocupa la IA de vanilla.
         /// </summary>
-        private static void EnsureAdoptedPetFor(PetAdoptionRecord? record, bool removeForeignPets)
+        private static void EnsureAdoptedPetFor(PetAdoptionRecord? record)
         {
             if (context == null || record == null || record.State != PetAdoptionState.Adopted)
                 return;
@@ -248,21 +239,27 @@ namespace Pelican4Ever.Modules
             if (candidates.Count == 0)
                 return;
 
-            // Preferir donde ya vive la mascota; si no existe, donde está su cuenco.
-            GameLocation target =
-                candidates.FirstOrDefault(c => c.characters.OfType<Pet>().Any(p => p.petId.Value == petGuid))
-                ?? candidates.FirstOrDefault(c => FindPetBowl(c, record) != null)
-                ?? candidates[0];
+            // La mascota puede estar fuera de la residencia (vanilla la lleva a una casa los días de lluvia),
+            // así que se busca en todo el mundo antes de dar por hecho que falta.
+            List<(GameLocation Location, Pet Pet)> copies = FindPetCopies(petGuid);
+            (GameLocation Location, Pet Pet)? kept = copies.Count == 0
+                ? null
+                : copies.OrderByDescending(c => candidates.Contains(c.Location)).First();
 
-            // Copias duplicadas de la misma mascota: quedarse con una sola.
-            List<Pet> matching = target.characters.OfType<Pet>().Where(p => p.petId.Value == petGuid).ToList();
-            for (int i = 1; i < matching.Count; i++)
-                target.characters.Remove(matching[i]);
-
-            Pet? pet = matching.FirstOrDefault();
-            if (pet == null)
+            foreach ((GameLocation location, Pet copy) in copies)
             {
-                PetBowl? bowl = FindPetBowl(target, record);
+                if (ReferenceEquals(copy, kept!.Value.Pet))
+                    continue;
+
+                location.characters.Remove(copy);
+                Diagnostics.Write($"Copia duplicada de '{copy.displayName}' retirada de '{location.NameOrUniqueName}'.");
+            }
+
+            GameLocation bowlLocation = candidates.FirstOrDefault(c => FindPetBowl(c, record) != null) ?? candidates[0];
+            Pet pet;
+            if (kept == null)
+            {
+                PetBowl? bowl = FindPetBowl(bowlLocation, record);
                 Point spot = bowl?.GetPetSpot() ?? new Point(Math.Max(0, record.BowlTileX), Math.Max(0, record.BowlTileY));
 
                 pet = new Pet(
@@ -273,54 +270,39 @@ namespace Pelican4Ever.Modules
                 pet.petId.Value = petGuid;
                 pet.Name = record.PetName;
                 pet.displayName = record.PetName;
-                pet.currentLocation = target;
-                target.characters.Add(pet);
+                pet.currentLocation = bowlLocation;
+                bowlLocation.characters.Add(pet);
 
-                EnsurePetBehavior(pet, "reconciliación");
                 context.Monitor.Log(
-                    $"[ClientPetAdoption] Mascota '{record.PetName}' restaurada en '{target.NameOrUniqueName}' (petId {petGuid}).",
+                    $"[ClientPetAdoption] Mascota '{record.PetName}' restaurada en '{bowlLocation.NameOrUniqueName}' (petId {petGuid}).",
                     LogLevel.Info);
-                Diagnostics.Write($"Mascota '{record.PetName}' restaurada en '{target.NameOrUniqueName}' (petId {petGuid}).");
+                Diagnostics.Write($"Mascota '{record.PetName}' restaurada en '{bowlLocation.NameOrUniqueName}' (petId {petGuid}).");
             }
             else
             {
-                EnsurePetBehavior(pet, "reconciliación");
+                pet = kept.Value.Pet;
             }
 
-            AssignPetToBowl(target, pet, record);
+            EnsurePetBehavior(pet, "reconciliación");
+            AssignPetToBowl(bowlLocation, pet, record);
+        }
 
-            // Si la mascota quedó dentro del propio cuenco, sacarla a su casilla libre. Se comprueba solo
-            // la huella del cuenco (no cualquier edificio) para no teletransportarla en bucle cada tick.
-            PetBowl? bowlForSpot = FindPetBowl(target, record);
-            if (bowlForSpot != null && IsInsideBuildingFootprint(pet, bowlForSpot))
+        /// <summary>Todas las copias de una mascota (por <c>petId</c>) en cualquier ubicación cargada.</summary>
+        private static List<(GameLocation Location, Pet Pet)> FindPetCopies(Guid petGuid)
+        {
+            var copies = new List<(GameLocation, Pet)>();
+            Utility.ForEachLocation(location =>
             {
-                Point spot = bowlForSpot.GetPetSpot();
-
-                // Si el punto canónico sigue dentro de la huella del cuenco (edificio de varios tiles),
-                // bajar hasta la primera casilla libre para no teletransportarla en bucle.
-                for (int guard = 0; guard < 8 && IsTileInsideFootprint(spot, bowlForSpot); guard++)
-                    spot.Y++;
-
-                Game1.warpCharacter(pet, target, new Vector2(spot.X, spot.Y));
-                pet.homeLocationName.Value = target.NameOrUniqueName;
-                Diagnostics.Write(
-                    $"Mascota '{pet.displayName}' recolocada fuera del cuenco en '{target.NameOrUniqueName}' ({spot.X},{spot.Y}).");
-            }
-
-            if (removeForeignPets)
-            {
-                // En la ubicación del jugador no debe aparecer la mascota de otro (p. ej. la del anfitrión).
-                foreach (Pet foreign in target.characters.OfType<Pet>()
-                             .Where(p => p.petId.Value != petGuid && !ReferenceEquals(p, activePetPreview))
-                             .ToList())
+                foreach (NPC character in location.characters)
                 {
-                    target.characters.Remove(foreign);
-                    context.Monitor.Log(
-                        $"[ClientPetAdoption] Mascota ajena '{foreign.displayName}' retirada de '{target.NameOrUniqueName}'.",
-                        LogLevel.Info);
-                    Diagnostics.Write($"Mascota ajena '{foreign.displayName}' retirada de '{target.NameOrUniqueName}'.");
+                    if (character is Pet pet && pet.petId.Value == petGuid && !ReferenceEquals(pet, activePetPreview))
+                        copies.Add((location, pet));
                 }
-            }
+
+                return true;
+            });
+
+            return copies;
         }
 
         /// <summary>
@@ -329,7 +311,9 @@ namespace Pelican4Ever.Modules
         /// </summary>
         private static void RemoveForeignPetsFromOwnLocations()
         {
-            if (context == null || Game1.player == null || isAdoptionPromptActive)
+            // Quitar un personaje en el cliente se replica al anfitrión. Hasta recibir el registro
+            // autoritativo no se sabe cuál es la mascota propia y se borraría también esa.
+            if (context == null || Game1.player == null || isAdoptionPromptActive || !localRecordSynced)
                 return;
 
             Guid ownGuid = Guid.Empty;
@@ -375,78 +359,154 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        /// <summary>Diagnóstico periódico del estado de simulación de las mascotas en el host.</summary>
-        private static void LogPetSimulationState()
-        {
-            if (++petSimulationTicks % 30 != 0)
-                return;
-
-            foreach (Pet pet in Utility.getAllPets())
-            {
-                PetBehavior? behavior = pet.GetCurrentPetBehavior();
-                Diagnostics.Write(
-                    $"Simulación mascota '{pet.displayName}': ubicación='{pet.currentLocation?.NameOrUniqueName ?? "?"}', " +
-                    $"comportamiento='{pet.CurrentBehavior}', walk={behavior?.WalkInDirection.ToString() ?? "null"}, " +
-                    $"tile=({pet.TilePoint.X},{pet.TilePoint.Y}), moving={pet.isMoving()}, speed={pet.speed}, " +
-                    $"dir={pet.FacingDirection}, alwaysActive={pet.currentLocation?.isAlwaysActive.Value.ToString() ?? "?"}, " +
-                    $"vecinos[{DescribeNeighbours(pet)}]");
-            }
-        }
+        /// <summary>Muestras de 1 s seguidas, en comportamiento de paseo, tras las que se actúa sobre una mascota parada.</summary>
+        private const int StuckSamplesBeforeAction = 3;
 
         /// <summary>
-        /// El <c>RunState</c> de vanilla, al chocar, sortea una dirección pero vuelve a comprobar la misma
-        /// casilla bloqueada, así que nunca la aplica y la mascota puede quedarse clavada en un rincón.
-        /// Aquí se aplica de verdad una dirección aleatoria cuando lleva un rato en un comportamiento de
-        /// paseo sin moverse. No cambia el comportamiento ni la IA: solo reorienta el paso.
+        /// Vigila en el anfitrión las mascotas que quieren pasear y no avanzan. Una mascota cuya caja de
+        /// colisión ya está dentro de algo sólido choca en las cuatro direcciones y vanilla no la saca nunca
+        /// de ahí; solo en ese caso se la lleva a la casilla libre más cercana a su cuenco. En cualquier otro
+        /// caso no se toca la IA: se deja constancia de qué la bloquea para poder diagnosticarlo.
         /// </summary>
-        private static void UnstickWalkingPets()
+        private static void WatchStuckPets()
         {
+            var seen = new HashSet<Guid>();
             foreach (Pet pet in Utility.getAllPets())
             {
-                PetBehavior? behavior = pet.GetCurrentPetBehavior();
                 Guid id = pet.petId.Value;
+                seen.Add(id);
 
-                if (behavior == null || !behavior.WalkInDirection || pet.isMoving())
+                GameLocation? location = pet.currentLocation;
+                PetBehavior? behavior = pet.GetCurrentPetBehavior();
+                if (location == null || pet.isSleepingOnFarmerBed.Value || pet.isMoving())
                 {
-                    petStuckTicks.Remove(id);
+                    petStuckSamples.Remove(id);
                     continue;
                 }
 
-                int ticks = petStuckTicks.TryGetValue(id, out int previous) ? previous + 1 : 1;
-                petStuckTicks[id] = ticks;
-
-                if (ticks % 3 != 0)
+                // Sentada, lamiéndose o dormida no intenta moverse: la muestra no cuenta, pero tampoco reinicia.
+                if (behavior == null || !behavior.WalkInDirection)
                     continue;
 
-                pet.faceDirection(Game1.random.Next(4));
-                pet.setMovingInFacingDirection();
+                int samples = petStuckSamples.TryGetValue(id, out int previous) ? previous + 1 : 1;
+                petStuckSamples[id] = samples;
+                if (samples % StuckSamplesBeforeAction != 0)
+                    continue;
+
+                bool embedded = IsCollidingAt(pet, location, pet.GetBoundingBox());
+
+                // Una línea al detectarlo y después una por minuto de paseo bloqueado, no una por segundo.
+                if (samples == StuckSamplesBeforeAction || samples % 60 == 0)
+                    Diagnostics.Write(DescribeStuckPet(pet, location, embedded));
+
+                if (!embedded)
+                    continue;
+
+                Point? free = FindFreeTileNearBowl(pet, location);
+                if (free == null)
+                {
+                    Diagnostics.Write($"Mascota '{pet.displayName}' incrustada y sin casilla libre cercana en '{location.NameOrUniqueName}'.");
+                    continue;
+                }
+
+                Game1.warpCharacter(pet, location, new Vector2(free.Value.X, free.Value.Y));
+                petStuckSamples.Remove(id);
+                context?.Monitor.Log(
+                    $"[ClientPetAdoption] Mascota '{pet.displayName}' incrustada en un obstáculo; movida a ({free.Value.X},{free.Value.Y}) en '{location.NameOrUniqueName}'.",
+                    LogLevel.Info);
+                Diagnostics.Write($"Mascota '{pet.displayName}' movida a la casilla libre ({free.Value.X},{free.Value.Y}).");
             }
+
+            foreach (Guid stale in petStuckSamples.Keys.Where(k => !seen.Contains(k)).ToList())
+                petStuckSamples.Remove(stale);
         }
 
-        /// <summary>Resumen de transitabilidad de las cuatro casillas contiguas (diagnóstico).</summary>
-        private static string DescribeNeighbours(Pet pet)
+        /// <summary>
+        /// Misma comprobación que usa <c>Character.MovePosition</c> para decidir si la mascota puede ocupar
+        /// un rectángulo, sin los efectos secundarios (empujones, hierba) de una colisión real.
+        /// </summary>
+        private static bool IsCollidingAt(Pet pet, GameLocation location, Rectangle box)
         {
-            GameLocation? location = pet.currentLocation;
-            if (location == null)
-                return "sin ubicación";
+            return location.isCollidingPosition(
+                box, Game1.viewport, isFarmer: false, damagesFarmer: 0, glider: false, character: pet,
+                pathfinding: false, projectile: false, ignoreCharacterRequirement: false, skipCollisionEffects: true);
+        }
 
-            Point tile = pet.TilePoint;
-            (string Name, int Dx, int Dy)[] deltas =
-            {
-                ("N", 0, -1), ("E", 1, 0), ("S", 0, 1), ("O", -1, 0)
-            };
+        /// <summary>Primera casilla, por anillos alrededor del punto del cuenco, donde la mascota no colisiona.</summary>
+        private static Point? FindFreeTileNearBowl(Pet pet, GameLocation location)
+        {
+            PetBowl? bowl = pet.GetPetBowl();
+            Point origin = bowl != null && location.buildings.Contains(bowl) ? bowl.GetPetSpot() : pet.TilePoint;
+            Rectangle box = pet.GetBoundingBox();
+            int offsetX = box.X - (int)pet.Position.X;
+            int offsetY = box.Y - (int)pet.Position.Y;
 
-            var parts = new List<string>();
-            foreach ((string name, int dx, int dy) in deltas)
+            for (int radius = 0; radius <= 6; radius++)
             {
-                int x = tile.X + dx;
-                int y = tile.Y + dy;
-                bool passable = location.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport);
-                bool building = location.getBuildingAt(new Vector2(x, y)) != null;
-                parts.Add($"{name}:{(passable && !building ? "libre" : "bloqueado")}");
+                for (int dy = -radius; dy <= radius; dy++)
+                {
+                    for (int dx = -radius; dx <= radius; dx++)
+                    {
+                        if (Math.Max(Math.Abs(dx), Math.Abs(dy)) != radius)
+                            continue;
+
+                        int x = origin.X + dx;
+                        int y = origin.Y + dy;
+
+                        // Fuera del mapa isCollidingPosition responde «libre», así que se descarta antes.
+                        var candidate = new Rectangle(x * 64 + offsetX, y * 64 + offsetY, box.Width, box.Height);
+                        if (!location.isTileOnMap(new Vector2(candidate.Left / 64, candidate.Top / 64))
+                            || !location.isTileOnMap(new Vector2(candidate.Right / 64, candidate.Bottom / 64)))
+                        {
+                            continue;
+                        }
+
+                        if (!IsCollidingAt(pet, location, candidate))
+                            return new Point(x, y);
+                    }
+                }
             }
 
-            return string.Join(" ", parts);
+            return null;
+        }
+
+        /// <summary>Qué impide avanzar a una mascota: colisión real por dirección y obstáculos que pisa.</summary>
+        private static string DescribeStuckPet(Pet pet, GameLocation location, bool embedded)
+        {
+            Rectangle box = pet.GetBoundingBox();
+            string[] names = { "N", "E", "S", "O" };
+            var directions = new List<string>();
+            for (int direction = 0; direction < 4; direction++)
+            {
+                bool blocked = IsCollidingAt(pet, location, pet.nextPosition(direction));
+                directions.Add($"{names[direction]}:{(blocked ? "bloqueado" : "libre")}");
+            }
+
+            var blockers = new List<string>();
+            foreach (Building building in location.buildings)
+            {
+                if (building.intersects(box))
+                    blockers.Add($"edificio {building.buildingType.Value}@({building.tileX.Value},{building.tileY.Value})");
+            }
+
+            foreach (NPC other in location.characters)
+            {
+                if (!ReferenceEquals(other, pet) && other.GetBoundingBox().Intersects(box))
+                    blockers.Add($"personaje {other.Name}");
+            }
+
+            foreach (Farmer farmer in location.farmers)
+            {
+                if (farmer.GetBoundingBox().Intersects(box))
+                    blockers.Add($"jugador {farmer.Name}");
+            }
+
+            return
+                $"Mascota parada '{pet.displayName}' en '{location.NameOrUniqueName}': comportamiento='{pet.CurrentBehavior}', " +
+                $"tile=({pet.TilePoint.X},{pet.TilePoint.Y}), px=({(int)pet.Position.X},{(int)pet.Position.Y}), " +
+                $"caja=({box.X},{box.Y},{box.Width}x{box.Height}), speed={pet.speed}, dir={pet.FacingDirection}, " +
+                $"incrustada={embedded}, colisión[{string.Join(" ", directions)}], " +
+                $"pisa[{(blockers.Count == 0 ? "nada" : string.Join("; ", blockers))}]";
         }
 
         /// <summary>Ubicaciones del jugador local: su residencia y sus anexos.</summary>
@@ -489,24 +549,9 @@ namespace Pelican4Ever.Modules
             return null;
         }
 
-        /// <summary>Indica si la mascota está dentro de la huella (ancho × alto) de un edificio.</summary>
-        private static bool IsInsideBuildingFootprint(Pet pet, Building building)
-        {
-            return IsTileInsideFootprint(pet.TilePoint, building);
-        }
-
-        /// <summary>Indica si una casilla cae dentro de la huella de un edificio.</summary>
-        private static bool IsTileInsideFootprint(Point tile, Building building)
-        {
-            if (building == null)
-                return false;
-
-            return tile.X >= building.tileX.Value && tile.X < building.tileX.Value + building.tilesWide.Value
-                && tile.Y >= building.tileY.Value && tile.Y < building.tileY.Value + building.tilesHigh.Value;
-        }
-
         /// <summary>Ubicaciones donde puede estar la mascota del jugador: su residencia y sus anexos.</summary>
-        private static IEnumerable<GameLocation> GetCandidateLocations(PetAdoptionRecord record)        {
+        private static IEnumerable<GameLocation> GetCandidateLocations(PetAdoptionRecord record)
+        {
             if (string.IsNullOrWhiteSpace(record.FarmSlotId))
                 yield break;
 
@@ -604,7 +649,7 @@ namespace Pelican4Ever.Modules
                         continue;
 
                     string? previousGuid = record.PetGuid;
-                    EnsureAdoptedPetFor(record, removeForeignPets: false);
+                    EnsureAdoptedPetFor(record);
                     if (!string.Equals(previousGuid, record.PetGuid, StringComparison.Ordinal))
                         changed = true;
                 }
@@ -612,8 +657,7 @@ namespace Pelican4Ever.Modules
                 if (changed)
                     context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
 
-                LogPetSimulationState();
-                UnstickWalkingPets();
+                WatchStuckPets();
             }
             else
             {
@@ -915,6 +959,28 @@ namespace Pelican4Ever.Modules
         {
             if (context == null) return;
 
+            var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
+
+            // El anfitrión es la autoridad: solo se crea la mascota si este jugador tiene una adopción
+            // pendiente y en la ubicación donde registró el cuenco. Un mensaje repetido o fuera de flujo
+            // no debe generar otra mascota; se le devuelve el estado real.
+            if (!PetAdoptionLogic.IsAwaitingAdoption(playerRecord.PetAdoption)
+                || !string.Equals(playerRecord.PetAdoption.FarmSlotId, payload.SlotName, StringComparison.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(payload.PetName))
+            {
+                context.Monitor.Log(
+                    $"[ClientPetAdoption] Adopción ignorada para {playerId} en '{payload.SlotName}' " +
+                    $"(estado={playerRecord.PetAdoption.State}, cuenco en '{playerRecord.PetAdoption.FarmSlotId}').",
+                    LogLevel.Warn);
+                context.Helper.Multiplayer.SendMessage(
+                    playerRecord.PetAdoption,
+                    MsgPetAdoptionSync,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { playerId }
+                );
+                return;
+            }
+
             GameLocation? loc = Game1.getLocationFromName(payload.SlotName);
             if (loc == null)
             {
@@ -922,8 +988,7 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            // Identificador estable de la mascota: host y cliente crean la misma, y el cuenco la apunta.
-            var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
+            // Identificador estable de la mascota: el cuenco y el registro la apuntan por este GUID.
             string petGuid = PetAdoptionLogic.EnsurePetGuid(playerRecord.PetAdoption);
 
             // Localizar el cuenco antes de crear la mascota: su casilla canónica es la de delante
@@ -1013,15 +1078,17 @@ namespace Pelican4Ever.Modules
                 }
                 else if (e.Type == MsgQueryPetAdoption)
                 {
-                    if (context.WorldState.Players.TryGetValue(e.FromPlayerID, out var playerRecord))
-                    {
-                        context.Helper.Multiplayer.SendMessage(
-                            playerRecord.PetAdoption,
-                            MsgPetAdoptionSync,
-                            new[] { context.Manifest.UniqueID },
-                            new[] { e.FromPlayerID }
-                        );
-                    }
+                    // Se responde siempre, aunque el jugador aún no tenga registro: el cliente necesita
+                    // saber que su estado (vacío) es el autoritativo antes de tocar las mascotas que ve.
+                    PetAdoptionRecord reply = context.WorldState.Players.TryGetValue(e.FromPlayerID, out var playerRecord)
+                        ? playerRecord.PetAdoption ?? new PetAdoptionRecord()
+                        : new PetAdoptionRecord();
+                    context.Helper.Multiplayer.SendMessage(
+                        reply,
+                        MsgPetAdoptionSync,
+                        new[] { context.Manifest.UniqueID },
+                        new[] { e.FromPlayerID }
+                    );
                 }
             }
             else
@@ -1029,6 +1096,7 @@ namespace Pelican4Ever.Modules
                 if (e.Type == MsgPetAdoptionSync && e.ReadAs<PetAdoptionRecord>() is { } record)
                 {
                     localRecord = record;
+                    localRecordSynced = true;
                     UpdateWakeTriggerPending();
                     context.Monitor.Log(
                         $"[ClientPetAdoption] Estado de adopción sincronizado desde el host: estado={record.State}, cuenco en '{record.FarmSlotId}' (compra día {record.PurchaseGameDay}).",

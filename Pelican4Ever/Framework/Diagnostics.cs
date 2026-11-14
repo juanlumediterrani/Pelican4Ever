@@ -11,6 +11,9 @@ namespace Pelican4Ever.Framework
     /// </summary>
     public static class Diagnostics
     {
+        /// <summary>Tamaño a partir del cual se rota el archivo, para que no crezca sin límite.</summary>
+        private const long MaxBytes = 2 * 1024 * 1024;
+
         private static readonly object Gate = new();
         private static string? path;
 
@@ -40,6 +43,10 @@ namespace Pelican4Ever.Framework
                 string role = Context.IsMainPlayer ? "H" : "C";
                 lock (Gate)
                 {
+                    var info = new FileInfo(path);
+                    if (info.Exists && info.Length > MaxBytes)
+                        File.Move(path, path + ".old", overwrite: true);
+
                     File.AppendAllText(path, $"[{DateTime.Now:HH:mm:ss}] [{role}] {message}{Environment.NewLine}");
                 }
             }

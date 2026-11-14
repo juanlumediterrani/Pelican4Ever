@@ -3277,35 +3277,12 @@ namespace Pelican4Ever.Modules
             else if (e.Type == ModMessages.DemolishBuildingRequest && Context.IsMainPlayer)
             {
                 // Los clientes no pueden usar demolishLock: la demolición la ejecuta el anfitrión.
-                var payload = e.ReadAs<DemolishBuildingPayload>();
-                if (payload != null
-                    && Game1.getLocationFromName(payload.LocationId) is GameLocation location
-                    && IsOwnedByPlayer(location, e.FromPlayerID))
-                {
-                    Building? building = location.getBuildingAt(new Vector2(payload.TileX, payload.TileY));
-                    if (building != null && !CanDemolishBuilding(location, building, out string? reason))
-                    {
-                        context.Monitor.Log(
-                            $"[FarmSlotModule] Demolición rechazada por {e.FromPlayerID} en '{payload.LocationId}' " +
-                            $"@({payload.TileX},{payload.TileY}): {reason}",
-                            LogLevel.Warn);
-                        Diagnostics.Write($"Demolición rechazada en host: {reason}");
-                        return;
-                    }
-
-                    bool removed = building != null && location.destroyStructure(building);
-                    context.Monitor.Log(
-                        $"[FarmSlotModule] Demolición solicitada por {e.FromPlayerID} en '{payload.LocationId}' " +
-                        $"@({payload.TileX},{payload.TileY}): {(removed ? "eliminado" : "no encontrado")}.",
-                        removed ? LogLevel.Info : LogLevel.Warn);
-                    Diagnostics.Write($"Demolición de {e.FromPlayerID} en '{payload.LocationId}' @({payload.TileX},{payload.TileY}) -> {removed}.");
-                }
-                else
-                {
-                    context.Monitor.Log(
-                        $"[FarmSlotModule] Petición de demolición rechazada para {e.FromPlayerID} en '{payload?.LocationId ?? "?"}'.",
-                        LogLevel.Warn);
-                }
+                HandleDemolishBuildingRequest(e.FromPlayerID, e.ReadAs<DemolishBuildingPayload>());
+            }
+            else if (e.Type == ModMessages.DemolishBuildingResult && !Context.IsMainPlayer
+                && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
+            {
+                HandleDemolishBuildingResult(e.ReadAs<DemolishBuildingResultPayload>());
             }
             else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
@@ -6151,6 +6128,9 @@ namespace Pelican4Ever.Modules
                 TileY = (int)tile.Y
             };
 
+            pendingDemolishBuilding = building;
+            pendingDemolishLocation = target;
+
             context.Helper.Multiplayer.SendMessage(
                 payload,
                 ModMessages.DemolishBuildingRequest,
@@ -6165,6 +6145,103 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
+        /// <summary>Edificio cuya demolición ha pedido este cliente y aún no ha confirmado el anfitrión.</summary>
+        private static Building? pendingDemolishBuilding;
+        private static GameLocation? pendingDemolishLocation;
+
+        /// <summary>
+        /// Anfitrión: valida y ejecuta la demolición pedida por un cliente con los mismos pasos que
+        /// <c>ContinueDemolish</c> de vanilla, y le responde siempre para que su menú pueda continuar.
+        /// </summary>
+        private static void HandleDemolishBuildingRequest(long playerId, DemolishBuildingPayload? payload)
+        {
+            if (context == null)
+                return;
+
+            bool removed = false;
+            string outcome;
+
+            if (payload == null
+                || Game1.getLocationFromName(payload.LocationId) is not GameLocation location
+                || !IsOwnedByPlayer(location, playerId))
+            {
+                outcome = "ubicación ajena o desconocida";
+            }
+            else if (location.getBuildingAt(new Vector2(payload.TileX, payload.TileY)) is not Building building)
+            {
+                outcome = "no hay edificio en esa casilla";
+            }
+            else if (!CanDemolishBuilding(location, building, out string? reason))
+            {
+                outcome = $"no permitido ({reason ?? "edificio protegido"})";
+            }
+            else
+            {
+                building.BeforeDemolish();
+                removed = location.destroyStructure(building);
+                if (removed)
+                    Utility.spreadAnimalsAround(building, location);
+
+                outcome = removed ? "eliminado" : "destroyStructure devolvió false";
+            }
+
+            context.Monitor.Log(
+                $"[FarmSlotModule] Demolición solicitada por {playerId} en '{payload?.LocationId ?? "?"}' " +
+                $"@({payload?.TileX},{payload?.TileY}): {outcome}.",
+                removed ? LogLevel.Info : LogLevel.Warn);
+            Diagnostics.Write($"Demolición de {playerId} en '{payload?.LocationId ?? "?"}' @({payload?.TileX},{payload?.TileY}) -> {outcome}.");
+
+            context.Helper.Multiplayer.SendMessage(
+                new DemolishBuildingResultPayload
+                {
+                    LocationId = payload?.LocationId ?? string.Empty,
+                    TileX = payload?.TileX ?? 0,
+                    TileY = payload?.TileY ?? 0,
+                    Success = removed
+                },
+                ModMessages.DemolishBuildingResult,
+                new[] { context.Manifest.UniqueID },
+                new[] { playerId });
+        }
+
+        /// <summary>
+        /// Cliente: completa la parte visual de <c>ContinueDemolish</c> cuando el anfitrión confirma
+        /// (destello, animación, sonido y vuelta al menú de Robin) o avisa si la rechazó.
+        /// </summary>
+        private static void HandleDemolishBuildingResult(DemolishBuildingResultPayload? payload)
+        {
+            Building? building = pendingDemolishBuilding;
+            GameLocation? location = pendingDemolishLocation;
+            pendingDemolishBuilding = null;
+            pendingDemolishLocation = null;
+
+            if (payload == null)
+                return;
+
+            Diagnostics.Write($"Resultado de demolición del host: '{payload.LocationId}' @({payload.TileX},{payload.TileY}) -> {payload.Success}.");
+
+            if (!payload.Success)
+            {
+                Game1.addHUDMessage(new HUDMessage(Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_LockFailed"), 3));
+                return;
+            }
+
+            Game1.flashAlpha = 1f;
+            Game1.playSound("explosion");
+            if (building != null
+                && location != null
+                && string.Equals(location.NameOrUniqueName, payload.LocationId, StringComparison.OrdinalIgnoreCase))
+            {
+                building.showDestroyedAnimation(location);
+            }
+
+            if (Game1.activeClickableMenu is CarpenterMenu menu && menu.onFarm && !menu.freeze)
+            {
+                DelayedAction.functionAfterDelay(menu.returnToCarpentryMenu, 1500);
+                menu.freeze = true;
+            }
+        }
+
         /// <summary>
         /// Réplica de las comprobaciones de <c>ContinueDemolish</c> de vanilla, necesarias cuando la
         /// demolición la ejecuta el anfitrión en nombre de un cliente.
@@ -6176,6 +6253,16 @@ namespace Pelican4Ever.Modules
             if (location == null || building == null)
                 return false;
 
+            // Equivalente a CarpenterMenu.CanDemolishThis. Vanilla protege la casa, el invernadero y el
+            // último cajón de envíos comparando con la granja principal y con los nombres de interior
+            // «FarmHouse»/«Greenhouse», que no coinciden en una residencia: sin esto un cliente podía
+            // demoler el invernadero o el único cajón de su residencia. Sin mensaje, como en vanilla.
+            string buildingType = building.buildingType.Value ?? string.Empty;
+            if (buildingType == "Farmhouse" || buildingType == "Greenhouse")
+                return false;
+            if (buildingType == "Shipping Bin" && !location.HasMinBuildings(buildingType, 2))
+                return false;
+
             if (building.daysOfConstructionLeft.Value > 0 || building.daysUntilUpgrade.Value > 0)
             {
                 message = Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_DuringConstruction");
@@ -6183,6 +6270,13 @@ namespace Pelican4Ever.Modules
             }
 
             GameLocation? interior = building.GetIndoors();
+
+            // Vanilla no deja a un cliente demoler cabañas (tienen dueño, sótano y cofre de devolución).
+            if (interior is Cabin)
+            {
+                message = Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_LockFailed");
+                return false;
+            }
 
             // Un cuenco vinculado a una mascota no se puede retirar: la dejaría sin hogar y sin punto de referencia.
             if (building is PetBowl bowl && bowl.HasPet())

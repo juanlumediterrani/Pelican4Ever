@@ -1798,3 +1798,16 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       1. La recolocación solo se aplica si la mascota está dentro de la huella **del cuenco**, y el destino salta las casillas ocupadas por ese edificio (sin bucles).
       2. Al mostrar el martillo se restauran los vecinos de navegación (`upgradeIcon.rightNeighborID`, `okButton.rightNeighborID`, `cancelButton.leftNeighborID` = 104) y se repuebla la lista de componentes, de modo que el mando lo alcanza.
       3. Verificado que `Pet.draw` usa `StandingPixel.Y / 10000` igual que `NPC.draw`: que un gato sentado quede tras la copa de un árbol es comportamiento vanilla, no del mod.
+
+- [x] **TASK-2027: Cierre de mascotas y demolición de clientes**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2023..TASK-2026.
+  * **Descripción:** Últimos ajustes del flujo de mascotas y del borrado remoto: la mascota podía estar fuera de la residencia (vanilla la lleva a casa los días de lluvia) y la reconciliación la duplicaba; el cliente no recibía confirmación de la demolición, así que se quedaba en el mapa sin animación ni vuelta al menú.
+  * **Resolución:**
+      1. `FindPetCopies` busca la mascota por `petId` en todas las ubicaciones antes de recrearla, conserva una sola copia y deja la posición a la IA de vanilla (no se recoloca salvo que esté incrustada en un obstáculo, y entonces se lleva a la casilla libre más cercana al cuenco).
+      2. «Sleep» se respeta como estado válido de vanilla y no se trata como comportamiento inexistente.
+      3. La demolición de un cliente recibe `DemolishBuildingResult`: el host valida y ejecuta, y el cliente reproduce destello, sonido, animación y vuelta al menú de Robin.
+      4. `CanDemolishBuilding` replica además `CanDemolishThis` (casa, invernadero y último cajón de envíos) y bloquea cabañas con dueño.
+      5. El cliente no retira personajes hasta recibir el registro autoritativo, para no borrar su propia mascota.
+      6. `diagnostics.log` rota a 2 MB (`diagnostics.log.old`).
+      7. Compilación Debug sin errores y suite en verde (1337 pruebas).
