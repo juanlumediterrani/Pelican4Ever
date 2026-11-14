@@ -10,5 +10,11 @@ namespace Pelican4Ever.Core.World
             int level = Math.Max(0, Math.Min(personalDepth, 120));
             return orderDepth >= 0 ? Math.Min(level, orderDepth) : level;
         }
+
+        /// <summary>
+        /// En vanilla (<c>Game1._newDayAfterFade</c>), los cofres por encima del piso 120 (Caverna Calavera)
+        /// se limpian al cambiar de día, mientras que los de las minas regulares (&lt;= 120) son de un solo uso.
+        /// </summary>
+        public static bool ShouldResetMineChestOnNewDay(int mineLevel) => mineLevel > 120;
     }
 }

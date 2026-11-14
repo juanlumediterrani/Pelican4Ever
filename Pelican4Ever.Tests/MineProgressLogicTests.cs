@@ -16,4 +16,18 @@ public class MineProgressLogicTests
     {
         Assert.Equal(expected, MineProgressLogic.ElevatorLevel(personalDepth, orderDepth));
     }
+
+    [Theory]
+    [InlineData(10, false)]
+    [InlineData(100, false)]
+    [InlineData(120, false)]
+    [InlineData(121, true)]
+    [InlineData(131, true)]
+    [InlineData(220, true)]
+    [InlineData(320, true)]
+    [InlineData(420, true)]
+    public void ResetsOnlySkullCavernChestsAbove120OnNewDay(int mineLevel, bool expected)
+    {
+        Assert.Equal(expected, MineProgressLogic.ShouldResetMineChestOnNewDay(mineLevel));
+    }
 }

@@ -518,6 +518,10 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                // En vanilla Game1._newDayAfterFade() solo limpia chestConsumedMineLevels (> 120) en el jugador local;
+                // como este rollover cierra los peers antes de NewDay(0f), los farmhands necesitan esa limpieza aquí.
+                ResetOfflineFarmhandSkullCavernChests();
+
                 // Game1.NewDay es la transición nativa que ejecuta ReadyCheckDialog al completarse.
                 // Todos los farmhands ya se han guardado y desconectado, así que no queda un peer bloqueando el check.
                 Game1.NewDay(0f);
@@ -551,6 +555,41 @@ namespace Pelican4Ever.Modules
             Game1.fadeScreenToBlack();
             Game1.player.Halt();
             return "host despierto: fundido lanzado por el mod";
+        }
+
+        /// <summary>
+        /// Limpia en los farmhands desconectados los cofres diarios de la Caverna Calavera (&gt; 120) antes de
+        /// <c>Game1.NewDay</c>, igual que hace el motor nativo solo en <c>Game1.player</c>.
+        /// </summary>
+        private static void ResetOfflineFarmhandSkullCavernChests()
+        {
+            int clearedFarmhands = 0;
+            int clearedLevels = 0;
+
+            foreach (Farmer farmhand in Game1.getAllFarmhands())
+            {
+                if (farmhand == null || farmhand.IsMainPlayer)
+                    continue;
+
+                int before = farmhand.chestConsumedMineLevels.Count();
+                if (before == 0)
+                    continue;
+
+                farmhand.chestConsumedMineLevels.RemoveWhere(pair => MineProgressLogic.ShouldResetMineChestOnNewDay(pair.Key));
+                int removed = before - farmhand.chestConsumedMineLevels.Count();
+                if (removed > 0)
+                {
+                    clearedFarmhands++;
+                    clearedLevels += removed;
+                }
+            }
+
+            if (clearedLevels > 0)
+            {
+                context?.Monitor.Log(
+                    $"[DailyRolloverModule] Caverna Calavera: limpiados {clearedLevels} cofre(s) diario(s) (>120) en {clearedFarmhands} farmhand(s).",
+                    LogLevel.Info);
+            }
         }
 
         /// <summary>
