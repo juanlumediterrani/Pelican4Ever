@@ -38,6 +38,7 @@ namespace Pelican4Ever.Models
         public const string SyncDoorsState = "SyncDoorsState";
         public const string RequestAnnexLocation = "RequestAnnexLocation";
         public const string SyncAnnexLocation = "SyncAnnexLocation";
+        public const string DemolishBuildingRequest = "DemolishBuildingRequest";
         public const string RequestDoorsSync = "RequestDoorsSync";
         public const string PairingChallenge = "PairingChallenge";
         public const string PairingSubmit = "PairingSubmit";
@@ -49,6 +50,17 @@ namespace Pelican4Ever.Models
         public string Alias { get; set; } = string.Empty;
         public int RemainingAttempts { get; set; } = 3;
         public string PromptMessage { get; set; } = "Introduce tu código de pairing:";
+    }
+
+    /// <summary>
+    /// Petición de un cliente para que el anfitrión demuela un edificio: `demolishLock` de vanilla solo
+    /// funciona en el anfitrión, así que la operación autoritativa la ejecuta él.
+    /// </summary>
+    public class DemolishBuildingPayload
+    {
+        public string LocationId { get; set; } = string.Empty;
+        public int TileX { get; set; }
+        public int TileY { get; set; }
     }
 
     public class PairingSubmitPayload

@@ -3274,6 +3274,29 @@ namespace Pelican4Ever.Modules
                     RetainSyncedOwnPrivateLocation(farm);
                 }
             }
+            else if (e.Type == ModMessages.DemolishBuildingRequest && Context.IsMainPlayer)
+            {
+                // Los clientes no pueden usar demolishLock: la demolición la ejecuta el anfitrión.
+                var payload = e.ReadAs<DemolishBuildingPayload>();
+                if (payload != null
+                    && Game1.getLocationFromName(payload.LocationId) is GameLocation location
+                    && IsOwnedByPlayer(location, e.FromPlayerID))
+                {
+                    Building? building = location.getBuildingAt(new Vector2(payload.TileX, payload.TileY));
+                    bool removed = building != null && location.destroyStructure(building);
+                    context.Monitor.Log(
+                        $"[FarmSlotModule] Demolición solicitada por {e.FromPlayerID} en '{payload.LocationId}' " +
+                        $"@({payload.TileX},{payload.TileY}): {(removed ? "eliminado" : "no encontrado")}.",
+                        removed ? LogLevel.Info : LogLevel.Warn);
+                    Diagnostics.Write($"Demolición de {e.FromPlayerID} en '{payload.LocationId}' @({payload.TileX},{payload.TileY}) -> {removed}.");
+                }
+                else
+                {
+                    context.Monitor.Log(
+                        $"[FarmSlotModule] Petición de demolición rechazada para {e.FromPlayerID} en '{payload?.LocationId ?? "?"}'.",
+                        LogLevel.Warn);
+                }
+            }
             else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
             {
@@ -4334,6 +4357,15 @@ namespace Pelican4Ever.Modules
                     "GameLocation.destroyStructure(Building)",
                     AccessTools.Method(typeof(GameLocation), nameof(GameLocation.destroyStructure), new[] { typeof(Building) }),
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_GameLocation_DestroyStructure))
+                );
+
+                // NetWitnessedLock.RequestLock solo funciona en el anfitrión (lanza InvalidOperationException en
+                // un cliente). Se intercepta el demolishLock para que el host ejecute la demolición.
+                PatchSafe(
+                    harmony,
+                    "NetWitnessedLock.RequestLock",
+                    AccessTools.Method(typeof(NetWitnessedLock), nameof(NetWitnessedLock.RequestLock)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NetWitnessedLock_RequestLock))
                 );
 
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
@@ -6023,6 +6055,54 @@ namespace Pelican4Ever.Modules
                 $"@({building?.tileX?.Value.ToString() ?? "?"},{building?.tileY?.Value.ToString() ?? "?"}) -> {__result}, host={Context.IsMainPlayer}");
         }
 
+        /// <summary>
+        /// TASK-2020: <c>NetWitnessedLock.RequestLock</c> solo funciona en el anfitrión. Cuando un cliente
+        /// demuele, se envía la petición al host (que es la autoridad de la ubicación) en lugar de dejar que
+        /// vanilla lance <c>InvalidOperationException</c>.
+        /// </summary>
+        public static bool Prefix_NetWitnessedLock_RequestLock(NetWitnessedLock __instance, Action acquired, Action failed)
+        {
+            if (Context.IsMainPlayer || Game1.player == null || context == null)
+                return true;
+
+            if (!ReferenceEquals(__instance, Game1.player.team.demolishLock))
+                return true;
+
+            if (Game1.activeClickableMenu is not CarpenterMenu menu)
+                return true;
+
+            GameLocation? target = menu.TargetLocation;
+            if (target == null)
+                return true;
+
+            Vector2 tile = new Vector2(
+                (Game1.viewport.X + Game1.getOldMouseX(ui_scale: false)) / 64,
+                (Game1.viewport.Y + Game1.getOldMouseY(ui_scale: false)) / 64);
+            Building? building = target.getBuildingAt(tile);
+            if (building == null)
+                return true;
+
+            var payload = new DemolishBuildingPayload
+            {
+                LocationId = target.NameOrUniqueName,
+                TileX = (int)tile.X,
+                TileY = (int)tile.Y
+            };
+
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                ModMessages.DemolishBuildingRequest,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+
+            Diagnostics.Write(
+                $"Petición de demolición enviada al host: '{payload.LocationId}' " +
+                $"{building.buildingType?.Value ?? "?"} @({payload.TileX},{payload.TileY}).");
+
+            // No se llama al original: en un cliente siempre lanzaría InvalidOperationException.
+            return false;
+        }
+
         /// <summary>Indica si el jugador local puede gestionar edificios (construir, mover, demoler) en una ubicación.</summary>
         private static bool CanClientManageLocation(GameLocation? location)
         {
@@ -6524,13 +6604,13 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
-        /// TASK-2014: el menú «Animales» de 1.6 recorre todas las ubicaciones del juego, así que en un cliente
-        /// listaba la mascota, el caballo y los animales del anfitrión. Se conservan solo los que viven en
-        /// ubicaciones del jugador local (su residencia, anexos e interiores).
+        /// TASK-2014: el menú «Animales» de 1.6 recorre todas las ubicaciones del juego, así que mostraba
+        /// también la mascota, el caballo y los animales de los demás (incluido el anfitrión con las granjas
+        /// de los farmhands). Se conservan solo los que viven en ubicaciones del jugador local.
         /// </summary>
         public static void Postfix_AnimalPage_FindAnimals(ref List<AnimalPage.AnimalEntry> __result)
         {
-            if (Context.IsMainPlayer || __result == null)
+            if (__result == null)
                 return;
 
             __result.RemoveAll(entry => entry?.Animal == null || !IsAnimalOwnedByLocalPlayer(entry.Animal));
@@ -6563,23 +6643,34 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || Game1.player == null) return false;
 
-            long me = Game1.player.UniqueMultiplayerID;
+            // La granja principal pertenece siempre al anfitrión.
+            if (string.Equals(location.NameOrUniqueName, "Farm", StringComparison.OrdinalIgnoreCase))
+                return Context.IsMainPlayer;
+
+            return IsOwnedByPlayer(location, Game1.player.UniqueMultiplayerID);
+        }
+
+        /// <summary>Indica si una ubicación (o su granja padre) pertenece al jugador indicado.</summary>
+        private static bool IsOwnedByPlayer(GameLocation location, long playerId)
+        {
+            if (context == null || playerId == 0) return false;
+
             string name = location.NameOrUniqueName;
 
-            if (context.WorldState.Doors.Values.Any(d => d.OwnerId == me && string.Equals(d.FarmSlotId, name, StringComparison.OrdinalIgnoreCase)))
+            if (context.WorldState.Doors.Values.Any(d => d.OwnerId == playerId && string.Equals(d.FarmSlotId, name, StringComparison.OrdinalIgnoreCase)))
                 return true;
-            if (context.WorldState.Players.TryGetValue(me, out var rec) && string.Equals(rec.FarmSlotId, name, StringComparison.OrdinalIgnoreCase))
+            if (context.WorldState.Players.TryGetValue(playerId, out var rec) && string.Equals(rec.FarmSlotId, name, StringComparison.OrdinalIgnoreCase))
                 return true;
-            if (context.WorldState.FindAnnexById(name)?.OwnerId == me)
+            if (context.WorldState.FindAnnexById(name)?.OwnerId == playerId)
                 return true;
 
-            if (location.GetFarmOwnerId() == me)
+            if (location.GetFarmOwnerId() == playerId)
                 return true;
 
             // Interiores de la residencia (Pelican4Ever_Farm_02_Home, _Cave, _Cellar, _Greenhouse):
             // resolver el hueco desde el edificio padre o, si no está hidratado, desde el nombre.
             if (location.ParentBuilding?.GetParentLocation() is GameLocation parent && !ReferenceEquals(parent, location))
-                return IsOwnedByLocalPlayer(parent);
+                return IsOwnedByPlayer(parent, playerId);
 
             foreach (string suffix in new[] { "_Home", "_Cave", "_Cellar", "_Greenhouse" })
             {
@@ -6587,8 +6678,8 @@ namespace Pelican4Ever.Modules
                     continue;
 
                 string slotId = name.Substring(0, name.Length - suffix.Length);
-                if (context.WorldState.Doors.Values.Any(d => d.OwnerId == me && string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
-                    || context.WorldState.FindAnnexById(slotId)?.OwnerId == me)
+                if (context.WorldState.Doors.Values.Any(d => d.OwnerId == playerId && string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                    || context.WorldState.FindAnnexById(slotId)?.OwnerId == playerId)
                     return true;
             }
 

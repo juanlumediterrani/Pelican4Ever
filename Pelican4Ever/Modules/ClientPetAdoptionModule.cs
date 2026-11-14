@@ -38,6 +38,9 @@ namespace Pelican4Ever.Modules
         private static NPC? activeMarnie;
         private static Pet? activePetPreview;
 
+        /// <summary>Ticks consecutivos en los que la mascota propia no aparece en la copia local del cliente.</summary>
+        private static int missingPetTicks;
+
         public const string MsgBowlPurchased = "Pelican4Ever.PetBowlPurchased";
         public const string MsgPetAdoptionSync = "Pelican4Ever.PetAdoptionSync";
         public const string MsgPetAdopted = "Pelican4Ever.PetAdopted";
@@ -297,10 +300,27 @@ namespace Pelican4Ever.Modules
             if (context == null || Game1.player == null || isAdoptionPromptActive)
                 return;
 
-            Guid ownGuid = Guid.TryParse(localRecord.PetGuid, out Guid parsed) ? parsed : Guid.Empty;
+            Guid ownGuid = Guid.Empty;
+            if (localRecord.State == PetAdoptionState.Adopted)
+            {
+                // Sin el GUID sincronizado aún no se puede distinguir la propia: mejor no tocar nada.
+                if (!Guid.TryParse(localRecord.PetGuid, out ownGuid))
+                    return;
+            }
+
+            bool ownPetSeen = false;
+            int checkedLocations = 0;
 
             foreach (GameLocation location in GetOwnLocations())
             {
+                checkedLocations++;
+
+                if (localRecord.State == PetAdoptionState.Adopted
+                    && location.characters.OfType<Pet>().Any(p => p.petId.Value == ownGuid))
+                {
+                    ownPetSeen = true;
+                }
+
                 foreach (Pet pet in location.characters.OfType<Pet>()
                              .Where(p => p.petId.Value != ownGuid && !ReferenceEquals(p, activePetPreview))
                              .ToList())
@@ -308,6 +328,21 @@ namespace Pelican4Ever.Modules
                     location.characters.Remove(pet);
                     Diagnostics.Write($"Mascota ajena '{pet.displayName}' retirada de '{location.NameOrUniqueName}' (cliente).");
                 }
+            }
+
+            // Diagnóstico: si la mascota propia no aparece en la copia local, el host aún no la ha sincronizado.
+            if (localRecord.State == PetAdoptionState.Adopted && checkedLocations > 0 && !ownPetSeen)
+            {
+                missingPetTicks++;
+                if (missingPetTicks % 30 == 1)
+                {
+                    Diagnostics.Write(
+                        $"La mascota '{localRecord.PetName}' (petId {localRecord.PetGuid}) todavía no está en las ubicaciones locales del cliente.");
+                }
+            }
+            else
+            {
+                missingPetTicks = 0;
             }
         }
 
@@ -460,7 +495,8 @@ namespace Pelican4Ever.Modules
             }
             else
             {
-                EnsureAdoptedPetFor(localRecord, removeForeignPets: true);
+                // El cliente NO simula la mascota: su movimiento lo calcula el anfitrión y llega por red.
+                // Aquí solo se retiran las mascotas ajenas de la residencia y los anexos.
                 RemoveForeignPetsFromOwnLocations();
             }
         }

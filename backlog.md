@@ -1732,3 +1732,31 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Resolución:**
       1. `Prefix_Utility_FindPet` responde con `Utility.getAllPets()` (ya tolerante y filtrado por jugador en clientes) en lugar de resolver casas ajenas.
       2. Compilación Debug desplegada sin errores y suite en verde (1337 pruebas).
+
+- [x] **TASK-2020: Demoler como cliente rompía `demolishLock` y salía en rojo sin borrar**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2015.
+  * **Descripción:** `NetWitnessedLock.RequestLock` lanza `InvalidOperationException` si no eres el anfitrión (`if (!Game1.IsMasterGame) throw …`). Al pulsar un edificio en modo demoler, el cliente entraba en un bucle de excepciones con «Mismatched UI Mode Push/Pop counts».
+  * **Criterios de aceptación:**
+      1. Un cliente demuele en su residencia o anexo sin excepciones.
+      2. La operación la ejecuta el anfitrión y el edificio desaparece en todas las instancias.
+      3. En ubicaciones ajenas sigue sin poder.
+  * **Resolución:**
+      1. `Prefix_NetWitnessedLock_RequestLock` intercepta el `demolishLock` en clientes y envía `DemolishBuildingRequest` al host (ubicación + casilla); no llama al original.
+      2. El host valida la propiedad del solicitante (`IsOwnedByPlayer`) y ejecuta `GameLocation.destroyStructure`, que replica el borrado por la red.
+
+- [x] **TASK-2021: El anfitrión veía también los animales de los farmhands**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2014.
+  * **Descripción:** El filtro de la pestaña «Animales» solo se aplicaba a clientes, así que el anfitrión veía sus animales y los de todos los farmhands (incluidas gallinas).
+  * **Resolución:**
+      1. El postfix de `AnimalPage.FindAnimals` se aplica también en el host.
+      2. `IsOwnedByLocalPlayer` considera la granja principal («Farm») del anfitrión y resuelve interiores por edificio padre.
+
+- [x] **TASK-2022: La mascota del cliente no se movía**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2017.
+  * **Descripción:** La IA de `Pet` solo avanza en el anfitrión (`if (Game1.IsMasterGame)` dentro de `update`); en un cliente la entidad solo se mueve por interpolación de red. La reconciliación creaba una copia local en el cliente, que quedaba estática.
+  * **Resolución:**
+      1. El cliente deja de crear mascotas: solo el host las crea/repara y las sincroniza.
+      2. El cliente se limita a retirar mascotas ajenas de su residencia y anexos, y registra en `diagnostics.log` si su mascota aún no ha llegado.
