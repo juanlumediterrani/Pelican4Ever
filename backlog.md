@@ -1789,3 +1789,12 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Resolución:**
       1. `CanDemolishBuilding` bloquea un `PetBowl` con `HasPet()` y avisa con el nombre de la mascota (claves i18n `carpenter.cant_demolish_pet_bowl` y `carpenter.unknown_pet` en inglés, castellano y chino).
       2. Nuevo postfix en `CarpenterMenu.resetBounds` que repone la visibilidad del martillo en ubicaciones propias, de modo que el botón sigue ahí al volver del mapa.
+
+- [x] **TASK-2026: La mascota quedaba clavada junto al cuenco y el martillo no era accesible con mando**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2023, TASK-2025.
+  * **Descripción:** El diagnóstico del host mostró `Mascota 'Gatabell' recolocada fuera del edificio…` **cada segundo**: la comprobación usaba `getBuildingAt(pet.Tile) != null`, así que cualquier edificio junto al cuenco (o la propia huella del cuenco) provocaba un teletransporte continuo que impedía caminar. Por otro lado, al hacer visible el martillo se restauraba `visible`, pero `resetBounds` había recableado los `neighborID` de navegación, de modo que el botón solo se alcanzaba con ratón.
+  * **Resolución:**
+      1. La recolocación solo se aplica si la mascota está dentro de la huella **del cuenco**, y el destino salta las casillas ocupadas por ese edificio (sin bucles).
+      2. Al mostrar el martillo se restauran los vecinos de navegación (`upgradeIcon.rightNeighborID`, `okButton.rightNeighborID`, `cancelButton.leftNeighborID` = 104) y se repuebla la lista de componentes, de modo que el mando lo alcanza.
+      3. Verificado que `Pet.draw` usa `StandingPixel.Y / 10000` igual que `NPC.draw`: que un gato sentado quede tras la copa de un árbol es comportamiento vanilla, no del mod.

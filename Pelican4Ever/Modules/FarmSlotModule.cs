@@ -6050,8 +6050,24 @@ namespace Pelican4Ever.Modules
         {
             bool owned = CanClientManageLocation(menu.TargetLocation);
 
-            if (!Context.IsMainPlayer && !menu.readOnly && menu.demolishButton != null && owned)
+            if (Context.IsMainPlayer || menu.readOnly || menu.demolishButton == null || !owned)
+                return owned;
+
+            if (!menu.demolishButton.visible)
+            {
                 menu.demolishButton.visible = true;
+
+                // resetBounds recablea los vecinos de navegación cuando el martillo estaba oculto;
+                // sin restaurarlos el botón solo se alcanza con el ratón, no con el mando.
+                if (menu.upgradeIcon != null)
+                    menu.upgradeIcon.rightNeighborID = 104;
+                if (menu.okButton != null)
+                    menu.okButton.rightNeighborID = 104;
+                if (menu.cancelButton != null)
+                    menu.cancelButton.leftNeighborID = 104;
+
+                menu.populateClickableComponentList();
+            }
 
             return owned;
         }

@@ -286,19 +286,22 @@ namespace Pelican4Ever.Modules
 
             AssignPetToBowl(target, pet, record);
 
-            // Si la mascota quedó dentro de un edificio (p. ej. el cuenco), sacarla a la casilla libre
-            // de delante: dentro de la huella del edificio no puede moverse.
-            if (target.getBuildingAt(pet.Tile) != null)
+            // Si la mascota quedó dentro del propio cuenco, sacarla a su casilla libre. Se comprueba solo
+            // la huella del cuenco (no cualquier edificio) para no teletransportarla en bucle cada tick.
+            PetBowl? bowlForSpot = FindPetBowl(target, record);
+            if (bowlForSpot != null && IsInsideBuildingFootprint(pet, bowlForSpot))
             {
-                PetBowl? bowl = FindPetBowl(target, record);
-                if (bowl != null)
-                {
-                    Point spot = bowl.GetPetSpot();
-                    Game1.warpCharacter(pet, target, new Vector2(spot.X, spot.Y));
-                    pet.homeLocationName.Value = target.NameOrUniqueName;
-                    Diagnostics.Write(
-                        $"Mascota '{pet.displayName}' recolocada fuera del edificio en '{target.NameOrUniqueName}' ({spot.X},{spot.Y}).");
-                }
+                Point spot = bowlForSpot.GetPetSpot();
+
+                // Si el punto canónico sigue dentro de la huella del cuenco (edificio de varios tiles),
+                // bajar hasta la primera casilla libre para no teletransportarla en bucle.
+                for (int guard = 0; guard < 8 && IsTileInsideFootprint(spot, bowlForSpot); guard++)
+                    spot.Y++;
+
+                Game1.warpCharacter(pet, target, new Vector2(spot.X, spot.Y));
+                pet.homeLocationName.Value = target.NameOrUniqueName;
+                Diagnostics.Write(
+                    $"Mascota '{pet.displayName}' recolocada fuera del cuenco en '{target.NameOrUniqueName}' ({spot.X},{spot.Y}).");
             }
 
             if (removeForeignPets)
@@ -424,6 +427,22 @@ namespace Pelican4Ever.Modules
             }
 
             return null;
+        }
+
+        /// <summary>Indica si la mascota está dentro de la huella (ancho × alto) de un edificio.</summary>
+        private static bool IsInsideBuildingFootprint(Pet pet, Building building)
+        {
+            return IsTileInsideFootprint(pet.TilePoint, building);
+        }
+
+        /// <summary>Indica si una casilla cae dentro de la huella de un edificio.</summary>
+        private static bool IsTileInsideFootprint(Point tile, Building building)
+        {
+            if (building == null)
+                return false;
+
+            return tile.X >= building.tileX.Value && tile.X < building.tileX.Value + building.tilesWide.Value
+                && tile.Y >= building.tileY.Value && tile.Y < building.tileY.Value + building.tilesHigh.Value;
         }
 
         /// <summary>Ubicaciones donde puede estar la mascota del jugador: su residencia y sus anexos.</summary>
