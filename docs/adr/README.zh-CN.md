@@ -13,6 +13,7 @@ ADR 是一项**决策**及其理由：当背景变化时不会重写，而是由
 | [0006](0006-session-energy-satiety-wellfed-spa.md) · [EN](0006-session-energy-satiety-wellfed-spa.en.md) · [中文](0006-session-energy-satiety-wellfed-spa.zh-CN.md) | 按会话计算精力：持续消耗的饱腹值、坐着时的「吃饱」和温泉增益 | 已接受（取代 0004 的第 3 点） | 2026-11-06 |
 | [0007](0007-dispositivo-identidad-y-acceso-seguro.md) · [EN](0007-dispositivo-identidad-y-acceso-seguro.en.md) · [中文](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md) | 按设备的非对称身份（ECDSA P-256）与 Lidgren 上的 `P4E\x02` 质询 | 已接受 | 2026-11-11 |
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | 面向 1:1 的再平衡：每日经验曲线、更慢的钓鱼、更少的梯子以及骷髅洞穴的能量消耗 | 提议中 | 2026-11-14 |
+| [0009](0009-annex-vanilla-composition.md) | 使用「桥接地图」流程生成附属区域（`MapStudio` + 规范裁剪 + 已验证分类器） | 已接受 | 2026-11-08 |
 
 ## 如何阅读
 

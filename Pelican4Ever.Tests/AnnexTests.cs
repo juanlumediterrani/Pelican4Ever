@@ -227,8 +227,9 @@ namespace Pelican4Ever.Tests
                 Assert.Equal(40, t.Width);
                 Assert.Equal(32, t.Height);
                 Assert.StartsWith("Maps/", t.SourceVanillaMap);
-                Assert.InRange(t.SourceCropX, 0, 40);
-                Assert.InRange(t.SourceCropY, 0, 33);
+                var mapDims = VanillaFarmExitTable.Table[t.Id];
+                Assert.InRange(t.SourceCropX, 0, mapDims.MapWidth - t.Width);
+                Assert.InRange(t.SourceCropY, 0, mapDims.MapHeight - t.Height);
 
                 if (t.Behavior.MountainOreArea is { } area)
                 {
@@ -247,7 +248,7 @@ namespace Pelican4Ever.Tests
 
             var mining = AnnexTemplateCatalog.GetTemplate("Mining");
             Assert.NotNull(mining.Behavior.MountainOreArea);
-            Assert.Equal(new TileArea(5, 13, 22, 8), mining.Behavior.MountainOreArea!.Value);
+            Assert.Equal(new TileArea(5, 4, 21, 7), mining.Behavior.MountainOreArea!.Value);
 
             var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
             Assert.True(foraging.Behavior.ForestForage);
@@ -510,7 +511,7 @@ namespace Pelican4Ever.Tests
             // Un anexo minero ("Mining") tiene área de mineral recalculada en 40×32
             var miningAnnex = AnnexTemplateCatalog.GetTemplate("Mining");
             Assert.NotNull(miningAnnex.Behavior.MountainOreArea);
-            Assert.Equal(new TileArea(5, 13, 22, 8), miningAnnex.Behavior.MountainOreArea!.Value);
+            Assert.Equal(new TileArea(5, 4, 21, 7), miningAnnex.Behavior.MountainOreArea!.Value);
             Assert.Equal(14, miningAnnex.Behavior.InitialMountainOreDays);
         }
 
@@ -528,8 +529,9 @@ namespace Pelican4Ever.Tests
                 Assert.False(string.IsNullOrWhiteSpace(t.DisplayName));
                 Assert.False(string.IsNullOrWhiteSpace(t.MapAsset));
                 Assert.StartsWith("Maps/", t.SourceVanillaMap);
-                Assert.InRange(t.SourceCropX, 0, 80 - t.Width);
-                Assert.InRange(t.SourceCropY, 0, 80 - t.Height);
+                var mapDims = VanillaFarmExitTable.Table[t.Id];
+                Assert.InRange(t.SourceCropX, 0, mapDims.MapWidth - t.Width);
+                Assert.InRange(t.SourceCropY, 0, mapDims.MapHeight - t.Height);
 
                 // Cada lado cardinal genera una ruta de asset válida
                 Assert.Equal($"{t.MapAsset}_North", t.GetMapAssetForSide(AnnexSide.North));
@@ -540,8 +542,8 @@ namespace Pelican4Ever.Tests
             // Validación específica de la plantilla Fluvial (Fishing)
             var fishing = templates["Fishing"];
             Assert.Equal("Maps/Farm_Fishing", fishing.SourceVanillaMap);
-            Assert.Equal(16, fishing.SourceCropX);
-            Assert.Equal(18, fishing.SourceCropY);
+            Assert.Equal(22, fishing.SourceCropX);
+            Assert.Equal(25, fishing.SourceCropY);
             Assert.True(fishing.Behavior.RiverFishSplashes);
             Assert.Equal("Farm_Riverland", fishing.LocationDataKey);
         }
@@ -579,6 +581,236 @@ namespace Pelican4Ever.Tests
             Assert.True(foraging.Behavior.ForestStumps);
             Assert.Equal(40, foraging.Width);
             Assert.Equal(32, foraging.Height);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Fishing_ConfiguresAuthenticCentralIslandBridgeEntrances()
+        {
+            var fishing = AnnexTemplateCatalog.GetTemplate("Fishing");
+            Assert.Equal(22, fishing.SourceCropX);
+            Assert.Equal(25, fishing.SourceCropY);
+
+            var northLayout = fishing.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(25, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+
+            var eastLayout = fishing.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(8, eastLayout.EntranceTile.Y);
+
+            var southLayout = fishing.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(4, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Foraging_ConfiguresAuthenticForestLayouts()
+        {
+            var foraging = AnnexTemplateCatalog.GetTemplate("Foraging");
+            Assert.Equal("Maps/Farm_Foraging", foraging.SourceVanillaMap);
+
+            var northLayout = foraging.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(26, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.NotNull(northLayout.RenewableStumpTiles);
+            Assert.Contains(new TilePoint(8, 18), northLayout.RenewableStumpTiles);
+
+            var eastLayout = foraging.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(14, eastLayout.EntranceTile.Y);
+            Assert.NotNull(eastLayout.RenewableStumpTiles);
+
+            var southLayout = foraging.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(26, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.NotNull(southLayout.RenewableStumpTiles);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Mining_ConfiguresAuthenticHilltopLayouts()
+        {
+            var mining = AnnexTemplateCatalog.GetTemplate("Mining");
+            Assert.Equal("Maps/Farm_Mining", mining.SourceVanillaMap);
+
+            var northLayout = mining.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(24, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.NotNull(northLayout.MountainOreArea);
+            Assert.Equal(5, northLayout.MountainOreArea.Value.X);
+            Assert.Equal(4, northLayout.MountainOreArea.Value.Y);
+
+            var eastLayout = mining.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(19, eastLayout.EntranceTile.Y);
+            Assert.NotNull(eastLayout.MountainOreArea);
+
+            var southLayout = mining.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(15, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.NotNull(southLayout.MountainOreArea);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Combat_ConfiguresAuthenticWildernessLayouts()
+        {
+            var combat = AnnexTemplateCatalog.GetTemplate("Combat");
+            Assert.Equal("Maps/Farm_Combat", combat.SourceVanillaMap);
+            Assert.True(combat.Behavior.NightMonsters);
+
+            var northLayout = combat.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(16, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+
+            var eastLayout = combat.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(14, eastLayout.EntranceTile.Y);
+
+            var southLayout = combat.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(16, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+        }
+
+        [Fact]
+        public void AnnexTemplates_FourCorners_ConfiguresAuthenticCrossroadsLayouts()
+        {
+            var fourCorners = AnnexTemplateCatalog.GetTemplate("FourCorners");
+            Assert.Equal("Maps/Farm_FourCorners", fourCorners.SourceVanillaMap);
+            Assert.True(fourCorners.Behavior.FourCornersExtras);
+            Assert.Equal(20, fourCorners.SourceCropX);
+            Assert.Equal(24, fourCorners.SourceCropY);
+            Assert.NotNull(fourCorners.Behavior.MountainOreArea);
+
+            var northLayout = fourCorners.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(13, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.Equal(20, northLayout.CropX);
+            Assert.Equal(24, northLayout.CropY);
+
+            var eastLayout = fourCorners.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(5, eastLayout.EntranceTile.Y);
+            Assert.Equal(20, eastLayout.CropX);
+            Assert.Equal(24, eastLayout.CropY);
+
+            var southLayout = fourCorners.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(13, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.Equal(20, southLayout.CropX);
+            Assert.Equal(24, southLayout.CropY);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Ranching_ConfiguresAuthenticMeadowlandsLayouts()
+        {
+            var ranching = AnnexTemplateCatalog.GetTemplate("Ranching");
+            Assert.Equal("Maps/Farm_Ranching", ranching.SourceVanillaMap);
+            Assert.Equal(40, ranching.SourceCropX);
+            Assert.Equal(0, ranching.SourceCropY);
+
+            var northLayout = ranching.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(23, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.Equal(40, northLayout.CropX);
+            Assert.Equal(0, northLayout.CropY);
+
+            var eastLayout = ranching.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(20, eastLayout.EntranceTile.Y);
+            Assert.Equal(40, eastLayout.CropX);
+            Assert.Equal(0, eastLayout.CropY);
+
+            var southLayout = ranching.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(23, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.Equal(40, southLayout.CropX);
+            Assert.Equal(0, southLayout.CropY);
+        }
+
+        [Fact]
+        public void AnnexTemplates_Beach_ConfiguresAuthenticIslandLayouts()
+        {
+            var beach = AnnexTemplateCatalog.GetTemplate("Beach");
+            Assert.Equal("Maps/Farm_Island", beach.SourceVanillaMap);
+            Assert.Equal(29, beach.SourceCropX);
+            Assert.Equal(0, beach.SourceCropY);
+
+            var northLayout = beach.GetWindowLayoutForSide(AnnexSide.North);
+            Assert.Equal(11, northLayout.EntranceTile.X);
+            Assert.Equal(30, northLayout.EntranceTile.Y);
+            Assert.Equal(29, northLayout.CropX);
+            Assert.Equal(0, northLayout.CropY);
+
+            var eastLayout = beach.GetWindowLayoutForSide(AnnexSide.East);
+            Assert.Equal(1, eastLayout.EntranceTile.X);
+            Assert.Equal(20, eastLayout.EntranceTile.Y);
+            Assert.Equal(29, eastLayout.CropX);
+            Assert.Equal(0, eastLayout.CropY);
+
+            var southLayout = beach.GetWindowLayoutForSide(AnnexSide.South);
+            Assert.Equal(11, southLayout.EntranceTile.X);
+            Assert.Equal(1, southLayout.EntranceTile.Y);
+            Assert.Equal(29, southLayout.CropX);
+            Assert.Equal(0, southLayout.CropY);
+        }
+
+        [Fact]
+        public void AnnexValidation_PassableBridgeOverWater_PassesClearanceValidation()
+        {
+            const int w = 40;
+            const int h = 32;
+            var back = new bool[w, h];
+            var passable = new bool[w, h];
+            var water = new bool[w, h];
+
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y < h; y++)
+                {
+                    back[x, y] = true;
+                    bool isBorder = x == 0 || x == w - 1 || y == 0 || y == h - 1;
+                    passable[x, y] = !isBorder;
+                }
+            }
+
+            // Simulamos el puente norte de Riverland (x = 2..3, y = 0..4) sobre canal de agua
+            // El canal de agua abarca y = 0..3
+            for (int x = 0; x < w; x++)
+            {
+                for (int y = 0; y <= 3; y++)
+                {
+                    water[x, y] = true;
+                    // El agua fuera del puente es intransitable
+                    if (x < 2 || x > 3)
+                    {
+                        passable[x, y] = false;
+                    }
+                }
+            }
+
+            // Apertura de entrada por el norte en x=2..3, y=0 (borde)
+            passable[2, 0] = true;
+            passable[3, 0] = true;
+            // Pasarela de puente transitable sobre el agua
+            passable[2, 1] = true;
+            passable[3, 1] = true;
+            passable[2, 2] = true;
+            passable[3, 2] = true;
+
+            var data = new AnnexMapInspectionData(
+                TemplateId: "Fishing",
+                Side: AnnexSide.South,
+                Width: w,
+                Height: h,
+                EntryTile: new TilePoint(2, 1),
+                BackTilePresent: back,
+                IsPassable: passable,
+                IsWater: water
+            );
+
+            var report = AnnexValidationLogic.ValidateAnnex(data);
+            Assert.True(report.IsValid);
+            Assert.DoesNotContain(report.Issues, i => i.Code == "CLEARANCE_WATER");
+            Assert.DoesNotContain(report.Issues, i => i.Code == "CLEARANCE_BLOCKED");
         }
     }
 }

@@ -279,6 +279,7 @@
   "badge.my_slot": "🏠 Mi Parcela (Caminar para entrar)",
   "badge.neighbor_slot": "🏠 Parcela de {{owner}}",
   "badge.annex_enter": "🌲 {{name}} (Caminar para entrar)",
+  "badge.annex_return": "🏠 Volver a la residencia (Caminar para salir)",
   "badge.annex_purchase": "[E / Clic o Caminar] Adquirir Anexo",
   "badge.annex_unavailable": "🚫 Ampliación no disponible",
 

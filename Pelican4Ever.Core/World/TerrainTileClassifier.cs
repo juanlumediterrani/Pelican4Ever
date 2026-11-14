@@ -58,6 +58,65 @@ namespace Pelican4Ever.Core.World
         /// <summary>Offset base para tiles de Stepping Stones sobre hierba (tiles 16..31).</summary>
         public const int GrassBaseIndex = 16;
 
+        // --- Índices Canónicos de Suelo y Terreno Exterior (spring_outdoorsTileSheet) ---
+        /// <summary>Pradera verde soleada estándar (spring_outdoorsTileSheet: 175).</summary>
+        public const int SunnyGrassTileIndex = 175;
+        /// <summary>Pradera soleada suave (spring_outdoorsTileSheet: 150).</summary>
+        public const int SunnyGrassSoftTileIndex = 150;
+        /// <summary>Pradera soleada tupida (spring_outdoorsTileSheet: 256).</summary>
+        public const int SunnyGrassThickTileIndex = 256;
+        /// <summary>Pradera soleada con florecillas (spring_outdoorsTileSheet: 151).</summary>
+        public const int SunnyGrassFlowersTileIndex = 151;
+        /// <summary>Pradera soleada con flores silvestres (spring_outdoorsTileSheet: 152).</summary>
+        public const int SunnyGrassWildflowersTileIndex = 152;
+
+        /// <summary>Camino / suelo de tierra abierto (spring_outdoorsTileSheet: 587).</summary>
+        public const int DirtPlainTileIndex = 587;
+
+        // --- Índices Canónicos de Puente de Madera sobre Agua (spring_outdoorsTileSheet) ---
+        /// <summary>Cuerpo central de puente de madera vertical/horizontal (spring_outdoorsTileSheet: 809).</summary>
+        public const int WoodenBridgeMidTileIndex = 809;
+        /// <summary>Borde sur izquierdo de puente de madera vertical (spring_outdoorsTileSheet: 859).</summary>
+        public const int WoodenBridgeSouthLeftTileIndex = 859;
+        /// <summary>Borde sur derecho de puente de madera vertical (spring_outdoorsTileSheet: 860).</summary>
+        public const int WoodenBridgeSouthRightTileIndex = 860;
+        /// <summary>Rampa/tablón sur de puente de madera vertical (spring_outdoorsTileSheet: 884).</summary>
+        public const int WoodenBridgeRampLeftTileIndex = 884;
+        /// <summary>Rampa/tablón sur derecho de puente de madera vertical (spring_outdoorsTileSheet: 885).</summary>
+        public const int WoodenBridgeRampRightTileIndex = 885;
+        /// <summary>Tablón de puente de madera horizontal (spring_outdoorsTileSheet: 834).</summary>
+        public const int WoodenBridgeHorizMidTileIndex = 834;
+        /// <summary>Borde de puente de madera horizontal (spring_outdoorsTileSheet: 835).</summary>
+        public const int WoodenBridgeHorizEdgeTileIndex = 835;
+
+        /// <summary>
+        /// Determina si un tile de pradera corresponde a hierba de sombra oscura de bosque (350..355, 375..381, 400..405, 325..330).
+        /// Esta hierba no debe colocarse jamás en campo abierto ni en entradas despejadas.
+        /// </summary>
+        public static bool IsForestShadeGrass(int tileIndex)
+        {
+            return tileIndex is (>= 325 and <= 330)
+                or (>= 350 and <= 355)
+                or (>= 375 and <= 381)
+                or (>= 400 and <= 405);
+        }
+
+        /// <summary>
+        /// Determina si un tile en la capa Buildings corresponde a una pasarela o puente de madera canónico sobre agua.
+        /// </summary>
+        public static bool IsWoodenBridgeTile(int tileIndex)
+        {
+            return tileIndex is WoodenBridgeMidTileIndex
+                or WoodenBridgeSouthLeftTileIndex
+                or WoodenBridgeSouthRightTileIndex
+                or WoodenBridgeRampLeftTileIndex
+                or WoodenBridgeRampRightTileIndex
+                or WoodenBridgeHorizMidTileIndex
+                or WoodenBridgeHorizEdgeTileIndex
+                or 909
+                or 910;
+        }
+
         /// <summary>Tiles de baldosas de piedra del patio exterior / spouse area: 1964..1966.</summary>
         public static readonly int[] GrassBaldosas = { 1964, 1965, 1966 };
 

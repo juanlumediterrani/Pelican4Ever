@@ -321,5 +321,66 @@ namespace Pelican4Ever.Core.World
 
             return true;
         }
+
+        /// <summary>
+        /// Determina si un índice de tile corresponde a la base del tronco de un árbol estático en la capa Buildings.
+        /// </summary>
+        public static bool IsTreeTrunkBase(int tileIndex)
+        {
+            return tileIndex is 168 or 169 or 143 or 144 or 129 or 132 or 133 or 136 or 104 or 107 or 108 or 111;
+        }
+
+        /// <summary>
+        /// Determina si un índice de tile corresponde a cualquier parte de tronco de árbol estático.
+        /// </summary>
+        public static bool IsTreePart(int tileIndex)
+        {
+            return tileIndex is 168 or 169 or 143 or 144 or 118 or 119
+                or 129 or 104 or 79
+                or 132 or 107 or 82
+                or 133 or 108 or 83
+                or 136 or 111 or 86;
+        }
+
+        /// <summary>
+        /// Determina si un índice de tile corresponde a un arbusto estático (3×3, 2×2 o 1×3).
+        /// </summary>
+        public static bool IsBushTile(int tileIndex)
+        {
+            return tileIndex is (>= 63 and <= 65)
+                or (>= 38 and <= 40)
+                or (>= 13 and <= 15)
+                or 113 or 114 or 88 or 89
+                or 126 or 101 or 76;
+        }
+
+        /// <summary>
+        /// Determina si un índice de tile corresponde a una valla de madera o cancela.
+        /// </summary>
+        public static bool IsFenceTile(int tileIndex)
+        {
+            return tileIndex is (>= 358 and <= 361)
+                or (>= 383 and <= 386)
+                or (>= 408 and <= 411)
+                or (>= 434 and <= 436);
+        }
+
+        /// <summary>
+        /// Obtiene el rectángulo envolvente (en casillas de mapa) que abarca la totalidad del árbol estático
+        /// (tronco, raíz y copa de follaje) a partir de la posición de la base del tronco en Buildings.
+        /// Permite limpiar la caja completa del árbol para no dejar medios árboles ni copas flotantes.
+        /// </summary>
+        public static TileArea GetStaticTreeBoundingBox(int trunkX, int trunkY, int trunkBaseTileIndex)
+        {
+            // Árboles anchos de 2 casillas (roble/arce: raíces 168, 169): copa de follaje 5x5 centrada encima
+            if (trunkBaseTileIndex is 168 or 169 or 143 or 144)
+            {
+                int leftX = (trunkBaseTileIndex == 169) ? trunkX - 1 : trunkX;
+                return new TileArea(leftX - 2, trunkY - 5, 6, 6);
+            }
+
+            // Árboles delgados de 1 casilla (pinos: base 129, 132, 133, 136): copa 3x4
+            return new TileArea(trunkX - 1, trunkY - 4, 3, 5);
+        }
     }
 }

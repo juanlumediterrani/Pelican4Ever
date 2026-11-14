@@ -13,6 +13,7 @@ replaced by another ADR. The table is the index; the detail is in each file.
 | [0006](0006-session-energy-satiety-wellfed-spa.md) · [EN](0006-session-energy-satiety-wellfed-spa.en.md) · [中文](0006-session-energy-satiety-wellfed-spa.zh-CN.md) | Energy per session: satiety with a continuous drain, seated "Well-Fed" and the spa buff | Accepted (replaces point 3 of 0004) | 2026-11-06 |
 | [0007](0007-dispositivo-identidad-y-acceso-seguro.md) · [EN](0007-dispositivo-identidad-y-acceso-seguro.en.md) · [中文](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md) | Asymmetric identity per device (ECDSA P-256) and the `P4E\x02` challenge in Lidgren | Accepted | 2026-11-11 |
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | Rebalance for 1:1: daily experience curve, slower fishing, fewer ladders and an energy cost in the Skull Cavern | Proposed | 2026-11-14 |
+| [0009](0009-annex-vanilla-composition.md) | Annex generation with the "Bridge Maps" flow (`MapStudio` + canonical crop + verified classifiers) | Accepted | 2026-11-08 |
 
 ## How to read them
 

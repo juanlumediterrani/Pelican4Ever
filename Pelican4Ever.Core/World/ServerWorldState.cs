@@ -42,6 +42,8 @@ namespace Pelican4Ever.Core.World
     /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901).</summary>
     public class AnnexAssignment
     {
+        public const int CurrentMapVersion = 4;
+
         public string AnnexId { get; set; } = string.Empty;
 
         public string ResidenceSlotId { get; set; } = string.Empty;
@@ -53,6 +55,9 @@ namespace Pelican4Ever.Core.World
         public long OwnerId { get; set; }
 
         public DateTimeOffset AcquiredAtUtc { get; set; } = DateTimeOffset.UtcNow;
+
+        /// <summary>Versión de generación del mapa del anexo (v2 = recorte canónico + saneado de bordes).</summary>
+        public int MapVersion { get; set; } = 1;
     }
 
     /// <summary>Motivo por el que el host rechaza el reclamo de una puerta.</summary>

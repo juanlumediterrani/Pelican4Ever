@@ -25,45 +25,72 @@ namespace Pelican4Ever.Core.World
     {
         /// <summary>
         /// Calcula las coordenadas de entrada al anexo y de vuelta a la residencia según el lado de acceso y tipo de granja.
-        /// En un mapa de tamaño (width × height, por defecto 40×32):
-        /// - Acceso por el NORTE (salir de la residencia hacia el norte):
-        ///   Entra por el borde SUR del anexo, mirando al Norte (0). Vuelve a la casilla norte de la residencia mirando al Sur (2).
-        /// - Acceso por el ESTE (salir de la residencia hacia el este):
-        ///   Entra por el borde OESTE del anexo, mirando al Este (1). Vuelve a la casilla este de la residencia mirando al Oeste (3).
-        /// - Acceso por el SUR (salir de la residencia hacia el sur):
-        ///   Entra por el borde NORTE del anexo, mirando al Sur (2). Vuelve a la casilla sur de la residencia mirando al Norte (0).
+        /// Permite especificar un <paramref name="customEntrance"/> determinado por la ventana de recorte vanilla (TASK-911).
         /// </summary>
-        public static AnnexWarpPoints For(AnnexSide side, int mapWidth = 40, int mapHeight = 32, string? farmType = null)
+        public static AnnexWarpPoints For(
+            AnnexSide side,
+            int mapWidth = 40,
+            int mapHeight = 32,
+            string? farmType = null,
+            TilePoint? customEntrance = null)
         {
-            int centerX = mapWidth / 2;
-            int centerY = mapHeight / 2;
+            int defaultCenterX = mapWidth / 2;
+            int defaultCenterY = mapHeight / 2;
             FarmTemplate template = FarmTemplateCatalog.GetTemplate(farmType);
+
+            int entX = customEntrance?.X ?? (side == AnnexSide.East ? 1 : defaultCenterX);
+            int entY = customEntrance?.Y ?? (side switch
+            {
+                AnnexSide.North => mapHeight - 2,
+                AnnexSide.South => 1,
+                _ => defaultCenterY
+            });
+
+            TilePoint entryTile = new TilePoint(entX, entY);
+
+            TilePoint returnExitTile = side switch
+            {
+                AnnexSide.North => new TilePoint(entX, mapHeight - 1),
+                AnnexSide.South => new TilePoint(entX, 0),
+                AnnexSide.East => new TilePoint(0, entY),
+                _ => throw new ArgumentOutOfRangeException(nameof(side), side, null)
+            };
 
             return side switch
             {
                 AnnexSide.North => new AnnexWarpPoints(
-                    EntryTile: new TilePoint(centerX, mapHeight - 2),
+                    EntryTile: entryTile,
                     FacingDirection: 0, // Mirando al Norte
-                    ReturnExitTile: new TilePoint(centerX, mapHeight - 1),
+                    ReturnExitTile: returnExitTile,
                     ResidenceReturnTile: new TilePoint(template.NorthArrivalTileX, template.NorthArrivalTileY),
                     ResidenceReturnFacingDirection: 2 // Mirando al Sur
                 ),
                 AnnexSide.East => new AnnexWarpPoints(
-                    EntryTile: new TilePoint(1, centerY),
+                    EntryTile: entryTile,
                     FacingDirection: 1, // Mirando al Este
-                    ReturnExitTile: new TilePoint(0, centerY),
+                    ReturnExitTile: returnExitTile,
                     ResidenceReturnTile: new TilePoint(template.EastArrivalTileX, template.EastArrivalTileY),
                     ResidenceReturnFacingDirection: 3 // Mirando al Oeste
                 ),
                 AnnexSide.South => new AnnexWarpPoints(
-                    EntryTile: new TilePoint(centerX, 1),
+                    EntryTile: entryTile,
                     FacingDirection: 2, // Mirando al Sur
-                    ReturnExitTile: new TilePoint(centerX, 0),
+                    ReturnExitTile: returnExitTile,
                     ResidenceReturnTile: new TilePoint(template.SouthArrivalTileX, template.SouthArrivalTileY),
                     ResidenceReturnFacingDirection: 0 // Mirando al Norte
                 ),
                 _ => throw new ArgumentOutOfRangeException(nameof(side), side, null)
             };
+        }
+
+        /// <summary>
+        /// Sobrecarga que calcula los puntos de entrada utilizando la ventana de recorte configurada para la plantilla (TASK-911).
+        /// </summary>
+        public static AnnexWarpPoints For(AnnexTemplate template, AnnexSide side, string? farmType = null)
+        {
+            if (template == null) throw new ArgumentNullException(nameof(template));
+            AnnexWindowLayout layout = template.GetWindowLayoutForSide(side);
+            return For(side, template.Width, template.Height, farmType, layout.EntranceTile);
         }
     }
 }

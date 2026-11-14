@@ -13,6 +13,7 @@ por otro ADR. La tabla es el índice; el detalle está en cada fichero.
 | [0006](0006-session-energy-satiety-wellfed-spa.md) · [EN](0006-session-energy-satiety-wellfed-spa.en.md) · [中文](0006-session-energy-satiety-wellfed-spa.zh-CN.md) | Energía por sesiones: saciedad con vaciado continuo, «Bien comido» sentado y buff del spa | Aceptado (sustituye el punto 3 de 0004) | 2026-11-06 |
 | [0007](0007-dispositivo-identidad-y-acceso-seguro.md) · [EN](0007-dispositivo-identidad-y-acceso-seguro.en.md) · [中文](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md) | Identidad asimétrica por dispositivo (ECDSA P-256) y desafío `P4E\x02` en Lidgren | Aceptado | 2026-11-11 |
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | Rebalanceo para el 1:1: curva diaria de experiencia, pesca más lenta, menos escaleras y coste de energía en la Caverna Calavera | Propuesto | 2026-11-14 |
+| [0009](0009-annex-vanilla-composition.md) | Generación de anexos con el flujo «Mapas Puente» (`MapStudio` + recorte canónico + clasificadores verificados) | Aceptado | 2026-11-08 |
 
 ## Cómo leerlos
 

@@ -279,6 +279,7 @@
   "badge.my_slot": "🏠 我的地块（走近进入）",
   "badge.neighbor_slot": "🏠 {{owner}} 的地块",
   "badge.annex_enter": "🌲 {{name}}（走近进入）",
+  "badge.annex_return": "🏠 返回居所（走近离开）",
   "badge.annex_purchase": "[E / 点击或走近] 购买附属地",
   "badge.annex_unavailable": "🚫 无法扩建",
 

@@ -6,8 +6,28 @@ namespace Pelican4Ever.Core.World
     /// <summary>Rectángulo de casillas del mapa.</summary>
     public readonly record struct TileArea(int X, int Y, int Width, int Height)
     {
+        /// <summary>Comprueba si una casilla está contenida en el rectángulo.</summary>
+        public bool Contains(int x, int y) => x >= X && x < X + Width && y >= Y && y < Y + Height;
+
         /// <summary>Formato de las propiedades de mapa de Stardew ("x y ancho alto").</summary>
         public string ToMapProperty() => $"{X} {Y} {Width} {Height}";
+
+        public static bool TryParse(string? text, out TileArea area)
+        {
+            area = default;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            string[] parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 4 &&
+                int.TryParse(parts[0], out int x) &&
+                int.TryParse(parts[1], out int y) &&
+                int.TryParse(parts[2], out int w) &&
+                int.TryParse(parts[3], out int h))
+            {
+                area = new TileArea(x, y, w, h);
+                return true;
+            }
+            return false;
+        }
     }
 
     /// <summary>

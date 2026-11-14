@@ -49,6 +49,7 @@ namespace Pelican4Ever
                 new CheckpointModule(),
                 new CheckpointSpikeModule(),
                 new FarmSlotModule(),
+                new AnnexReviewModule(),
                 new FarmTypeModule(),
                 new FarmTypeLootModule(),
                 new VisitorGuardModule(),

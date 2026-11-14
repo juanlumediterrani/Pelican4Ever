@@ -279,6 +279,7 @@
   "badge.my_slot": "🏠 My Plot (Walk to enter)",
   "badge.neighbor_slot": "🏠 {{owner}}'s Plot",
   "badge.annex_enter": "🌲 {{name}} (Walk to enter)",
+  "badge.annex_return": "🏠 Return to residence (Walk to exit)",
   "badge.annex_purchase": "[E / Click or Walk] Purchase Annex",
   "badge.annex_unavailable": "🚫 Expansion unavailable",
 

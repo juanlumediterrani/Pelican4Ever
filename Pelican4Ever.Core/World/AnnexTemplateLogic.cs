@@ -4,7 +4,18 @@ using System.Collections.Generic;
 namespace Pelican4Ever.Core.World
 {
     /// <summary>
-    /// Plantilla de minimapa temático (40×32) para anexos de residencia adquiribles (TASK-901 / TASK-902).
+    /// Configuración de ventana de recorte y punto de entrada para un lado cardinal (TASK-910 / TASK-911).
+    /// </summary>
+    public sealed record AnnexWindowLayout(
+        int CropX,
+        int CropY,
+        TilePoint EntranceTile,
+        TileArea? MountainOreArea = null,
+        IReadOnlyList<TilePoint>? RenewableStumpTiles = null
+    );
+
+    /// <summary>
+    /// Plantilla de minimapa temático (40×32) para anexos de residencia adquiribles (TASK-901 / TASK-902 / TASK-910).
     /// Incluye el cuadrante de origen en el mapa vanilla, las bonificaciones recalculadas para 40×32 y la sobrecarga de pesca.
     /// </summary>
     public sealed record AnnexTemplate(
@@ -20,16 +31,35 @@ namespace Pelican4Ever.Core.World
         int SourceCropX,
         int SourceCropY,
         FarmTypeBehavior Behavior,
-        string? FishLocationOverride = null)
+        string? FishLocationOverride = null,
+        IReadOnlyDictionary<AnnexSide, AnnexWindowLayout>? Windows = null)
     {
         /// <summary>
         /// Ruta del asset de mapa generada para el lado de entrada indicado (ej. "Maps/Pelican4Ever_Annex_Fishing_East").
         /// </summary>
         public string GetMapAssetForSide(AnnexSide side) => $"{MapAsset}_{side}";
+
+        /// <summary>
+        /// Obtiene el diseño de ventana configurado para un lado de entrada (TASK-910 / TASK-911).
+        /// </summary>
+        public AnnexWindowLayout GetWindowLayoutForSide(AnnexSide side)
+        {
+            if (Windows != null && Windows.TryGetValue(side, out AnnexWindowLayout? layout))
+                return layout;
+
+            int defEntX = side == AnnexSide.East ? 1 : Width / 2;
+            int defEntY = side switch
+            {
+                AnnexSide.North => Height - 2,
+                AnnexSide.South => 1,
+                _ => Height / 2
+            };
+            return new AnnexWindowLayout(SourceCropX, SourceCropY, new TilePoint(defEntX, defEntY), Behavior.MountainOreArea);
+        }
     }
 
     /// <summary>
-    /// Catálogo de plantillas de anexos soportadas en Pelican 4Ever (TASK-901 / TASK-902).
+    /// Catálogo de plantillas de anexos soportadas en Pelican 4Ever (TASK-901 / TASK-902 / TASK-910).
     /// </summary>
     public static class AnnexTemplateCatalog
     {
@@ -46,8 +76,14 @@ namespace Pelican4Ever.Core.World
                 25000,
                 "Farm_Standard",
                 "Maps/Farm",
-                10, 20,
-                FarmTypeBehavior.None
+                15, 33,
+                FarmTypeBehavior.None,
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(15, 33, new TilePoint(25, 30)),
+                    [AnnexSide.East] = new(15, 33, new TilePoint(1, 18)),
+                    [AnnexSide.South] = new(15, 33, new TilePoint(22, 1))
+                }
             ),
             ["Fishing"] = new AnnexTemplate(
                 "Fishing",
@@ -58,9 +94,15 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Riverland",
                 "Maps/Farm_Fishing",
-                16, 18,
+                22, 25,
                 FarmTypeBehavior.None with { RiverFishSplashes = true },
-                "Town 0.7"
+                "Town 0.7",
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(22, 25, new TilePoint(25, 30)),
+                    [AnnexSide.East] = new(22, 25, new TilePoint(1, 8)),
+                    [AnnexSide.South] = new(22, 25, new TilePoint(4, 1))
+                }
             ),
             ["Foraging"] = new AnnexTemplate(
                 "Foraging",
@@ -71,8 +113,14 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Forest",
                 "Maps/Farm_Foraging",
-                0, 18,
-                FarmTypeBehavior.None with { ForestForage = true, ForestStumps = true }
+                0, 14,
+                FarmTypeBehavior.None with { ForestForage = true, ForestStumps = true },
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(0, 14, new TilePoint(26, 30), RenewableStumpTiles: new[] { new TilePoint(8, 18), new TilePoint(9, 13), new TilePoint(14, 11), new TilePoint(14, 15) }),
+                    [AnnexSide.East] = new(0, 14, new TilePoint(1, 14), RenewableStumpTiles: new[] { new TilePoint(8, 18), new TilePoint(9, 13), new TilePoint(14, 11), new TilePoint(14, 15) }),
+                    [AnnexSide.South] = new(0, 14, new TilePoint(26, 1), RenewableStumpTiles: new[] { new TilePoint(8, 18), new TilePoint(9, 13), new TilePoint(14, 11), new TilePoint(14, 15) })
+                }
             ),
             ["Mining"] = new AnnexTemplate(
                 "Mining",
@@ -83,8 +131,14 @@ namespace Pelican4Ever.Core.World
                 35000,
                 "Farm_Hilltop",
                 "Maps/Farm_Mining",
-                0, 24,
-                FarmTypeBehavior.None with { MountainOreArea = new TileArea(5, 13, 22, 8), InitialMountainOreDays = 14 }
+                0, 33,
+                FarmTypeBehavior.None with { MountainOreArea = new TileArea(5, 4, 21, 7), InitialMountainOreDays = 14 },
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(0, 33, new TilePoint(24, 30), MountainOreArea: new TileArea(5, 4, 21, 7)),
+                    [AnnexSide.East] = new(0, 33, new TilePoint(1, 19), MountainOreArea: new TileArea(5, 4, 21, 7)),
+                    [AnnexSide.South] = new(0, 33, new TilePoint(15, 1), MountainOreArea: new TileArea(5, 4, 21, 7))
+                }
             ),
             ["Combat"] = new AnnexTemplate(
                 "Combat",
@@ -95,8 +149,14 @@ namespace Pelican4Ever.Core.World
                 35000,
                 "Farm_Wilderness",
                 "Maps/Farm_Combat",
-                10, 18,
-                FarmTypeBehavior.None with { NightMonsters = true }
+                24, 10,
+                FarmTypeBehavior.None with { NightMonsters = true },
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(24, 10, new TilePoint(16, 30)),
+                    [AnnexSide.East] = new(24, 10, new TilePoint(1, 14)),
+                    [AnnexSide.South] = new(24, 10, new TilePoint(16, 1))
+                }
             ),
             ["FourCorners"] = new AnnexTemplate(
                 "FourCorners",
@@ -107,8 +167,14 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_FourCorners",
                 "Maps/Farm_FourCorners",
-                20, 20,
-                FarmTypeBehavior.None with { MountainOreArea = new TileArea(24, 22, 10, 5), InitialMountainOreDays = 10, FourCornersExtras = true }
+                20, 24,
+                FarmTypeBehavior.None with { MountainOreArea = new TileArea(28, 20, 9, 7), InitialMountainOreDays = 10, FourCornersExtras = true },
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(20, 24, new TilePoint(13, 30), MountainOreArea: new TileArea(28, 20, 9, 7)),
+                    [AnnexSide.East] = new(20, 24, new TilePoint(1, 5), MountainOreArea: new TileArea(28, 20, 9, 7)),
+                    [AnnexSide.South] = new(20, 24, new TilePoint(13, 1), MountainOreArea: new TileArea(28, 20, 9, 7))
+                }
             ),
             ["Ranching"] = new AnnexTemplate(
                 "Ranching",
@@ -119,8 +185,14 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_MeadowlandsFarm",
                 "Maps/Farm_Ranching",
-                12, 18,
-                FarmTypeBehavior.None
+                40, 0,
+                FarmTypeBehavior.None,
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(40, 0, new TilePoint(23, 30)),
+                    [AnnexSide.East] = new(40, 0, new TilePoint(1, 20)),
+                    [AnnexSide.South] = new(40, 0, new TilePoint(23, 1))
+                }
             ),
             ["Beach"] = new AnnexTemplate(
                 "Beach",
@@ -131,9 +203,14 @@ namespace Pelican4Ever.Core.World
                 30000,
                 "Farm_Beach",
                 "Maps/Farm_Island",
-                // Recorte con el rectángulo fértil (25-44, 50-59) y la arena de alrededor
-                15, 30,
-                FarmTypeBehavior.None with { BeachForage = true }
+                29, 0,
+                FarmTypeBehavior.None with { BeachForage = true },
+                Windows: new Dictionary<AnnexSide, AnnexWindowLayout>
+                {
+                    [AnnexSide.North] = new(29, 0, new TilePoint(11, 30)),
+                    [AnnexSide.East] = new(29, 0, new TilePoint(1, 20)),
+                    [AnnexSide.South] = new(29, 0, new TilePoint(11, 1))
+                }
             )
         };
 
