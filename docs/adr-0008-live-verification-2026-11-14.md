@@ -56,4 +56,9 @@ Las baterías adicionales en el laboratorio headless (host y *farmhand* en proce
 
 Tras estas correcciones y dos pruebas unitarias nuevas en `Pelican4Ever.Tests/EconomyRebalanceTests.cs` (separación de días/carteras e invariantes frente a reportes futuros de clientes), la solución `Pelican4Ever.sln` compiló con `0` advertencias y `0` errores, y la suite completa de `Pelican4Ever.Tests` pasó con `1.379/1.379` pruebas (`0` fallos, `0` omitidas).
 
-Queda únicamente `TASK-2107`: jugar al menos una semana real con el grupo humano para calibrar los valores definitivos, decidir el tratamiento del botín de combate fuera de la Caverna Calavera y mover ADR-0008 a *Aceptado* junto con `design.md` (§4), `architecture.md`, `config.example.json` y los índices de ADR en los tres idiomas.
+Queda únicamente `TASK-2107`: jugar al menos una semana real con el grupo humano para calibrar los valores definitivos, decidir el tratamiento del botín de combate fuera de la Caverna Calavera y mover ADR-0008 a *Aceptado* junto con `design.md` (§4), `architecture.md`, `config.example.json` y los índices de ADR en los tres idiomas (la tarea multijugador se movió a [test-users-tasks.md](test-users-tasks.md)).
+
+### Comprobación posterior de `AdminApi` y telemetría de eventos (`dev`)
+
+Con `AdminApi` habilitado y token configurado en el laboratorio:
+- `GET http://127.0.0.1:8085/api/v1/host/events` devolvió `401` sin cabecera Bearer y `200` autenticado, registrando `economy.daily@2` (`2` eventos, uno por jugador) sin duplicados tras `telemetry_retry 2` (`files=2->2`, `dailyEcon=2`) y con `stalled=0` en el rollover despierto (`host despierto: fundido lanzado por el mod`).

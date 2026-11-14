@@ -34,6 +34,14 @@ namespace Pelican4Ever.Core.World
         public const string NoLetterSuffix = "%&NL&%";
 
         /// <summary>
+        /// Determina si debe entregarse el correo pendiente de un farmhand desconectado.
+        /// Incluye jugadores registrados en <c>ServerWorldState</c> aunque su slot no completara
+        /// la personalización de personaje vanilla, omitiendo cabañas realmente sin reclamar.
+        /// </summary>
+        public static bool ShouldDeliverToFarmhand(bool isUnclaimedFarmhand, bool isKnownPlayer, int pendingCount)
+            => pendingCount > 0 && (!isUnclaimedFarmhand || isKnownPlayer);
+
+        /// <summary>
         /// Convierte las entradas crudas de <c>mailForTomorrow</c> en entregas idempotentes.
         /// Se ignoran nulos, vacíos y duplicados.
         /// </summary>

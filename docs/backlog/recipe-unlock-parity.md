@@ -111,31 +111,31 @@ Riesgo: el envío se decide en `Stats.checkForFriendshipAchievements` con `Game1
 - Entregar `Furnace` a partir de las 12:00 si el evento no se jugó.
 - Pruebas de lógica pura y HUD.
 
-### RCP-002 — Entrega de `mailForTomorrow` de farmhands en rollover · **Hecho**
+### RCP-002 — Entrega de `mailForTomorrow` de farmhands en rollover · **Hecho y verificado**
 - Procesar banderas (`%&NL&%`) y cartas antes del guardado post-cierre.
 - Cubre Furnace, cartas de cocina, Krobus, CarolineTea y correo general.
-- Añadir una prueba de integración con dos farmhands y un save real.
+- Corregido en `DailyRolloverModule` / `FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand` para incluir jugadores registrados en `ServerWorldState` aunque no completaran la personalización vanilla (`isUnclaimedFarmhand == true`), evitando omitir sus envíos pendientes.
+- Verificado en laboratorio headless host+cliente sobre `Prueba29`: antes del rollover el host tenía `tom=[spring_2_1,copperFound%&NL&%,RobinCooking,KrobusCrafting,lab_flag_only%&NL&%]` en el farmhand desconectado; tras el rollover pasó a `tom=[], box=[spring_2_1,RobinCooking,KrobusCrafting]` y las banderas pasaron a `mailReceived`. Pruebas unitarias en `FarmhandMailDeliveryLogicTests`.
 
-### RCP-003 — Garden Pot: eliminar dependencia del host · **Hecho**
+### RCP-003 — Garden Pot: eliminar dependencia del host · **Hecho y verificado**
 - **Problema:** `Hn ccPantry` exige el correo del host; el invernadero reparado del farmhand no influye.
 - **Implementado:** `RecipeFallbackModule` comprueba el invernadero de la residencia del jugador (`farm.greenhouseUnlocked`) o su propio `ccPantry`/`jojaPantry`/CC completado y, a partir de las 12:00, concede `Garden Pot` si la receta falta.
-- **Aceptación:** un farmhand con invernadero propio recibe Garden Pot aunque el host no haya completado el pantry.
+- **Aceptación (verificado en laboratorio):** con `ccPantry=False` en el host y `Pelican4Ever_Farm_01.greenhouseUnlocked=True` cargada en el cliente, `RecipeFallbackModule` concedió `Garden Pot` tras las 12:00. (Nota: si el cliente aún no ha visitado/cargado su ubicación de residencia tras conectar, `Game1.getLocationFromName` devuelve `null` hasta que entra en ella.)
 
-### RCP-004 — Correo de cocina y Krobus · **Cubierto por RCP-002, verificación pendiente**
+### RCP-004 — Correo de cocina y Krobus · **Hecho y verificado**
 - Las 19 cartas `*Cooking` y `KrobusCrafting` se entregan con el rollover corregido.
-- Verificar que `Stats.checkForFriendshipAchievements` se ejecuta para el farmhand correcto.
-- Prueba de regresión: amistad 3/7, carta en `mailForTomorrow`, rollover, apertura y receta aprendida.
+- Verificado en laboratorio: `RobinCooking` y `KrobusCrafting` llegaron al buzón del farmhand tras el rollover y al abrir el correo desbloquearon `Pumpkin Soup` y `Dark Sign`.
 
-### RCP-005 — Órdenes especiales y correo party-wide
+### RCP-005 — Órdenes especiales y correo party-wide · **Verificado envío offline en laboratorio (falta auditoría completa de las 12 cartas)**
 - Auditar las 12 cartas de crafting de la Matriz B.1.
 - Revisar `MailReward` + `broadcastPartyWideMail` + `FarmerTeam.AddAnyBroadcastedMail` con farmhands desconectados.
-- Prueba: completar una orden con un farmhand offline y verificar que recibe la carta al reconectar.
+- Prueba realizada en laboratorio: `Game1.addMail("robinResource", sendToEveryone: true)` enviado con el cliente desconectado entregó la carta al reconectar y al abrirla concedió `Stone Chest`.
 
-### RCP-006 — Eventos de receta restantes · **Hecho**
+### RCP-006 — Eventos de receta restantes · **Hecho y verificado**
 - **Implementado:** `RecipeFallbackModule` cubre Mini-Jukebox, Wild Bait, Flute/Drum Block, Cookies, Quality Bobber, Tea Sapling, Fairy Dust y Ostrich Incubator.
 - La concesión se hace a partir de las 12:00 solo si la receta falta y el requisito de fondo se cumple (amistad, carta o evento visto).
 - No se arrancan eventos ni se reenvía correo: la escena vanilla sigue disponible si el jugador aún no la ha visto.
-- Aceptación: ningún jugador queda sin la receta por no estar en la ubicación/ventana correcta.
+- Verificado en laboratorio headless sobre cliente a partir de las 12:00 (idempotente en tics posteriores): aprendidas todas las recetas anteriores más `Furnace`.
 
 ### RCP-007 — Recetas por nivel de habilidad
 - Verificar `AddMissedMailAndRecipes`/`fixProblems` para farmhands offline.

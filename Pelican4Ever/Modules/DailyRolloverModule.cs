@@ -364,7 +364,10 @@ namespace Pelican4Ever.Modules
 
             foreach (Farmer farmhand in Game1.getOfflineFarmhands())
             {
-                if (farmhand == null || farmhand.isUnclaimedFarmhand || farmhand.mailForTomorrow.Count == 0)
+                if (farmhand == null)
+                    continue;
+                bool knownPlayer = context.WorldState.Players.ContainsKey(farmhand.UniqueMultiplayerID);
+                if (!FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand(farmhand.isUnclaimedFarmhand, knownPlayer, farmhand.mailForTomorrow.Count))
                     continue;
 
                 string[] rawEntries = farmhand.mailForTomorrow.ToArray();

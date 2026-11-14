@@ -53,5 +53,14 @@ namespace Pelican4Ever.Tests
         {
             Assert.Empty(FarmhandMailDeliveryLogic.Plan(null!));
         }
+
+        [Fact]
+        public void ShouldDeliverToFarmhand_IncludesKnownPlayerEvenIfUncustomized()
+        {
+            Assert.False(FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand(isUnclaimedFarmhand: true, isKnownPlayer: false, pendingCount: 2));
+            Assert.True(FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand(isUnclaimedFarmhand: true, isKnownPlayer: true, pendingCount: 2));
+            Assert.True(FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand(isUnclaimedFarmhand: false, isKnownPlayer: false, pendingCount: 1));
+            Assert.False(FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand(isUnclaimedFarmhand: false, isKnownPlayer: true, pendingCount: 0));
+        }
     }
 }
