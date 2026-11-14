@@ -1760,3 +1760,24 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Resolución:**
       1. El cliente deja de crear mascotas: solo el host las crea/repara y las sincroniza.
       2. El cliente se limita a retirar mascotas ajenas de su residencia y anexos, y registra en `diagnostics.log` si su mascota aún no ha llegado.
+
+- [x] **TASK-2023: Inicialización de la mascota fiel a vanilla**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2022.
+  * **Descripción:** Se forzaba el comportamiento «Walk» en la mascota. Vanilla crea la mascota en la casa, deja `CurrentBehavior = "Sleep"` y es la propia IA (`Pet.RunState`) la que la despierta al azar durante el día y la vuelve a dormir a partir de las 20:00. Forzar un valor fijo se alejaba del comportamiento original.
+  * **Resolución:**
+      1. `EnsurePetBehavior` solo corrige estados inexistentes («None», vacío o no presente en `Data/Pets`) y los deja en «Sleep», el estado inicial de vanilla.
+      2. La IA del anfitrión despierta y pasea a la mascota por sí sola; no se fuerza ningún comportamiento periódicamente.
+      3. Si la mascota queda dentro de la huella de un edificio (p. ej. sobre el cuenco), se la recoloca en la casilla libre de delante, como `PetBowl.GetPetSpot`.
+
+- [x] **TASK-2024: Demolición sin las comprobaciones de vanilla**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2020.
+  * **Descripción:** Al ejecutar el anfitrión la demolición pedida por un cliente se saltaban las comprobaciones de `ContinueDemolish`: obra en curso, animales viviendo dentro y jugadores dentro. Se podía borrar un gallinero con animales sin aviso.
+  * **Criterios de aceptación:**
+      1. No se puede demoler un edificio en construcción, con animales dentro o con un jugador dentro.
+      2. Se muestra el mensaje de vanilla correspondiente.
+      3. Las cabañas con dueño siguen pidiendo la confirmación de vanilla (el diálogo ocurre en el cliente antes de pedir el lock).
+  * **Resolución:**
+      1. `CanDemolishBuilding` replica `ContinueDemolish` (mismos textos `Carpenter_CantDemolish_*`).
+      2. Se valida en el cliente antes de enviar la petición (para mostrar el aviso) y de nuevo en el anfitrión como autoridad.

@@ -3283,6 +3283,16 @@ namespace Pelican4Ever.Modules
                     && IsOwnedByPlayer(location, e.FromPlayerID))
                 {
                     Building? building = location.getBuildingAt(new Vector2(payload.TileX, payload.TileY));
+                    if (building != null && !CanDemolishBuilding(location, building, out string? reason))
+                    {
+                        context.Monitor.Log(
+                            $"[FarmSlotModule] Demolición rechazada por {e.FromPlayerID} en '{payload.LocationId}' " +
+                            $"@({payload.TileX},{payload.TileY}): {reason}",
+                            LogLevel.Warn);
+                        Diagnostics.Write($"Demolición rechazada en host: {reason}");
+                        return;
+                    }
+
                     bool removed = building != null && location.destroyStructure(building);
                     context.Monitor.Log(
                         $"[FarmSlotModule] Demolición solicitada por {e.FromPlayerID} en '{payload.LocationId}' " +
@@ -6082,6 +6092,17 @@ namespace Pelican4Ever.Modules
             if (building == null)
                 return true;
 
+            // Mismas comprobaciones que ContinueDemolish de vanilla: obra en curso, animales o jugadores dentro.
+            if (!CanDemolishBuilding(target, building, out string? reason))
+            {
+                if (reason != null)
+                    Game1.addHUDMessage(new HUDMessage(reason, 3));
+
+                Diagnostics.Write(
+                    $"Demolición bloqueada en cliente: {building.buildingType?.Value ?? "?"} @({(int)tile.X},{(int)tile.Y}) — {reason}");
+                return false;
+            }
+
             var payload = new DemolishBuildingPayload
             {
                 LocationId = target.NameOrUniqueName,
@@ -6101,6 +6122,39 @@ namespace Pelican4Ever.Modules
 
             // No se llama al original: en un cliente siempre lanzaría InvalidOperationException.
             return false;
+        }
+
+        /// <summary>
+        /// Réplica de las comprobaciones de <c>ContinueDemolish</c> de vanilla, necesarias cuando la
+        /// demolición la ejecuta el anfitrión en nombre de un cliente.
+        /// </summary>
+        private static bool CanDemolishBuilding(GameLocation location, Building building, out string? message)
+        {
+            message = null;
+
+            if (location == null || building == null)
+                return false;
+
+            if (building.daysOfConstructionLeft.Value > 0 || building.daysUntilUpgrade.Value > 0)
+            {
+                message = Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_DuringConstruction");
+                return false;
+            }
+
+            GameLocation? interior = building.GetIndoors();
+            if (interior is AnimalHouse animalHouse && animalHouse.animalsThatLiveHere.Count > 0)
+            {
+                message = Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_AnimalsHere");
+                return false;
+            }
+
+            if (interior != null && interior.farmers.Any())
+            {
+                message = Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_PlayerHere");
+                return false;
+            }
+
+            return true;
         }
 
         /// <summary>Indica si el jugador local puede gestionar edificios (construir, mover, demoler) en una ubicación.</summary>

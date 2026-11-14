@@ -14,6 +14,7 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Buildings;
 using StardewValley.Characters;
+using StardewValley.GameData.Pets;
 using StardewValley.Menus;
 
 namespace Pelican4Ever.Modules
@@ -40,6 +41,9 @@ namespace Pelican4Ever.Modules
 
         /// <summary>Ticks consecutivos en los que la mascota propia no aparece en la copia local del cliente.</summary>
         private static int missingPetTicks;
+
+        /// <summary>Contador para emitir el diagnóstico de simulación cada 30 s.</summary>
+        private static int petSimulationTicks;
 
         public const string MsgBowlPurchased = "Pelican4Ever.PetBowlPurchased";
         public const string MsgPetAdoptionSync = "Pelican4Ever.PetAdoptionSync";
@@ -181,12 +185,19 @@ namespace Pelican4Ever.Modules
         /// <summary>Garantiza que la mascota tenga un comportamiento válido de <c>Data/Pets</c>.</summary>
         private static void EnsurePetBehavior(Pet pet, string origin)
         {
-            if (string.IsNullOrEmpty(pet.CurrentBehavior) || pet.GetCurrentPetBehavior() == null)
+            string current = pet.CurrentBehavior;
+
+            // Estado inicial de vanilla: PetLicense crea la mascota y warpToFarmHouse la deja en «Sleep»;
+            // la propia IA (RunState) la despierta al pasear. Solo se corrige un estado inexistente.
+            if (string.IsNullOrEmpty(current)
+                || string.Equals(current, "None", StringComparison.OrdinalIgnoreCase)
+                || pet.GetCurrentPetBehavior() == null)
             {
-                pet.CurrentBehavior = "Walk";
+                pet.CurrentBehavior = "Sleep";
                 context?.Monitor.Log(
-                    $"[ClientPetAdoption] Comportamiento de la mascota '{pet.displayName}' inicializado a 'Walk' ({origin}).",
+                    $"[ClientPetAdoption] Comportamiento inicial de la mascota '{pet.displayName}' ajustado a 'Sleep' (era '{current}', {origin}).",
                     LogLevel.Trace);
+                Diagnostics.Write($"Mascota '{pet.displayName}': comportamiento '{current}' -> 'Sleep' ({origin}).");
             }
 
             // Las primeras versiones la creaban sobre la casilla del cuenco, que es un edificio
@@ -275,6 +286,21 @@ namespace Pelican4Ever.Modules
 
             AssignPetToBowl(target, pet, record);
 
+            // Si la mascota quedó dentro de un edificio (p. ej. el cuenco), sacarla a la casilla libre
+            // de delante: dentro de la huella del edificio no puede moverse.
+            if (target.getBuildingAt(pet.Tile) != null)
+            {
+                PetBowl? bowl = FindPetBowl(target, record);
+                if (bowl != null)
+                {
+                    Point spot = bowl.GetPetSpot();
+                    Game1.warpCharacter(pet, target, new Vector2(spot.X, spot.Y));
+                    pet.homeLocationName.Value = target.NameOrUniqueName;
+                    Diagnostics.Write(
+                        $"Mascota '{pet.displayName}' recolocada fuera del edificio en '{target.NameOrUniqueName}' ({spot.X},{spot.Y}).");
+                }
+            }
+
             if (removeForeignPets)
             {
                 // En la ubicación del jugador no debe aparecer la mascota de otro (p. ej. la del anfitrión).
@@ -301,25 +327,19 @@ namespace Pelican4Ever.Modules
                 return;
 
             Guid ownGuid = Guid.Empty;
-            if (localRecord.State == PetAdoptionState.Adopted)
-            {
-                // Sin el GUID sincronizado aún no se puede distinguir la propia: mejor no tocar nada.
-                if (!Guid.TryParse(localRecord.PetGuid, out ownGuid))
-                    return;
-            }
+            bool adopted = localRecord.State == PetAdoptionState.Adopted;
+            if (adopted && !Guid.TryParse(localRecord.PetGuid, out ownGuid))
+                return;
+
+            List<GameLocation> locations = GetOwnLocations().ToList();
+            if (locations.Count == 0)
+                return;
 
             bool ownPetSeen = false;
-            int checkedLocations = 0;
-
-            foreach (GameLocation location in GetOwnLocations())
+            foreach (GameLocation location in locations)
             {
-                checkedLocations++;
-
-                if (localRecord.State == PetAdoptionState.Adopted
-                    && location.characters.OfType<Pet>().Any(p => p.petId.Value == ownGuid))
-                {
+                if (adopted && location.characters.OfType<Pet>().Any(p => p.petId.Value == ownGuid))
                     ownPetSeen = true;
-                }
 
                 foreach (Pet pet in location.characters.OfType<Pet>()
                              .Where(p => p.petId.Value != ownGuid && !ReferenceEquals(p, activePetPreview))
@@ -330,19 +350,39 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            // Diagnóstico: si la mascota propia no aparece en la copia local, el host aún no la ha sincronizado.
-            if (localRecord.State == PetAdoptionState.Adopted && checkedLocations > 0 && !ownPetSeen)
+            // Solo avisar si el jugador está dentro de una ubicación propia: fuera de ella los personajes
+            // de esa ubicación aún no se han sincronizado y el aviso sería un falso positivo.
+            bool insideOwnLocation = locations.Any(l => ReferenceEquals(l, Game1.currentLocation));
+            if (adopted && insideOwnLocation && !ownPetSeen)
             {
                 missingPetTicks++;
                 if (missingPetTicks % 30 == 1)
                 {
                     Diagnostics.Write(
-                        $"La mascota '{localRecord.PetName}' (petId {localRecord.PetGuid}) todavía no está en las ubicaciones locales del cliente.");
+                        $"La mascota '{localRecord.PetName}' (petId {localRecord.PetGuid}) no está en la copia local de " +
+                        $"'{Game1.currentLocation?.NameOrUniqueName}' (¿sin sincronizar desde el host?).");
                 }
             }
             else
             {
                 missingPetTicks = 0;
+            }
+        }
+
+        /// <summary>Diagnóstico periódico del estado de simulación de las mascotas en el host.</summary>
+        private static void LogPetSimulationState()
+        {
+            if (++petSimulationTicks % 30 != 0)
+                return;
+
+            foreach (Pet pet in Utility.getAllPets())
+            {
+                PetBehavior? behavior = pet.GetCurrentPetBehavior();
+                Diagnostics.Write(
+                    $"Simulación mascota '{pet.displayName}': ubicación='{pet.currentLocation?.NameOrUniqueName ?? "?"}', " +
+                    $"comportamiento='{pet.CurrentBehavior}', walk={behavior?.WalkInDirection.ToString() ?? "null"}, " +
+                    $"tile=({pet.TilePoint.X},{pet.TilePoint.Y}), moving={pet.isMoving()}, " +
+                    $"alwaysActive={pet.currentLocation?.isAlwaysActive.Value.ToString() ?? "?"}");
             }
         }
 
@@ -492,6 +532,8 @@ namespace Pelican4Ever.Modules
 
                 if (changed)
                     context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+
+                LogPetSimulationState();
             }
             else
             {
