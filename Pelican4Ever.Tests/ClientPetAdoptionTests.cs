@@ -182,6 +182,35 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void RecordAdoption_StoresPetGuid()
+        {
+            var record = new PetAdoptionRecord
+            {
+                State = PetAdoptionState.BowlPurchased,
+                FarmSlotId = "Pelican4Ever_Farm_02"
+            };
+
+            string guid = Guid.NewGuid().ToString();
+            Assert.True(PetAdoptionLogic.RecordAdoption(record, "Tobi", "Dog", "2", guid));
+            Assert.Equal(guid, record.PetGuid);
+        }
+
+        [Fact]
+        public void EnsurePetGuid_IsStableAndRegeneratesInvalidValues()
+        {
+            var record = new PetAdoptionRecord { State = PetAdoptionState.Adopted };
+
+            string first = PetAdoptionLogic.EnsurePetGuid(record);
+            Assert.True(Guid.TryParse(first, out _));
+            Assert.Equal(first, PetAdoptionLogic.EnsurePetGuid(record));
+
+            record.PetGuid = "no-es-un-guid";
+            string regenerated = PetAdoptionLogic.EnsurePetGuid(record);
+            Assert.True(Guid.TryParse(regenerated, out _));
+            Assert.NotEqual("no-es-un-guid", regenerated);
+        }
+
+        [Fact]
         public void RecordDeclined_Success_SetsDeclined()
         {
             var record = new PetAdoptionRecord

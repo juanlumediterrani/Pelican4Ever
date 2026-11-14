@@ -52,6 +52,12 @@ namespace Pelican4Ever.Core.Pets
         /// <summary>Raza/variante cosmética de la mascota (ej. "0", "1", "2").</summary>
         public string? PetBreed { get; set; } = "0";
 
+        /// <summary>
+        /// Identificador único (GUID) de la mascota. Se guarda para que host y cliente puedan crear
+        /// exactamente la misma mascota (y el cuenco apunte a ella) aunque la ubicación privada se regenere.
+        /// </summary>
+        public string? PetGuid { get; set; }
+
         /// <summary>Fecha UTC de la última actualización de estado.</summary>
         public DateTimeOffset UpdatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
     }

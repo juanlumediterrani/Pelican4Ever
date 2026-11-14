@@ -1698,3 +1698,26 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       1. `Postfix_CarpenterMenu_Ctor` muestra `demolishButton` cuando `TargetLocation` pertenece al jugador local.
       2. `Postfix_CarpenterMenu_HasPermissionsToDemolish` concede permiso en las mismas ubicaciones. `GameLocation.destroyStructure` no tiene guarda de anfitrión, así que la eliminación se sincroniza igual que la construcción.
       3. Compilación Debug desplegada sin errores y suite completa en verde (1334 pruebas).
+
+- [x] **TASK-2017: La mascota adoptada se perdía al recargar y aparecía duplicada o ajena**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2015.
+  * **Descripción:** El save mostraba los dos cuencos del cliente con `petGuid` vacío y ninguna mascota suya guardada: la entidad creada al adoptar vivía solo en la copia en memoria de la residencia y se perdía al regenerarse la ubicación. Además, el cliente veía la mascota del anfitrión (a veces duplicada) porque no había ninguna comprobación de propiedad a nivel de entidad.
+  * **Criterios de aceptación:**
+      1. La mascota adoptada reaparece al reconectar o recargar, ligada a un cuenco.
+      2. Nunca hay dos copias de la misma mascota en una ubicación.
+      3. La residencia y los anexos del cliente no contienen mascotas de otros jugadores.
+  * **Resolución:**
+      1. `PetAdoptionRecord.PetGuid` guarda el GUID de la mascota; host y cliente crean la misma entidad y el cuenco apunta a ella.
+      2. `EnsureAdoptedPetFor` reconcilia cada segundo (host: todos los jugadores; cliente: el local): rescata la mascota existente por nombre en partidas antiguas, crea la que falte, elimina duplicados y reasigna el cuenco solo si hace falta (sin reescribir NetFields cada tick).
+      3. En el cliente se retiran de su residencia y anexos las mascotas ajenas, excluyendo la mascota de muestra del evento.
+      4. La visita de Marnie solo se dispara si queda un cuenco libre, para no dejar al jugador sin mascota cuando el primer cuenco está libre.
+      5. Suite en verde (1337 pruebas).
+
+- [x] **TASK-2018: Diagnóstico propio del mod por instancia**
+  * **Prioridad:** Media
+  * **Dependencias:** —
+  * **Descripción:** SMAPI escribe un único `SMAPI-latest.txt` por máquina, así que al arrancar el cliente se perdía el log del servidor persistente y era imposible diagnosticar fallos que solo ocurrían en el host (p. ej. demoler edificios).
+  * **Resolución:**
+      1. `Framework/Diagnostics` escribe en `Mods/Pelican4Ever/diagnostics.log` con marca de tiempo y rol (`[H]`/`[C]`), sin sobrescribirse entre instancias.
+      2. Se registran el constructor del `CarpenterMenu`, las comprobaciones de permiso de demolición, la entrada en la vista de colocación y el resultado de `GameLocation.destroyStructure`, además del estado de las mascotas y la visita de Marnie.

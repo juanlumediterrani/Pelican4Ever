@@ -1,9 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.Pets;
+using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
@@ -199,6 +201,271 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>
+        /// Reconcilia la mascota adoptada con la ubicación del jugador: se ejecuta en el host y en el
+        /// cliente. Las ubicaciones privadas se regeneran al cargar y sus entidades no siempre sobreviven,
+        /// así que la mascota se reconstruye a partir del registro autoritativo (nombre, tipo, raza y GUID).
+        /// También garantiza que haya una sola copia y que el cuenco apunte a ella.
+        /// </summary>
+        private static void EnsureAdoptedPetFor(PetAdoptionRecord? record, bool removeForeignPets)
+        {
+            if (context == null || record == null || record.State != PetAdoptionState.Adopted)
+                return;
+            if (string.IsNullOrWhiteSpace(record.PetName))
+                return;
+
+            Guid petGuid;
+            if (Guid.TryParse(record.PetGuid, out Guid parsed))
+            {
+                petGuid = parsed;
+            }
+            else
+            {
+                // Partidas anteriores al GUID persistido: rescatar la mascota existente con el mismo nombre
+                // antes de crear una copia nueva.
+                Pet? existing = FindExistingPet(record);
+                petGuid = existing?.petId.Value ?? Guid.NewGuid();
+                record.PetGuid = petGuid.ToString();
+            }
+
+            List<GameLocation> candidates = GetCandidateLocations(record).ToList();
+            if (candidates.Count == 0)
+                return;
+
+            // Preferir donde ya vive la mascota; si no existe, donde está su cuenco.
+            GameLocation target =
+                candidates.FirstOrDefault(c => c.characters.OfType<Pet>().Any(p => p.petId.Value == petGuid))
+                ?? candidates.FirstOrDefault(c => FindPetBowl(c, record) != null)
+                ?? candidates[0];
+
+            // Copias duplicadas de la misma mascota: quedarse con una sola.
+            List<Pet> matching = target.characters.OfType<Pet>().Where(p => p.petId.Value == petGuid).ToList();
+            for (int i = 1; i < matching.Count; i++)
+                target.characters.Remove(matching[i]);
+
+            Pet? pet = matching.FirstOrDefault();
+            if (pet == null)
+            {
+                PetBowl? bowl = FindPetBowl(target, record);
+                Point spot = bowl?.GetPetSpot() ?? new Point(Math.Max(0, record.BowlTileX), Math.Max(0, record.BowlTileY));
+
+                pet = new Pet(
+                    spot.X,
+                    spot.Y,
+                    string.IsNullOrWhiteSpace(record.PetBreed) ? "0" : record.PetBreed,
+                    string.IsNullOrWhiteSpace(record.PetType) ? "Dog" : record.PetType);
+                pet.petId.Value = petGuid;
+                pet.Name = record.PetName;
+                pet.displayName = record.PetName;
+                pet.currentLocation = target;
+                target.characters.Add(pet);
+
+                EnsurePetBehavior(pet, "reconciliación");
+                context.Monitor.Log(
+                    $"[ClientPetAdoption] Mascota '{record.PetName}' restaurada en '{target.NameOrUniqueName}' (petId {petGuid}).",
+                    LogLevel.Info);
+                Diagnostics.Write($"Mascota '{record.PetName}' restaurada en '{target.NameOrUniqueName}' (petId {petGuid}).");
+            }
+            else
+            {
+                EnsurePetBehavior(pet, "reconciliación");
+            }
+
+            AssignPetToBowl(target, pet, record);
+
+            if (removeForeignPets)
+            {
+                // En la ubicación del jugador no debe aparecer la mascota de otro (p. ej. la del anfitrión).
+                foreach (Pet foreign in target.characters.OfType<Pet>()
+                             .Where(p => p.petId.Value != petGuid && !ReferenceEquals(p, activePetPreview))
+                             .ToList())
+                {
+                    target.characters.Remove(foreign);
+                    context.Monitor.Log(
+                        $"[ClientPetAdoption] Mascota ajena '{foreign.displayName}' retirada de '{target.NameOrUniqueName}'.",
+                        LogLevel.Info);
+                    Diagnostics.Write($"Mascota ajena '{foreign.displayName}' retirada de '{target.NameOrUniqueName}'.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Retira de la residencia y anexos del jugador local cualquier mascota que no sea la suya.
+        /// Cubre el caso de un cliente sin mascota al que le aparecía la del anfitrión.
+        /// </summary>
+        private static void RemoveForeignPetsFromOwnLocations()
+        {
+            if (context == null || Game1.player == null || isAdoptionPromptActive)
+                return;
+
+            Guid ownGuid = Guid.TryParse(localRecord.PetGuid, out Guid parsed) ? parsed : Guid.Empty;
+
+            foreach (GameLocation location in GetOwnLocations())
+            {
+                foreach (Pet pet in location.characters.OfType<Pet>()
+                             .Where(p => p.petId.Value != ownGuid && !ReferenceEquals(p, activePetPreview))
+                             .ToList())
+                {
+                    location.characters.Remove(pet);
+                    Diagnostics.Write($"Mascota ajena '{pet.displayName}' retirada de '{location.NameOrUniqueName}' (cliente).");
+                }
+            }
+        }
+
+        /// <summary>Ubicaciones del jugador local: su residencia y sus anexos.</summary>
+        private static IEnumerable<GameLocation> GetOwnLocations()
+        {
+            if (context == null || Game1.player == null)
+                yield break;
+
+            long me = Game1.player.UniqueMultiplayerID;
+            string? residence = context.WorldState.ResolvePlayerResidenceSlot(me);
+            if (string.IsNullOrWhiteSpace(residence))
+                yield break;
+
+            if (Game1.getLocationFromName(residence) is GameLocation main)
+                yield return main;
+
+            foreach (AnnexAssignment annex in context.WorldState.GetAnnexesForResidence(residence))
+            {
+                if (annex.OwnerId == me
+                    && !string.IsNullOrWhiteSpace(annex.AnnexId)
+                    && Game1.getLocationFromName(annex.AnnexId) is GameLocation annexLocation)
+                {
+                    yield return annexLocation;
+                }
+            }
+        }
+
+        /// <summary>Busca una mascota ya creada con el nombre registrado (para no duplicarla).</summary>
+        private static Pet? FindExistingPet(PetAdoptionRecord record)
+        {
+            foreach (GameLocation location in GetCandidateLocations(record))
+            {
+                Pet? pet = location.characters.OfType<Pet>().FirstOrDefault(p =>
+                    string.Equals(p.displayName, record.PetName, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(p.Name, record.PetName, StringComparison.OrdinalIgnoreCase));
+                if (pet != null)
+                    return pet;
+            }
+
+            return null;
+        }
+
+        /// <summary>Ubicaciones donde puede estar la mascota del jugador: su residencia y sus anexos.</summary>
+        private static IEnumerable<GameLocation> GetCandidateLocations(PetAdoptionRecord record)        {
+            if (string.IsNullOrWhiteSpace(record.FarmSlotId))
+                yield break;
+
+            if (Game1.getLocationFromName(record.FarmSlotId) is GameLocation residence)
+                yield return residence;
+
+            if (context?.WorldState == null)
+                yield break;
+
+            foreach (AnnexAssignment annex in context.WorldState.GetAnnexesForResidence(record.FarmSlotId))
+            {
+                if (!string.IsNullOrWhiteSpace(annex.AnnexId)
+                    && Game1.getLocationFromName(annex.AnnexId) is GameLocation annexLocation)
+                {
+                    yield return annexLocation;
+                }
+            }
+        }
+
+        /// <summary>Cuenco asignado a la mascota: el de las coordenadas registradas o el primero libre.</summary>
+        private static PetBowl? FindPetBowl(GameLocation location, PetAdoptionRecord record)
+        {
+            List<PetBowl> bowls = location.buildings.OfType<PetBowl>().ToList();
+            if (bowls.Count == 0)
+                return null;
+
+            if (record.BowlTileX >= 0 && record.BowlTileY >= 0)
+            {
+                PetBowl? exact = bowls.FirstOrDefault(b =>
+                    b.tileX.Value == record.BowlTileX && b.tileY.Value == record.BowlTileY);
+                if (exact != null)
+                    return exact;
+            }
+
+            return bowls.FirstOrDefault(b => !b.HasPet()) ?? bowls[0];
+        }
+
+        /// <summary>Vincula la mascota con su cuenco y libera los cuencos que la apuntaban.</summary>
+        private static void AssignPetToBowl(GameLocation location, Pet pet, PetAdoptionRecord record)
+        {
+            List<PetBowl> bowls = location.buildings.OfType<PetBowl>().ToList();
+            if (bowls.Count == 0)
+                return;
+
+            PetBowl? bowl = null;
+            if (record.BowlTileX >= 0 && record.BowlTileY >= 0)
+            {
+                bowl = bowls.FirstOrDefault(b => b.tileX.Value == record.BowlTileX && b.tileY.Value == record.BowlTileY);
+            }
+
+            bowl ??= bowls.FirstOrDefault(b => !b.HasPet()) ?? bowls[0];
+
+            foreach (PetBowl other in bowls.Where(b => b != bowl && b.petId.Value == pet.petId.Value))
+                other.petId.Value = Guid.Empty;
+
+            // No reescribir los NetFields cada segundo si ya está todo correcto (evita tráfico de red).
+            if (bowl.petId.Value == pet.petId.Value
+                && string.Equals(pet.homeLocationName.Value, bowl.parentLocationName.Value, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            bowl.AssignPet(pet);
+        }
+
+        /// <summary>Indica si el jugador tiene algún cuenco sin mascota en su residencia o anexos.</summary>
+        private static bool HasFreePetBowl(string residenceSlotId)
+        {
+            if (context?.WorldState == null)
+                return false;
+
+            var record = new PetAdoptionRecord { FarmSlotId = residenceSlotId };
+            foreach (GameLocation location in GetCandidateLocations(record))
+            {
+                if (location.buildings.OfType<PetBowl>().Any(bowl => !bowl.HasPet()))
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>Reconcilia las mascotas de todos los jugadores (host) o la del jugador local (cliente).</summary>
+        private void ReconcilePets()
+        {
+            if (context == null || !Context.IsWorldReady)
+                return;
+
+            if (Context.IsMainPlayer)
+            {
+                bool changed = false;
+                foreach (PlayerRecord player in context.WorldState.Players.Values)
+                {
+                    PetAdoptionRecord? record = player.PetAdoption;
+                    if (record == null || record.State != PetAdoptionState.Adopted)
+                        continue;
+
+                    string? previousGuid = record.PetGuid;
+                    EnsureAdoptedPetFor(record, removeForeignPets: false);
+                    if (!string.Equals(previousGuid, record.PetGuid, StringComparison.Ordinal))
+                        changed = true;
+                }
+
+                if (changed)
+                    context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+            }
+            else
+            {
+                EnsureAdoptedPetFor(localRecord, removeForeignPets: true);
+                RemoveForeignPetsFromOwnLocations();
+            }
+        }
+
+        /// <summary>
         /// Marca que en este despertar debe producirse la visita de Marnie si el cuenco se compró antes de dormir.
         /// </summary>
         private static void UpdateWakeTriggerPending()
@@ -232,6 +499,7 @@ namespace Pelican4Ever.Modules
             if (!Context.IsWorldReady || !Context.IsPlayerFree)
                 return;
 
+            ReconcilePets();
             CheckAndTriggerAdoptionEvent();
         }
 
@@ -261,6 +529,14 @@ namespace Pelican4Ever.Modules
 
             string currentMap = farm.NameOrUniqueName;
             long playerId = Game1.player.UniqueMultiplayerID;
+
+            // Solo tiene sentido la visita si queda un cuenco libre: con todos los cuencos ocupados
+            // (o con la mascota ya adoptada) no se vuelve a llamar a Marnie.
+            if (!HasFreePetBowl(currentMap))
+            {
+                NoteAdoptionGate("no queda ningún cuenco libre en la residencia ni en los anexos");
+                return;
+            }
 
             // Determinar si el jugador local es propietario de esta ranura
             long ownerId = 0;
@@ -306,6 +582,7 @@ namespace Pelican4Ever.Modules
 
             lastAdoptionGate = gate;
             context?.Monitor.Log($"[ClientPetAdoption] Visita de Marnie pendiente; bloqueada por: {gate}.", LogLevel.Trace);
+            Diagnostics.Write($"Visita de Marnie bloqueada: {gate}.");
         }
 
         /// <summary>Retira a Marnie y a la mascota de muestra si la visita se interrumpe o queda obsoleta.</summary>
@@ -333,6 +610,7 @@ namespace Pelican4Ever.Modules
             context?.Monitor.Log(
                 $"[ClientPetAdoption] Marnie se presenta en la puerta de '{farm.NameOrUniqueName}' para {Game1.player.Name}.",
                 LogLevel.Info);
+            Diagnostics.Write($"Marnie se presenta en '{farm.NameOrUniqueName}' para {Game1.player.Name}.");
 
             Point entry = farm.GetMainFarmHouseEntry();
             Vector2 marnieTile = new Vector2(entry.X - 1, entry.Y + 1);
@@ -486,14 +764,20 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
+            // Identificador estable de la mascota: host y cliente crean la misma, y el cuenco la apunta.
+            var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
+            string petGuid = PetAdoptionLogic.EnsurePetGuid(playerRecord.PetAdoption);
+
             // Localizar el cuenco antes de crear la mascota: su casilla canónica es la de delante
             // (PetBowl.GetPetSpot), no la del edificio, que bloquea el movimiento.
             var petBowl = loc.buildings.OfType<PetBowl>().FirstOrDefault(b => b.tileX.Value == payload.BowlTileX && b.tileY.Value == payload.BowlTileY)
+                          ?? loc.buildings.OfType<PetBowl>().FirstOrDefault(b => !b.HasPet())
                           ?? loc.buildings.OfType<PetBowl>().FirstOrDefault();
             Point petSpot = petBowl?.GetPetSpot() ?? new Point(payload.BowlTileX, payload.BowlTileY);
 
             // Instanciar mascota autoritativa
             Pet pet = new Pet(petSpot.X, petSpot.Y, payload.PetBreed, payload.PetType);
+            pet.petId.Value = Guid.Parse(petGuid);
             pet.Name = payload.PetName;
             pet.displayName = payload.PetName;
             pet.currentLocation = loc;
@@ -520,8 +804,7 @@ namespace Pelican4Ever.Modules
             loc.characters.Add(pet);
 
             // Persistir en el estado autoritativo
-            var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
-            PetAdoptionLogic.RecordAdoption(playerRecord.PetAdoption, payload.PetName, payload.PetType, payload.PetBreed);
+            PetAdoptionLogic.RecordAdoption(playerRecord.PetAdoption, payload.PetName, payload.PetType, payload.PetBreed, petGuid);
             context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
 
             context.Monitor.Log($"[ClientPetAdoption] Mascota '{payload.PetName}' ({payload.PetType}) vinculada a cuenco en {payload.SlotName} para el jugador {playerId}.", LogLevel.Info);

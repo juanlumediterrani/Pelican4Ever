@@ -4322,6 +4322,20 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish))
                 );
 
+                // Diagnóstico del flujo de demolición (pulsar el martillo y borrar el edificio).
+                PatchSafe(
+                    harmony,
+                    "CarpenterMenu.setUpForBuildingPlacement",
+                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.setUpForBuildingPlacement)),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_SetUpForBuildingPlacement))
+                );
+                PatchSafe(
+                    harmony,
+                    "GameLocation.destroyStructure(Building)",
+                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.destroyStructure), new[] { typeof(Building) }),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_GameLocation_DestroyStructure))
+                );
+
                 // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
                 harmony.Patch(
                     original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
@@ -5953,21 +5967,51 @@ namespace Pelican4Ever.Modules
         /// </summary>
         public static void Postfix_CarpenterMenu_Ctor(CarpenterMenu __instance)
         {
-            if (Context.IsMainPlayer || __instance == null || __instance.readOnly)
+            if (__instance == null)
                 return;
 
-            if (__instance.demolishButton != null && CanClientManageLocation(__instance.TargetLocation))
+            bool owned = CanClientManageLocation(__instance.TargetLocation);
+
+            if (!Context.IsMainPlayer && !__instance.readOnly && __instance.demolishButton != null && owned)
                 __instance.demolishButton.visible = true;
+
+            Diagnostics.Write(
+                $"CarpenterMenu ctor: destino='{__instance.TargetLocation?.NameOrUniqueName ?? "?"}', " +
+                $"propio={owned}, martilloVisible={__instance.demolishButton?.visible}, host={Context.IsMainPlayer}");
         }
 
         /// <summary>TASK-2015: permite demoler en la residencia o anexo propio (vanilla lo reservaba al anfitrión).</summary>
         public static void Postfix_CarpenterMenu_HasPermissionsToDemolish(CarpenterMenu __instance, Building b, ref bool __result)
         {
-            if (__result || Context.IsMainPlayer || __instance == null)
+            if (__result || __instance == null)
+                return;
+
+            if (Context.IsMainPlayer)
                 return;
 
             if (CanClientManageLocation(__instance.TargetLocation))
                 __result = true;
+
+            Diagnostics.Write(
+                $"hasPermissionsToDemolish (cliente): edificio={b?.buildingType?.Value ?? "?"}, " +
+                $"destino='{__instance.TargetLocation?.NameOrUniqueName ?? "?"}' -> {__result} (propio={CanClientManageLocation(__instance.TargetLocation)})");
+        }
+
+        /// <summary>Diagnóstico: se pulsó construir/mover/pintar/demoler y se entra en la vista de colocación.</summary>
+        public static void Postfix_CarpenterMenu_SetUpForBuildingPlacement(CarpenterMenu __instance)
+        {
+            Diagnostics.Write(
+                $"CarpenterMenu.setUpForBuildingPlacement: destino='{__instance?.TargetLocation?.NameOrUniqueName ?? "?"}', " +
+                $"currentLocation='{Game1.currentLocation?.NameOrUniqueName ?? "?"}', host={Context.IsMainPlayer}");
+        }
+
+        /// <summary>Diagnóstico: resultado real de la demolición de un edificio.</summary>
+        public static void Postfix_GameLocation_DestroyStructure(GameLocation __instance, Building building, bool __result)
+        {
+            Diagnostics.Write(
+                $"destroyStructure: ubicación='{__instance?.NameOrUniqueName ?? "?"}', " +
+                $"edificio={building?.buildingType?.Value ?? "?"} " +
+                $"@({building?.tileX?.Value.ToString() ?? "?"},{building?.tileY?.Value.ToString() ?? "?"}) -> {__result}, host={Context.IsMainPlayer}");
         }
 
         /// <summary>Indica si el jugador local puede gestionar edificios (construir, mover, demoler) en una ubicación.</summary>

@@ -120,7 +120,8 @@ namespace Pelican4Ever.Core.Pets
             PetAdoptionRecord record,
             string petName,
             string? petType = null,
-            string? petBreed = null)
+            string? petBreed = null,
+            string? petGuid = null)
         {
             if (record == null || !IsAwaitingAdoption(record))
                 return false;
@@ -137,8 +138,31 @@ namespace Pelican4Ever.Core.Pets
             if (!string.IsNullOrWhiteSpace(petBreed))
                 record.PetBreed = petBreed;
 
+            if (!string.IsNullOrWhiteSpace(petGuid))
+                record.PetGuid = petGuid;
+
             record.UpdatedAtUtc = DateTimeOffset.UtcNow;
             return true;
+        }
+
+        /// <summary>
+        /// Normaliza el GUID de la mascota. Si el registro no lo tiene (partidas antiguas), se genera uno
+        /// nuevo y se devuelve para que pueda persistirse.
+        /// </summary>
+        public static string EnsurePetGuid(PetAdoptionRecord record)
+        {
+            if (record == null)
+                throw new ArgumentNullException(nameof(record));
+
+            if (!string.IsNullOrWhiteSpace(record.PetGuid)
+                && Guid.TryParse(record.PetGuid, out Guid parsed))
+            {
+                return parsed.ToString();
+            }
+
+            string generated = Guid.NewGuid().ToString();
+            record.PetGuid = generated;
+            return generated;
         }
 
         /// <summary>
