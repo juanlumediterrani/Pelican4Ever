@@ -45,6 +45,9 @@ namespace Pelican4Ever.Modules
         /// <summary>Contador para emitir el diagnóstico de simulación cada 30 s.</summary>
         private static int petSimulationTicks;
 
+        /// <summary>Ticks consecutivos sin desplazarse de cada mascota (por petId), para reorientar el paso.</summary>
+        private static readonly Dictionary<Guid, int> petStuckTicks = new();
+
         public const string MsgBowlPurchased = "Pelican4Ever.PetBowlPurchased";
         public const string MsgPetAdoptionSync = "Pelican4Ever.PetAdoptionSync";
         public const string MsgPetAdopted = "Pelican4Ever.PetAdopted";
@@ -384,9 +387,66 @@ namespace Pelican4Ever.Modules
                 Diagnostics.Write(
                     $"Simulación mascota '{pet.displayName}': ubicación='{pet.currentLocation?.NameOrUniqueName ?? "?"}', " +
                     $"comportamiento='{pet.CurrentBehavior}', walk={behavior?.WalkInDirection.ToString() ?? "null"}, " +
-                    $"tile=({pet.TilePoint.X},{pet.TilePoint.Y}), moving={pet.isMoving()}, " +
-                    $"alwaysActive={pet.currentLocation?.isAlwaysActive.Value.ToString() ?? "?"}");
+                    $"tile=({pet.TilePoint.X},{pet.TilePoint.Y}), moving={pet.isMoving()}, speed={pet.speed}, " +
+                    $"dir={pet.FacingDirection}, alwaysActive={pet.currentLocation?.isAlwaysActive.Value.ToString() ?? "?"}, " +
+                    $"vecinos[{DescribeNeighbours(pet)}]");
             }
+        }
+
+        /// <summary>
+        /// El <c>RunState</c> de vanilla, al chocar, sortea una dirección pero vuelve a comprobar la misma
+        /// casilla bloqueada, así que nunca la aplica y la mascota puede quedarse clavada en un rincón.
+        /// Aquí se aplica de verdad una dirección aleatoria cuando lleva un rato en un comportamiento de
+        /// paseo sin moverse. No cambia el comportamiento ni la IA: solo reorienta el paso.
+        /// </summary>
+        private static void UnstickWalkingPets()
+        {
+            foreach (Pet pet in Utility.getAllPets())
+            {
+                PetBehavior? behavior = pet.GetCurrentPetBehavior();
+                Guid id = pet.petId.Value;
+
+                if (behavior == null || !behavior.WalkInDirection || pet.isMoving())
+                {
+                    petStuckTicks.Remove(id);
+                    continue;
+                }
+
+                int ticks = petStuckTicks.TryGetValue(id, out int previous) ? previous + 1 : 1;
+                petStuckTicks[id] = ticks;
+
+                if (ticks % 3 != 0)
+                    continue;
+
+                pet.faceDirection(Game1.random.Next(4));
+                pet.setMovingInFacingDirection();
+            }
+        }
+
+        /// <summary>Resumen de transitabilidad de las cuatro casillas contiguas (diagnóstico).</summary>
+        private static string DescribeNeighbours(Pet pet)
+        {
+            GameLocation? location = pet.currentLocation;
+            if (location == null)
+                return "sin ubicación";
+
+            Point tile = pet.TilePoint;
+            (string Name, int Dx, int Dy)[] deltas =
+            {
+                ("N", 0, -1), ("E", 1, 0), ("S", 0, 1), ("O", -1, 0)
+            };
+
+            var parts = new List<string>();
+            foreach ((string name, int dx, int dy) in deltas)
+            {
+                int x = tile.X + dx;
+                int y = tile.Y + dy;
+                bool passable = location.isTilePassable(new xTile.Dimensions.Location(x, y), Game1.viewport);
+                bool building = location.getBuildingAt(new Vector2(x, y)) != null;
+                parts.Add($"{name}:{(passable && !building ? "libre" : "bloqueado")}");
+            }
+
+            return string.Join(" ", parts);
         }
 
         /// <summary>Ubicaciones del jugador local: su residencia y sus anexos.</summary>
@@ -553,6 +613,7 @@ namespace Pelican4Ever.Modules
                     context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
 
                 LogPetSimulationState();
+                UnstickWalkingPets();
             }
             else
             {
