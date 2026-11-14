@@ -1811,3 +1811,85 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       5. El cliente no retira personajes hasta recibir el registro autoritativo, para no borrar su propia mascota.
       6. `diagnostics.log` rota a 2 MB (`diagnostics.log.old`).
       7. Compilación Debug sin errores y suite en verde (1337 pruebas).
+
+---
+
+### Épica 21: Rebalanceo de habilidades y economía para el reloj 1:1 (ADR-0008)
+> **Objetivo:** Ajustar el progreso de habilidades y el ingreso por actividad al tiempo 1:1 y a la vida persistente antes de la 1.0, según [ADR-0008](docs/adr/0008-skill-economy-rebalance.md). Solo se frena lo que ni el calendario ni la energía limitan: pesca, minería, combate, criaturas y Caverna Calavera. Cultivo, ganadería y forraje no se tocan. Todos los valores son configurables y su valor neutro devuelve el comportamiento de vanilla.
+
+- [ ] **TASK-2101: Curva diaria de experiencia — lógica pura en Core**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Crear en `Pelican4Ever.Core/Economy` la lógica pura que, dado el XP ya ganado hoy en una habilidad, el XP entrante, el multiplicador fijo, el cupo diario y el multiplicador de exceso, devuelve el XP entero a conceder y el resto fraccionario a conservar. Añadir a `ServerConfig` `SkillDailyFullXp` (diccionario por habilidad; `300` para `Fishing`, `Foraging`, `Mining` y `Combat`; ausente o `0` = sin cupo), `SkillOverflowXpMultiplier` (`0.25`) y `SkillXpMultiplier` (diccionario por habilidad, vacío = `1.0`), con validación al arranque.
+  * **Criterios de aceptación:**
+    1. Con el cupo sin agotar, el XP se concede íntegro; un evento que cruza el cupo se parte en la porción al 100 % y la porción al 25 %.
+    2. Las fracciones se acumulan: cuatro eventos de 1 XP por encima del cupo conceden 1 punto en total.
+    3. Una habilidad sin cupo (Cultivo) y los valores neutros devuelven exactamente el XP de entrada.
+    4. La validación rechaza multiplicadores negativos y nombres de habilidad desconocidos.
+    5. Pruebas unitarias en `Pelican4Ever.Tests` que cubren los cuatro puntos.
+
+- [ ] **TASK-2102: Curva diaria de experiencia — parche y contador autoritativo**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2101, TASK-301.
+  * **Descripción:** Parchear `Farmer.gainExperience(int which, int howMuch)` con un prefijo que solo actúe sobre el jugador local y sustituya `howMuch` por el resultado de TASK-2101. Guardar en `PlayerRecord` el XP ganado hoy por habilidad, el resto fraccionario y el día de juego al que pertenecen, con el mismo patrón que la Saciedad: el cliente informa al host, el host lo acota y lo persiste en `ServerWorldState`, y el cliente lo recupera al reconectar. El contador se reinicia al cambiar el día de juego.
+  * **Criterios de aceptación:**
+    1. Un *farmhand* que supera el cupo de Pesca, se desconecta y vuelve el mismo día sigue en la parte reducida de la curva.
+    2. Tras el rollover el cupo vuelve a estar completo para todos los jugadores, conectados o no.
+    3. El XP de Cultivo (cosechas y animales) no cambia.
+    4. La captura de criaturas de *Nature in the Valley* queda cubierta: da XP de Recolección por `gainExperience`.
+    5. El contador sobrevive a un checkpoint intradía y a un reinicio controlado.
+    6. Nota de verificación en partida con host y un *farmhand*.
+
+- [ ] **TASK-2103: Pesca — tiempo hasta la picada y duración del minijuego**
+  * **Prioridad:** Media
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Añadir `FishingBiteTimeMultiplier` (`2.5`) y `FishingMinigameDurationMultiplier` (`1.5`). El primero se aplica como postfix al resultado de `FishingRod.calculateTimeUntilFishingBite`, salvo cuando el anzuelo cae en un estanque de peces con ocupantes. El segundo escala, en `BobberBar.update`, la variación por tick de `distanceFromCatching` dividiéndola entre el multiplicador, tanto al subir como al bajar.
+  * **Criterios de aceptación:**
+    1. Con cebo y sin cebo, el tiempo medio hasta la picada medido en partida es unas 2,5 veces el de vanilla.
+    2. Un pez mantenido siempre dentro de la barra tarda unas 1,5 veces más en capturarse; la captura y el escape se disparan igual que en vanilla.
+    3. Los estanques de peces conservan su tiempo fijo.
+    4. Con ambos multiplicadores en `1.0` el comportamiento es el de vanilla.
+    5. El concurso de pesca de los festivales se revisa y se decide explícitamente si queda exento.
+
+- [ ] **TASK-2104: Minas — probabilidad de escalera por piedra y por monstruo**
+  * **Prioridad:** Media
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Añadir `MineStoneLadderChanceMultiplier` (`0.5`) y `MineMonsterLadderChance` (`0.08`). Aplicarlos a la tirada de escalera de `MineShaft.checkStoneForItems` y a la de `MineShaft.monsterDrop`, conservando la escalera garantizada al romper la última piedra, el `+0.07` de la estatua del enano y los pisos que exigen matar a todos los monstruos. Las probabilidades son literales dentro de ambos métodos: decidir en la tarea entre transpiler y veto probabilístico sobre `createLadderDown` / `createLadderAt`, y dejarlo anotado.
+  * **Criterios de aceptación:**
+    1. Ningún piso queda sin salida: romper la última piedra crea siempre la escalera.
+    2. En una muestra de pisos anotada en el registro de diagnóstico, la frecuencia de escalera por piedra y por monstruo cae a los valores configurados.
+    3. La densidad de menas no cambia.
+    4. Con `1.0` y `0.15` el comportamiento es el de vanilla.
+    5. Comprobado con un *farmhand*: la tirada se ejecuta donde se rompe la piedra y la escalera se sincroniza a los demás jugadores del piso.
+
+- [ ] **TASK-2105: Caverna Calavera — coste de energía por piso descendido**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Añadir `SkullCavernDescentBaseCost` (`1`) y `SkullCavernDescentDepthDivisor` (`25`). Cuando el jugador local llega a un piso de la Caverna más profundo que el anterior, restar de su energía la suma de `base + piso / divisor` de cada piso recorrido, con `piso = mineLevel − 120`. Cubre escaleras, pozos (`enterMineShaft` salta varios pisos) y escaleras fabricadas. La fórmula y la suma van en Core con pruebas. Si la energía no alcanza, queda en `0` y el jugador pasa a agotado; el descenso no se bloquea.
+  * **Criterios de aceptación:**
+    1. Bajar del piso 1 al 100 de uno en uno cuesta unos 300 puntos; una caída de 8 pisos cuesta lo mismo que bajar esos 8 pisos por escalera.
+    2. Subir, salir o volver a entrar no cuesta nada, y volver a entrar no abarata los pisos ya pagados.
+    3. Las Minas normales (pisos 1–120) y el Volcán no tienen coste.
+    4. La energía nunca queda negativa por este coste y el jugador no se desmaya por él.
+    5. Con el coste base y el divisor en `0` el coste queda desactivado y el comportamiento es el de vanilla.
+    6. Revisado el modo difícil de la Caverna y el festival del desierto.
+
+- [ ] **TASK-2106: Multiplicadores de precio de pescado y minerales, y telemetría diaria**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2102.
+  * **Descripción:** Ampliar `Postfix_SellToStorePrice` con `FishPriceMultiplier` (categoría `-4`) y `MineralPriceMultiplier` (categorías `-2`, `-12` y `-15`), ambos `1.0`. Registrar en el log de eventos del host, una vez por rollover y jugador, el oro ganado en el día y el XP obtenido por habilidad (antes y después de la curva), para calibrar con datos reales.
+  * **Criterios de aceptación:**
+    1. Con los multiplicadores en `1.0` ningún precio cambia.
+    2. Un multiplicador distinto de `1.0` afecta a la venta en tienda y a la caja de envíos de las categorías indicadas, y a ninguna otra.
+    3. El registro diario aparece para jugadores conectados y desconectados que jugaron ese día, y no duplica líneas si el rollover se reintenta.
+    4. Pruebas unitarias del reparto por categoría.
+
+- [ ] **TASK-2107: Calibración en partida y aceptación de ADR-0008**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2102..TASK-2106.
+  * **Descripción:** Jugar al menos una semana real con el grupo con los valores iniciales y revisar la telemetría de TASK-2106. Ajustar los valores, anotar en ADR-0008 las cifras finales y pasarlo a *Aceptado* en los tres idiomas. Actualizar `design.md` (§4), `architecture.md`, `config.example.json` y los índices de ADR.
+  * **Criterios de aceptación:**
+    1. Queda escrito cuántos días tarda un jugador de una sesión diaria en llegar a nivel 5 y a nivel 10 de Pesca, Minería y Combate.
+    2. Queda escrito el oro diario típico por actividad (cultivo, pesca, minería) y la decisión sobre los multiplicadores de precio.
+    3. Las cifras de ADR-0008 coinciden con los valores por defecto del código.
+    4. Decisión explícita sobre el botín de combate fuera de la Caverna Calavera, que ADR-0008 deja sin freno.

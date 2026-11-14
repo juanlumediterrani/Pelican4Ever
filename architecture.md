@@ -181,3 +181,4 @@ Las decisiones arquitectónicas clave y sus alternativas descartadas están docu
 * **ADR-0005:** Plaza Central en la Granja Host y Mapas Puente Declarativos (`Data/Locations`) para el escalado de hasta 16 residencias privadas.
 * **ADR-0006:** Energía por sesiones: Saciedad con vaciado continuo, "Bien comido" que activa el descanso sentado y buff diario del Spa.
 * **ADR-0007:** Identidad asimétrica por dispositivo (ECDSA P-256) y desafío `P4E\x02` en el saludo de Lidgren.
+* **ADR-0008 (propuesto):** Rebalanceo para el 1:1: curva diaria de experiencia, pesca más lenta, menos escaleras en las minas y coste de energía por piso en la Caverna Calavera.
