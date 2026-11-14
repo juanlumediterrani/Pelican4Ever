@@ -62,7 +62,7 @@ The authoritative state of each player lives only on the server (`ServerWorldSta
 
 2. **Mine Persistence by Shifts (12 Hours):**
    * The automatic unloading of empty floors (`MineShaft.clearInactiveMines`) is blocked.
-   * The floors visited in the Mines, the Skull Cavern and the Volcano stay in memory and **only regenerate twice per real day (`06:00` and `18:00`)**, except for the floors where a player is inside at that exact moment (which are cleared as soon as they leave).
+   * Floors are shared, and unoccupied floors regenerate at `06:00` and `18:00` real time. They also unload after `MineFloorCooldownMinutes` minutes empty (45 by default); occupied floors are not unloaded.
 
 3. **Native 1:1 Industrial Processing:**
    * Because the clock runs 1:1 with real time, Stardew Valley's native `MinutesUntilReady` values already scale naturally without touching each machine: an oven takes **30 real minutes**, a jar **~2.8 real days** and a keg **~6.9 real days**.
@@ -102,7 +102,7 @@ The authoritative state of each player lives only on the server (`ServerWorldSta
 | **Economy and Shipping Bins** | **Individual** (`team.useSeparateWallets = true`). Each player has their own gold and their own `personalShippingBin`. |
 | **Farm, House and Upgrades** | **Individual** per slot (`Pelican4Ever_Farm_01..04`). |
 | **Town Hall / Museum / Joja** | **Shared (community)** for the whole server. |
-| **Mine Elevator** | **Individual** or shared depending on the group configuration (generated floors are shared during each 12h shift). |
+| **Mine Elevator** | **Individual** per player. Floors are shared; Mines reward chests are personal and can be claimed once per player. |
 | **NPC relationships** | **Individual** per player, with no decay while the player is in the `Offline_*` state. |
 
 ---

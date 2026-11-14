@@ -62,7 +62,7 @@ El estado autoritativo de cada jugador reside únicamente en el servidor (`Serve
 
 2. **Persistencia de Minas por Turnos (12 Horas):**
    * Se bloquea la descarga automática de pisos vacíos (`MineShaft.clearInactiveMines`).
-   * Los pisos visitados de las Minas, Caverna Calavera y Volcán permanecen en memoria y **solo se regeneran dos veces al día real (`06:00` y `18:00`)**, salvo los pisos donde haya un jugador dentro en ese instante (que se limpian en cuanto salga).
+   * Los pisos son compartidos y los desocupados se regeneran a las `06:00` y `18:00` reales. También se descargan tras `MineFloorCooldownMinutes` minutos vacíos (45 por defecto); los ocupados no se descargan.
 
 3. **Procesado Industrial 1:1 Nativo:**
    * Al ir el reloj 1:1 con el tiempo real, los `MinutesUntilReady` nativos de Stardew Valley ya escalan de forma natural sin tocar cada máquina: un horno tarda **30 minutos reales**, una envasadora **~2,8 días reales** y un barril **~6,9 días reales**.
@@ -102,7 +102,7 @@ El estado autoritativo de cada jugador reside únicamente en el servidor (`Serve
 | **Economía y Cajas de Envío** | **Individual** (`team.useSeparateWallets = true`). Cada jugador tiene su propio oro y su `personalShippingBin`. |
 | **Granja, Casa y Mejoras** | **Individual** por hueco (`Pelican4Ever_Farm_01..04`). |
 | **Centro Cívico / Museo / Joja** | **Compartido (Comunitario)** para todo el servidor. |
-| **Ascensor de las Minas** | **Individual** o compartido según configuración del grupo (los pisos generados sí son compartidos durante cada turno de 12h). |
+| **Ascensor de las Minas** | **Individual** por jugador. Los pisos son compartidos; los cofres de recompensa de las Minas son personales y se obtienen una sola vez por jugador. |
 | **Relaciones con NPCs** | **Individual** por jugador, sin decaimiento mientras el jugador está en estado `Offline_*`. |
 
 ---

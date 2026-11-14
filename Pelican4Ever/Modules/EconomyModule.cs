@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Economy;
@@ -12,6 +14,7 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Buffs;
 using StardewValley.Locations;
+using StardewValley.Menus;
 
 namespace Pelican4Ever.Modules
 {
@@ -334,6 +337,12 @@ namespace Pelican4Ever.Modules
                     );
                 }
 
+                // Solo las consultas del ascensor son personales; la generación de pisos sigue siendo compartida.
+                var elevatorTranspiler = new HarmonyMethod(typeof(EconomyModule), nameof(Transpiler_PersonalElevator));
+                harmony.Patch(AccessTools.Constructor(typeof(MineElevatorMenu)), transpiler: elevatorTranspiler);
+                harmony.Patch(AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performAction),
+                    new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }), transpiler: elevatorTranspiler);
+
                 // Parche en Object.sellToStorePrice para multiplicadores agrícolas y artesanales
                 harmony.Patch(
                     original: AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.sellToStorePrice), new[] { typeof(long) }),
@@ -358,6 +367,30 @@ namespace Pelican4Ever.Modules
             {
                 context?.Monitor.Log($"[EconomyModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
             }
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler_PersonalElevator(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo sharedGetter = AccessTools.PropertyGetter(typeof(MineShaft), nameof(MineShaft.lowestLevelReached));
+            MethodInfo personalGetter = AccessTools.Method(typeof(EconomyModule), nameof(GetPersonalElevatorLevel));
+            int replacements = 0;
+            foreach (CodeInstruction instruction in instructions)
+            {
+                if (instruction.Calls(sharedGetter))
+                {
+                    instruction.opcode = OpCodes.Call;
+                    instruction.operand = personalGetter;
+                    replacements++;
+                }
+                yield return instruction;
+            }
+            if (replacements != 1)
+                throw new InvalidOperationException($"Se esperaba una consulta al progreso del ascensor y se encontraron {replacements}.");
+        }
+
+        public static int GetPersonalElevatorLevel()
+        {
+            return MineProgressLogic.ElevatorLevel(Game1.player.deepestMineLevel, Game1.netWorldState.Value.LowestMineLevelForOrder);
         }
 
         public static void Prefix_DoneEating(Farmer __instance)
