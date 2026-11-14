@@ -118,6 +118,30 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Multiplicador de precio de productos artesanales (provisional; pendiente de simulación).</summary>
         public float ArtisanPriceMultiplier { get; set; } = 1.0f;
 
+        /// <summary>Multiplicador del precio de pescado; neutro mientras se calibra la economía.</summary>
+        public float FishPriceMultiplier { get; set; } = 1.0f;
+
+        /// <summary>Multiplicador del precio de gemas, minerales y menas; neutro por defecto.</summary>
+        public float MineralPriceMultiplier { get; set; } = 1.0f;
+
+        /// <summary>Cupo diario de XP por habilidad tras el multiplicador fijo; ausente o cero lo desactiva.</summary>
+        public Dictionary<string, int> SkillDailyFullXp { get; set; } = new()
+        {
+            ["Fishing"] = 300, ["Foraging"] = 300, ["Mining"] = 300, ["Combat"] = 300
+        };
+
+        /// <summary>Fracción del XP que se concede por encima del cupo diario.</summary>
+        public decimal SkillOverflowXpMultiplier { get; set; } = 0.25m;
+
+        /// <summary>Multiplicador aplicado antes del cupo; una habilidad ausente usa 1.</summary>
+        public Dictionary<string, decimal> SkillXpMultiplier { get; set; } = new();
+
+        /// <summary>Multiplica el tiempo hasta la picada fuera de estanques y festivales.</summary>
+        public double FishingBiteTimeMultiplier { get; set; } = 2.5;
+
+        /// <summary>Multiplica la duración del minijuego de pesca fuera de festivales.</summary>
+        public double FishingMinigameDurationMultiplier { get; set; } = 1.5;
+
         // ─────────────────────────── Minas ───────────────────────────
 
         /// <summary>Horas reales (HH:mm) en las que se regeneran los pisos de minas, Caverna Calavera y Volcán.</summary>
@@ -125,6 +149,18 @@ namespace Pelican4Ever.Core.Config
 
         /// <summary>Minutos reales consecutivos que un piso de la mina debe permanecer desocupado para regenerarse (GAP-14).</summary>
         public int MineFloorCooldownMinutes { get; set; } = 45;
+
+        /// <summary>Multiplica la probabilidad aleatoria de escalera por piedra; no afecta la última piedra.</summary>
+        public double MineStoneLadderChanceMultiplier { get; set; } = 0.5;
+
+        /// <summary>Probabilidad base de escalera por monstruo, antes de la bonificación de la estatua.</summary>
+        public double MineMonsterLadderChance { get; set; } = 0.08;
+
+        /// <summary>Coste de energía por piso descendido en la Caverna Calavera.</summary>
+        public double SkullCavernDescentBaseCost { get; set; } = 1;
+
+        /// <summary>Divisor de la profundidad para el coste; cero desactiva el componente de profundidad.</summary>
+        public double SkullCavernDescentDepthDivisor { get; set; } = 25;
 
         // ─────────────────────────── Comercio y Construcción ───────────────────────────
 
@@ -334,6 +370,30 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(SatietyDrainHours)} debe ser > 0.");
             if (CropPriceMultiplier <= 0 || ArtisanPriceMultiplier <= 0)
                 errors.Add("Los multiplicadores de precio deben ser > 0.");
+            if (!float.IsFinite(FishPriceMultiplier) || FishPriceMultiplier <= 0)
+                errors.Add($"{nameof(FishPriceMultiplier)} debe ser finito y mayor que cero.");
+            if (!float.IsFinite(MineralPriceMultiplier) || MineralPriceMultiplier <= 0)
+                errors.Add($"{nameof(MineralPriceMultiplier)} debe ser finito y mayor que cero.");
+            if (SkillOverflowXpMultiplier < 0)
+                errors.Add($"{nameof(SkillOverflowXpMultiplier)} no puede ser negativo.");
+            if (!double.IsFinite(FishingBiteTimeMultiplier) || FishingBiteTimeMultiplier <= 0)
+                errors.Add($"{nameof(FishingBiteTimeMultiplier)} debe ser finito y mayor que cero.");
+            if (!double.IsFinite(FishingMinigameDurationMultiplier) || FishingMinigameDurationMultiplier <= 0)
+                errors.Add($"{nameof(FishingMinigameDurationMultiplier)} debe ser finito y mayor que cero.");
+            if (SkillDailyFullXp == null)
+                errors.Add($"{nameof(SkillDailyFullXp)} no puede ser null.");
+            else foreach (var entry in SkillDailyFullXp)
+            {
+                if (!IsSkillName(entry.Key) || entry.Value < 0)
+                    errors.Add($"{nameof(SkillDailyFullXp)} contiene una habilidad desconocida o un cupo negativo: '{entry.Key}'.");
+            }
+            if (SkillXpMultiplier == null)
+                errors.Add($"{nameof(SkillXpMultiplier)} no puede ser null.");
+            else foreach (var entry in SkillXpMultiplier)
+            {
+                if (!IsSkillName(entry.Key) || entry.Value < 0)
+                    errors.Add($"{nameof(SkillXpMultiplier)} contiene una habilidad desconocida o un multiplicador negativo: '{entry.Key}'.");
+            }
             if (WellFedDurationMinutes <= 0)
                 errors.Add($"{nameof(WellFedDurationMinutes)} debe ser > 0.");
             if (SpaStillSeconds <= 0)
@@ -348,6 +408,14 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(OfflineRegenFullBarHours)} no puede ser negativo.");
             if (MineFloorCooldownMinutes < 0)
                 errors.Add($"{nameof(MineFloorCooldownMinutes)} no puede ser negativo.");
+            if (!double.IsFinite(MineStoneLadderChanceMultiplier) || MineStoneLadderChanceMultiplier < 0)
+                errors.Add($"{nameof(MineStoneLadderChanceMultiplier)} debe ser finito y no negativo.");
+            if (!double.IsFinite(MineMonsterLadderChance) || MineMonsterLadderChance < 0 || MineMonsterLadderChance > 1)
+                errors.Add($"{nameof(MineMonsterLadderChance)} debe estar entre 0 y 1.");
+            if (!double.IsFinite(SkullCavernDescentBaseCost) || SkullCavernDescentBaseCost < 0)
+                errors.Add($"{nameof(SkullCavernDescentBaseCost)} debe ser finito y no negativo.");
+            if (!double.IsFinite(SkullCavernDescentDepthDivisor) || SkullCavernDescentDepthDivisor < 0)
+                errors.Add($"{nameof(SkullCavernDescentDepthDivisor)} debe ser finito y no negativo.");
             if (FarmSlotCount is < 1 or > 16)
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
             if (MaxAnnexesPerResidence is < 0 or > 3)
@@ -386,6 +454,8 @@ namespace Pelican4Ever.Core.Config
 
             return errors;
         }
+
+        private static bool IsSkillName(string name) => name is "Farming" or "Fishing" or "Foraging" or "Mining" or "Combat";
 
         private static TimeSpan ParseTime(string field, string? raw, List<string> errors)
         {

@@ -39,6 +39,9 @@ namespace Pelican4Ever.Modules
 
         /// <summary>Mensaje cliente → host con el estado de consumo (Saciedad y contadores diarios) del jugador local.</summary>
         public const string MsgSatietyReport = "SatietyReport";
+        private const string MsgPriceRulesRequest = "PriceRulesRequest";
+        private const string MsgPriceRulesResponse = "PriceRulesResponse";
+        private static PriceRules? syncedPriceRules;
 
         /// <summary>
         /// En un farmhand, true en cuanto el jugador ha comido o descansado en el Spa en esta sesión: a partir de ahí su copia
@@ -54,10 +57,12 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
+            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
             {
                 HasLocalConsumptionChanges = false;
+                syncedPriceRules = null;
                 spaStillSeconds = 0;
                 spaRegenCarry = 0;
                 sittingSecondAccumulator = 0;
@@ -68,10 +73,33 @@ namespace Pelican4Ever.Modules
             ApplyHarmonyPatches(ctx.Harmony);
         }
 
+        private static void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        {
+            if (Context.IsMainPlayer) syncedPriceRules = CurrentPriceRules();
+            else RequestPriceRules();
+        }
+
+        private static void RequestPriceRules()
+        {
+            if (context != null && Game1.MasterPlayer != null)
+                context.Helper.Multiplayer.SendMessage(string.Empty, MsgPriceRulesRequest, new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
+        private static PriceRules CurrentPriceRules() => new()
+        {
+            Crop = context!.Config.CropPriceMultiplier,
+            Artisan = context.Config.ArtisanPriceMultiplier,
+            Fish = context.Config.FishPriceMultiplier,
+            Mineral = context.Config.MineralPriceMultiplier
+        };
+
         private void OnOneSecondUpdateTicked(object? sender, OneSecondUpdateTickedEventArgs e)
         {
             if (!Context.IsWorldReady || context == null || Game1.player == null)
                 return;
+
+            if (!Context.IsMainPlayer && syncedPriceRules == null)
+                RequestPriceRules();
 
             ModContext modCtx = context;
 
@@ -513,7 +541,28 @@ namespace Pelican4Ever.Modules
 
         private static void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
         {
-            if (context == null || e.FromModID != context.Manifest.UniqueID || e.Type != MsgSatietyReport || !Context.IsMainPlayer)
+            if (context == null || e.FromModID != context.Manifest.UniqueID)
+                return;
+
+            if (Context.IsMainPlayer && e.Type == MsgPriceRulesRequest && Game1.GetPlayer(e.FromPlayerID) != null)
+            {
+                context.Helper.Multiplayer.SendMessage(CurrentPriceRules(), MsgPriceRulesResponse, new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                return;
+            }
+
+            if (!Context.IsMainPlayer && e.Type == MsgPriceRulesResponse && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID && syncedPriceRules == null)
+            {
+                PriceRules received = e.ReadAs<PriceRules>();
+                if (received != null
+                    && float.IsFinite(received.Crop) && received.Crop > 0
+                    && float.IsFinite(received.Artisan) && received.Artisan > 0
+                    && float.IsFinite(received.Fish) && received.Fish > 0
+                    && float.IsFinite(received.Mineral) && received.Mineral > 0)
+                    syncedPriceRules = received;
+                return;
+            }
+
+            if (e.Type != MsgSatietyReport || !Context.IsMainPlayer)
                 return;
 
             ConsumptionReport report = e.ReadAs<ConsumptionReport>();
@@ -567,22 +616,22 @@ namespace Pelican4Ever.Modules
             if (context == null || __result <= 0)
                 return;
 
-            float cropMult = context.Config.CropPriceMultiplier;
-            float artisanMult = context.Config.ArtisanPriceMultiplier;
-
-            if (cropMult == 1.0f && artisanMult == 1.0f)
+            PriceRules active = !Context.IsMainPlayer && syncedPriceRules != null
+                ? syncedPriceRules
+                : CurrentPriceRules();
+            float multiplier = CategoryPriceMultiplier.ForCategory(__instance.Category,
+                active.Crop, active.Artisan, active.Fish, active.Mineral);
+            if (multiplier == 1.0f)
                 return;
+            __result = (int)Math.Max(1, Math.Round(__result * multiplier));
+        }
 
-            // Categorías agrícolas directas: -75 (Vegetable), -79 (Fruit), -80 (Flower)
-            if (__instance.Category is -75 or -79 or -80)
-            {
-                __result = (int)Math.Max(1, Math.Round(__result * cropMult));
-            }
-            // Categoría artesanal: -26 (ArtisanGoods)
-            else if (__instance.Category == -26)
-            {
-                __result = (int)Math.Max(1, Math.Round(__result * artisanMult));
-            }
+        public sealed class PriceRules
+        {
+            public float Crop { get; set; } = 1f;
+            public float Artisan { get; set; } = 1f;
+            public float Fish { get; set; } = 1f;
+            public float Mineral { get; set; } = 1f;
         }
 
         public const float BuffTimeScaleFactor = 600_000f / 7_000f; // ~85.714f (1 min real = 1 min juego)

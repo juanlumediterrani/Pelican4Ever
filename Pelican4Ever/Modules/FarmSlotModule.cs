@@ -3320,6 +3320,14 @@ namespace Pelican4Ever.Modules
                             kvp.Value.CopyConsumptionFrom(local);
                         }
 
+                        if (kvp.Key == localId && SkillExperienceModule.HasLocalState
+                            && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? localSkillRecord))
+                            kvp.Value.SkillExperience = localSkillRecord.SkillExperience;
+
+                        if (kvp.Key == localId && DailyGoldTelemetryModule.HasLocalState
+                            && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? localGoldRecord))
+                            kvp.Value.GoldLedger = localGoldRecord.GoldLedger;
+
                         context.WorldState.Players[kvp.Key] = kvp.Value;
                     }
 

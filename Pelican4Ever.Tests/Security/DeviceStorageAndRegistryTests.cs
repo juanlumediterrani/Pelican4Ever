@@ -217,7 +217,8 @@ namespace Pelican4Ever.Tests.Security
             ServerDeviceRegistry.RegisterOrUpdateDevice(state, key1.GetPublicKeyBase64(), "Alice", 1001L);
             ServerDeviceRegistry.RegisterOrUpdateDevice(state, key2.GetPublicKeyBase64(), "Bob", 1002L);
 
-            ClientPairingLogic.CreateInvite(state, "Charlie", "83.44.12.50", TimeSpan.FromHours(72), BaseTime, "ABC123");
+            // LoadAndMerge descarta invitaciones caducadas usando el reloj real.
+            ClientPairingLogic.CreateInvite(state, "Charlie", "83.44.12.50", TimeSpan.FromHours(72), DateTimeOffset.UtcNow, "ABC123");
 
             // Guardar atómicamente
             SidecarPersistence.SaveAtomic(sidecarPath, state);

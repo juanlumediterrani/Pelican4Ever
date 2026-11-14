@@ -38,6 +38,7 @@ namespace Pelican4Ever.Modules
         private double longestTickMs;
         private bool runningManual;
         private DateTimeOffset? pendingStartUtc;
+        private DateTimeOffset? skillSyncDeadlineUtc;
         private bool pendingManual;
         private DateTimeOffset lastCheckpointUtc = DateTimeOffset.UtcNow;
         private int slowStreak;
@@ -66,6 +67,7 @@ namespace Pelican4Ever.Modules
                 (_, _) => RequestManual());
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => ResetDay();
             ctx.Helper.Events.GameLoop.DayStarted += (_, _) => ResetDay();
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => { skillSyncDeadlineUtc = null; SkillExperienceModule.EndCheckpoint(); };
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
         }
@@ -80,6 +82,8 @@ namespace Pelican4Ever.Modules
 
         private void ResetDay()
         {
+            skillSyncDeadlineUtc = null;
+            SkillExperienceModule.EndCheckpoint();
             lastCheckpointUtc = DateTimeOffset.UtcNow;
             slowStreak = 0;
             activitySinceLast = false;
@@ -93,7 +97,7 @@ namespace Pelican4Ever.Modules
                 context.Monitor.Log("[Checkpoint] Hace falta una partida cargada y ser el host.", LogLevel.Warn);
                 return;
             }
-            if (save != null || pendingStartUtc != null)
+            if (save != null || pendingStartUtc != null || skillSyncDeadlineUtc != null)
             {
                 context.Monitor.Log("[Checkpoint] Ya hay un checkpoint en marcha.", LogLevel.Warn);
                 return;
@@ -119,10 +123,31 @@ namespace Pelican4Ever.Modules
             if (save != null)
                 return;
 
+            if (skillSyncDeadlineUtc != null)
+            {
+                if (SkillExperienceModule.CheckpointReady(Game1.otherFarmers.Keys))
+                {
+                    skillSyncDeadlineUtc = null;
+                    Start();
+                }
+                else if (DateTimeOffset.UtcNow >= skillSyncDeadlineUtc.Value)
+                {
+                    skillSyncDeadlineUtc = null;
+                    SkillExperienceModule.EndCheckpoint();
+                    lastCheckpointUtc = DateTimeOffset.UtcNow;
+                    context.Monitor.Log("[Checkpoint] Cancelado: no se pudo sincronizar la experiencia de todos los farmhands en 10 segundos.", LogLevel.Warn);
+                }
+                return;
+            }
+
             if (pendingStartUtc != null)
             {
                 if (DateTimeOffset.UtcNow >= pendingStartUtc.Value)
-                    Start();
+                {
+                    pendingStartUtc = null;
+                    SkillExperienceModule.BeginCheckpoint(Game1.otherFarmers.Keys);
+                    skillSyncDeadlineUtc = DateTimeOffset.UtcNow.AddSeconds(10);
+                }
                 return;
             }
 
@@ -162,6 +187,7 @@ namespace Pelican4Ever.Modules
             if (!decision.Run)
             {
                 LogSkip(decision, manual);
+                SkillExperienceModule.EndCheckpoint();
                 return;
             }
 
@@ -190,6 +216,10 @@ namespace Pelican4Ever.Modules
                 longestTickMs = total.Elapsed.TotalMilliseconds;
                 Finish(ex);
                 return;
+            }
+            finally
+            {
+                SkillExperienceModule.EndCheckpoint();
             }
 
             longestTickMs = total.Elapsed.TotalMilliseconds;

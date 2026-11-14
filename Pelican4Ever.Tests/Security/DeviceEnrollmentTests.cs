@@ -265,7 +265,7 @@ namespace Pelican4Ever.Tests.Security
             };
 
             // Aprobación usando prefijo de 12 caracteres (como lo vería el dueño en Discord)
-            bool ok = DeviceEnrollmentLogic.ApproveEnrollment(state, shortFp, out var dev, out string msg);
+            bool ok = DeviceEnrollmentLogic.ApproveEnrollment(state, shortFp, 0, BaseTime.AddHours(1), out var dev, out string msg);
 
             Assert.True(ok, msg);
             Assert.NotNull(dev);
@@ -293,7 +293,7 @@ namespace Pelican4Ever.Tests.Security
                 ExpiresAtUtc = BaseTime.AddHours(72)
             };
 
-            bool ok = DeviceEnrollmentLogic.ApproveEnrollment(state, "bob", out var dev, out string msg);
+            bool ok = DeviceEnrollmentLogic.ApproveEnrollment(state, "bob", 0, BaseTime.AddHours(1), out var dev, out string msg);
 
             Assert.True(ok, msg);
             Assert.Equal(fp, dev?.Fingerprint);
@@ -374,12 +374,12 @@ namespace Pelican4Ever.Tests.Security
             Assert.Equal("BBB222", enroll2.InviteCode);
 
             // Aprobar Jugador1 solo consume AAA111; la invitación de Jugador2 sobrevive
-            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, key1.GetFingerprint(), out _, out _));
+            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, key1.GetFingerprint(), 0, BaseTime.AddSeconds(4), out _, out _));
             Assert.Single(state.PairingInvites);
             Assert.Equal("BBB222", state.PairingInvites[0].Code);
 
             // Aprobar Jugador2 consume la restante
-            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, key2.GetFingerprint(), out _, out _));
+            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, key2.GetFingerprint(), 0, BaseTime.AddSeconds(5), out _, out _));
             Assert.Empty(state.PairingInvites);
         }
 
