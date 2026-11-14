@@ -4398,6 +4398,15 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName))
                 );
 
+                // Utility.findPet recorre las casas de todos los granjeros con RequireLocation: al pulsar un
+                // cuenco en un cliente lanzaba KeyNotFoundException si otra residencia no estaba cargada.
+                PatchSafe(
+                    harmony,
+                    "Utility.findPet",
+                    AccessTools.Method(typeof(Utility), nameof(Utility.findPet)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_FindPet))
+                );
+
                 // El menú «Animales» de 1.6 recorre todas las ubicaciones del juego: en un cliente
                 // mostraba la mascota, el caballo y los animales del anfitrión como si fueran suyos.
                 PatchSafe(
@@ -6501,6 +6510,16 @@ namespace Pelican4Ever.Modules
         {
             __result = Utility.getAllPets().FirstOrDefault()?.displayName
                 ?? Game1.content.LoadString("Strings\\StringsFromCSFiles:Farmer.cs.1972");
+            return false;
+        }
+
+        /// <summary>
+        /// Versión tolerante de <see cref="Utility.findPet"/>: busca en la lista de mascotas accesibles en esta
+        /// instancia en lugar de resolver con <c>RequireLocation</c> la casa de todos los granjeros.
+        /// </summary>
+        public static bool Prefix_Utility_FindPet(Guid guid, ref StardewValley.Characters.Pet? __result)
+        {
+            __result = Utility.getAllPets().FirstOrDefault(pet => pet.petId.Value == guid);
             return false;
         }
 

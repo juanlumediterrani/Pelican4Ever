@@ -1721,3 +1721,14 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Resolución:**
       1. `Framework/Diagnostics` escribe en `Mods/Pelican4Ever/diagnostics.log` con marca de tiempo y rol (`[H]`/`[C]`), sin sobrescribirse entre instancias.
       2. Se registran el constructor del `CarpenterMenu`, las comprobaciones de permiso de demolición, la entrada en la vista de colocación y el resultado de `GameLocation.destroyStructure`, además del estado de las mascotas y la visita de Marnie.
+
+- [x] **TASK-2019: `Utility.findPet` lanzaba al pulsar un cuenco en un cliente**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2017.
+  * **Descripción:** Al interactuar con el cuenco, `PetBowl.doAction` llama a `Utility.findPet`, que recorre la casa de **todos** los granjeros con `Utility.getHomeOfFarmer` → `RequireLocation`. En un cliente, la residencia de otro jugador no está cargada y el juego lanzaba `KeyNotFoundException: Required location 'Pelican4Ever_Farm_03_Home' not found.` en el bucle de actualización.
+  * **Criterios de aceptación:**
+      1. Pulsar el cuenco no lanza excepciones en el cliente.
+      2. Se muestra el nombre de la mascota cuando el cuenco es del jugador.
+  * **Resolución:**
+      1. `Prefix_Utility_FindPet` responde con `Utility.getAllPets()` (ya tolerante y filtrado por jugador en clientes) en lugar de resolver casas ajenas.
+      2. Compilación Debug desplegada sin errores y suite en verde (1337 pruebas).
