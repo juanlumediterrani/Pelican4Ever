@@ -5,6 +5,7 @@ using System.Linq;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -335,6 +336,7 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                DeliverPendingFarmhandMail();
                 PersistenceModule.FlushToSaveData(context, "rollover post-cierre");
                 postCloseSave = SaveGame.Save();
                 context.Monitor.Log("[DailyRolloverModule] Peers cerrados; guardando su estado final antes de avanzar la fecha.", LogLevel.Info);
@@ -344,6 +346,67 @@ namespace Pelican4Ever.Modules
                 postCloseSave = null;
                 rollover.Fail();
                 context.Monitor.Log($"[DailyRolloverModule] No se pudo iniciar el guardado posterior al cierre; la fecha no avanza: {ex}", LogLevel.Error);
+            }
+        }
+
+        /// <summary>
+        /// Entrega el correo «para mañana» de los farmhands que ya están desconectados. El juego nativo
+        /// solo procesa <c>mailForTomorrow</c> de <c>Game1.player</c> en cada <c>_newDayAfterFade</c>; como
+        /// este rollover cierra todos los peers antes de avanzar la fecha, sus cartas y banderas (por
+        /// ejemplo <c>copperFound</c>, que desbloquea el evento del Horno) se quedaban atascadas para siempre.
+        /// </summary>
+        private void DeliverPendingFarmhandMail()
+        {
+            int deliveredFlags = 0;
+            int deliveredLetters = 0;
+            int affectedFarmhands = 0;
+
+            foreach (Farmer farmhand in Game1.getOfflineFarmhands())
+            {
+                if (farmhand == null || farmhand.isUnclaimedFarmhand || farmhand.mailForTomorrow.Count == 0)
+                    continue;
+
+                string[] rawEntries = farmhand.mailForTomorrow.ToArray();
+                var planned = FarmhandMailDeliveryLogic.Plan(rawEntries);
+                if (planned.Count == 0)
+                    continue;
+
+                bool changed = false;
+                foreach (PendingFarmhandMail mail in planned)
+                {
+                    if (mail.DeliverToMailbox)
+                    {
+                        if (!farmhand.mailbox.Contains(mail.Id) && !farmhand.mailReceived.Contains(mail.Id))
+                        {
+                            farmhand.mailbox.Add(mail.Id);
+                            deliveredLetters++;
+                            changed = true;
+                        }
+                    }
+                    else if (farmhand.mailReceived.Add(mail.Id))
+                    {
+                        deliveredFlags++;
+                        changed = true;
+                    }
+                }
+
+                foreach (string rawEntry in rawEntries)
+                    farmhand.mailForTomorrow.Remove(rawEntry);
+
+                if (changed)
+                {
+                    affectedFarmhands++;
+                    context.Monitor.Log(
+                        $"[DailyRolloverModule] Farmhand {farmhand.Name} ({farmhand.UniqueMultiplayerID}): correo pendiente entregado ({string.Join(", ", planned.Select(mail => mail.Id))}).",
+                        LogLevel.Trace);
+                }
+            }
+
+            if (affectedFarmhands > 0)
+            {
+                context.Monitor.Log(
+                    $"[DailyRolloverModule] Correo pendiente entregado a {affectedFarmhands} farmhand(s) desconectado(s): {deliveredFlags} bandera(s) y {deliveredLetters} carta(s).",
+                    LogLevel.Info);
             }
         }
 

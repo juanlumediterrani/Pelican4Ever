@@ -56,6 +56,7 @@ namespace Pelican4Ever
                 new ChatChannelModule(),
                 new CommunityMarketModule(),
                 new EconomyModule(),
+                new FurnaceUnlockModule(),
                 new GroundSitModule(),
                 new WorldLifeModule(),
                 new FestivalMinigameModule(),
