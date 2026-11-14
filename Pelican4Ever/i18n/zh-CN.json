@@ -7,6 +7,7 @@
   "dialog.back": "返回",
   "dialog.understood": "明白了",
   "furnace_unlock.learned": "你学会了制作熔炉！",
+  "recipe_fallback.learned": "你学会了制作{{recipe}}。",
 
   "plaza.welcome": "欢迎来到中央广场！走到广场上空闲的传送门，或穿过西侧的通道前往桥梁（也可以输入 /residencias），就能建立你的农场。",
 

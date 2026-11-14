@@ -7,6 +7,7 @@
   "dialog.back": "Back",
   "dialog.understood": "Understood",
   "furnace_unlock.learned": "You learned how to craft a Furnace!",
+  "recipe_fallback.learned": "You learned how to craft {{recipe}}.",
 
   "plaza.welcome": "Welcome to Central Plaza! Walk to a free portal in the plaza or cross the western passage to the bridges (or type /residencias) to establish your farm.",
 

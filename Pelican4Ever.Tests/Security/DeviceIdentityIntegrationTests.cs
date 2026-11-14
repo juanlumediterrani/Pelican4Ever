@@ -149,7 +149,13 @@ namespace Pelican4Ever.Tests.Security
                 out _));
 
             // Aprobación fuera de banda por el propietario (Putre DM o p4e_pair_approve)
-            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(state, dexFp, out var dexDev, out _));
+            Assert.True(DeviceEnrollmentLogic.ApproveEnrollment(
+                state,
+                dexFp,
+                0,
+                BaseTime.AddHours(2),
+                out var dexDev,
+                out _));
             Assert.NotNull(dexDev);
             Assert.Equal(DeviceStatus.Active, dexDev!.Status);
             Assert.Equal(0, dexDev.BoundPlayerId); // Libre para seleccionar slot

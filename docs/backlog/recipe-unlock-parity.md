@@ -28,15 +28,15 @@ Enumeración obtenida de `Data/Events/*`, `Strings/Locations`, `Event.skipEvent(
 | ID | Ubicación | Receta(s) | Precondición vanilla | Ámbito | Riesgo en Pelican | Tarea | Estado |
 |---|---|---|---|---|---|---|---|
 | `992553` | `Farm` | Furnace | `t 600 1130` + `n copperFound` | Local | Correo atascado; el host parecía ser el único que podía cumplirlo | RCP-001 | **Hecho** |
-| `900553` | `Farm` | Garden Pot | `t 600 1130` + `Hn ccPantry` + `A cc_Greenhouse` + `w sunny` | **Host + local** | `Hn` exige que el **host** haya completado el pantry del Centro Cívico; la reparación del invernadero propio del farmhand no cuenta | RCP-003 | Pendiente |
-| `980558` | `Farm` | Mini-Jukebox | `t 600 1130` + `w sunny` + `f Gus 1250` | Local | Evento solo en la granja del host y en ventana 06:00–11:30; si se pierde, no hay receta | RCP-006 | Pendiente |
-| `3131209` | `Beach` | Quality Bobber | `n willyBugWadCutscene` | Local + correo | El flag lo entrega la orden especial «Juicy Bugs Wanted»; si el correo no llega, el evento nunca se abre | RCP-005 | Pendiente |
-| `19` | `JoshHouse` | Cookies (cooking) | `f Evelyn 1000` + `p Evelyn` | Local | Evento por amistad; sin fallback si el jugador no visita la casa | RCP-006 | Pendiente |
-| `26` | `Mountain` | Wild Bait | `f Linus 1000` + `w sunny` + `t 2000 2400` | Local | Ventana nocturna + clima; fácil de perder | RCP-006 | Pendiente |
-| `33` | `ScienceHouse` | Flute Block + Drum Block | `f Robin 1500` + `p Robin` | Local | Evento por amistad; sin fallback | RCP-006 | Pendiente |
-| `-666777` | `IslandWest` (Birdie) | Fairy Dust | Evento `Strings\Locations:IslandSecret_Event_BirdieFinished` | Local | El evento se lanza desde código y el `skipEvent()` tiene una concesión hardcodeada; auditar ambos caminos | RCP-006 | Pendiente |
-| `FieldOfficeFinale` | `IslandFieldOffice` | Ostrich Incubator | `!fieldOfficeFinale` + colección completa | Local | Evento de progreso personal en Ginger Island; verificar en clientes | RCP-006 | Pendiente |
-| `719926` | `Sunroom` | Tea Sapling (`mail CarolineTea`) | `t 900 1700` + `w sunny` | Local + correo | El evento envía la carta `CarolineTea`; si el correo se atasca, no hay receta | RCP-004 | Pendiente |
+| `900553` | `Farm` | Garden Pot | `t 600 1130` + `Hn ccPantry` + `A cc_Greenhouse` + `w sunny` | **Host + local** | `Hn` exige que el **host** haya completado el pantry del Centro Cívico; la reparación del invernadero propio del farmhand no cuenta | RCP-003 | **Hecho** |
+| `980558` | `Farm` | Mini-Jukebox | `t 600 1130` + `w sunny` + `f Gus 1250` | Local | Evento solo en la granja del host y en ventana 06:00–11:30; si se pierde, no hay receta | RCP-006 | **Hecho** |
+| `3131209` | `Beach` | Quality Bobber | `n willyBugWadCutscene` | Local + correo | El flag lo entrega la orden especial «Juicy Bugs Wanted»; si el correo no llega, el evento nunca se abre | RCP-006 | **Hecho** (verificar correo) |
+| `19` | `JoshHouse` | Cookies (cooking) | `f Evelyn 1000` + `p Evelyn` | Local | Evento por amistad; sin fallback si el jugador no visita la casa | RCP-006 | **Hecho** |
+| `26` | `Mountain` | Wild Bait | `f Linus 1000` + `w sunny` + `t 2000 2400` | Local | Ventana nocturna + clima; fácil de perder | RCP-006 | **Hecho** |
+| `33` | `ScienceHouse` | Flute Block + Drum Block | `f Robin 1500` + `p Robin` | Local | Evento por amistad; sin fallback | RCP-006 | **Hecho** |
+| `-666777` | `IslandWest` (Birdie) | Fairy Dust | Evento `Strings\Locations:IslandSecret_Event_BirdieFinished` | Local | El evento se lanza desde código y el `skipEvent()` tiene una concesión hardcodeada; auditar ambos caminos | RCP-006 | **Hecho** |
+| `FieldOfficeFinale` | `IslandFieldOffice` | Ostrich Incubator | `!fieldOfficeFinale` + colección completa | Local | Evento de progreso personal en Ginger Island; verificar en clientes | RCP-006 | **Hecho** (si la carta existe) |
+| `719926` | `Sunroom` | Tea Sapling (`mail CarolineTea`) | `t 900 1700` + `w sunny` | Local + correo | El evento envía la carta `CarolineTea`; si el correo se atasca, no hay receta | RCP-004 | **Hecho** |
 
 ### Concesiones hardcodeadas en `Event.skipEvent()`
 
@@ -116,13 +116,13 @@ Riesgo: el envío se decide en `Stats.checkForFriendshipAchievements` con `Game1
 - Cubre Furnace, cartas de cocina, Krobus, CarolineTea y correo general.
 - Añadir una prueba de integración con dos farmhands y un save real.
 
-### RCP-003 — Garden Pot: eliminar dependencia del host
+### RCP-003 — Garden Pot: eliminar dependencia del host · **Hecho**
 - **Problema:** `Hn ccPantry` exige el correo del host; el invernadero reparado del farmhand no influye.
-- **Opciones:** sustituir por una condición por residencia/jugador; o añadir fallback de receta cuando el jugador tenga su propio invernadero reparado.
+- **Implementado:** `RecipeFallbackModule` comprueba el invernadero de la residencia del jugador (`farm.greenhouseUnlocked`) o su propio `ccPantry`/`jojaPantry`/CC completado y, a partir de las 12:00, concede `Garden Pot` si la receta falta.
 - **Aceptación:** un farmhand con invernadero propio recibe Garden Pot aunque el host no haya completado el pantry.
 
-### RCP-004 — Correo de cocina y Krobus
-- Auditar las 19 cartas `*Cooking` y `KrobusCrafting`.
+### RCP-004 — Correo de cocina y Krobus · **Cubierto por RCP-002, verificación pendiente**
+- Las 19 cartas `*Cooking` y `KrobusCrafting` se entregan con el rollover corregido.
 - Verificar que `Stats.checkForFriendshipAchievements` se ejecuta para el farmhand correcto.
 - Prueba de regresión: amistad 3/7, carta en `mailForTomorrow`, rollover, apertura y receta aprendida.
 
@@ -131,9 +131,10 @@ Riesgo: el envío se decide en `Stats.checkForFriendshipAchievements` con `Game1
 - Revisar `MailReward` + `broadcastPartyWideMail` + `FarmerTeam.AddAnyBroadcastedMail` con farmhands desconectados.
 - Prueba: completar una orden con un farmhand offline y verificar que recibe la carta al reconectar.
 
-### RCP-006 — Eventos de receta restantes
-- Mini-Jukebox, Wild Bait, Flute/Drum Block, Cookies, Quality Bobber, Fairy Dust, Tea Sapling, Ostrich Incubator.
-- Para cada uno: decidir si se mantiene el evento vanilla, se añade un fallback de receta o se replica la concesión de `skipEvent()`.
+### RCP-006 — Eventos de receta restantes · **Hecho**
+- **Implementado:** `RecipeFallbackModule` cubre Mini-Jukebox, Wild Bait, Flute/Drum Block, Cookies, Quality Bobber, Tea Sapling, Fairy Dust y Ostrich Incubator.
+- La concesión se hace a partir de las 12:00 solo si la receta falta y el requisito de fondo se cumple (amistad, carta o evento visto).
+- No se arrancan eventos ni se reenvía correo: la escena vanilla sigue disponible si el jugador aún no la ha visto.
 - Aceptación: ningún jugador queda sin la receta por no estar en la ubicación/ventana correcta.
 
 ### RCP-007 — Recetas por nivel de habilidad
@@ -178,7 +179,34 @@ Riesgo: el envío se decide en `Stats.checkForFriendshipAchievements` con `Game1
 
 ---
 
-## 7. Fuentes consultadas
+## 7. Fallbacks implementados (`RecipeFallbackModule`)
+
+La tabla se evalúa en `SaveLoaded`, `DayStarted` y `TimeChanged`. Todas las reglas comparten:
+
+- **Idempotencia:** si la receta ya está en `craftingRecipes`/`cookingRecipes`, no se hace nada.
+- **Sin eventos:** no se llama a `Game1.PlayEvent`, `startEvent` ni `addMailForTomorrow`.
+- **Sin HUD duplicado:** solo se muestra el mensaje si `TryAdd` devuelve `true`.
+- **Sin log repetido:** los errores se registran una vez por regla y tipo de excepción.
+- **Sin bucles:** `TimeChanged` solo lee estado y, como mucho, añade la receta una vez.
+
+| Receta | Requisito de la red de seguridad | Hora mínima |
+|---|---|---|
+| Garden Pot | Invernadero propio desbloqueado, `ccPantry`, `jojaPantry` o CC propio completado | 12:00 |
+| Mini-Jukebox | Amistad con Gus ≥ 1250 puntos (5 corazones) | 12:00 |
+| Wild Bait | Amistad con Linus ≥ 1000 puntos (4 corazones) | 12:00 |
+| Flute Block | Amistad con Robin ≥ 1500 puntos (6 corazones) | 12:00 |
+| Drum Block | Amistad con Robin ≥ 1500 puntos (6 corazones) | 12:00 |
+| Cookies (cooking) | Amistad con Evelyn ≥ 1000 puntos (4 corazones) | 12:00 |
+| Quality Bobber | Carta `willyBugWadCutscene` o evento `3131209` visto | 12:00 |
+| Tea Sapling | Carta `CarolineTea` o evento `719926` visto | 12:00 |
+| Fairy Dust | Carta/flag `birdieQuestFinished` o evento `-666777` visto | 12:00 |
+| Ostrich Incubator | Carta `fieldOfficeFinale` | 12:00 |
+
+Furnace queda en `FurnaceUnlockModule` porque además marca `copperFound` en el jugador local.
+
+---
+
+## 8. Fuentes consultadas
 
 - Contenido local del juego 1.6.15: `Data/Events`, `Data/mail`, `Data/CraftingRecipes`, `Data/CookingRecipes`, `Data/Shops`, `Data/SpecialOrders`, `Strings/Locations`.
 - Código del juego: `Farmer.AddMissedMailAndRecipes`, `Stats.checkForFriendshipAchievements`, `LetterViewerMenu.HandleItemCommand`, `Event.skipEvent`, `MailReward`, `MasteryTrackerMenu`, `TV`, `FarmHouse`, `LibraryMuseum`.
