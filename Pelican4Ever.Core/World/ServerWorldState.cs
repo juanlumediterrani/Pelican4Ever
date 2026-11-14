@@ -75,6 +75,28 @@ namespace Pelican4Ever.Core.World
         UnknownFarmType
     }
 
+    /// <summary>Metadatos del último checkpoint intradía persistido en <see cref="ServerWorldState"/> (TASK-1606).</summary>
+    public sealed class CheckpointMetadata
+    {
+        /// <summary>Día de juego (<c>Game1.Date.TotalDays</c>) en que se tomó el checkpoint, o -1 si no hay ninguno.</summary>
+        public int GameDay { get; set; } = -1;
+
+        /// <summary>Hora del juego (<c>Game1.timeOfDay</c>, HHMM) en el momento del checkpoint.</summary>
+        public int GameTime { get; set; } = 600;
+
+        /// <summary>Instante UTC ISO-8601 en que se creó el checkpoint.</summary>
+        public string SavedAtUtc { get; set; } = string.Empty;
+
+        /// <summary>Nombre de carpeta de la copia verificada en <c>checkpoints/</c>, si se creó.</summary>
+        public string BackupName { get; set; } = string.Empty;
+
+        /// <summary>Duración total del checkpoint en ms.</summary>
+        public double TotalMs { get; set; }
+
+        /// <summary>Duración del tick más largo del checkpoint en ms.</summary>
+        public double LongestTickMs { get; set; }
+    }
+
     /// <summary>
     /// Estado global autoritativo del servidor. Lo escribe SOLO el host mediante
     /// <c>Helper.Data.WriteSaveData</c> y se guarda junto a la partida maestra.
@@ -83,7 +105,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 5;
+        public const int CurrentSchemaVersion = 6;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -125,6 +147,9 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Momento (UTC) del último reinicio de minas.</summary>
         public DateTimeOffset LastMineResetUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>Metadatos del último checkpoint intradía persistido en esta partida (TASK-1606).</summary>
+        public CheckpointMetadata? LastCheckpoint { get; set; }
 
         /// <summary>Devuelve el registro del jugador, creándolo si no existe.</summary>
         public PlayerRecord GetOrCreatePlayer(long uniqueMultiplayerId, string name)
@@ -326,6 +351,15 @@ namespace Pelican4Ever.Core.World
                 AuthorizedDevices ??= new Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice>(StringComparer.OrdinalIgnoreCase);
                 Pelican4Ever.Core.Security.ServerDeviceRegistry.MigrateLegacyClients(this, DateTimeOffset.UtcNow);
                 SchemaVersion = 5;
+                changed = true;
+            }
+
+            // v5 → v6: metadatos del último checkpoint intradía (TASK-1606).
+            if (SchemaVersion < 6)
+            {
+                if (LastCheckpoint != null && LastCheckpoint.GameDay < 0)
+                    LastCheckpoint = null;
+                SchemaVersion = 6;
                 changed = true;
             }
 

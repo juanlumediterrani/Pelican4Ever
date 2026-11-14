@@ -28,6 +28,7 @@ namespace Pelican4Ever.Core.Admin
         public const string CheckpointCreated = "checkpoint.created";
         public const string CheckpointSkipped = "checkpoint.skipped";
         public const string CheckpointFailed = "checkpoint.failed";
+        public const string CheckpointRestored = "checkpoint.restored";
         public const string HostRested = "host.rested";
         public const string HostAnnouncement = "host.announcement";
         public const string RestartScheduled = "host.restart.scheduled";

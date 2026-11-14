@@ -251,5 +251,50 @@ namespace Pelican4Ever.Tests
             Assert.Equal("Take care of Luna!", enProvider.Get("marnie.pet_event.accepted", new { petName = "Luna" }));
             Assert.Equal("¡Cuida de Luna!", esProvider.Get("marnie.pet_event.accepted", new { petName = "Luna" }));
         }
+
+        [Fact]
+        public void PetOwnership_RecordAndClaimValidation_EnforceOwnerAuthority()
+        {
+            var record = new PetAdoptionRecord();
+            Assert.True(PetAdoptionLogic.RecordPurchase(record, "Pelican4Ever_Farm_02", 14, 18, 5, "Dog", "1", ownerPlayerId: 2020));
+            Assert.Equal(2020L, record.OwnerPlayerId);
+
+            Assert.True(PetAdoptionLogic.RecordAdoption(record, "Boby", "Dog", "1", Guid.NewGuid().ToString(), ownerPlayerId: 2020));
+            Assert.Equal(2020L, record.OwnerPlayerId);
+
+            Assert.True(PetAdoptionLogic.CanClaimOrManagePet(record.OwnerPlayerId, 2020L));
+            Assert.False(PetAdoptionLogic.CanClaimOrManagePet(record.OwnerPlayerId, 3030L));
+            Assert.False(PetAdoptionLogic.CanClaimOrManagePet(record.OwnerPlayerId, 0L));
+
+            // Visitante autorizado puede acariciar sin apropiarse de la mascota
+            Assert.True(PetAdoptionLogic.CanVisitorInteractWithPet(record.OwnerPlayerId, 3030L, hasLocationAccess: true));
+            Assert.False(PetAdoptionLogic.CanVisitorInteractWithPet(record.OwnerPlayerId, 3030L, hasLocationAccess: false));
+            Assert.True(PetAdoptionLogic.CanVisitorInteractWithPet(record.OwnerPlayerId, 2020L, hasLocationAccess: false));
+        }
+
+        [Fact]
+        public void PetOwnership_ModDataAndLegacyBackfill_ResolveAndDetectMisplacedPets()
+        {
+            var legacy = new PetAdoptionRecord
+            {
+                State = PetAdoptionState.Adopted,
+                FarmSlotId = "Pelican4Ever_Farm_03",
+                PetName = "Nube"
+            };
+
+            Assert.True(PetAdoptionLogic.EnsureOwnerPlayerId(legacy, -9001L));
+            Assert.Equal(-9001L, legacy.OwnerPlayerId);
+            Assert.False(PetAdoptionLogic.EnsureOwnerPlayerId(legacy, 9999L));
+
+            string serialized = PetAdoptionLogic.FormatPetOwnerId(-9001L);
+            Assert.True(PetAdoptionLogic.TryParsePetOwnerId(serialized, out long parsed));
+            Assert.Equal(-9001L, parsed);
+
+            var allowed = new[] { "Pelican4Ever_Farm_03", "Pelican4Ever_Farm_03_Home", "Pelican4Ever_Annex_03_North" };
+            Assert.False(PetAdoptionLogic.ShouldRelocateMisplacedPet("Pelican4Ever_Farm_03", allowed));
+            Assert.False(PetAdoptionLogic.ShouldRelocateMisplacedPet("Pelican4Ever_Annex_03_North", allowed));
+            Assert.True(PetAdoptionLogic.ShouldRelocateMisplacedPet("Farm", allowed));
+            Assert.True(PetAdoptionLogic.ShouldRelocateMisplacedPet(null, allowed));
+        }
     }
 }

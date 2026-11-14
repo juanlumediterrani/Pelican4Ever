@@ -121,6 +121,7 @@ namespace Pelican4Ever.Modules
                     localRecord = rec.PetAdoption;
                 }
 
+                ReconcilePets();
                 UpdateWakeTriggerPending();
                 HealStuckPets("carga de partida");
             }
@@ -214,12 +215,82 @@ namespace Pelican4Ever.Modules
         /// registro autoritativo (nombre, tipo, raza y GUID). También garantiza que haya una sola copia y
         /// que el cuenco apunte a ella. No la mueve: de la posición se ocupa la IA de vanilla.
         /// </summary>
-        private static void EnsureAdoptedPetFor(PetAdoptionRecord? record)
+        /// <summary>
+        /// Consulta el propietario autoritativo (<c>UniqueMultiplayerID</c>) de una mascota.
+        /// Prioriza el registro en <see cref="ServerWorldState"/> y cae al <c>modData</c> replicado.
+        /// </summary>
+        public static bool TryGetPetOwnerId(Pet? pet, out long ownerId)
+        {
+            ownerId = 0;
+            if (pet == null)
+                return false;
+
+            if (context?.WorldState != null)
+            {
+                string petGuidStr = pet.petId.Value.ToString();
+                foreach (PlayerRecord player in context.WorldState.Players.Values)
+                {
+                    PetAdoptionRecord? rec = player.PetAdoption;
+                    if (rec == null || rec.State != PetAdoptionState.Adopted)
+                        continue;
+
+                    if (string.Equals(rec.PetGuid, petGuidStr, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ownerId = rec.OwnerPlayerId != 0 ? rec.OwnerPlayerId : player.UniqueMultiplayerID;
+                        return ownerId != 0;
+                    }
+                }
+            }
+
+            if (pet.modData != null
+                && pet.modData.TryGetValue(PetAdoptionLogic.PetOwnerModDataKey, out string? rawOwner)
+                && PetAdoptionLogic.TryParsePetOwnerId(rawOwner, out ownerId))
+            {
+                return true;
+            }
+
+            if (pet.currentLocation != null)
+            {
+                long resolved = ResolveSlotOwnerId(pet.currentLocation.NameOrUniqueName);
+                if (resolved != 0)
+                {
+                    ownerId = resolved;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static long ResolveSlotOwnerId(string? locationName)
+        {
+            if (context?.WorldState == null || string.IsNullOrWhiteSpace(locationName))
+                return 0;
+
+            if (string.Equals(locationName, "Farm", StringComparison.OrdinalIgnoreCase))
+                return Game1.MasterPlayer?.UniqueMultiplayerID ?? 0;
+
+            DoorAssignment? door = context.WorldState.Doors.Values.FirstOrDefault(d =>
+                string.Equals(d.FarmSlotId, locationName, StringComparison.OrdinalIgnoreCase));
+            if (door != null && door.OwnerId != 0)
+                return door.OwnerId;
+
+            AnnexAssignment? annex = context.WorldState.FindAnnexById(locationName);
+            if (annex != null && annex.OwnerId != 0)
+                return annex.OwnerId;
+
+            return Game1.getLocationFromName(locationName)?.GetFarmOwnerId() ?? 0;
+        }
+
+        private static bool EnsureAdoptedPetFor(PetAdoptionRecord? record, long ownerPlayerId)
         {
             if (context == null || record == null || record.State != PetAdoptionState.Adopted)
-                return;
+                return false;
             if (string.IsNullOrWhiteSpace(record.PetName))
-                return;
+                return false;
+
+            bool stateChanged = PetAdoptionLogic.EnsureOwnerPlayerId(record, ownerPlayerId);
+            long effectiveOwnerId = record.OwnerPlayerId != 0 ? record.OwnerPlayerId : ownerPlayerId;
 
             Guid petGuid;
             if (Guid.TryParse(record.PetGuid, out Guid parsed))
@@ -233,13 +304,24 @@ namespace Pelican4Ever.Modules
                 Pet? existing = FindExistingPet(record);
                 petGuid = existing?.petId.Value ?? Guid.NewGuid();
                 record.PetGuid = petGuid.ToString();
+                stateChanged = true;
             }
 
             List<GameLocation> candidates = GetCandidateLocations(record).ToList();
             if (candidates.Count == 0)
-                return;
+                return stateChanged;
 
-            // La mascota puede estar fuera de la residencia (vanilla la lleva a una casa los días de lluvia),
+            var allowedLocationNames = new List<string>();
+            foreach (GameLocation c in candidates)
+            {
+                allowedLocationNames.Add(c.NameOrUniqueName);
+                if (string.Equals(c.NameOrUniqueName, "Farm", StringComparison.OrdinalIgnoreCase))
+                    allowedLocationNames.Add("FarmHouse");
+                else
+                    allowedLocationNames.Add($"{c.NameOrUniqueName}_Home");
+            }
+
+            // La mascota puede estar dentro de la cabaña/casa del dueño en días de lluvia,
             // así que se busca en todo el mundo antes de dar por hecho que falta.
             List<(GameLocation Location, Pet Pet)> copies = FindPetCopies(petGuid);
             (GameLocation Location, Pet Pet)? kept = copies.Count == 0
@@ -256,12 +338,13 @@ namespace Pelican4Ever.Modules
             }
 
             GameLocation bowlLocation = candidates.FirstOrDefault(c => FindPetBowl(c, record) != null) ?? candidates[0];
+            PetBowl? bowl = FindPetBowl(bowlLocation, record);
+            Point spot = bowl?.GetPetSpot() ?? new Point(Math.Max(0, record.BowlTileX), Math.Max(0, record.BowlTileY));
+
             Pet pet;
+            string linkageResult;
             if (kept == null)
             {
-                PetBowl? bowl = FindPetBowl(bowlLocation, record);
-                Point spot = bowl?.GetPetSpot() ?? new Point(Math.Max(0, record.BowlTileX), Math.Max(0, record.BowlTileY));
-
                 pet = new Pet(
                     spot.X,
                     spot.Y,
@@ -272,19 +355,42 @@ namespace Pelican4Ever.Modules
                 pet.displayName = record.PetName;
                 pet.currentLocation = bowlLocation;
                 bowlLocation.characters.Add(pet);
-
-                context.Monitor.Log(
-                    $"[ClientPetAdoption] Mascota '{record.PetName}' restaurada en '{bowlLocation.NameOrUniqueName}' (petId {petGuid}).",
-                    LogLevel.Info);
-                Diagnostics.Write($"Mascota '{record.PetName}' restaurada en '{bowlLocation.NameOrUniqueName}' (petId {petGuid}).");
+                linkageResult = "restaurada junto al cuenco";
             }
             else
             {
                 pet = kept.Value.Pet;
+                GameLocation currentLoc = kept.Value.Location;
+                bool misplaced = PetAdoptionLogic.ShouldRelocateMisplacedPet(currentLoc.NameOrUniqueName, allowedLocationNames)
+                    || (!ReferenceEquals(currentLoc, bowlLocation) && pet.TilePoint == Point.Zero);
+                if (misplaced)
+                {
+                    currentLoc.characters.Remove(pet);
+                    pet.currentLocation = bowlLocation;
+                    pet.setTileLocation(new Vector2(spot.X, spot.Y));
+                    if (!bowlLocation.characters.Contains(pet))
+                        bowlLocation.characters.Add(pet);
+                    linkageResult = $"reubicada desde '{currentLoc.NameOrUniqueName}'";
+                }
+                else
+                {
+                    linkageResult = "reconciliada";
+                }
             }
 
             EnsurePetBehavior(pet, "reconciliación");
-            AssignPetToBowl(bowlLocation, pet, record);
+            bool relinked = AssignPetToBowl(bowlLocation, pet, record, effectiveOwnerId, linkageResult);
+            if (kept == null || relinked)
+            {
+                context.Monitor.Log(
+                    $"[ClientPetAdoption] Vinculación mascota: slot='{bowlLocation.NameOrUniqueName}', petId={petGuid}, owner={effectiveOwnerId}, " +
+                    $"homeLocationName='{pet.homeLocationName.Value}', resultado='{linkageResult}'.",
+                    LogLevel.Info);
+                Diagnostics.Write(
+                    $"Vinculación mascota '{record.PetName}': slot='{bowlLocation.NameOrUniqueName}', petId={petGuid}, owner={effectiveOwnerId}, homeLocationName='{pet.homeLocationName.Value}', resultado='{linkageResult}'.");
+            }
+
+            return stateChanged;
         }
 
         /// <summary>Todas las copias de una mascota (por <c>petId</c>) en cualquier ubicación cargada.</summary>
@@ -555,13 +661,20 @@ namespace Pelican4Ever.Modules
             if (string.IsNullOrWhiteSpace(record.FarmSlotId))
                 yield break;
 
-            if (Game1.getLocationFromName(record.FarmSlotId) is GameLocation residence)
+            string residenceId = record.FarmSlotId;
+            if (context?.WorldState != null && context.WorldState.FindAnnexById(record.FarmSlotId) is AnnexAssignment ownerAnnex
+                && !string.IsNullOrWhiteSpace(ownerAnnex.ResidenceSlotId))
+            {
+                residenceId = ownerAnnex.ResidenceSlotId;
+            }
+
+            if (Game1.getLocationFromName(residenceId) is GameLocation residence)
                 yield return residence;
 
             if (context?.WorldState == null)
                 yield break;
 
-            foreach (AnnexAssignment annex in context.WorldState.GetAnnexesForResidence(record.FarmSlotId))
+            foreach (AnnexAssignment annex in context.WorldState.GetAnnexesForResidence(residenceId))
             {
                 if (!string.IsNullOrWhiteSpace(annex.AnnexId)
                     && Game1.getLocationFromName(annex.AnnexId) is GameLocation annexLocation)
@@ -590,11 +703,21 @@ namespace Pelican4Ever.Modules
         }
 
         /// <summary>Vincula la mascota con su cuenco y libera los cuencos que la apuntaban.</summary>
-        private static void AssignPetToBowl(GameLocation location, Pet pet, PetAdoptionRecord record)
+        private static bool AssignPetToBowl(GameLocation location, Pet pet, PetAdoptionRecord record, long ownerPlayerId, string origin = "reconciliación")
         {
+            bool changed = false;
+            string expectedOwnerStr = PetAdoptionLogic.FormatPetOwnerId(ownerPlayerId);
+            if (ownerPlayerId != 0
+                && (!pet.modData.TryGetValue(PetAdoptionLogic.PetOwnerModDataKey, out string? existingOwner)
+                    || !string.Equals(existingOwner, expectedOwnerStr, StringComparison.Ordinal)))
+            {
+                pet.modData[PetAdoptionLogic.PetOwnerModDataKey] = expectedOwnerStr;
+                changed = true;
+            }
+
             List<PetBowl> bowls = location.buildings.OfType<PetBowl>().ToList();
             if (bowls.Count == 0)
-                return;
+                return changed;
 
             PetBowl? bowl = null;
             if (record.BowlTileX >= 0 && record.BowlTileY >= 0)
@@ -605,16 +728,31 @@ namespace Pelican4Ever.Modules
             bowl ??= bowls.FirstOrDefault(b => !b.HasPet()) ?? bowls[0];
 
             foreach (PetBowl other in bowls.Where(b => b != bowl && b.petId.Value == pet.petId.Value))
-                other.petId.Value = Guid.Empty;
-
-            // No reescribir los NetFields cada segundo si ya está todo correcto (evita tráfico de red).
-            if (bowl.petId.Value == pet.petId.Value
-                && string.Equals(pet.homeLocationName.Value, bowl.parentLocationName.Value, StringComparison.Ordinal))
             {
-                return;
+                other.petId.Value = Guid.Empty;
+                changed = true;
             }
 
-            bowl.AssignPet(pet);
+            if (!string.Equals(bowl.parentLocationName.Value, location.NameOrUniqueName, StringComparison.Ordinal))
+            {
+                bowl.parentLocationName.Value = location.NameOrUniqueName;
+                changed = true;
+            }
+
+            // No reescribir los NetFields cada segundo si ya está todo correcto (evita tráfico de red).
+            if (bowl.petId.Value != pet.petId.Value
+                || !string.Equals(pet.homeLocationName.Value, location.NameOrUniqueName, StringComparison.Ordinal))
+            {
+                bowl.AssignPet(pet);
+                pet.homeLocationName.Value = location.NameOrUniqueName;
+                changed = true;
+                context?.Monitor.Log(
+                    $"[ClientPetAdoption] Cuenco ({bowl.tileX.Value},{bowl.tileY.Value}) vinculado ({origin}): slot='{location.NameOrUniqueName}', " +
+                    $"parentLocationName='{bowl.parentLocationName.Value}', petId={pet.petId.Value}, homeLocationName='{pet.homeLocationName.Value}', owner={ownerPlayerId}.",
+                    LogLevel.Trace);
+            }
+
+            return changed;
         }
 
         /// <summary>Indica si el jugador tiene algún cuenco sin mascota en su residencia o anexos.</summary>
@@ -645,12 +783,13 @@ namespace Pelican4Ever.Modules
                 foreach (PlayerRecord player in context.WorldState.Players.Values)
                 {
                     PetAdoptionRecord? record = player.PetAdoption;
-                    if (record == null || record.State != PetAdoptionState.Adopted)
+                    if (record == null || record.State == PetAdoptionState.None)
                         continue;
 
-                    string? previousGuid = record.PetGuid;
-                    EnsureAdoptedPetFor(record);
-                    if (!string.Equals(previousGuid, record.PetGuid, StringComparison.Ordinal))
+                    if (PetAdoptionLogic.EnsureOwnerPlayerId(record, player.UniqueMultiplayerID))
+                        changed = true;
+
+                    if (record.State == PetAdoptionState.Adopted && EnsureAdoptedPetFor(record, player.UniqueMultiplayerID))
                         changed = true;
                 }
 
@@ -961,6 +1100,22 @@ namespace Pelican4Ever.Modules
 
             var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
 
+            // Verificar que la ubicación de destino pertenece al jugador (no permitir reclamar/adoptar en ranura ajena)
+            long slotOwner = ResolveSlotOwnerId(payload.SlotName);
+            if (!PetAdoptionLogic.CanClaimOrManagePet(slotOwner, playerId))
+            {
+                context.Monitor.Log(
+                    $"[ClientPetAdoption] Adopción rechazada para {playerId} en '{payload.SlotName}': la ranura pertenece a {slotOwner}.",
+                    LogLevel.Warn);
+                context.Helper.Multiplayer.SendMessage(
+                    playerRecord.PetAdoption,
+                    MsgPetAdoptionSync,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { playerId }
+                );
+                return;
+            }
+
             // El anfitrión es la autoridad: solo se crea la mascota si este jugador tiene una adopción
             // pendiente y en la ubicación donde registró el cuenco. Un mensaje repetido o fuera de flujo
             // no debe generar otra mascota; se le devuelve el estado real.
@@ -998,41 +1153,39 @@ namespace Pelican4Ever.Modules
                           ?? loc.buildings.OfType<PetBowl>().FirstOrDefault();
             Point petSpot = petBowl?.GetPetSpot() ?? new Point(payload.BowlTileX, payload.BowlTileY);
 
-            // Instanciar mascota autoritativa
+            // Instanciar mascota autoritativa con vinculación explícita de propietario y ranura
             Pet pet = new Pet(petSpot.X, petSpot.Y, payload.PetBreed, payload.PetType);
             pet.petId.Value = Guid.Parse(petGuid);
             pet.Name = payload.PetName;
             pet.displayName = payload.PetName;
             pet.currentLocation = loc;
+            pet.modData[PetAdoptionLogic.PetOwnerModDataKey] = PetAdoptionLogic.FormatPetOwnerId(playerId);
 
-            // Vincular al cuenco en el mapa. AssignPet copia el nombre del mapa desde el cuenco,
-            // así que la asignación autoritativa se hace después para no quedar sobrescrita.
+            // Vincular al cuenco en el mapa asegurando parentLocationName antes y homeLocationName después.
             if (petBowl != null)
             {
+                petBowl.parentLocationName.Value = loc.NameOrUniqueName;
                 petBowl.AssignPet(pet);
+                playerRecord.PetAdoption.BowlTileX = petBowl.tileX.Value;
+                playerRecord.PetAdoption.BowlTileY = petBowl.tileY.Value;
             }
 
             pet.homeLocationName.Value = loc.NameOrUniqueName;
             EnsurePetBehavior(pet, "adopción");
 
-            if (petBowl == null)
-            {
-                context.Monitor.Log($"[ClientPetAdoption] La mascota '{payload.PetName}' se creó sin cuenco asociado en {payload.SlotName} ({payload.BowlTileX}, {payload.BowlTileY}).", LogLevel.Warn);
-            }
-            else
-            {
-                context.Monitor.Log($"[ClientPetAdoption] Cuenco {payload.BowlTileX},{payload.BowlTileY} vinculado a petId {pet.petId.Value}.", LogLevel.Trace);
-            }
-
             loc.characters.Add(pet);
 
             // Persistir en el estado autoritativo
-            PetAdoptionLogic.RecordAdoption(playerRecord.PetAdoption, payload.PetName, payload.PetType, payload.PetBreed, petGuid);
+            PetAdoptionLogic.RecordAdoption(playerRecord.PetAdoption, payload.PetName, payload.PetType, payload.PetBreed, petGuid, playerId);
             context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
 
-            context.Monitor.Log($"[ClientPetAdoption] Mascota '{payload.PetName}' ({payload.PetType}) vinculada a cuenco en {payload.SlotName} para el jugador {playerId}.", LogLevel.Info);
+            context.Monitor.Log(
+                $"[ClientPetAdoption] Adopción completada: slot='{payload.SlotName}', petId={pet.petId.Value}, " +
+                $"homeLocationName='{pet.homeLocationName.Value}', owner={playerId}, " +
+                $"resultado='{(petBowl != null ? $"vinculada a cuenco ({petBowl.tileX.Value},{petBowl.tileY.Value})" : "sin cuenco")}'.",
+                LogLevel.Info);
 
-            // Notificar a todos los clientes para sincronización
+            // Notificar al jugador (y sincronizar el registro con dueño explícito)
             context.Helper.Multiplayer.SendMessage(
                 playerRecord.PetAdoption,
                 MsgPetAdoptionSync,
@@ -1050,6 +1203,13 @@ namespace Pelican4Ever.Modules
             {
                 if (e.Type == MsgBowlPurchased && e.ReadAs<PetBowlPurchasedPayload>() is { } bowlPayload)
                 {
+                    long slotOwner = ResolveSlotOwnerId(bowlPayload.SlotName);
+                    if (!PetAdoptionLogic.CanClaimOrManagePet(slotOwner, e.FromPlayerID))
+                    {
+                        context.Monitor.Log($"[ClientPetAdoption] Compra de cuenco ignorada: {e.FromPlayerID} no es propietario de '{bowlPayload.SlotName}' (dueño={slotOwner}).", LogLevel.Warn);
+                        return;
+                    }
+
                     var playerRecord = context.WorldState.GetOrCreatePlayer(e.FromPlayerID, string.Empty);
                     PetAdoptionLogic.RecordPurchase(
                         playerRecord.PetAdoption,
@@ -1058,7 +1218,8 @@ namespace Pelican4Ever.Modules
                         bowlPayload.TileY,
                         bowlPayload.GameDay,
                         bowlPayload.PetType,
-                        bowlPayload.PetBreed
+                        bowlPayload.PetBreed,
+                        e.FromPlayerID
                     );
                     context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
                     context.Monitor.Log($"[ClientPetAdoption] Registrada compra de Pet Bowl para {e.FromPlayerID} en {bowlPayload.SlotName} ({bowlPayload.TileX}, {bowlPayload.TileY}).", LogLevel.Info);
@@ -1117,10 +1278,23 @@ namespace Pelican4Ever.Modules
             if (!bType.Equals("Pet Bowl", StringComparison.OrdinalIgnoreCase))
                 return;
 
-            int tileX = (Game1.viewport.X + Game1.getOldMouseX()) / 64;
-            int tileY = (Game1.viewport.Y + Game1.getOldMouseY()) / 64;
             string slotName = ___TargetLocation.NameOrUniqueName;
             long playerId = Game1.player.UniqueMultiplayerID;
+            long slotOwner = ResolveSlotOwnerId(slotName);
+            if (!PetAdoptionLogic.CanClaimOrManagePet(slotOwner, playerId))
+            {
+                context.Monitor.Log($"[ClientPetAdoption] Cuenco construido en '{slotName}' no pertenece al jugador {playerId} (dueño={slotOwner}); no se registra adopción.", LogLevel.Warn);
+                return;
+            }
+
+            int cursorTileX = (int)Game1.currentCursorTile.X;
+            int cursorTileY = (int)Game1.currentCursorTile.Y;
+            PetBowl? builtBowl = ___TargetLocation.buildings.OfType<PetBowl>()
+                .LastOrDefault(b => !b.HasPet() && Math.Abs(b.tileX.Value - cursorTileX) <= 2 && Math.Abs(b.tileY.Value - cursorTileY) <= 2)
+                ?? ___TargetLocation.buildings.OfType<PetBowl>().LastOrDefault(b => !b.HasPet());
+            int tileX = builtBowl?.tileX.Value ?? cursorTileX;
+            int tileY = builtBowl?.tileY.Value ?? cursorTileY;
+
             int gameDay = Game1.Date.TotalDays;
             string petType = Game1.player.whichPetType;
             if (string.IsNullOrWhiteSpace(petType))
@@ -1130,7 +1304,7 @@ namespace Pelican4Ever.Modules
             if (Context.IsMainPlayer)
             {
                 var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, Game1.player.Name);
-                PetAdoptionLogic.RecordPurchase(playerRecord.PetAdoption, slotName, tileX, tileY, gameDay, petType, petBreed);
+                PetAdoptionLogic.RecordPurchase(playerRecord.PetAdoption, slotName, tileX, tileY, gameDay, petType, petBreed, playerId);
                 localRecord = playerRecord.PetAdoption;
                 context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
                 context.Monitor.Log($"[ClientPetAdoption] Cuenco registrado directamente para host en {slotName} ({tileX}, {tileY}).", LogLevel.Info);
@@ -1155,6 +1329,7 @@ namespace Pelican4Ever.Modules
                 );
 
                 localRecord.State = PetAdoptionState.BowlPurchased;
+                localRecord.OwnerPlayerId = playerId;
                 localRecord.FarmSlotId = slotName;
                 localRecord.BowlTileX = tileX;
                 localRecord.BowlTileY = tileY;

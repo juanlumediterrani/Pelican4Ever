@@ -224,6 +224,9 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Multiplicador de precio para el segundo anexo temático de una residencia (por defecto 1.00 = 100% del precio base normal).</summary>
         public float SecondAnnexPriceMultiplier { get; set; } = 1.00f;
 
+        /// <summary>Si es true, permite usar la red de vagonetas (y el destino a la Plaza) sin exigir completar la Sala de Calderas (<c>ccBoilerRoom</c>).</summary>
+        public bool BypassMinecartUnlockRequirement { get; set; } = false;
+
         // ─────────────────────────── Panel de Administración y API REST ───────────────────────────
 
         /// <summary>Valor por defecto inseguro del token; el servidor HTTP rechazará arrancar si no se cambia (TASK-803).</summary>

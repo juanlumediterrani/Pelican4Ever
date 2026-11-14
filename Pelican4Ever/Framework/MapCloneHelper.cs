@@ -364,6 +364,17 @@ namespace Pelican4Ever.Framework
                 target.Properties["Warp"] = passageWarps;
             }
 
+            // 9. TASK-1501: Conectar la vagoneta en (4, 3) con la red nativa de vagonetas y mantener libre la llegada en (4, 4)
+            if (bldLayer.Tiles[MinecartPlazaLogic.BridgeMinecartTileX, MinecartPlazaLogic.BridgeMinecartTileY] is Tile minecartTile)
+            {
+                minecartTile.Properties["Action"] = MinecartPlazaLogic.GetBridgeMinecartAction(bridgeLoc.Name);
+            }
+            if (bldLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY] != null)
+            {
+                bldLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY] = null;
+            }
+            ClearBlockingAndWaterProperties(backLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY]);
+
             return target;
         }
 

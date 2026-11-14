@@ -40,6 +40,21 @@ namespace Pelican4Ever.Core.Admin
 
         /// <summary>Si la partida está abierta como servidor de cooperativo (los jugadores pueden entrar).</summary>
         public bool IsMultiplayerServer { get; set; }
+
+        /// <summary>Carpeta del último checkpoint intradía creado o restaurado, o null si no hay ninguno (TASK-1607).</summary>
+        public string? LastCheckpointName { get; set; }
+
+        /// <summary>Día de juego (<c>TotalDays</c>) del último checkpoint, o null.</summary>
+        public int? LastCheckpointGameDay { get; set; }
+
+        /// <summary>Hora del juego (<c>timeOfDay</c>) del último checkpoint, o null.</summary>
+        public int? LastCheckpointGameTime { get; set; }
+
+        /// <summary>Instante UTC ISO-8601 del último checkpoint, o null.</summary>
+        public string? LastCheckpointAtUtc { get; set; }
+
+        /// <summary>Duración del tick más largo del último checkpoint (ms), o null.</summary>
+        public double? LastCheckpointLongestTickMs { get; set; }
     }
 
     /// <summary>
@@ -186,12 +201,13 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
-    /// Petición de reinicio controlado para <c>POST /api/v1/host/restart</c> (TASK-804).
+    /// Petición de reinicio controlado para <c>POST /api/v1/host/restart</c> (TASK-804 / TASK-1608).
     /// </summary>
     public sealed class HostRestartRequestDto
     {
         public string Reason { get; set; } = string.Empty;
         public bool Immediate { get; set; }
+        public bool RestartAfterCheckpoint { get; set; }
         public int? WarningMinutes { get; set; }
         public bool Cancel { get; set; }
     }
@@ -300,6 +316,7 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/announce",          MutatesGameState: true,  "Envía un aviso global por chat y/o en pantalla (HUD) a los jugadores."),
             new("POST", "/api/v1/host/rest",              MutatesGameState: true,  "Registra el descanso diario del anfitrión sin desconectar la sesión (TASK-804)."),
             new("POST", "/api/v1/host/restart",           MutatesGameState: true,  "Programa o cancela un reinicio controlado del servidor con preaviso (TASK-804)."),
+            new("POST", "/api/v1/host/checkpoint",        MutatesGameState: true,  "Ejecuta un checkpoint intradía en el hilo del juego y devuelve su resultado (TASK-1607)."),
             new("GET",  "/api/v1/host/events",            MutatesGameState: false, "Devuelve la lista incremental de sucesos desde el cursor ?since=N."),
             new("GET",  "/api/v1/host/commands",          MutatesGameState: false, "Lista cerrada de comandos de consola de Pelican que se pueden ejecutar a distancia, con su riesgo."),
             new("POST", "/api/v1/host/command",           MutatesGameState: true,  "Ejecuta un comando de consola de la lista de permitidos y devuelve lo que escribe en el registro."),

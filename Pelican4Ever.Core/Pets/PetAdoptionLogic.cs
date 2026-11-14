@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 
 namespace Pelican4Ever.Core.Pets
 {
@@ -14,6 +16,9 @@ namespace Pelican4Ever.Core.Pets
         /// </summary>
         public const string MarnieMailKey = "Pelican4Ever_MarniePetLetter";
 
+        /// <summary>Clave de <c>modData</c> en la entidad <c>Pet</c> con el propietario autoritativo.</summary>
+        public const string PetOwnerModDataKey = "Pelican4Ever.PetOwnerId";
+
         /// <summary>
         /// Registra la adquisición de un cuenco para mascotas por parte de un jugador cliente.
         /// </summary>
@@ -24,7 +29,8 @@ namespace Pelican4Ever.Core.Pets
             int bowlY,
             int currentGameDay,
             string petType = "Dog",
-            string petBreed = "0")
+            string petBreed = "0",
+            long ownerPlayerId = 0)
         {
             if (record == null)
                 throw new ArgumentNullException(nameof(record));
@@ -37,6 +43,8 @@ namespace Pelican4Ever.Core.Pets
                 return false;
 
             record.State = PetAdoptionState.BowlPurchased;
+            if (ownerPlayerId != 0)
+                record.OwnerPlayerId = ownerPlayerId;
             record.FarmSlotId = slotId;
             record.BowlTileX = bowlX;
             record.BowlTileY = bowlY;
@@ -121,7 +129,8 @@ namespace Pelican4Ever.Core.Pets
             string petName,
             string? petType = null,
             string? petBreed = null,
-            string? petGuid = null)
+            string? petGuid = null,
+            long ownerPlayerId = 0)
         {
             if (record == null || !IsAwaitingAdoption(record))
                 return false;
@@ -131,6 +140,9 @@ namespace Pelican4Ever.Core.Pets
 
             record.State = PetAdoptionState.Adopted;
             record.PetName = petName.Trim();
+
+            if (ownerPlayerId != 0)
+                record.OwnerPlayerId = ownerPlayerId;
 
             if (!string.IsNullOrWhiteSpace(petType))
                 record.PetType = petType;
@@ -143,6 +155,92 @@ namespace Pelican4Ever.Core.Pets
 
             record.UpdatedAtUtc = DateTimeOffset.UtcNow;
             return true;
+        }
+
+        /// <summary>
+        /// Rellena <see cref="PetAdoptionRecord.OwnerPlayerId"/> cuando falta en partidas heredadas.
+        /// </summary>
+        public static bool EnsureOwnerPlayerId(PetAdoptionRecord? record, long ownerPlayerId)
+        {
+            if (record == null || ownerPlayerId == 0 || record.OwnerPlayerId == ownerPlayerId)
+                return false;
+
+            if (record.OwnerPlayerId != 0)
+                return false;
+
+            record.OwnerPlayerId = ownerPlayerId;
+            return true;
+        }
+
+        /// <summary>Formatea el identificador de propietario para almacenarlo en <c>Pet.modData</c>.</summary>
+        public static string FormatPetOwnerId(long ownerPlayerId)
+            => ownerPlayerId.ToString(CultureInfo.InvariantCulture);
+
+        /// <summary>Lee el propietario persistido desde <c>Pet.modData</c>.</summary>
+        public static bool TryParsePetOwnerId(string? raw, out long ownerPlayerId)
+        {
+            ownerPlayerId = 0;
+            return !string.IsNullOrWhiteSpace(raw)
+                && long.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out ownerPlayerId)
+                && ownerPlayerId != 0;
+        }
+
+        /// <summary>
+        /// Resuelve el propietario efectivo de una mascota priorizando el registro del servidor,
+        /// luego su <c>modData</c> replicado y por último el respaldo recibido.
+        /// </summary>
+        public static long ResolvePetOwnerId(PetAdoptionRecord? record, string? modDataOwnerRaw, long fallbackOwnerId = 0)
+        {
+            if (record != null && record.OwnerPlayerId != 0)
+                return record.OwnerPlayerId;
+
+            if (TryParsePetOwnerId(modDataOwnerRaw, out long parsed))
+                return parsed;
+
+            return fallbackOwnerId;
+        }
+
+        /// <summary>Indica si solo el propietario (o un dueño aún sin reclamar) puede reclamar/gestionar la mascota.</summary>
+        public static bool CanClaimOrManagePet(long petOwnerId, long actingPlayerId)
+        {
+            if (actingPlayerId == 0)
+                return false;
+
+            return petOwnerId == 0 || petOwnerId == actingPlayerId;
+        }
+
+        /// <summary>Los visitantes autorizados pueden interactuar (acariciar) sin adquirir la propiedad.</summary>
+        public static bool CanVisitorInteractWithPet(long petOwnerId, long actingPlayerId, bool hasLocationAccess)
+        {
+            if (actingPlayerId == 0)
+                return false;
+
+            if (petOwnerId == actingPlayerId)
+                return true;
+
+            return hasLocationAccess;
+        }
+
+        /// <summary>
+        /// Indica si una mascota está fuera de su conjunto válido de mapas (residencia, anexos y casa privada)
+        /// y debe reubicarse junto a su cuenco.
+        /// </summary>
+        public static bool ShouldRelocateMisplacedPet(string? currentLocationName, IEnumerable<string?> allowedLocationNames)
+        {
+            if (allowedLocationNames == null)
+                return false;
+
+            var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string? name in allowedLocationNames)
+            {
+                if (!string.IsNullOrWhiteSpace(name))
+                    allowed.Add(name);
+            }
+
+            if (allowed.Count == 0)
+                return false;
+
+            return string.IsNullOrWhiteSpace(currentLocationName) || !allowed.Contains(currentLocationName);
         }
 
         /// <summary>

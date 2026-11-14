@@ -127,5 +127,8 @@ namespace Pelican4Ever.Models
 
         /// <summary>FarmSlotCount del host, para que el catálogo de los clientes muestre los mismos huecos.</summary>
         public int FarmSlotCount { get; set; }
+
+        /// <summary>Si las vagonetas omiten el requisito de la Sala de Calderas en el servidor.</summary>
+        public bool BypassMinecartUnlockRequirement { get; set; }
     }
 }

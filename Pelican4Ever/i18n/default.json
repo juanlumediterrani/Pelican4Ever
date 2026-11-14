@@ -247,6 +247,7 @@
   "rollover.disconnecting": "Save confirmed. Disconnecting for day rollover.",
 
   "checkpoint.saving_soon": "Saving the world in a few seconds…",
+  "checkpoint.restored_notice": "Restored from the {{time}} checkpoint.",
 
   "security.verifying_code": "Verifying pairing code...",
   "security.pairing_code_prompt": "Pairing code (Pelican 4Ever):",
@@ -299,6 +300,7 @@
   "location.host_farm": "Host Farm",
   "location.host_farm_named": "{{name}} Farm",
   "location.bridge": "Bridge {{number}}",
+  "minecart.plaza_destination": "Central Plaza (Bridge 1)",
   "location.farm_slot": "Farm {{number}} ({{type}})",
   "location.cave_slot": "Plot {{slot}} Cave",
   "location.cellar_slot": "Plot {{slot}} Cellar",

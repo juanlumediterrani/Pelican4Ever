@@ -592,6 +592,42 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        /// <summary>
+        /// Siembra matas iniciales de hierba azul masticable al crear un anexo de Pradera 40×32 (TASK-607).
+        /// </summary>
+        public static int SpawnInitialAnnexBlueGrass(Farm annexFarm, string? templateId)
+        {
+            if (annexFarm?.map == null || !FarmGrassLogic.IsMeadowlands(templateId))
+                return 0;
+
+            int mapWidth = annexFarm.map.DisplayWidth / 64;
+            int mapHeight = annexFarm.map.DisplayHeight / 64;
+            if (mapWidth <= 0 || mapHeight <= 0)
+                return 0;
+
+            int spawned = 0;
+            int maxAttempts = FarmGrassLogic.AnnexInitialBlueGrassPatches * 8;
+            for (int i = 0; i < maxAttempts && spawned < FarmGrassLogic.AnnexInitialBlueGrassPatches; i++)
+            {
+                int x = Game1.random.Next(mapWidth);
+                int y = Game1.random.Next(mapHeight);
+                Vector2 tile = new Vector2(x, y);
+
+                bool hasDiggable = annexFarm.doesTileHaveProperty(x, y, "Diggable", "Back") != null;
+                bool isTileOpen = annexFarm.isTileLocationOpen(new xTile.Dimensions.Location(x, y));
+                bool isOccupied = annexFarm.IsTileOccupiedBy(tile) || annexFarm.objects.ContainsKey(tile) || annexFarm.terrainFeatures.ContainsKey(tile);
+                bool isWater = annexFarm.isWaterTile(x, y);
+                bool isNoSpawn = annexFarm.IsNoSpawnTile(tile, "Grass");
+
+                if (FarmGrassLogic.CanSpawnGrassOnTile(false, hasDiggable, isTileOpen, isOccupied, isWater, isNoSpawn))
+                {
+                    annexFarm.terrainFeatures[tile] = new Grass(FarmGrassLogic.BlueGrassType, 4);
+                    spawned++;
+                }
+            }
+            return spawned;
+        }
+
         private static bool CanPlaceClump(Farm farm, int x, int y)
         {
             return farm.CanItemBePlacedHere(new Vector2(x, y), itemIsPassable: false, CollisionMask.All, CollisionMask.None)

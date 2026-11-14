@@ -11,6 +11,7 @@ namespace Pelican4Ever.Core.World
         public const int BlueGrassType = 7;
         public const double DailyGrassChance = 0.15;
         public const double MeadowlandsBlueGrassChance = 0.10;
+        public const int AnnexInitialBlueGrassPatches = 12;
 
         /// <summary>
         /// Comprueba si el tipo de granja corresponde a Pradera (Meadowlands).

@@ -285,13 +285,13 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - *Burbujas en Cuatro Esquinas:* vanilla solo las crea en la fluvial (`whichFarm == 1`).
     - **Pendiente:**
       - ~~*Cueva individual*~~ **Hecho en `73ca26d`** (`Pelican4Ever/Modules/PrivateFarmCaves.cs`): la primera vez que un residente entra en la cueva privada de su residencia elige entre setas y murciélagos frutícolas; la elección se guarda por jugador (`PlayerRecord.CaveChoice`) y la cueva de cada residencia, y la de su anexo Coto Salvaje, lee la de su dueño en vez de `MasterPlayer.caveChoice`. En partidas existentes se conservan los objetos que ya había. Verificación en partida con dos jugadores trasladada a [test-users-tasks.md](test-users-tasks.md).
-      - *Traslado del invernadero y de la casa:* verificar que Robin y la Torre del Mago pueden mover el invernadero de una residencia, y qué pasa si se mueve su casa (1.6 lo permite): la puerta, el buzón, la cueva y los warps de la residencia dependen de su posición.
-      - *Anexo de Pradera:* evaluar establo/vallas o hierba azul optimizada para 40×32.
+      - ~~*Traslado del invernadero y de la casa:*~~ **Hecho:** `ResidenceUpgradeLogic` (`CanMoveResidenceBuilding`, `NeedsResidenceFarmhouseCacheReset`) y `FarmSlotModule` (`Postfix_CarpenterCanMoveIslandBuilding`, `Postfix_OnIslandBuildingMoved`) validan el `greenhouseUnlocked` de la propia residencia y el permiso del propietario tanto en Robin como en la Torre del Mago, y al mover la casa ejecutan `UnsetFarmhouseValues()` + `updateInteriorWarps(ghLoc)` para recalcular puerta, buzón, cueva y warps interiores. Verificado en `Pelican4Ever.Tests/ResidenceUpgradeLogicTests.cs`.
+      - ~~*Anexo de Pradera:*~~ **Hecho:** decidido mantener el anexo 40×32 sin corral ni animales gratuitos en la expansión, incorporando `FarmGrassLogic.SpawnInitialAnnexBlueGrass` (`AnnexInitialBlueGrassPatches = 12`) al crear o regenerar el anexo de Pradera en `FarmSlotModule.EnsureAnnexLocation`, junto al cercado/cascada y el crecimiento diario de hierba azul (`FarmTypeModule`). Verificado en `FarmGrassLogicTests`.
     - **Pruebas en vivo (2026-11-07, playa):** checkpoint; la sesión se cortó porque el servidor entró en mantenimiento.
       - *Funciona:* comandos de prueba, cajas de suministros (café, hamburguesa, geodas, tierra con retención de agua, semillas…), forraje de playa (salen cajas), aspersores (no se colocan en arena, sí en tierra fértil).
       - *Corregido — warp este del anexo de playa:* los warps de la residencia hacia sus anexos y las zonas para comprarlos estaban fijados con las casillas de la granja estándar, y el warp este caía en la llegada (79,17). Ahora salen de `ResidenceAnnexAccessLogic` por tipo de mapa: en la playa, en las salidas vanilla de `Farm_Island` (este x 81, sur y 105) con la llegada este en (80,17). Al sincronizar se quitan los warps viejos al anexo. Los tests comprueban que ninguna llegada es un warp.
       - *Corregido — `p4e_farm_tp`, `inspect`, `spawn` y `lightning` sobre un hueco sin fundar:* creaban una granja vacía con `EnsureFarmSlotExists`; ahora responden que no está fundada.
-      - *Revisar:* algunas cajas sueltan 3 y 5 objetos a la vez; comprobar contra `BreakableContainer.releaseContents` si es vanilla.
+      - ~~*Revisar:* algunas cajas sueltan 3 y 5 objetos a la vez; comprobar contra `BreakableContainer.releaseContents` si es vanilla.~~ **Comprobado (IL 1.6.15):** en `BreakableContainer.releaseContents` + `StardewValley.Object.performToolAction` (`"SupplyCrate"`, cajas de playa 922–924), los drops múltiples de 3–5 ítems son tiradas vanilla (`Random.Next(3, 6)` `(O)770`, `Next(5, 8)` `(O)371`, `Next(2, 5)` `(O)535`, `Next(1, 3)` `(O)241`, más `Next(2, 6)` `(O)390`); no es un bug.
       - *Minimapa (anexo):* sirve como provisional; todos iguales, sin bordes delimitados y con algún fallo gráfico. Se deja así.
       - *Hecho — `/residencias`:* en el chat solo salen las ocupadas (dueño, tipo y lugar) y el número de libres (`PlazaCatalogFormatter.FormatChatSummary`). `p4e_doors` en consola sigue listando todas. El host envía su `FarmSlotCount` en `SyncDoorsState` para que los clientes cuenten los mismos huecos.
       - *Hecho — permiso de edición para visitantes:* `DoorAssignment.VisitorsCanEdit` (por defecto no), que se cambia en el diálogo de acceso de la puerta o el buzón. `VisitorGuardModule` corre en cada juego y bloquea a quien no es el dueño, en la residencia, su cueva, sótano, invernadero, casa y anexos: herramientas de trabajo y guadaña, colocar y sembrar, cosechar a mano, árboles frutales, cofres y máquinas. Armas, honda y caña siguen permitidas. Los diálogos muestran el acceso en texto («abierta, visitas solo miran»). Antes la descripción de `Public` decía que bloqueaba herramientas y cofres, pero nada lo hacía.
@@ -1164,7 +1164,7 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
 
 #### Fase F — Conectividad e Integración Urbana
 
-- [ ] **TASK-1501: Habilitar y conectar la red de vagonetas en los Puentes de la Plaza**
+- [x] **TASK-1501: Habilitar y conectar la red de vagonetas en los Puentes de la Plaza**
   * **Análisis Técnico:**
     - En el mapa recortado de `Maps/BusStop` (`35×30`), en las coordenadas `x = 0..3, y = 2..6` (correspondientes a `sx = 10..13, sy = 2..6` del mapa vanilla), se conservan visualmente las vías férreas y la vagoneta minera junto a la Parcela 05 del Puente 1.
     - En `MapCloneHelper.CreateBridgeMap`, las acciones de interacción vanilla fueron suprimidas incondicionalmente para evitar conflictos con la parada de autobús original (`Action "None"`, etc.), dejando la vagoneta en estado decorativo estático sin disparador.
@@ -1184,6 +1184,10 @@ B y C pueden avanzar a la vez una vez terminada TASK-1101. TASK-1202 necesita TA
     1. Al interactuar con la vagoneta en el Puente 1, se despliega el menú de viaje si la red está desbloqueada.
     2. Desde las vagonetas del Pueblo, Minas o Cantera, se puede seleccionar el viaje hacia el Puente de la Plaza.
     3. Funciona limpiamente tanto en partidas locales como en multijugador con clientes conectados.
+  * **Resolución:**
+    1. `MapCloneHelper.CreateBridgeMap` inyecta `Action = "MinecartTransport Default Pelican4Ever_Plaza"` en `(4, 3)` y limpia el bloqueo en `(4, 4)` para la vagoneta del Puente 1.
+    2. `FarmSlotModule` registra `Pelican4Ever_Plaza` en `Data/Minecarts` (destino `Pelican4Ever_Bridge_1`, llegada `(4, 4)`, dirección sur), invalida la caché al editar `SyncDoorsPayload`, y respeta `ccBoilerRoom` o `ServerConfig.BypassMinecartUnlockRequirement` mediante `Pelican4Ever.Core/World/MinecartPlazaLogic.cs`.
+    3. Claves i18n añadidas en `Pelican4Ever/i18n/{default,es,zh-CN}.json` y cobertura unitaria en `Pelican4Ever.Tests/MinecartPlazaTests.cs` (3 tests en verde).
 
 
 ---
@@ -1312,29 +1316,36 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Guía de restauración desde un checkpoint en `docs/archive/servidor-persistente.md`.
   * **Resolución:** `Framework/SaveBackupService` (`Create` y `ApplyRetention`) sustituye a `DailyRolloverModule.CreateSaveBackup()`. Copia a `<destino>.partial` y renombra al final, verifica cada archivo con SHA-256 sobre el contenido sin comprimir y, con compresión, escribe `<archivo>.gz`. La rotación solo mira carpetas `<partida>_<yyyyMMdd_HHmmss_fff>` de la partida cargada, así que no toca otras partidas, copias parciales, `spike/` ni `checkpoints/` desde las diarias. `BackupRetentionPolicy` (Core): últimos N checkpoints, últimos D días de diarias y nunca la más reciente de cada tipo. `BackupRetentionDays` es 0 por defecto, así que las copias diarias siguen sin borrarse como hasta ahora hasta que se configure. Las copias diarias mantienen nombre y formato. Tests en `BackupRetentionPolicyTests`; guía de restauración en `docs/archive/servidor-persistente.md`.
 
-- [ ] **TASK-1606: Carga desde un checkpoint de mitad de día (G5, G6)**
+- [x] **TASK-1606: Carga desde un checkpoint de mitad de día (G5, G6)**
   * **Análisis Técnico:** `ServerWorldState.LastCheckpoint` (día, hora de juego y UTC, con migración de esquema). En `SaveLoaded`, si el día guardado es el actual y hay `LastCheckpoint`, registrar «restaurado al checkpoint de las HH:MM» en el registro de sucesos y avisar a los jugadores al conectarse. Revisar la idempotencia de los `DayStarted` propios (`WorldLifeModule`, `FestivalParticipationModule`, `FarmSlotModule`) y lanzar `ScheduleCatchUp` para los NPC.
   * **Prioridad:** Media
   * **Dependencias:** TASK-1601.
   * **Criterios de Aceptación:**
     1. Tras matar el proceso y recargar, el día y la hora real son correctos y no se aplica ninguna penalización ni contador dos veces.
     2. Los gaps de mods de terceros detectados en el spike quedan corregidos o documentados aquí.
+  * **Resolución:**
+    - `ServerWorldState` elevado a esquema v6 (`Migración v5→v6` y propiedad `LastCheckpoint` con día, hora de juego, UTC, nombre de copia y métricas); `CheckpointModule.OnSaveLoaded` detecta restauraciones intradía mediante `CheckpointRestoreLogic.FindMidDayRestoreCheckpoint`, emite `HostEventTypes.CheckpointRestored` (`checkpoint.restored`), lanza `RealTimeClockModule.CatchUpVillagerSchedules()` y avisa al conectar (`checkpoint.restored_notice`).
+    - Los archivos auxiliares `spacecore-serialization*.json` se respaldan junto al save en `Pelican4Ever_Backups/checkpoints/`. Verificado con `CheckpointPolicyTests`, `DeviceStorageAndRegistryTests` y restauración en vivo sobre SMAPI headless (`Prueba29_453599927`, día 2 a las 23:50).
 
-- [ ] **TASK-1607: Checkpoints en la API de anfitrión y en el panel web**
+- [x] **TASK-1607: Checkpoints en la API de anfitrión y en el panel web**
   * **Análisis Técnico:** `POST /api/v1/host/checkpoint` (ejecuta en el hilo del juego con `MainThreadActionQueue` y responde con el resultado o el motivo de no hacerlo) y, en `GET clock`, el último checkpoint (nombre, hora y duración). Botón en el panel y entrada en `HostApiContract` y `docs/host-api.md`.
   * **Prioridad:** Baja
   * **Dependencias:** TASK-1604.
   * **Criterios de Aceptación:**
     1. Test de contrato de la ruta nueva.
     2. Sin token responde 401, como el resto.
+  * **Resolución:**
+    - Registrado `POST /api/v1/host/checkpoint` en `HostApiCatalog.Routes`, `AdminApiModule` (`CheckpointModule.RequestFromHostApi()`) y `docs/host-api.md`, y añadidos los campos `LastCheckpoint*` a `HostClockDto` / `GET /api/v1/host/clock`. (El panel web HTML fue retirado previamente en `dev`, por lo que la integración queda en la API REST y comandos). Verificado con `AdminApiLogicTests` (contrato, paridad `docs/host-api.md`, auth `401`) y pruebas HTTP en vivo (`401`/`200`).
 
-- [ ] **TASK-1608: Reinicio controlado apoyado en checkpoints (G9)**
+- [x] **TASK-1608: Reinicio controlado apoyado en checkpoints (G9)**
   * **Análisis Técnico:** `--immediate` hace primero un checkpoint y reinicia al terminarlo (o igualmente si falla, dejándolo registrado). Con `RestartAfterCheckpoint`, el modo seguro reinicia tras el siguiente checkpoint en vez de esperar al rollover (`NotifySaveCompleted` también desde `CheckpointModule`). `ProgressAtRiskDto` pasa a contar desde el último checkpoint.
   * **Prioridad:** Baja
   * **Dependencias:** TASK-1604, TASK-1606.
   * **Criterios de Aceptación:**
     1. Sin `RestartAfterCheckpoint`, el reinicio seguro se comporta como hoy.
     2. `ProgressAtRiskDto.Summary` indica la hora del último checkpoint.
+  * **Resolución:**
+    - `SafeRestartCoordinator` (`Schedule(..., restartAfterCheckpoint, lastCheckpoint)`, `ConsumeOnSaveCompleted(..., isCheckpoint)` y `EvaluateProgressAtRisk`), `AdminApiModule` (`--after-checkpoint`/`--checkpoint` y `CheckpointModule.RunBeforeImmediateRestart` previo a `--immediate`) y `CheckpointModule.NotifySaveCompleted(isCheckpoint: true)`. Verificado con `AdminApiLogicTests` y `POST /api/v1/host/restart` en vivo (`mode: after_next_checkpoint`, resumen anclado al último checkpoint).
 
 
 ---
@@ -1710,7 +1721,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Resolución:** `FarmSlotModule.RemoveStarterPetBowl` retira solo el cuenco de arranque (en su casilla inicial o en la canónica `(53, 7)` del host, y si no tiene mascota asignada). Deja una marca en el `modData` de la ubicación (`Pelican4Ever.StarterPetBowlRemoved`) para ejecutarse una sola vez. Se invoca desde `EnsureFarmSlotBuildings` (residencias), `CleanUpHostFarmLegacy` (host), la regeneración de plantilla y la migración de partidas, que ya no reubica el cuenco.
   * **Reparación visual (host):** la retirada del cuenco dejaba un hueco junto a la valla del corral, porque el host pintaba dos baldosas de borde de tierra (`612`) en `(53, 7)` y `(53, 8)` y recurría la hierba sombreada (`256`) en `(54, 7)` y `(54, 8)`, dejando una franja de tierra recortada y una línea de borde de hierba colgando en el aire. `FarmSlotModule.RestoreHostFarmPetBowlGround` repinta ahora ese solar con las baldosas vanilla del terreno de `Maps/Farm` (hierba con sombra `567` bajo la valla, tierra lisa `587` en `(53, 7-8)`, borde de campo `612` en `(54, 7-8)` y hierba `401`/`256` en el corral), tanto al generar `Maps/Pelican4Ever_HostFarm` como al limpiar la ubicación en tiempo de ejecución. El terreno resultante es idéntico al vanilla y la retirada del cuenco ya no deja ningún hueco visible.
 
-- [ ] **TASK-2007: Vinculación explícita mascota ↔ jugador propietario**
+- [x] **TASK-2007: Vinculación explícita mascota ↔ jugador propietario**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2004.
   * **Descripción:** La entidad `Pet` de Stardew Valley no expone un propietario de jugador: hoy la pertenencia se infiere de `PetBowl.petId`, `homeLocationName`, `friendshipTowardFarmer` y del `PlayerRecord.PetAdoption`. En la prueba del host la mascota no quedó asociada a ningún jugador. Añadir una vinculación autoritativa explícita (por ejemplo `OwnerPlayerId` en el registro de adopción y en el estado del servidor, o un `modData` en la propia mascota) que sobreviva a guardados y se replique a los clientes, y usarla para decidir quién puede acariciar, renombrar o reclamar la mascota.
@@ -1719,8 +1730,10 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Tras reiniciar el servidor o reconectar al cliente, la mascota sigue perteneciendo al mismo jugador y no se reasigna a otro.
     3. Ningún otro jugador puede adoptar, reclamar ni duplicar la mascota vinculada a una ranura ajena.
     4. Los visitantes autorizados pueden ver e interactuar con la mascota sin convertirse en propietarios.
+  * **Resolución:**
+    - Añadido `PetAdoptionRecord.OwnerPlayerId`, la clave replicada `PetAdoptionLogic.PetOwnerModDataKey` (`Pelican4Ever.PetOwnerId`) y `EnsureOwnerPlayerId` para persistir el propietario en el registro, el servidor y `pet.modData` sin reasignación tras reinicios ni reconexiones, validado por autoridad en `PetAdoptionTests` / `ClientPetAdoptionTests.cs`.
 
-- [ ] **TASK-2008: Vinculación y persistencia mascota ↔ mapa/cuenco en ranuras privadas**
+- [x] **TASK-2008: Vinculación y persistencia mascota ↔ mapa/cuenco en ranuras privadas**
   * **Prioridad:** Crítica
   * **Dependencias:** TASK-2004, TASK-2007.
   * **Descripción:** Auditar y corregir la cadena completa de vinculación al mapa tras la adopción: `PetBowl.parentLocationName` ↔ `PetBowl.petId` ↔ `Pet.petId` ↔ `Pet.homeLocationName` ↔ `loc.characters` ↔ guardado. La prueba del host mostró que la mascota no quedaba vinculada ni al jugador ni al mapa. Revisar también `FarmSlotModule.Prefix_Utility_GetAllPets`, que recopila mascotas de la granja host y de las puertas de residencia, pero no de los anexos, y verificar que la sincronización de red hace visible la mascota en el cliente y en visitantes.
@@ -1729,6 +1742,8 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Tras guardar y recargar, la mascota reaparece en su mapa, junto a su cuenco, sin teletransportarse a `(0,0)` ni a la granja host.
     3. `Utility.getAllPets` incluye mascotas de residencias, anexos y granja host, y el comportamiento diario (cariño, cuenco, paseos) se ejecuta en el host.
     4. El cliente propietario y los visitantes autorizados ven la mascota sincronizada; el log de diagnóstico indica slot, `petId`, `homeLocationName` y resultado de la vinculación.
+  * **Resolución:**
+    - Corregidos `AssignPetToBowl` (normalizando `parentLocationName`/`homeLocationName` y `petId`), la reubicación de mascotas desubicadas y `FarmSlotModule.Prefix_Utility_GetAllPets` (incluyendo anexos y cabañas `_Home`), con cobertura en `Pelican4Ever.Tests/ClientPetAdoptionTests.cs`.
 
 - [x] **TASK-2009: Corregir la selección de ubicación en el menú de construcción de Robin (clientes)**
   * **Prioridad:** Crítica

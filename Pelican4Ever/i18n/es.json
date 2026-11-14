@@ -247,6 +247,7 @@
   "rollover.disconnecting": "Guardado confirmado. Desconectando para el cambio de fecha.",
 
   "checkpoint.saving_soon": "Guardando el mundo en unos segundos…",
+  "checkpoint.restored_notice": "Partida restaurada al checkpoint de las {{time}}.",
 
   "security.verifying_code": "Verificando código de emparejamiento...",
   "security.pairing_code_prompt": "Código de pairing (Pelican 4Ever):",
@@ -299,6 +300,7 @@
   "location.host_farm": "Granja Host",
   "location.host_farm_named": "Granja {{name}}",
   "location.bridge": "Puente {{number}}",
+  "minecart.plaza_destination": "Plaza Central (Puente 1)",
   "location.farm_slot": "Granja {{number}} ({{type}})",
   "location.cave_slot": "Cueva Parcela {{slot}}",
   "location.cellar_slot": "Bodega Parcela {{slot}}",

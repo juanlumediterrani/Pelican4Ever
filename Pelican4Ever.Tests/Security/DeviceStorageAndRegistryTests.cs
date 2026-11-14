@@ -305,7 +305,7 @@ namespace Pelican4Ever.Tests.Security
             // Normalización
             bool changed = state.Migrate();
             Assert.True(changed);
-            Assert.Equal(5, state.SchemaVersion);
+            Assert.Equal(Pelican4Ever.Core.World.ServerWorldState.CurrentSchemaVersion, state.SchemaVersion);
             Assert.Single(state.AuthorizedDevices);
             Assert.True(state.AuthorizedDevices.ContainsKey(fp));
             Assert.Equal("LegacyPlayer", state.AuthorizedDevices[fp].Alias);

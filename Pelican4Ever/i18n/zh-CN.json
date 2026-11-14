@@ -247,6 +247,7 @@
   "rollover.disconnecting": "保存已确认。正在断开连接以进行日切。",
 
   "checkpoint.saving_soon": "世界将在几秒后保存…",
+  "checkpoint.restored_notice": "已恢复到 {{time}} 的检查点。",
 
   "security.verifying_code": "正在验证配对码...",
   "security.pairing_code_prompt": "配对码（Pelican 4Ever）：",
@@ -299,6 +300,7 @@
   "location.host_farm": "主机农场",
   "location.host_farm_named": "{{name}} 的农场",
   "location.bridge": "{{number}} 号桥梁",
+  "minecart.plaza_destination": "中央广场（1号桥）",
   "location.farm_slot": "{{number}} 号农场（{{type}}）",
   "location.cave_slot": "{{slot}} 号地块洞穴",
   "location.cellar_slot": "{{slot}} 号地块地窖",

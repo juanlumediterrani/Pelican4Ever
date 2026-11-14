@@ -232,5 +232,34 @@ namespace Pelican4Ever.Tests
             bool result = ResidenceUpgradeLogic.ShouldKeepRobinAvailable(config, builder);
             Assert.Equal(expected, result);
         }
+
+        [Theory]
+        [InlineData(true, false, true, true, false)]   // Invernadero bloqueado: ni el host ni el dueño pueden moverlo
+        [InlineData(true, true, false, true, true)]    // Invernadero desbloqueado: el dueño cliente puede moverlo aunque vanilla bloquease por host/permisos
+        [InlineData(true, true, false, false, false)]  // Invernadero desbloqueado: visitante ajeno no puede
+        [InlineData(false, false, false, true, true)]  // Farmhouse o establo: el dueño cliente puede moverlo en su residencia/anexo
+        [InlineData(false, false, true, false, true)]  // Anfitrión puede mover edificios de residencia
+        public void CanMoveResidenceBuilding_EnforcesOwnGreenhouseLockAndOwnerPermission(
+            bool isGreenhouse,
+            bool unlocked,
+            bool isMasterGame,
+            bool canManageLocation,
+            bool expected)
+        {
+            Assert.Equal(expected, ResidenceUpgradeLogic.CanMoveResidenceBuilding(isGreenhouse, unlocked, isMasterGame, canManageLocation));
+        }
+
+        [Theory]
+        [InlineData("Pelican4Ever_Farm_01", "Farmhouse", true)]
+        [InlineData("Pelican4Ever_Farm_01", "Greenhouse", false)]
+        [InlineData("Pelican4Ever_Annex_01_East", "Farmhouse", false)]
+        [InlineData("Farm", "Farmhouse", false)]
+        public void NeedsResidenceFarmhouseCacheReset_DetectsMovedPrivateFarmhouse(
+            string? locationName,
+            string? buildingType,
+            bool expected)
+        {
+            Assert.Equal(expected, ResidenceUpgradeLogic.NeedsResidenceFarmhouseCacheReset(locationName, buildingType));
+        }
     }
 }

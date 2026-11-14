@@ -630,6 +630,43 @@ namespace Pelican4Ever.Modules
             {
                 e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/stepping_stones.png", AssetLoadPriority.Medium);
             }
+            else if (e.NameWithoutLocale.IsEquivalentTo("Data/Minecarts"))
+            {
+                // TASK-1501: Añadir la Plaza Central (Puente 1) a la red nativa de vagonetas
+                e.Edit(asset =>
+                {
+                    var networks = asset.AsDictionary<string, StardewValley.GameData.Minecarts.MinecartNetworkData>().Data;
+                    if (!networks.TryGetValue(MinecartPlazaLogic.NetworkId, out var network) || network == null)
+                        return;
+
+                    if (context?.Config.BypassMinecartUnlockRequirement == true)
+                    {
+                        network.UnlockCondition = null;
+                    }
+
+                    network.Destinations ??= new List<StardewValley.GameData.Minecarts.MinecartDestinationData>();
+                    network.Destinations.RemoveAll(d => string.Equals(d.Id, MinecartPlazaLogic.PlazaDestinationId, StringComparison.OrdinalIgnoreCase));
+
+                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    if (!MinecartPlazaLogic.ShouldIncludePlazaDestination(slotCount))
+                        return;
+
+                    var plazaDest = new StardewValley.GameData.Minecarts.MinecartDestinationData
+                    {
+                        Id = MinecartPlazaLogic.PlazaDestinationId,
+                        DisplayName = I18n.Get("minecart.plaza_destination"),
+                        TargetLocation = HostPlazaLayout.BridgeName(1),
+                        TargetTile = new Point(MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY),
+                        TargetDirection = MinecartPlazaLogic.BridgeArrivalDirectionName
+                    };
+
+                    int busIdx = network.Destinations.FindIndex(d => string.Equals(d.Id, "Bus", StringComparison.OrdinalIgnoreCase));
+                    if (busIdx >= 0)
+                        network.Destinations.Insert(busIdx + 1, plazaDest);
+                    else
+                        network.Destinations.Add(plazaDest);
+                });
+            }
         }
 
         public static (Point tile1, Point tile2) GetOpeningTiles(DoorModel door)
@@ -1774,12 +1811,14 @@ namespace Pelican4Ever.Modules
             string annexSig = string.Join(";", (context.WorldState.Annexes?.Values ?? Enumerable.Empty<AnnexAssignment>())
                 .Select(a => $"{a.AnnexId}={a.TemplateId}:{a.Side}")
                 .OrderBy(entry => entry, StringComparer.Ordinal));
-            string signature = $"{slotCount}:{bridges}|{doorSig}|{annexSig}";
+            string bypassMc = context.Config.BypassMinecartUnlockRequirement ? "1" : "0";
+            string signature = $"{slotCount}:{bridges}:{bypassMc}|{doorSig}|{annexSig}";
             if (signature == slotDataSignature) return;
 
             slotDataSignature = signature;
             context.Helper.GameContent.InvalidateCache("Data/Locations");
             context.Helper.GameContent.InvalidateCache("Data/Objects");
+            context.Helper.GameContent.InvalidateCache("Data/Minecarts");
             context.Helper.GameContent.InvalidateCache("Maps/Pelican4Ever_HostFarm");
             for (int i = 1; i <= HostPlazaLayout.MaxBridges; i++)
             {
@@ -1946,6 +1985,7 @@ namespace Pelican4Ever.Modules
                     annexFarm.loadObjects();
                 }
                 FarmTypeModule.SpawnInitialOres(annexFarm, template.Id);
+                FarmTypeModule.SpawnInitialAnnexBlueGrass(annexFarm, template.Id);
             }
 
             // TASK-912: Migración única de anexos con mapas previos hacia composición vanilla v3
@@ -3651,8 +3691,12 @@ namespace Pelican4Ever.Modules
                 var payload = e.ReadAs<SyncDoorsPayload>();
                 if (payload != null)
                 {
-                    if (payload.FarmSlotCount > 0 && !Context.IsMainPlayer)
-                        context.Config.FarmSlotCount = payload.FarmSlotCount;
+                    if (!Context.IsMainPlayer)
+                    {
+                        if (payload.FarmSlotCount > 0)
+                            context.Config.FarmSlotCount = payload.FarmSlotCount;
+                        context.Config.BypassMinecartUnlockRequirement = payload.BypassMinecartUnlockRequirement;
+                    }
 
                     context.WorldState.Doors.Clear();
                     foreach (var kvp in payload.Doors)
@@ -3740,7 +3784,8 @@ namespace Pelican4Ever.Modules
                 Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
                 Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
                 Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
-                FarmSlotCount = context.Config.FarmSlotCount
+                FarmSlotCount = context.Config.FarmSlotCount,
+                BypassMinecartUnlockRequirement = context.Config.BypassMinecartUnlockRequirement
             };
 
             context.Helper.Multiplayer.SendMessage(
@@ -3759,7 +3804,8 @@ namespace Pelican4Ever.Modules
                 Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
                 Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
                 Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
-                FarmSlotCount = context.Config.FarmSlotCount
+                FarmSlotCount = context.Config.FarmSlotCount,
+                BypassMinecartUnlockRequirement = context.Config.BypassMinecartUnlockRequirement
             };
 
             context.Helper.Multiplayer.SendMessage(
@@ -6403,18 +6449,60 @@ namespace Pelican4Ever.Modules
                 __result = island.farmhouseRestored.Value;
         }
 
-        /// <summary>TASK-2011: permite mover edificios de la granja compartida tras restaurar la casa.</summary>
-        public static void Postfix_CarpenterCanMoveIslandBuilding(Building b, ref bool __result)
+        /// <summary>TASK-2011 / TASK-607: permite mover edificios en la isla compartida tras restaurar la casa, y en residencias privadas/anexos propios (incluyendo Farmhouse e Invernadero desbloqueado).</summary>
+        public static void Postfix_CarpenterCanMoveIslandBuilding(CarpenterMenu __instance, Building b, ref bool __result)
         {
-            if (b?.GetParentLocation() is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+            GameLocation? parentLoc = b?.GetParentLocation() ?? __instance?.TargetLocation;
+            if (parentLoc is IslandWest { NameOrUniqueName: SharedIslandFarmId } island)
+            {
                 __result = island.farmhouseRestored.Value;
+                return;
+            }
+
+            if (parentLoc != null && LocationCullingLogic.IsPrivateFarmOrAnnex(parentLoc.NameOrUniqueName))
+            {
+                bool isGreenhouse = b is StardewValley.Buildings.GreenhouseBuilding
+                    || string.Equals(b?.buildingType?.Value, "Greenhouse", StringComparison.OrdinalIgnoreCase);
+                bool unlocked = parentLoc is not Farm f || f.greenhouseUnlocked.Value;
+                __result = ResidenceUpgradeLogic.CanMoveResidenceBuilding(
+                    isGreenhouse,
+                    unlocked,
+                    Context.IsMainPlayer,
+                    CanClientManageLocation(parentLoc));
+            }
         }
 
-        /// <summary>TASK-2011: recalcula los warps interiores al mover un edificio de la isla compartida.</summary>
+        /// <summary>
+        /// TASK-2011 / TASK-607: recalcula los warps interiores al mover un edificio en Isla Jengibre o una
+        /// residencia privada/anexo, y limpia el caché de puerta y buzón cuando se mueve el Farmhouse privado.
+        /// </summary>
         public static void Postfix_OnIslandBuildingMoved(GameLocation __instance, Building building)
         {
             if (__instance is IslandWest { NameOrUniqueName: SharedIslandFarmId })
+            {
                 building?.updateInteriorWarps();
+                return;
+            }
+
+            if (__instance is Farm privateFarm && LocationCullingLogic.IsPrivateFarmOrAnnex(privateFarm.NameOrUniqueName))
+            {
+                if (ResidenceUpgradeLogic.NeedsResidenceFarmhouseCacheReset(privateFarm.NameOrUniqueName, building?.buildingType?.Value))
+                {
+                    privateFarm.UnsetFarmhouseValues();
+                    building?.updateInteriorWarps();
+                    return;
+                }
+
+                if (building is StardewValley.Buildings.GreenhouseBuilding
+                    || string.Equals(building?.buildingType?.Value, "Greenhouse", StringComparison.OrdinalIgnoreCase))
+                {
+                    GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(privateFarm.NameOrUniqueName));
+                    building?.updateInteriorWarps(ghLoc);
+                    return;
+                }
+
+                building?.updateInteriorWarps();
+            }
         }
 
         /// <summary>
@@ -7169,7 +7257,10 @@ namespace Pelican4Ever.Modules
                 foreach (var door in context.WorldState.Doors.Values)
                 {
                     if (!string.IsNullOrEmpty(door.FarmSlotId))
+                    {
                         Collect(Game1.getLocationFromName(door.FarmSlotId));
+                        Collect(Game1.getLocationFromName($"{door.FarmSlotId}_Home"));
+                    }
                 }
 
                 if (context.WorldState.Annexes != null)

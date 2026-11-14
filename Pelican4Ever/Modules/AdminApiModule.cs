@@ -63,7 +63,7 @@ namespace Pelican4Ever.Modules
 
             ctx.AddCommand(
                 "p4e_safe_restart",
-                "Programa o cancela un reinicio controlado del servidor (TASK-804). Uso: p4e_safe_restart [motivo] [--immediate] [--minutes N] [--cancel]",
+                "Programa o cancela un reinicio controlado del servidor (TASK-804 / TASK-1608). Uso: p4e_safe_restart [motivo] [--immediate] [--after-checkpoint] [--minutes N] [--cancel]",
                 OnConsoleSafeRestart);
         }
 
@@ -92,17 +92,18 @@ namespace Pelican4Ever.Modules
                 RestartCoordinator.ConsumeIfImmediateTimerElapsed(DateTimeOffset.UtcNow, out SafeRestartStatusDto? triggered) &&
                 triggered != null)
             {
-                ExecuteControlledRestart(triggered);
+                CheckpointModule.RunBeforeImmediateRestart(() => ExecuteControlledRestart(triggered));
             }
         }
 
         /// <summary>
-        /// Invocado desde <see cref="DailyRolloverModule"/> justo tras completarse el guardado del cambio de día.
-        /// Si había un reinicio controlado en modo por defecto (<c>WaitingForNextSave</c>), lo ejecuta ahora (TASK-804).
+        /// Invocado desde <see cref="DailyRolloverModule"/> (<paramref name="isCheckpoint"/> = false) o
+        /// <see cref="CheckpointModule"/> (<paramref name="isCheckpoint"/> = true) justo tras completarse un guardado.
+        /// Si había un reinicio controlado esperando ese guardado, lo ejecuta ahora (TASK-804 / TASK-1608).
         /// </summary>
-        public static void NotifySaveCompleted()
+        public static void NotifySaveCompleted(bool isCheckpoint = false)
         {
-            if (RestartCoordinator.ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggered) && triggered != null)
+            if (RestartCoordinator.ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggered, isCheckpoint) && triggered != null)
             {
                 ExecuteControlledRestart(triggered);
             }
@@ -152,6 +153,7 @@ namespace Pelican4Ever.Modules
             }
 
             bool immediate = false;
+            bool restartAfterCheckpoint = false;
             bool cancel = false;
             int? warningMinutes = null;
             var reasonWords = new List<string>();
@@ -163,6 +165,11 @@ namespace Pelican4Ever.Modules
                     string.Equals(arg, "-i", StringComparison.OrdinalIgnoreCase))
                 {
                     immediate = true;
+                }
+                else if (string.Equals(arg, "--after-checkpoint", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(arg, "--checkpoint", StringComparison.OrdinalIgnoreCase))
+                {
+                    restartAfterCheckpoint = true;
                 }
                 else if (string.Equals(arg, "--cancel", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(arg, "-c", StringComparison.OrdinalIgnoreCase))
@@ -188,6 +195,7 @@ namespace Pelican4Ever.Modules
             {
                 Reason = reason,
                 Immediate = immediate,
+                RestartAfterCheckpoint = restartAfterCheckpoint,
                 WarningMinutes = warningMinutes,
                 Cancel = cancel
             });
@@ -528,6 +536,21 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "POST /api/v1/host/checkpoint":
+                {
+                    MainThreadExecutionResult<(bool Ok, string Message, long? EventId)> result =
+                        ExecuteWithThreadInfoOnGameThread(CheckpointModule.RequestFromHostApi);
+
+                    WriteJson(res, new HostActionResultDto
+                    {
+                        Ok = result.Value.Ok,
+                        Message = result.Value.Message,
+                        ExecutedOnThreadId = result.ExecutedOnThreadId,
+                        EventId = result.Value.EventId
+                    });
+                    break;
+                }
+
                 case "GET /api/v1/host/commands":
                 {
                     HostCommandCatalogDto dto = ExecuteOnGameThread(() => new HostCommandCatalogDto
@@ -645,7 +668,9 @@ namespace Pelican4Ever.Modules
                 time,
                 onlineIds.Count,
                 unrestedActive,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                request.RestartAfterCheckpoint,
+                context?.WorldState.LastCheckpoint);
 
             BroadcastToAllPlayers(scheduled.WarningAnnouncement, "both");
 
@@ -659,6 +684,7 @@ namespace Pelican4Ever.Modules
                     ["mode"] = scheduled.Mode,
                     ["reason"] = scheduled.Reason,
                     ["immediate"] = scheduled.Immediate,
+                    ["restartAfterCheckpoint"] = scheduled.RestartAfterCheckpoint,
                     ["warningMinutes"] = scheduled.WarningMinutes,
                     ["waitingForNextSave"] = scheduled.WaitingForNextSave,
                     ["unrestedActivePlayers"] = scheduled.ProgressAtRisk.UnrestedActivePlayersCount
@@ -695,6 +721,20 @@ namespace Pelican4Ever.Modules
             DateTime nextRolloverLocal = localNow.Add(untilRollover);
             int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
 
+            SaveBackupResult? liveCheckpoint = CheckpointModule.LastCheckpoint;
+            Pelican4Ever.Core.World.CheckpointMetadata? savedCheckpoint = context.WorldState.LastCheckpoint;
+            string? checkpointName = liveCheckpoint?.FolderName;
+            if (string.IsNullOrWhiteSpace(checkpointName) && savedCheckpoint != null && !string.IsNullOrWhiteSpace(savedCheckpoint.BackupName))
+                checkpointName = savedCheckpoint.BackupName;
+            string? checkpointAtUtc = liveCheckpoint?.CreatedUtc.ToUniversalTime().ToString("O");
+            if (string.IsNullOrWhiteSpace(checkpointAtUtc) && savedCheckpoint != null && !string.IsNullOrWhiteSpace(savedCheckpoint.SavedAtUtc))
+                checkpointAtUtc = savedCheckpoint.SavedAtUtc;
+            double? checkpointLongestMs = liveCheckpoint != null
+                ? Math.Round(CheckpointModule.LastCheckpointLongestTickMs)
+                : savedCheckpoint != null && savedCheckpoint.GameDay > 0
+                    ? Math.Round(savedCheckpoint.LongestTickMs)
+                    : null;
+
             return new HostClockDto
             {
                 RealTimeUtc = DateTimeOffset.UtcNow.ToString("O"),
@@ -713,7 +753,12 @@ namespace Pelican4Ever.Modules
                 LastBackupFileName = DailyRolloverModule.LastBackupFileName,
                 LastBackupCreatedUtc = DailyRolloverModule.LastBackupCreatedUtc,
                 SaveFolderName = Context.IsWorldReady ? Constants.SaveFolderName ?? string.Empty : string.Empty,
-                IsMultiplayerServer = Context.IsWorldReady && Game1.IsServer && Game1.server != null
+                IsMultiplayerServer = Context.IsWorldReady && Game1.IsServer && Game1.server != null,
+                LastCheckpointName = checkpointName,
+                LastCheckpointGameDay = savedCheckpoint != null && savedCheckpoint.GameDay > 0 ? savedCheckpoint.GameDay : null,
+                LastCheckpointGameTime = savedCheckpoint != null && savedCheckpoint.GameDay > 0 ? savedCheckpoint.GameTime : null,
+                LastCheckpointAtUtc = checkpointAtUtc,
+                LastCheckpointLongestTickMs = checkpointLongestMs
             };
         }
 

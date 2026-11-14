@@ -46,11 +46,16 @@ Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`
   "LastBackupFileName": "PelicanValley_20261031_020000_000",
   "LastBackupCreatedUtc": "2026-10-31T01:00:00.0000000Z",
   "SaveFolderName": "PelicanValley_452974881",
-  "IsMultiplayerServer": true
+  "IsMultiplayerServer": true,
+  "LastCheckpointName": "PelicanValley_20261031_154000_000",
+  "LastCheckpointGameDay": 12,
+  "LastCheckpointGameTime": 1540,
+  "LastCheckpointAtUtc": "2026-10-31T14:40:00.0000000Z",
+  "LastCheckpointLongestTickMs": 420
 }
 ```
 
-`SaveFolderName` es la carpeta de `Saves/` de la partida cargada e `IsMultiplayerServer` indica si está abierta como servidor de cooperativo; un supervisor desatendido los usa para comprobar que el servidor sirve la partida autorizada (guía: [despliegue/host-vps.md](despliegue/host-vps.md)).
+`SaveFolderName` es la carpeta de `Saves/` de la partida cargada e `IsMultiplayerServer` indica si está abierta como servidor de cooperativo; un supervisor desatendido los usa para comprobar que el servidor sirve la partida autorizada (guía: [despliegue/host-vps.md](despliegue/host-vps.md)). Los campos `LastCheckpoint*` son `null` hasta el primer checkpoint intradía.
 
 ### `GET /api/v1/host/players`
 
@@ -191,17 +196,19 @@ Registra el descanso diario del jugador anfitrión (`RestedOnGameDay` y `LastAct
 
 ### `POST /api/v1/host/restart`
 
-Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente al comando de consola `p4e_safe_restart`.
+Programa o cancela un reinicio controlado del servidor (`TASK-804` / `TASK-1608`), equivalente al comando de consola `p4e_safe_restart`.
 - Avisa a los jugadores conectados con antelación configurable (`warningMinutes`).
-- Calcula e informa del progreso diario no guardado en riesgo (`ProgressAtRisk`), dado que Stardew Valley solo guarda al cambiar de día.
-- Por defecto (`immediate: false`), espera hasta justo después del siguiente guardado/Rollover (`WaitingForNextSave: true`).
-- Si se solicita `immediate: true` por causa mayor, ejecuta el reinicio tras los minutos de preaviso indicados.
+- Calcula e informa del progreso diario en riesgo (`ProgressAtRisk`) desde el último checkpoint intradía (o desde las 06:00 si no hubo ninguno hoy).
+- Por defecto (`immediate: false`, `restartAfterCheckpoint: false`), espera hasta justo después del siguiente guardado/Rollover (`WaitingForNextSave: true`).
+- Con `restartAfterCheckpoint: true`, reinicia justo después del siguiente checkpoint intradía completado (o tras el rollover si llega antes).
+- Si se solicita `immediate: true` por causa mayor, intenta lanzar un checkpoint tras los minutos de preaviso y ejecuta el reinicio al terminar (o aunque el checkpoint se omita/falle).
 
 **Cuerpo de petición (`HostRestartRequestDto`):**
 ```json
 {
   "reason": "Actualización de mantenimiento",
   "immediate": false,
+  "restartAfterCheckpoint": false,
   "warningMinutes": 5,
   "cancel": false
 }
@@ -215,6 +222,7 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
   "Reason": "Actualización de mantenimiento",
   "Immediate": false,
   "WaitingForNextSave": true,
+  "RestartAfterCheckpoint": false,
   "WarningMinutes": 5,
   "RequestedAtUtc": "2026-10-31T15:10:00.0000000Z",
   "ExecuteNotBeforeUtc": null,
@@ -226,9 +234,25 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
     "OnlinePlayersCount": 2,
     "UnrestedActivePlayersCount": 1,
     "WouldLoseUnsavedDayProgress": true,
+    "LastCheckpointAtUtc": null,
+    "LastCheckpointGameTime": null,
     "Summary": "Progreso no guardado del día 12 (8h 30m desde las 06:00, 2 jugador(es) conectado(s), 1 sin descansar hoy). Stardew Valley solo guarda al cambiar de día (Rollover)."
   },
   "EventId": 57
+}
+```
+
+### `POST /api/v1/host/checkpoint`
+
+Ejecuta un checkpoint intradía en el hilo principal del juego (`TASK-1607`, equivalente a `p4e_checkpoint_now`). Si no hay farmhands conectados y las comprobaciones de seguridad de `CheckpointPolicy` permiten guardar, ejecuta el guardado y copia verificada síncronamente; si hay farmhands conectados, inicia el aviso y la sincronización de XP previa y devuelve `Ok: true`. Si una condición de seguridad bloquea el checkpoint (`FestivalOrEvent`, `NearRollover`, `RolloverActive`, etc.), devuelve `Ok: false` con el motivo y el `EventId` de `checkpoint.skipped`.
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "Checkpoint guardado y copiado (420 ms).",
+  "ExecutedOnThreadId": 1,
+  "EventId": 58
 }
 ```
 

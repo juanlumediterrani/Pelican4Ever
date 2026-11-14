@@ -31,6 +31,9 @@ namespace Pelican4Ever.Core.Pets
         /// <summary>Estado actual del flujo de adopción.</summary>
         public PetAdoptionState State { get; set; } = PetAdoptionState.None;
 
+        /// <summary>Identificador autoritativo del jugador propietario de la mascota (<c>UniqueMultiplayerID</c>).</summary>
+        public long OwnerPlayerId { get; set; }
+
         /// <summary>Identificador de mapa de la parcela residencial donde se ubica el cuenco (p. ej. "Pelican4Ever_Farm_02").</summary>
         public string? FarmSlotId { get; set; }
 

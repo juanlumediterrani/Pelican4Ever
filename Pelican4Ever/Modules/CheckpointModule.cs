@@ -6,6 +6,7 @@ using System.Linq;
 using Netcode;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Time;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -31,7 +32,9 @@ namespace Pelican4Ever.Modules
     {
         private const int AnnounceSeconds = 3;
         private const string NoticeMessageType = "Pelican4Ever.CheckpointNotice";
+        private const string RestoredNoticeMessageType = "Pelican4Ever.CheckpointRestoredNotice";
 
+        private static CheckpointModule? instance;
         private ModContext context = null!;
         private IEnumerator<int>? save;
         private readonly Stopwatch total = new();
@@ -44,6 +47,11 @@ namespace Pelican4Ever.Modules
         private int slowStreak;
         private bool activitySinceLast;
         private CheckpointSkipReason lastLoggedSkip = CheckpointSkipReason.None;
+        private string? restoredCheckpointTimeFormatted;
+        private Action? pendingPostCheckpointCallback;
+        private long? lastCheckpointEventId;
+        private bool lastCheckpointSucceeded;
+        private string lastCheckpointStatusMessage = string.Empty;
 
         public string Name => "Checkpoint";
 
@@ -61,23 +69,80 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
+            instance = this;
             ctx.AddCommand(
                 "p4e_checkpoint_now",
                 "Guarda la partida ahora sin cambiar de día y deja una copia en Pelican4Ever_Backups/checkpoints/ (Épica 11).",
                 (_, _) => RequestManual());
-            ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => ResetDay();
+            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.GameLoop.DayStarted += (_, _) => ResetDay();
-            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => { skillSyncDeadlineUtc = null; SkillExperienceModule.EndCheckpoint(); };
+            ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
+            {
+                skillSyncDeadlineUtc = null;
+                restoredCheckpointTimeFormatted = null;
+                pendingPostCheckpointCallback = null;
+                SkillExperienceModule.EndCheckpoint();
+            };
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
+            ctx.Helper.Events.Multiplayer.PeerConnected += OnPeerConnected;
         }
 
-        /// <summary>En los farmhands: muestra el aviso de que el host va a guardar (el juego se congelará un momento).</summary>
+        /// <summary>En los farmhands: muestra avisos de checkpoint inminente o restauración de mitad de día.</summary>
         private void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
         {
-            if (Context.IsMainPlayer || e.FromModID != context.Manifest.UniqueID || e.Type != NoticeMessageType)
+            if (Context.IsMainPlayer || e.FromModID != context.Manifest.UniqueID)
                 return;
-            Game1.addHUDMessage(new HUDMessage(I18n.Get(e.ReadAs<string>()), HUDMessage.newQuest_type));
+
+            if (e.Type == NoticeMessageType)
+            {
+                Game1.addHUDMessage(new HUDMessage(I18n.Get(e.ReadAs<string>()), HUDMessage.newQuest_type));
+            }
+            else if (e.Type == RestoredNoticeMessageType)
+            {
+                string hhmm = e.ReadAs<string>();
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("checkpoint.restored_notice", new { time = hhmm }), HUDMessage.newQuest_type));
+            }
+        }
+
+        private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        {
+            ResetDay();
+            restoredCheckpointTimeFormatted = null;
+
+            if (!Context.IsMainPlayer || Game1.Date == null)
+                return;
+
+            CheckpointMetadata? restored = CheckpointRestoreLogic.FindMidDayRestoreCheckpoint(context.WorldState, Game1.Date.TotalDays);
+            if (restored != null)
+            {
+                string hhmm = CheckpointRestoreLogic.FormatGameTime(restored.GameTime);
+                restoredCheckpointTimeFormatted = hhmm;
+                string summary = CheckpointRestoreLogic.BuildRestoreLogSummary(restored);
+                context.Monitor.Log($"[Checkpoint] {summary}", LogLevel.Info);
+                AppendEvent(HostEventTypes.CheckpointRestored, summary, new Dictionary<string, object?>
+                {
+                    ["gameDay"] = restored.GameDay,
+                    ["checkpointGameTime"] = restored.GameTime,
+                    ["checkpointTimeFormatted"] = hhmm,
+                    ["savedAtUtc"] = restored.SavedAtUtc,
+                    ["backupName"] = restored.BackupName
+                });
+                RealTimeClockModule.CatchUpVillagerSchedules(Game1.timeOfDay);
+            }
+        }
+
+        private void OnPeerConnected(object? sender, PeerConnectedEventArgs e)
+        {
+            if (!Context.IsMainPlayer || string.IsNullOrEmpty(restoredCheckpointTimeFormatted))
+                return;
+
+            string hhmm = restoredCheckpointTimeFormatted;
+            context.Helper.Multiplayer.SendMessage(
+                hhmm,
+                RestoredNoticeMessageType,
+                new[] { context.Manifest.UniqueID },
+                new[] { e.Peer.PlayerID });
         }
 
         private void ResetDay()
@@ -88,7 +153,81 @@ namespace Pelican4Ever.Modules
             slowStreak = 0;
             activitySinceLast = false;
             lastLoggedSkip = CheckpointSkipReason.None;
+            if (Game1.Date != null && context.WorldState.LastCheckpoint != null && context.WorldState.LastCheckpoint.GameDay != Game1.Date.TotalDays)
+                restoredCheckpointTimeFormatted = null;
         }
+
+        /// <summary>Lanza un checkpoint desde la API HTTP en el hilo principal (<c>POST /api/v1/host/checkpoint</c>).</summary>
+        public static (bool Ok, string Message, long? EventId) RequestFromHostApi()
+        {
+            if (instance == null || !Context.IsWorldReady || !Context.IsMainPlayer)
+                return (false, "Hace falta una partida cargada y ser el host.", null);
+
+            if (instance.save != null || instance.pendingStartUtc != null || instance.skillSyncDeadlineUtc != null)
+                return (false, "Ya hay un checkpoint en marcha.", null);
+
+            CheckpointDecision decision = instance.Decide(manual: true);
+            if (!decision.Run)
+            {
+                long eventId = instance.LogSkipAndReturnEventId(decision, manual: true);
+                return (false, $"Checkpoint no ejecutado: {Describe(decision.Reason)}.", eventId);
+            }
+
+            if (Game1.otherFarmers.Count == 0)
+            {
+                instance.pendingManual = true;
+                instance.Start(bypassPendingStart: true);
+                return (instance.lastCheckpointSucceeded, instance.lastCheckpointStatusMessage, instance.lastCheckpointEventId);
+            }
+
+            instance.Schedule(manual: true);
+            return (true, "Checkpoint iniciado (aviso a farmhands y sincronización de XP en curso).", null);
+        }
+
+        /// <summary>
+        /// Intenta ejecutar un checkpoint antes de un reinicio inmediato (<c>--immediate</c>, TASK-1608).
+        /// Siempre invoca <paramref name="onFinished"/> cuando concluye, o incluso si el checkpoint se omite o falla.
+        /// </summary>
+        public static void RunBeforeImmediateRestart(Action onFinished)
+        {
+            if (onFinished == null)
+                return;
+
+            if (instance == null || !Context.IsWorldReady || !Context.IsMainPlayer)
+            {
+                onFinished();
+                return;
+            }
+
+            if (instance.save != null || instance.pendingStartUtc != null || instance.skillSyncDeadlineUtc != null)
+            {
+                instance.pendingPostCheckpointCallback = CombineCallbacks(instance.pendingPostCheckpointCallback, onFinished);
+                return;
+            }
+
+            CheckpointDecision decision = instance.Decide(manual: true);
+            if (!decision.Run)
+            {
+                instance.LogSkip(decision, manual: true);
+                onFinished();
+                return;
+            }
+
+            instance.pendingManual = true;
+            instance.pendingPostCheckpointCallback = onFinished;
+            if (Game1.otherFarmers.Count == 0)
+            {
+                instance.Start(bypassPendingStart: true);
+            }
+            else
+            {
+                SkillExperienceModule.BeginCheckpoint(Game1.otherFarmers.Keys);
+                instance.skillSyncDeadlineUtc = DateTimeOffset.UtcNow.AddSeconds(10);
+            }
+        }
+
+        private static Action CombineCallbacks(Action? existing, Action added) =>
+            existing == null ? added : () => { existing(); added(); };
 
         private void RequestManual()
         {
@@ -136,6 +275,7 @@ namespace Pelican4Ever.Modules
                     SkillExperienceModule.EndCheckpoint();
                     lastCheckpointUtc = DateTimeOffset.UtcNow;
                     context.Monitor.Log("[Checkpoint] Cancelado: no se pudo sincronizar la experiencia de todos los farmhands en 10 segundos.", LogLevel.Warn);
+                    FlushPendingCallback();
                 }
                 return;
             }
@@ -177,17 +317,21 @@ namespace Pelican4Ever.Modules
                 modIDs: new[] { context.Manifest.UniqueID });
         }
 
-        private void Start()
+        private void Start(bool bypassPendingStart = false)
         {
             bool manual = pendingManual;
-            pendingStartUtc = null;
+            if (!bypassPendingStart)
+                pendingStartUtc = null;
 
             // La situación puede haber cambiado durante el aviso.
             CheckpointDecision decision = Decide(manual);
             if (!decision.Run)
             {
-                LogSkip(decision, manual);
+                lastCheckpointEventId = LogSkipAndReturnEventId(decision, manual);
+                lastCheckpointSucceeded = false;
+                lastCheckpointStatusMessage = $"Checkpoint omitido: {Describe(decision.Reason)}.";
                 SkillExperienceModule.EndCheckpoint();
+                FlushPendingCallback();
                 return;
             }
 
@@ -195,11 +339,19 @@ namespace Pelican4Ever.Modules
             longestTickMs = 0;
             total.Restart();
             IsSaving = true;
+            CheckpointMetadata? previousCheckpoint = context.WorldState.LastCheckpoint;
             try
             {
                 int cloned = 0;
                 if (Game1.otherFarmers.Count > 0)
                     cloned = CloneLiveFarmhandsIntoSaveData();
+
+                context.WorldState.LastCheckpoint = new CheckpointMetadata
+                {
+                    GameDay = Game1.Date.TotalDays,
+                    GameTime = Game1.timeOfDay,
+                    SavedAtUtc = DateTimeOffset.UtcNow.ToString("O")
+                };
 
                 if (!PersistenceModule.FlushToSaveData(context, "checkpoint"))
                     throw new IOException("No se pudo volcar ServerWorldState; se cancela el checkpoint para no guardar un estado incoherente.");
@@ -213,6 +365,7 @@ namespace Pelican4Ever.Modules
             }
             catch (Exception ex)
             {
+                context.WorldState.LastCheckpoint = previousCheckpoint;
                 longestTickMs = total.Elapsed.TotalMilliseconds;
                 Finish(ex);
                 return;
@@ -238,11 +391,14 @@ namespace Pelican4Ever.Modules
             if (failure != null)
             {
                 context.Monitor.Log($"[Checkpoint] El guardado falló; comprueba la partida en disco y las copias verificadas antes de restaurar: {failure}", LogLevel.Error);
-                AppendEvent(HostEventTypes.CheckpointFailed, "Checkpoint fallido.", new Dictionary<string, object?>
+                lastCheckpointSucceeded = false;
+                lastCheckpointStatusMessage = $"Checkpoint fallido: {failure.Message}";
+                lastCheckpointEventId = AppendEvent(HostEventTypes.CheckpointFailed, "Checkpoint fallido.", new Dictionary<string, object?>
                 {
                     ["manual"] = runningManual,
                     ["error"] = failure.Message
                 });
+                FlushPendingCallback();
                 return;
             }
 
@@ -259,12 +415,23 @@ namespace Pelican4Ever.Modules
                 SaveBackupService.ApplyRetention(context.Monitor, BackupKind.Checkpoint, context.Config.CheckpointRetention, keepDailyDays: 0);
             }
 
+            if (context.WorldState.LastCheckpoint != null)
+            {
+                context.WorldState.LastCheckpoint.BackupName = backup?.FolderName ?? string.Empty;
+                context.WorldState.LastCheckpoint.TotalMs = Math.Round(total.Elapsed.TotalMilliseconds);
+                context.WorldState.LastCheckpoint.LongestTickMs = Math.Round(longestTickMs);
+            }
+
             TimeSpan next = CheckpointPolicy.EffectiveInterval(context.Config.CheckpointIntervalMinutes, slowStreak);
+            string summaryMsg = $"Checkpoint {(backup != null ? "guardado y copiado" : "guardado sin copia verificada")} ({total.Elapsed.TotalMilliseconds:F0} ms).";
             context.Monitor.Log(
                 $"[Checkpoint] Partida guardada en {total.Elapsed.TotalMilliseconds:F0} ms (tick más largo {longestTickMs:F0} ms){(slow ? ", LENTO" : string.Empty)}. " +
                 $"Copia: {backup?.FolderName ?? "NO VERIFICADA"}. Próximo en {(next == TimeSpan.Zero ? "—" : $"{next.TotalMinutes:F0} min")}.",
                 backup == null || slow ? LogLevel.Warn : LogLevel.Info);
-            AppendEvent(HostEventTypes.CheckpointCreated, $"Checkpoint {(backup != null ? "guardado y copiado" : "guardado sin copia verificada")}.", new Dictionary<string, object?>
+
+            lastCheckpointSucceeded = true;
+            lastCheckpointStatusMessage = summaryMsg;
+            lastCheckpointEventId = AppendEvent(HostEventTypes.CheckpointCreated, $"Checkpoint {(backup != null ? "guardado y copiado" : "guardado sin copia verificada")}.", new Dictionary<string, object?>
             {
                 ["manual"] = runningManual,
                 ["backupName"] = backup?.FolderName,
@@ -274,6 +441,21 @@ namespace Pelican4Ever.Modules
                 ["slow"] = slow,
                 ["nextIntervalMinutes"] = next.TotalMinutes
             });
+
+            if (pendingPostCheckpointCallback != null)
+            {
+                FlushPendingCallback();
+                return;
+            }
+
+            AdminApiModule.NotifySaveCompleted(isCheckpoint: true);
+        }
+
+        private void FlushPendingCallback()
+        {
+            Action? cb = pendingPostCheckpointCallback;
+            pendingPostCheckpointCallback = null;
+            cb?.Invoke();
         }
 
         private CheckpointDecision Decide(bool manual)
@@ -337,18 +519,21 @@ namespace Pelican4Ever.Modules
             return cloned;
         }
 
-        private void LogSkip(CheckpointDecision decision, bool manual)
+        private void LogSkip(CheckpointDecision decision, bool manual) =>
+            LogSkipAndReturnEventId(decision, manual);
+
+        private long LogSkipAndReturnEventId(CheckpointDecision decision, bool manual)
         {
             context.Monitor.Log($"[Checkpoint] {(manual ? "Manual" : "Programado")} no se hace: {Describe(decision.Reason)}.", manual ? LogLevel.Warn : LogLevel.Info);
-            AppendEvent(HostEventTypes.CheckpointSkipped, $"Checkpoint omitido: {Describe(decision.Reason)}.", new Dictionary<string, object?>
+            return AppendEvent(HostEventTypes.CheckpointSkipped, $"Checkpoint omitido: {Describe(decision.Reason)}.", new Dictionary<string, object?>
             {
                 ["manual"] = manual,
                 ["reason"] = decision.Reason.ToString()
             });
         }
 
-        private static void AppendEvent(string type, string summary, Dictionary<string, object?> data) =>
-            AdminApiModule.EventLog.Append(type, Game1.Date.TotalDays, Game1.timeOfDay, summary, data);
+        private static long AppendEvent(string type, string summary, Dictionary<string, object?> data) =>
+            AdminApiModule.EventLog.Append(type, Game1.Date.TotalDays, Game1.timeOfDay, summary, data).Id;
 
         private static string Describe(CheckpointSkipReason reason) => reason switch
         {
