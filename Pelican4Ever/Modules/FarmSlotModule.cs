@@ -42,6 +42,9 @@ namespace Pelican4Ever.Modules
         /// <summary>Slot cuya residencia no estaba cargada en el cliente al despertar; se viaja a ella en cuanto se pueda.</summary>
         private static string? pendingResidenceWakeSlotId;
 
+        /// <summary>Indica que se debe comprobar la expulsión de un visitante en cuanto finalice un warp en curso.</summary>
+        private static bool pendingEvictionCheck;
+
         /// <summary>Huecos y tipos con los que se construyó la última versión de Data/Locations.</summary>
         private static string slotDataSignature = string.Empty;
         public static List<DoorModel> RegisteredDoors { get; private set; } = new();
@@ -1792,6 +1795,7 @@ namespace Pelican4Ever.Modules
         {
             welcomeNotified = false;
             pendingResidenceWakeSlotId = null;
+            pendingEvictionCheck = false;
             RefreshSlotLocationData();
         }
 
@@ -2376,6 +2380,8 @@ namespace Pelican4Ever.Modules
             if (!e.IsLocalPlayer || context == null)
                 return;
 
+            EvictLocalPlayerIfUnauthorized();
+
             if (e.NewLocation != null && HostPlazaLayout.IsPlazaLocation(e.NewLocation.NameOrUniqueName))
             {
                 if (e.NewLocation is Farm hostFarm && string.Equals(hostFarm.NameOrUniqueName, "Farm", StringComparison.OrdinalIgnoreCase))
@@ -2524,6 +2530,9 @@ namespace Pelican4Ever.Modules
         {
             if (!e.IsMultipleOf(4) || !Context.IsWorldReady || context == null)
                 return;
+
+            if (pendingEvictionCheck && !Game1.isWarping && !Game1.globalFade)
+                EvictLocalPlayerIfUnauthorized();
 
             if (unclaimedCheckCooldown > 0)
             {
@@ -3771,6 +3780,8 @@ namespace Pelican4Ever.Modules
                     {
                         EnsureLocationPortals(Game1.currentLocation);
                     }
+
+                    EvictLocalPlayerIfUnauthorized();
                 }
             }
         }
@@ -3954,6 +3965,8 @@ namespace Pelican4Ever.Modules
 
             context.Monitor.Log($"[FarmSlotModule] {friendId} {(add ? "añadido a" : "quitado de")} los amigos de {farmSlotId} por {playerId}.", LogLevel.Info);
             BroadcastDoorsSync();
+            if (!add)
+                EvictLocalPlayerIfUnauthorized();
         }
 
         private static void HandleChangePolicy(long playerId, string farmSlotId, string policyStr, bool? visitorsCanEdit = null)
@@ -3998,7 +4011,57 @@ namespace Pelican4Ever.Modules
 
                 // Sincronizar inmediatamente a todos los peones
                 BroadcastDoorsSync();
+                EvictLocalPlayerIfUnauthorized();
             }
+        }
+
+        private static void EvictLocalPlayerIfUnauthorized()
+        {
+            if (context == null || !Context.IsWorldReady || Game1.player == null || Game1.currentLocation == null)
+                return;
+
+            string? currentName = Game1.currentLocation.NameOrUniqueName;
+            string? rootName = Game1.currentLocation.GetRootLocation()?.NameOrUniqueName;
+            if (!VisitorPermissionLogic.ShouldEvictVisitor(currentName, rootName, context.WorldState.Doors, Game1.player.UniqueMultiplayerID, out DoorAssignment? revokedDoor)
+                || revokedDoor == null)
+            {
+                pendingEvictionCheck = false;
+                return;
+            }
+
+            if (Game1.isWarping || Game1.globalFade)
+            {
+                pendingEvictionCheck = true;
+                return;
+            }
+
+            pendingEvictionCheck = false;
+            string targetLoc = "Farm";
+            int tileX = 64;
+            int tileY = 16;
+            int facing = 2;
+
+            DoorModel? door = RegisteredDoors.FirstOrDefault(d => string.Equals(d.DefaultSlotId, revokedDoor.FarmSlotId, StringComparison.OrdinalIgnoreCase));
+            if (door != null)
+            {
+                var returnTarget = PlazaTopologyVerifier.ResolvePlazaReturnTarget(
+                    door.LocationName,
+                    door.Edge,
+                    door.TownTileX,
+                    door.TownTileY,
+                    context.Config.FarmSlotCount,
+                    name => Game1.getLocationFromName(name) != null);
+                targetLoc = returnTarget.TargetLocation;
+                tileX = returnTarget.TileX;
+                tileY = returnTarget.TileY;
+                facing = returnTarget.FacingDirection;
+            }
+
+            Game1.activeClickableMenu?.exitThisMenu(false);
+            Game1.player.Halt();
+            Game1.warpFarmer(targetLoc, tileX, tileY, facing);
+            Game1.showRedMessage(I18n.Get("residence.evicted"));
+            context.Monitor.Log($"[FarmSlotModule] Visitante {Game1.player.UniqueMultiplayerID} expulsado de '{currentName}' ({revokedDoor.FarmSlotId}) hacia {targetLoc} ({tileX}, {tileY}) por cambio de acceso.", LogLevel.Info);
         }
 
         /// <summary>

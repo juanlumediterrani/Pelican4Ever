@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Pelican4Ever.Core.Localization;
 
 namespace Pelican4Ever.Core.World
@@ -69,6 +70,47 @@ namespace Pelican4Ever.Core.World
                 || assignment.OwnerId == 0
                 || assignment.OwnerId == playerId
                 || assignment.VisitorsCanEdit;
+        }
+
+        /// <summary>Indica si el jugador puede recoger forraje u objetos aparecidos en el suelo de la residencia.</summary>
+        public static bool CanPickUpForage(DoorAssignment? assignment, long playerId, bool isSpawnedObject, bool isForage)
+        {
+            if (!isSpawnedObject && !isForage)
+                return true;
+            return CanEdit(assignment, playerId);
+        }
+
+        /// <summary>
+        /// Determina si un jugador que se encuentra dentro de <paramref name="currentLocationName"/> (o su ubicación raíz
+        /// <paramref name="rootLocationName"/>, para establos/galpones) ha perdido el permiso de entrada tras un cambio
+        /// de política o retirada de la lista de amigos.
+        /// </summary>
+        public static bool ShouldEvictVisitor(
+            string? currentLocationName,
+            string? rootLocationName,
+            IReadOnlyDictionary<string, DoorAssignment> doors,
+            long playerId,
+            out DoorAssignment? revokedDoor)
+        {
+            revokedDoor = null;
+            string? slotId = ResidenceSlotOf(currentLocationName) ?? ResidenceSlotOf(rootLocationName);
+            if (slotId == null)
+                return false;
+
+            foreach (DoorAssignment door in doors.Values)
+            {
+                if (string.Equals(door.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!CanEnter(door, playerId))
+                    {
+                        revokedDoor = door;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>

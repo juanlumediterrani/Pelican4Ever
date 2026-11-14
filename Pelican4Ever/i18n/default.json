@@ -93,6 +93,7 @@
   "residence.door_locked": "The door is locked.",
   "residence.parcel_friends_only": "This parcel is for friends of its owner only.",
   "residence.parcel_private_locked": "This parcel is private and locked.",
+  "residence.evicted": "The owner changed access permissions for this residence.",
   "annex.private_locked": "This annex is private and locked.",
   "residence.no_permission_modify": "You do not have permission to modify this farm.",
   "residence.chest_private": "This chest is private.",

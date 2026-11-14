@@ -93,6 +93,7 @@
   "residence.door_locked": "La puerta está cerrada con llave.",
   "residence.parcel_friends_only": "Esta parcela es solo para los amigos de su dueño.",
   "residence.parcel_private_locked": "Esta parcela es privada y está cerrada con llave.",
+  "residence.evicted": "El propietario ha cerrado el acceso a esta residencia.",
   "annex.private_locked": "Este anexo es privado y está cerrado con llave.",
   "residence.no_permission_modify": "No tienes permiso para modificar esta granja.",
   "residence.chest_private": "Este cofre es privado.",

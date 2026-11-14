@@ -113,5 +113,52 @@ namespace Pelican4Ever.Tests
             Assert.StartsWith("1 ocupadas, 2 libres.", lines[2]);
             Assert.DoesNotContain(lines, l => l.Contains("door_02"));
         }
+
+        [Fact]
+        public void CanPickUpForage_BlocksSpawnedOrForageUnlessVisitorCanEditOrIsOwner()
+        {
+            var door = new DoorAssignment { OwnerId = 10, Policy = AccessPolicy.Public, VisitorsCanEdit = false };
+
+            Assert.True(VisitorPermissionLogic.CanPickUpForage(door, 10, isSpawnedObject: true, isForage: true));
+            Assert.False(VisitorPermissionLogic.CanPickUpForage(door, 20, isSpawnedObject: true, isForage: false));
+            Assert.False(VisitorPermissionLogic.CanPickUpForage(door, 20, isSpawnedObject: false, isForage: true));
+            Assert.True(VisitorPermissionLogic.CanPickUpForage(door, 20, isSpawnedObject: false, isForage: false));
+
+            door.VisitorsCanEdit = true;
+            Assert.True(VisitorPermissionLogic.CanPickUpForage(door, 20, isSpawnedObject: true, isForage: true));
+        }
+
+        [Fact]
+        public void ShouldEvictVisitor_ReturnsTrueWhenDoorClosesOrFriendIsRemovedAcrossSubLocations()
+        {
+            var door = new DoorAssignment
+            {
+                DoorId = "door_03",
+                FarmSlotId = "Pelican4Ever_Farm_03",
+                OwnerId = 10,
+                Policy = AccessPolicy.Friends,
+                Friends = new HashSet<long> { 20 }
+            };
+            var doors = new Dictionary<string, DoorAssignment> { ["door_03"] = door };
+
+            // Mientras 20 es amigo, puede permanecer dentro (granja, cueva, anexo o edificio con raíz en la granja)
+            Assert.False(VisitorPermissionLogic.ShouldEvictVisitor("Pelican4Ever_Farm_03", null, doors, 20, out _));
+            Assert.False(VisitorPermissionLogic.ShouldEvictVisitor("Pelican4Ever_Annex_03_East", null, doors, 20, out _));
+            Assert.False(VisitorPermissionLogic.ShouldEvictVisitor("Coop123", "Pelican4Ever_Farm_03", doors, 20, out _));
+
+            // Al quitar al amigo 20, debe ser expulsado desde cualquier sububicación (y el dueño 10 nunca)
+            door.Friends.Remove(20);
+            Assert.True(VisitorPermissionLogic.ShouldEvictVisitor("Pelican4Ever_Farm_03_Cave", null, doors, 20, out var evictedFromCave));
+            Assert.Equal("Pelican4Ever_Farm_03", evictedFromCave?.FarmSlotId);
+            Assert.True(VisitorPermissionLogic.ShouldEvictVisitor("Coop123", "Pelican4Ever_Annex_03_North", doors, 20, out var evictedFromBuilding));
+            Assert.Equal("Pelican4Ever_Farm_03", evictedFromBuilding?.FarmSlotId);
+            Assert.False(VisitorPermissionLogic.ShouldEvictVisitor("Pelican4Ever_Farm_03", null, doors, 10, out _));
+
+            // Al volver a incluirlo y cerrar la puerta a Locked, también debe ser expulsado; fuera de la residencia no
+            door.Friends.Add(20);
+            door.Policy = AccessPolicy.Locked;
+            Assert.True(VisitorPermissionLogic.ShouldEvictVisitor("Pelican4Ever_Farm_03_Home", null, doors, 20, out _));
+            Assert.False(VisitorPermissionLogic.ShouldEvictVisitor("Town", null, doors, 20, out _));
+        }
     }
 }

@@ -93,6 +93,7 @@
   "residence.door_locked": "门锁着。",
   "residence.parcel_friends_only": "这块地皮只对主人的好友开放。",
   "residence.parcel_private_locked": "这块地皮是私人的，已上锁。",
+  "residence.evicted": "主人已更改这处居所的访问权限。",
   "annex.private_locked": "这处附属地是私人的，已上锁。",
   "residence.no_permission_modify": "你没有修改这座农场的权限。",
   "residence.chest_private": "这个箱子是私人物品。",
