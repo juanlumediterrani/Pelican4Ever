@@ -123,6 +123,7 @@ namespace Pelican4Ever.Modules
             foreach (var kvp in worldState.Players)
             {
                 var record = kvp.Value;
+                DailyEconomyTelemetry.Record(context, record, endedDay);
                 bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == record.UniqueMultiplayerID);
                 bool isEarlyRiser = isOnline && SleepPolicy.IsEarlyRiser(record, endedDay, localNow, cfg.ParsedCalendarDayChangeTime, cfg.EarlyMorningGraceMinutes);
                 RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline, isEarlyRiser);
@@ -677,8 +678,11 @@ namespace Pelican4Ever.Modules
         /// </summary>
         public static void SetFarmerMoney(Farmer farmer, int newMoney)
         {
-            if (Game1.player?.team != null && Game1.player.team.useSeparateWallets.Value && farmer != Game1.player)
+            if (Game1.player?.team != null && farmer != Game1.player)
             {
+                // SetIndividualMoney delegates to GetMoney(farmer), which selects either that
+                // farmer's wallet or the shared team wallet. Farmer.Money rejects writes to a
+                // non-local farmer even when wallets are shared.
                 Game1.player.team.SetIndividualMoney(farmer, newMoney);
             }
             else

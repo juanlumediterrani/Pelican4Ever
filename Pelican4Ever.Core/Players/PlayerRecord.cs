@@ -94,6 +94,12 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Día de juego al que corresponden los contadores diarios (si no coincide, se consideran a 0).</summary>
         public int SatietyGameDay { get; set; } = -1;
 
+        /// <summary>Contador diario y fracciones de experiencia de cada habilidad.</summary>
+        public Economy.DailySkillExperience SkillExperience { get; set; } = new();
+
+        /// <summary>Créditos diarios brutos, con ámbito y origen explícitos.</summary>
+        public Economy.DailyGoldLedger GoldLedger { get; set; } = new();
+
         /// <summary>Oro acumulado por ventas en el mercado vecinal mientras el jugador estaba desconectado.</summary>
         public int PendingMarketGold { get; set; }
 

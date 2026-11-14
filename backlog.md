@@ -284,7 +284,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - *0 XP de Combate en la Salvaje:* vanilla da 1/3 de la XP (mínimo 1) en cualquier granja (`isFarm`), como recoge la wiki inglesa; la española está desactualizada.
       - *Burbujas en Cuatro Esquinas:* vanilla solo las crea en la fluvial (`whichFarm == 1`).
     - **Pendiente:**
-      - ~~*Cueva individual*~~ **Hecho en `73ca26d`** (`Pelican4Ever/Modules/PrivateFarmCaves.cs`): la primera vez que un residente entra en la cueva privada de su residencia elige entre setas y murciélagos frutícolas; la elección se guarda por jugador (`PlayerRecord.CaveChoice`) y la cueva de cada residencia, y la de su anexo Coto Salvaje, lee la de su dueño en vez de `MasterPlayer.caveChoice`. En partidas existentes se conservan los objetos que ya había. **Pendiente solo:** la prueba en partida con dos jugadores.
+      - ~~*Cueva individual*~~ **Hecho en `73ca26d`** (`Pelican4Ever/Modules/PrivateFarmCaves.cs`): la primera vez que un residente entra en la cueva privada de su residencia elige entre setas y murciélagos frutícolas; la elección se guarda por jugador (`PlayerRecord.CaveChoice`) y la cueva de cada residencia, y la de su anexo Coto Salvaje, lee la de su dueño en vez de `MasterPlayer.caveChoice`. En partidas existentes se conservan los objetos que ya había. Verificación en partida con dos jugadores trasladada a [test-users-tasks.md](test-users-tasks.md).
       - *Traslado del invernadero y de la casa:* verificar que Robin y la Torre del Mago pueden mover el invernadero de una residencia, y qué pasa si se mueve su casa (1.6 lo permite): la puerta, el buzón, la cueva y los warps de la residencia dependen de su posición.
       - *Anexo de Pradera:* evaluar establo/vallas o hierba azul optimizada para 40×32.
     - **Pruebas en vivo (2026-11-07, playa):** checkpoint; la sesión se cortó porque el servidor entró en mantenimiento.
@@ -301,7 +301,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
       - *Funciona:* regalo y decoración de Pradera y Playa; ahumador en la fluvial; minerales por nivel en Colinas (oro e iridio con Minería 10, cobre y geodas con 0).
       - *Corregido:* la Salvaje (`Combat`) faltaba en el menú de fundar (salían 7 tipos).
       - *Es vanilla:* el pez sol sale en la fluvial (sus datos usan la pesca de `Town` y `Forest`, de río). Colinas regala chirivías: solo Pradera tiene `FarmHouseStarterGift` en su mapa. Los minerales de cantera salen pocos cada día (intentos con probabilidad decreciente, solo en casillas de tierra libres): tras llenar la cantera con `p4e_farm_spawn ores 20`, una noche añade pocos o ninguno.
-      - *Repetir:* pararrayos. El host contó 0 pararrayos colocados en `Farm_03` y `Farm_04` (`p4e_give_item` los dejó en el suelo por inventario lleno). Los `Bad IL range` en `DebugGive` y `p4e_farm_tp`, y el cierre del host, apuntan a que otra compilación reemplazó el DLL del mod con el juego abierto.
+      - *Pararrayos (repetición con varios jugadores):* el host contó 0 pararrayos colocados en `Farm_03` y `Farm_04` (`p4e_give_item` los dejó en el suelo por inventario lleno); prueba trasladada a [test-users-tasks.md](test-users-tasks.md). Los `Bad IL range` en `DebugGive` y `p4e_farm_tp`, y el cierre del host, apuntan a que otra compilación reemplazó el DLL del mod con el juego abierto.
   * **Prioridad:** Media
   * **Criterios de Aceptación:**
     1. Una residencia de playa carga `Farm_Island`, genera forraje y cajas y sus aspersores no riegan la arena.
@@ -332,7 +332,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     - El host deja el premio pendiente en `PlayerRecord.PendingFestivalPrizes` (clave `<festival>@<día>`) y lo envía al cliente del ganador si está conectado, o al conectarse (`OnPeerConnected`).
     - El cliente lo entrega en local, sin menús abiertos: marca de primera victoria en su `mailReceived` y objetos con `addItemsByMenuIfNecessary`. Después confirma al host, que borra el pendiente.
     - Las claves ya entregadas se guardan en `Farmer.modData` para no repetir el premio si el aviso llega dos veces.
-    - Objetos y marcas en `FestivalPrizeLogic` (Core, con tests). Sin verificar en partida.
+    - Objetos y marcas en `FestivalPrizeLogic` (Core, con tests). Prueba multijugador en partida trasladada a [test-users-tasks.md](test-users-tasks.md).
 
 - [x] **TASK-702: Ceremonias Comunitarias Programadas en Vivo**
   * **Análisis Técnico:** Para eventos comunitarios sin minijuego (Luau `summer11`, Danza de las Medusas `summer28`):
@@ -352,7 +352,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
   * **Corregido el 2026-10-31:**
     - Cada cliente avisa al host al empezar su evento de festival (`Postfix_TryToLoadFestival`) y al terminarlo (salida o final del evento principal).
     - El host lleva la cuenta en `FestivalPresence` (Core, con tests) y la limpia al desconectarse el jugador o al cambiar de día.
-    - La ceremonia de las 21:00 y la opción de Lewis usan esa lista en lugar de `currentLocation.Name`. Sin verificar en partida.
+    - La ceremonia de las 21:00 y la opción de Lewis usan esa lista en lugar de `currentLocation.Name`. Prueba multijugador en partida trasladada a [test-users-tasks.md](test-users-tasks.md).
 
 - [x] **TASK-703: Entrada y salida libre de festivales sin salto de cámara (`FestivalAccessModule.cs`)**
   * **Análisis Técnico:** En multijugador vanilla, entrar en el mapa del festival abre `ReadyCheckDialog("festivalStart")` para todos, y el guion `set-up` de `Data/Festivals/<fecha>` fija la cámara, teletransporta al jugador a una casilla fija (p. ej. 12,54 en la Fiesta del Huevo), oculta la vista con `viewport -1000 -1000` y la devuelve con `globalFadeToClear`. Salir abre `ReadyCheckDialog("festivalEnd")` y `Event.exitEvent` termina el festival para el servidor: hora a las 22:00 (24:00 en `summer28`/`fall27`), máquinas adelantadas esas horas, aldeanos a casa (host), jugadores a la granja y mensaje `endFest` a todos los clientes. Cambios:
@@ -364,7 +364,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
   * **Criterios de Aceptación:**
     1. Entrar al festival no mueve la cámara ni teletransporta al jugador.
     2. Un jugador puede salir y volver a entrar varias veces el mismo día; la hora del servidor no cambia y los demás siguen en el festival.
-    3. Sin verificar en partida (pendiente de prueba con dos instancias).
+    3. Prueba en partida con dos instancias trasladada a [test-users-tasks.md](test-users-tasks.md).
 
 - [x] **TASK-704: Evento principal del festival por inscripción, confirmado por el host (`FestivalParticipationModule.cs`)**
   * **Análisis Técnico:** El evento principal (búsqueda de huevos, Danza de las Flores, Luau, Danza de las Medusas, pesca en el hielo) arranca en multijugador cuando el host responde a Lewis. `Event.forceFestivalContinue` envía `festivalEvent` y arrastra a todos los que están en el festival. Después, las puertas `waitForOtherPlayers` (`startContest`, `endContest`, `festivalEnd`) esperan a **todos los jugadores conectados**, y la orden `end` cierra el festival para el servidor. Cambios:
@@ -378,7 +378,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
   * **Criterios de Aceptación:**
     1. Con un jugador apuntado en el festival y otro en su granja, el host arranca el evento y el apuntado lo completa sin esperar al otro.
     2. Un jugador no apuntado que está en el recinto no entra en el evento principal.
-    3. Sin verificar en partida (pendiente de prueba con dos o tres instancias).
+    3. Prueba en partida con dos o tres instancias trasladada a [test-users-tasks.md](test-users-tasks.md).
 
 ---
 
@@ -1811,3 +1811,82 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
       5. El cliente no retira personajes hasta recibir el registro autoritativo, para no borrar su propia mascota.
       6. `diagnostics.log` rota a 2 MB (`diagnostics.log.old`).
       7. Compilación Debug sin errores y suite en verde (1337 pruebas).
+
+---
+
+### Épica 21: Rebalanceo de habilidades y economía para el reloj 1:1 (ADR-0008)
+> **Objetivo:** Ajustar el progreso de habilidades y el ingreso por actividad al tiempo 1:1 y a la vida persistente antes de la 1.0, según [ADR-0008](docs/adr/0008-skill-economy-rebalance.md). Solo se frena lo que ni el calendario ni la energía limitan: pesca, minería, combate, criaturas y Caverna Calavera. Cultivo, ganadería y forraje no se tocan. Todos los valores son configurables y su valor neutro devuelve el comportamiento de vanilla.
+
+- [x] **TASK-2101: Curva diaria de experiencia — lógica pura en Core**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Crear en `Pelican4Ever.Core/Economy` la lógica pura que, dado el XP ya ganado hoy en una habilidad, el XP entrante, el multiplicador fijo, el cupo diario y el multiplicador de exceso, devuelve el XP entero a conceder y el resto fraccionario a conservar. Añadir a `ServerConfig` `SkillDailyFullXp` (diccionario por habilidad; `300` para `Fishing`, `Foraging`, `Mining` y `Combat`; ausente o `0` = sin cupo), `SkillOverflowXpMultiplier` (`0.25`) y `SkillXpMultiplier` (diccionario por habilidad, vacío = `1.0`), con validación al arranque.
+  * **Criterios de aceptación:**
+    1. Con el cupo sin agotar, el XP se concede íntegro; un evento que cruza el cupo se parte en la porción al 100 % y la porción al 25 %.
+    2. Las fracciones se acumulan: cuatro eventos de 1 XP por encima del cupo conceden 1 punto en total.
+    3. Una habilidad sin cupo (Cultivo) y los valores neutros devuelven exactamente el XP de entrada.
+    4. La validación rechaza multiplicadores negativos y nombres de habilidad desconocidos.
+    5. Pruebas unitarias en `Pelican4Ever.Tests` que cubren los cuatro puntos.
+
+- [x] **TASK-2102: Curva diaria de experiencia — parche y contador autoritativo**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2101, TASK-301.
+  * **Resolución:** Verificados el parche autoritativo de `gainExperience`, la barrera de checkpoints con 50 XP de Pesca retenida y liberada al concluir (`pending=0->1->0`), la restauración del respaldo del checkpoint (`Foraging=285`, `Mining=150`, sin la XP posterior en tránsito), la captura real de criaturas de *Nature in the Valley* (`0→15` y cruce del tope `295→301` con `Remainder=0.75`), la supervivencia exacta tras desconexión/reconexión y el reinicio al cambiar de día en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Descripción:** Parchear `Farmer.gainExperience(int which, int howMuch)` con un prefijo que solo actúe sobre el jugador local y sustituya `howMuch` por el resultado de TASK-2101. Guardar en `PlayerRecord` el XP ganado hoy por habilidad, el resto fraccionario y el día de juego al que pertenecen, con el mismo patrón que la Saciedad: el cliente informa al host, el host lo acota y lo persiste en `ServerWorldState`, y el cliente lo recupera al reconectar. El contador se reinicia al cambiar el día de juego.
+  * **Criterios de aceptación:**
+    1. Un *farmhand* que supera el cupo de Pesca, se desconecta y vuelve el mismo día sigue en la parte reducida de la curva.
+    2. Tras el rollover el cupo vuelve a estar completo para todos los jugadores, conectados o no.
+    3. El XP de Cultivo (cosechas y animales) no cambia.
+    4. La captura de criaturas de *Nature in the Valley* queda cubierta: da XP de Recolección por `gainExperience`.
+    5. El contador sobrevive a un checkpoint intradía y a un reinicio controlado.
+    6. Nota de verificación en partida con host y un *farmhand*.
+
+- [x] **TASK-2103: Pesca — tiempo hasta la picada y duración del minijuego**
+  * **Prioridad:** Media
+  * **Dependencias:** Ninguna.
+  * **Resolución:** Verificados en vivo con host y *farmhand* (`2.5` y `1.5`): picada `2,50×` sin cebo (`21.656→54.141 ms`) y con cebo (`14.438→36.094 ms`); exención de estanques poblados (`1.000 ms` frente a `36.094 ms` en vacío) y concursos/minijuegos de festival; captura (`501→750` ticks, `1,497×`), escape (`330→496` ticks, `1,503×`) y concurso de festival (`501` ticks) en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Descripción:** Añadir `FishingBiteTimeMultiplier` (`2.5`) y `FishingMinigameDurationMultiplier` (`1.5`). El primero se aplica como postfix al resultado de `FishingRod.calculateTimeUntilFishingBite`, salvo cuando el anzuelo cae en un estanque de peces con ocupantes. El segundo escala, en `BobberBar.update`, la variación por tick de `distanceFromCatching` dividiéndola entre el multiplicador, tanto al subir como al bajar.
+  * **Criterios de aceptación:**
+    1. Con cebo y sin cebo, el tiempo medio hasta la picada medido en partida es unas 2,5 veces el de vanilla.
+    2. Un pez mantenido siempre dentro de la barra tarda unas 1,5 veces más en capturarse; la captura y el escape se disparan igual que en vanilla.
+    3. Los estanques de peces conservan su tiempo fijo.
+    4. Con ambos multiplicadores en `1.0` el comportamiento es el de vanilla.
+    5. El concurso de pesca de los festivales se revisa y se decide explícitamente si queda exento.
+
+- [x] **TASK-2104: Minas — probabilidad de escalera por piedra y por monstruo**
+  * **Prioridad:** Media
+  * **Dependencias:** Ninguna.
+  * **Resolución:** Verificados en piso 3 (piedras: `35→13` y última piedra garantizada) y en piso 6 en serie limpia de 200 ensayos (`monsterDrop`: `22` en vanilla `0,15`, `13` con `0,08` y `38` con `+0,07` de la estatua del enano), así como la sincronización cliente→host de una escalera generada por el *farmhand* (`UndergroundMine6`, `x=3, y=18, idx=173`), en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md). Transpilers documentados que conservan ramas garantizadas y revierten a vanilla con log ante cambios de IL.
+  * **Descripción:** Añadir `MineStoneLadderChanceMultiplier` (`0.5`) y `MineMonsterLadderChance` (`0.08`). Aplicarlos a la tirada de escalera de `MineShaft.checkStoneForItems` y a la de `MineShaft.monsterDrop`, conservando la escalera garantizada al romper la última piedra, el `+0.07` de la estatua del enano y los pisos que exigen matar a todos los monstruos. Las probabilidades son literales dentro de ambos métodos: decidir en la tarea entre transpiler y veto probabilístico sobre `createLadderDown` / `createLadderAt`, y dejarlo anotado.
+  * **Criterios de aceptación:**
+    1. Ningún piso queda sin salida: romper la última piedra crea siempre la escalera.
+    2. En una muestra de pisos anotada en el registro de diagnóstico, la frecuencia de escalera por piedra y por monstruo cae a los valores configurados.
+    3. La densidad de menas no cambia.
+    4. Con `1.0` y `0.15` el comportamiento es el de vanilla.
+    5. Comprobado con un *farmhand*: la tirada se ejecuta donde se rompe la piedra y la escalera se sincroniza a los demás jugadores del piso.
+
+- [x] **TASK-2105: Caverna Calavera — coste de energía por piso descendido**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Resolución:** Verificados en vivo el pozo (`enterMineShaft`, pisos `121→126`, coste `−5,80`), la escalera fabricada `(BC)71` (`CheckForActionOnStaircase`, `126→127`, coste `−1,28`), el modo difícil (`SkullCavesDifficulty=1`, coste `−4,56`), el Festival del Desierto (activo, coste `−3,84`), el agotamiento sin bloqueo ni energía negativa, y las exenciones de Minas normales (`5→8`) y Volcán (`1→2`) en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Descripción:** Añadir `SkullCavernDescentBaseCost` (`1`) y `SkullCavernDescentDepthDivisor` (`25`). Cuando el jugador local llega a un piso de la Caverna más profundo que el anterior, restar de su energía la suma de `base + piso / divisor` de cada piso recorrido, con `piso = mineLevel − 120`. Cubre escaleras, pozos (`enterMineShaft` salta varios pisos) y escaleras fabricadas. La fórmula y la suma van en Core con pruebas. Si la energía no alcanza, queda en `0` y el jugador pasa a agotado; el descenso no se bloquea.
+  * **Criterios de aceptación:**
+    1. Bajar del piso 1 al 100 de uno en uno cuesta unos 300 puntos; una caída de 8 pisos cuesta lo mismo que bajar esos 8 pisos por escalera.
+    2. Subir, salir o volver a entrar no cuesta nada, y volver a entrar no abarata los pisos ya pagados.
+    3. Las Minas normales (pisos 1–120) y el Volcán no tienen coste.
+    4. La energía nunca queda negativa por este coste y el jugador no se desmaya por él.
+    5. Con el coste base y el divisor en `0` el coste queda desactivado y el comportamiento es el de vanilla.
+    6. Revisado el modo difícil de la Caverna y el festival del desierto.
+
+- [x] **TASK-2106: Multiplicadores de precio de pescado y minerales, y telemetría diaria**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2102.
+  * **Resolución:** Corregida la sincronización de `PriceRules` de host a clientes en `EconomyModule` y la atribución de día durante los menús de mañana en `DailyGoldTelemetryModule` (`closingGameDay` entre `DayEnding` y `DayStarted`). Verificados en vivo ventas en `FishShop` y `Blacksmith`, envíos de caja, cartera individual con *farmhand* desconectado (`800g` y `750g`), cartera compartida con ambos conectados (`400g` y `1.150g` sin duplicaciones), idempotencia de reintentos (`files=2->2` y `files=4->4`) y 1.379 pruebas unitarias en verde en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Descripción:** Ampliar `Postfix_SellToStorePrice` con `FishPriceMultiplier` (categoría `-4`) y `MineralPriceMultiplier` (categorías `-2`, `-12` y `-15`), ambos `1.0`. Registrar en el log de eventos del host, una vez por rollover y jugador, el oro ganado en el día y el XP obtenido por habilidad (antes y después de la curva), para calibrar con datos reales.
+  * **Criterios de aceptación:**
+    1. Con los multiplicadores en `1.0` ningún precio cambia.
+    2. Un multiplicador distinto de `1.0` afecta a la venta en tienda y a la caja de envíos de las categorías indicadas, y a ninguna otra.
+    3. El registro diario aparece para jugadores conectados y desconectados que jugaron ese día, y no duplica líneas si el rollover se reintenta.
+    4. Pruebas unitarias del reparto por categoría.
+
+> **Cierre de desarrollo y laboratorio:** `TASK-2101`–`TASK-2106` cerradas; la tarea de calibración y prueba en partida con varios jugadores (`TASK-2107`) se ha trasladado a [test-users-tasks.md](test-users-tasks.md).

@@ -23,6 +23,7 @@ namespace Pelican4Ever.Core.Admin
         public const string RolloverStarted = "rollover.started";
         public const string RolloverCompleted = "rollover.completed";
         public const string RolloverStalled = "rollover.stalled";
+        public const string DailyEconomy = "economy.daily";
         public const string BackupCreated = "backup.created";
         public const string CheckpointCreated = "checkpoint.created";
         public const string CheckpointSkipped = "checkpoint.skipped";

@@ -25,11 +25,27 @@
   "OfflineRegenFullBarHours": 4.0,
   "CropPriceMultiplier": 1.0,
   "ArtisanPriceMultiplier": 1.0,
+  "FishPriceMultiplier": 1.0,
+  "MineralPriceMultiplier": 1.0,
+  "SkillDailyFullXp": {
+    "Fishing": 300,
+    "Foraging": 300,
+    "Mining": 300,
+    "Combat": 300
+  },
+  "SkillOverflowXpMultiplier": 0.25,
+  "SkillXpMultiplier": {},
+  "FishingBiteTimeMultiplier": 2.5,
+  "FishingMinigameDurationMultiplier": 1.5,
   "MineResetTimes": [
     "06:00",
     "18:00"
   ],
   "MineFloorCooldownMinutes": 45,
+  "MineStoneLadderChanceMultiplier": 0.5,
+  "MineMonsterLadderChance": 0.08,
+  "SkullCavernDescentBaseCost": 1.0,
+  "SkullCavernDescentDepthDivisor": 25.0,
   "TravelingCartClosingTime": 2600,
   "KeepRobinInCarpentryShop": true,
   "FestivalWindowStart": 1800,

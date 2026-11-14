@@ -181,3 +181,4 @@ The key architectural decisions and their discarded alternatives are documented 
 * **ADR-0005:** Central Plaza on the Host Farm and declarative bridge maps (`Data/Locations`) for scaling up to 16 private residences.
 * **ADR-0006:** Energy per session: Satiety with a continuous drain, "Well-Fed" enabling seated rest and the daily Spa buff.
 * **ADR-0007:** Asymmetric identity per device (ECDSA P-256) and the `P4E\x02` challenge in the Lidgren handshake.
+* **ADR-0008 (proposed):** Rebalance for 1:1: daily experience curve, slower fishing, fewer mine ladders and an energy cost per floor in the Skull Cavern.
