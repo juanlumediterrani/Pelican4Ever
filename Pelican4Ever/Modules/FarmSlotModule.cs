@@ -4350,6 +4350,12 @@ namespace Pelican4Ever.Modules
                 );
                 PatchSafe(
                     harmony,
+                    "CarpenterMenu.resetBounds",
+                    AccessTools.Method(typeof(CarpenterMenu), "resetBounds"),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_ResetBounds))
+                );
+                PatchSafe(
+                    harmony,
                     "CarpenterMenu.hasPermissionsToDemolish",
                     AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToDemolish)),
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish))
@@ -6021,14 +6027,33 @@ namespace Pelican4Ever.Modules
             if (__instance == null)
                 return;
 
-            bool owned = CanClientManageLocation(__instance.TargetLocation);
-
-            if (!Context.IsMainPlayer && !__instance.readOnly && __instance.demolishButton != null && owned)
-                __instance.demolishButton.visible = true;
+            bool owned = ApplyDemolishVisibility(__instance);
 
             Diagnostics.Write(
                 $"CarpenterMenu ctor: destino='{__instance.TargetLocation?.NameOrUniqueName ?? "?"}', " +
                 $"propio={owned}, martilloVisible={__instance.demolishButton?.visible}, host={Context.IsMainPlayer}");
+        }
+
+        /// <summary>
+        /// Vanilla recalcula los botones en <c>resetBounds</c> (también al volver del mapa tras cancelar),
+        /// y ahí vuelve a ocultar el martillo a los clientes. Se repone el estado propio.
+        /// </summary>
+        public static void Postfix_CarpenterMenu_ResetBounds(CarpenterMenu __instance)
+        {
+            if (__instance == null)
+                return;
+
+            ApplyDemolishVisibility(__instance);
+        }
+
+        private static bool ApplyDemolishVisibility(CarpenterMenu menu)
+        {
+            bool owned = CanClientManageLocation(menu.TargetLocation);
+
+            if (!Context.IsMainPlayer && !menu.readOnly && menu.demolishButton != null && owned)
+                menu.demolishButton.visible = true;
+
+            return owned;
         }
 
         /// <summary>TASK-2015: permite demoler en la residencia o anexo propio (vanilla lo reservaba al anfitrión).</summary>
@@ -6142,6 +6167,17 @@ namespace Pelican4Ever.Modules
             }
 
             GameLocation? interior = building.GetIndoors();
+
+            // Un cuenco vinculado a una mascota no se puede retirar: la dejaría sin hogar y sin punto de referencia.
+            if (building is PetBowl bowl && bowl.HasPet())
+            {
+                StardewValley.Characters.Pet? pet = Utility.findPet(bowl.petId.Value);
+                message = I18n.Get(
+                    "carpenter.cant_demolish_pet_bowl",
+                    new { pet = pet?.displayName ?? I18n.Get("carpenter.unknown_pet") });
+                return false;
+            }
+
             if (interior is AnimalHouse animalHouse && animalHouse.animalsThatLiveHere.Count > 0)
             {
                 message = Game1.content.LoadString("Strings\\UI:Carpenter_CantDemolish_AnimalsHere");

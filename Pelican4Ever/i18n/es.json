@@ -83,6 +83,8 @@
   "carpenter.no_blueprints": "Ahora mismo no hay edificios disponibles para construir en '{{location}}'.",
   "carpenter.menu_failed": "No se pudo abrir el menú de construcción de '{{location}}'. Inténtalo de nuevo.",
   "carpenter.need_destination": "Debes reclamar una residencia o restaurar la casa de Isla Jengibre antes de encargar obras.",
+  "carpenter.cant_demolish_pet_bowl": "No puedes demoler este cuenco: está vinculado a {{pet}}.",
+  "carpenter.unknown_pet": "una mascota",
   "carpenter.island_shared": "Isla Jengibre (compartida)",
 
   "residence.friends_only_deny_visit": "Solo los amigos de {{owner}} pueden entrar.",

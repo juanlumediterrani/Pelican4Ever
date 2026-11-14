@@ -83,6 +83,8 @@
   "carpenter.no_blueprints": "There are no buildings available to construct in '{{location}}' right now.",
   "carpenter.menu_failed": "The construction menu for '{{location}}' could not be opened. Please try again.",
   "carpenter.need_destination": "You must claim a residence or restore the Ginger Island house before commissioning construction work.",
+  "carpenter.cant_demolish_pet_bowl": "You can't demolish this pet bowl: it's linked to {{pet}}.",
+  "carpenter.unknown_pet": "a pet",
   "carpenter.island_shared": "Ginger Island (shared)",
 
   "residence.friends_only_deny_visit": "Only friends of {{owner}} may enter.",

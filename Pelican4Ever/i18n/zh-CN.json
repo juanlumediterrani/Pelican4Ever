@@ -83,6 +83,8 @@
   "carpenter.no_blueprints": "目前 '{{location}}' 没有可以建造的建筑。",
   "carpenter.menu_failed": "无法打开 '{{location}}' 的建造菜单。请重试。",
   "carpenter.need_destination": "你必须先认领一处居所或修复姜岛的房子，才能委托施工。",
+  "carpenter.cant_demolish_pet_bowl": "不能拆除这个宠物碗：它已与{{pet}}绑定。",
+  "carpenter.unknown_pet": "一只宠物",
   "carpenter.island_shared": "姜岛（共享）",
 
   "residence.friends_only_deny_visit": "只有 {{owner}} 的好友才能进入。",

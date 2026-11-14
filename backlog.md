@@ -1781,3 +1781,11 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Resolución:**
       1. `CanDemolishBuilding` replica `ContinueDemolish` (mismos textos `Carpenter_CantDemolish_*`).
       2. Se valida en el cliente antes de enviar la petición (para mostrar el aviso) y de nuevo en el anfitrión como autoridad.
+
+- [x] **TASK-2025: Proteger el cuenco vinculado y mantener el botón de demoler al volver del mapa**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2024.
+  * **Descripción:** Se podía demoler un cuenco con mascota asignada (dejándola sin hogar) y, tras pulsar demoler, cancelar y volver al menú de construcción, el martillo desaparecía porque `returnToCarpentryMenu` llama a `resetBounds`, que vuelve a aplicar `demolishButton.visible = Game1.IsMasterGame` (falso en clientes).
+  * **Resolución:**
+      1. `CanDemolishBuilding` bloquea un `PetBowl` con `HasPet()` y avisa con el nombre de la mascota (claves i18n `carpenter.cant_demolish_pet_bowl` y `carpenter.unknown_pet` en inglés, castellano y chino).
+      2. Nuevo postfix en `CarpenterMenu.resetBounds` que repone la visibilidad del martillo en ubicaciones propias, de modo que el botón sigue ahí al volver del mapa.
