@@ -332,15 +332,18 @@ Pelican 控制台命令的**封闭**列表，可以远程执行。当 SMAPI 控�
 并备份而不换日；`p4e_pair_allow <usuario> <ip>`：准备一次按 IP 的准入，配套有效的配对码
 `PairingInviteTtlHours`，默认 72 小时）；**`Sensitive`** 会更改世界或某个玩家
 （`p4e_claim_reset`、`p4e_pair_approve`、`p4e_migrate_player`、`p4e_pair_revoke`、
-`p4e_forage_wave`、`p4e_festival_move`）：调用者应当已获得所有者的批准。刻意排除在外的
+`p4e_forage_wave`、`p4e_festival_move`、`p4e_time`）：调用者应当已获得所有者的批准。刻意排除在外的
 有 `p4e_rollover_now`（提前换日；请使用 `POST /api/rollover`）、`p4e_safe_restart`
-（它有带通知的专门路由）、`p4e_time`（打乱真实日历）、`p4e_migrate_save`、`p4e_give_*`
+（它有带通知的专门路由）、`p4e_migrate_save`、`p4e_give_*`
 以及测试命令。
+
+`p4e_time` 使用与控制台命令相同的语法（`+X`、`-X`、`X`、`Xm`、`reset`、`set HH:mm`、
+`set HHMM`、`set=...`）；不新增格式。
 
 有些命令**只**存在于 SMAPI 控制台中，而不在这个列表里：`p4e_pair_reject`
 （拒绝一项待处理的申请）、`p4e_checkpoint_spike`（需要 `CheckpointDebugMode`）、
 `p4e_farm_*`、`p4e_skill`、`p4e_weather`、`p4e_lightning`（需要 `EnableTestCommands`）、
-`p4e_render`、`p4e_rollover_now`、`p4e_safe_restart`、`p4e_time`、`p4e_migrate_save` 和
+`p4e_render`、`p4e_rollover_now`、`p4e_safe_restart`、`p4e_migrate_save` 和
 `p4e_give_*`。
 
 在通过 IP 直连时，已获授权且版本最新的客户端会在发现阶段、也就是收到角色列表之前，响应
@@ -467,7 +470,6 @@ API 中的列表是控制台命令的一个刻意挑选的子集。这些只能�
 | `p4e_pair_reject <huella_o_alias>` | 拒绝一项待处理的准入申请 |
 | `p4e_rollover_now` | 强制换日（有专门的路由：`POST /api/rollover`） |
 | `p4e_safe_restart [motivo] [--immediate\|-i] [--minutes N\|-m N] [--cancel\|-c]` | 受控重启（有专门的路由） |
-| `p4e_time <+X\|-X\|reset\|set HH:mm>` | 打乱时钟（仅用于测试） |
 | `p4e_render [status\|<minutos 1-120>\|off]` | 绘制借用 |
 | `p4e_migrate_save [slot\|geo]` | 将存档迁移到中央广场 |
 | `p4e_give_gold <cantidad> [jugador]`, `p4e_give_item <id_o_nombre> [cantidad] [jugador]` | 调试 |

@@ -24,7 +24,6 @@ public class RemoteCommandsTests
     [Theory]
     [InlineData("p4e_rollover_now")]   // adelanta el día
     [InlineData("p4e_safe_restart")]   // tiene su propia ruta con avisos
-    [InlineData("p4e_time")]           // desajusta el calendario real
     [InlineData("p4e_migrate_save")]
     [InlineData("p4e_give_gold")]
     [InlineData("p4e_give_item")]
@@ -45,7 +44,7 @@ public class RemoteCommandsTests
     [Fact]
     public void Allowlist_NeverContainsTheDangerousCommands()
     {
-        string[] banned = { "p4e_rollover_now", "p4e_safe_restart", "p4e_time", "p4e_migrate_save", "p4e_give_gold", "p4e_give_item" };
+        string[] banned = { "p4e_rollover_now", "p4e_safe_restart", "p4e_migrate_save", "p4e_give_gold", "p4e_give_item" };
         Assert.DoesNotContain(RemoteCommandCatalog.Commands, c => banned.Contains(c.Name, StringComparer.OrdinalIgnoreCase));
         Assert.DoesNotContain(RemoteCommandCatalog.Commands, c => c.Name.StartsWith("p4e_farm_", StringComparison.Ordinal));
     }
@@ -57,6 +56,8 @@ public class RemoteCommandsTests
         Assert.NotNull(Validate("p4e_claim_reset"));
         Assert.Null(Validate("p4e_claim_reset", "mTx"));
         Assert.NotNull(Validate("p4e_claim_reset", "uno", "dos"));
+        Assert.NotNull(Validate("p4e_time"));
+        Assert.NotNull(Validate("p4e_time", "set", "14:30", "extra"));
     }
 
     [Theory]
@@ -92,6 +93,43 @@ public class RemoteCommandsTests
         Assert.Equal(valid, Validate("p4e_festival_move", season, from, to) == null);
     }
 
+    [Theory]
+    [InlineData("-2", true)]
+    [InlineData("+2", true)]
+    [InlineData("2", true)]
+    [InlineData("2.5", true)]
+    [InlineData("-2.5", true)]
+    [InlineData("2h", true)]
+    [InlineData("2.5h", true)]
+    [InlineData("-2.5h", true)]
+    [InlineData("30m", true)]
+    [InlineData("-30m", true)]
+    [InlineData("2.5m", true)]
+    [InlineData("reset", true)]
+    [InlineData("RESET", true)]
+    [InlineData("abc", false)]
+    [InlineData("2x", false)]
+    [InlineData("-", false)]
+    public void TimeOffset_UsesTheSameGrammarAsTheConsoleCommand(string arg, bool valid)
+    {
+        Assert.Equal(valid, Validate("p4e_time", arg) == null);
+    }
+
+    [Theory]
+    [InlineData("14:30", true)]
+    [InlineData("09:05", true)]
+    [InlineData("23:59", true)]
+    [InlineData("14:30:00", true)]
+    [InlineData("1430", true)]
+    [InlineData("25:00", false)]   // TimeSpan.TryParse no acepta 25 como hora; el comando tampoco
+    [InlineData("14:30:99", false)]
+    [InlineData("1430x", false)]
+    public void TimeSet_UsesTheSameGrammarAsTheConsoleCommand(string value, bool valid)
+    {
+        Assert.Equal(valid, Validate("p4e_time", "set", value) == null);
+        Assert.Equal(valid, Validate("p4e_time", "set=" + value) == null);
+    }
+
     [Fact]
     public void Risks_MatchWhatEachCommandDoes()
     {
@@ -107,6 +145,7 @@ public class RemoteCommandsTests
         Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_pair_revoke"));
         Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_forage_wave"));
         Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_festival_move"));
+        Assert.Equal(RemoteCommandRisk.Sensitive, Risk("p4e_time"));
     }
 
     [Theory]

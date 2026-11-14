@@ -126,61 +126,46 @@ namespace Pelican4Ever.Modules
                 return false;
             }
 
-            input = input.Trim().ToLowerInvariant();
-
-            if (input == "reset")
+            TimeCommandParser.Parsed parsed = TimeCommandParser.Parse(input);
+            switch (parsed.Kind)
             {
-                ManualTimeOffset = TimeSpan.Zero;
-                ApplyCurrentClock();
-                BroadcastTimeOffset();
-                message = I18n.Get("clock.reset", new { time = Game1.getTimeOfDayString(Game1.timeOfDay) });
-                return true;
-            }
+                case TimeCommandParser.Kind.Reset:
+                    ManualTimeOffset = TimeSpan.Zero;
+                    ApplyCurrentClock();
+                    BroadcastTimeOffset();
+                    message = I18n.Get("clock.reset", new { time = Game1.getTimeOfDayString(Game1.timeOfDay) });
+                    return true;
 
-            if (input.StartsWith("set ") || input.StartsWith("set="))
-            {
-                string val = input.Substring(4).Trim();
-                if (TimeSpan.TryParse(val, out TimeSpan targetSpan) || (int.TryParse(val, out int rawTime) && TryConvertRawTimeToSpan(rawTime, out targetSpan)))
-                {
+                case TimeCommandParser.Kind.Set:
                     DateTime baseNow = ServerTime.LocalNow(context?.Config.TimeZoneId ?? "Europe/Madrid");
-                    ManualTimeOffset = targetSpan - baseNow.TimeOfDay;
+                    ManualTimeOffset = parsed.Value - baseNow.TimeOfDay;
                     ApplyCurrentClock();
                     BroadcastTimeOffset();
                     message = I18n.Get("clock.set", new { time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
-                }
-                message = I18n.Get("clock.invalid_time_format");
-                return false;
-            }
 
-            bool isMinus = input.StartsWith("-");
-            bool isPlus = input.StartsWith("+");
-            string numStr = input.TrimStart('+', '-').TrimEnd('h');
-
-            if (numStr.EndsWith("m"))
-            {
-                if (double.TryParse(numStr.TrimEnd('m'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double minutes))
-                {
-                    TimeSpan delta = TimeSpan.FromMinutes(isMinus ? -minutes : minutes);
-                    ManualTimeOffset += delta;
+                case TimeCommandParser.Kind.Hours:
+                    ManualTimeOffset += parsed.Value;
                     ApplyCurrentClock();
                     BroadcastTimeOffset();
-                    message = I18n.Get("clock.adjusted_minutes", new { sign = isMinus ? "-" : "+", minutes = minutes.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
+                    message = I18n.Get("clock.adjusted_hours", new { sign = parsed.IsMinus ? "-" : "+", hours = parsed.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
-                }
-            }
-            else if (double.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double hours))
-            {
-                TimeSpan delta = TimeSpan.FromHours(isMinus ? -hours : hours);
-                ManualTimeOffset += delta;
-                ApplyCurrentClock();
-                BroadcastTimeOffset();
-                message = I18n.Get("clock.adjusted_hours", new { sign = isMinus ? "-" : "+", hours = hours.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
-                return true;
-            }
 
-            message = I18n.Get("clock.invalid_format");
-            return false;
+                case TimeCommandParser.Kind.Minutes:
+                    ManualTimeOffset += parsed.Value;
+                    ApplyCurrentClock();
+                    BroadcastTimeOffset();
+                    message = I18n.Get("clock.adjusted_minutes", new { sign = parsed.IsMinus ? "-" : "+", minutes = parsed.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
+                    return true;
+
+                case TimeCommandParser.Kind.SetInvalid:
+                    message = I18n.Get("clock.invalid_time_format");
+                    return false;
+
+                default:
+                    message = I18n.Get("clock.invalid_format");
+                    return false;
+            }
         }
 
         private static void BroadcastTimeOffset()
@@ -214,19 +199,6 @@ namespace Pelican4Ever.Modules
                 ManualTimeOffset = TimeSpan.FromTicks(ticks);
                 context.Monitor.Log($"[RealTimeClockModule] Offset horario sincronizado desde anfitrión: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h.", LogLevel.Trace);
             }
-        }
-
-        private static bool TryConvertRawTimeToSpan(int raw, out TimeSpan span)
-        {
-            int hours = raw / 100;
-            int mins = raw % 100;
-            if (hours >= 0 && hours < 24 && mins >= 0 && mins < 60)
-            {
-                span = new TimeSpan(hours, mins, 0);
-                return true;
-            }
-            span = TimeSpan.Zero;
-            return false;
         }
 
         public static void ApplyCurrentClock()

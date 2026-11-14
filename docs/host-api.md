@@ -288,12 +288,14 @@ Lista **cerrada** de comandos de consola de Pelican que se pueden ejecutar a dis
 }
 ```
 
-`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`, `p4e_pair_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día; `p4e_pair_allow <usuario> <ip>`: prepara un alta por IP con código de pairing válido `PairingInviteTtlHours`, 72 h por defecto); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_pair_approve`, `p4e_migrate_player`, `p4e_pair_revoke`, `p4e_forage_wave`, `p4e_festival_move`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día; usa `POST /api/rollover`), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_time` (desajusta el calendario real), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`, `p4e_pair_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día; `p4e_pair_allow <usuario> <ip>`: prepara un alta por IP con código de pairing válido `PairingInviteTtlHours`, 72 h por defecto); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_pair_approve`, `p4e_migrate_player`, `p4e_pair_revoke`, `p4e_forage_wave`, `p4e_festival_move`, `p4e_time`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día; usa `POST /api/rollover`), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+
+`p4e_time` usa la misma gramática que el comando de consola (`+X`, `-X`, `X`, `Xm`, `reset`, `set HH:mm`, `set HHMM`, `set=...`); no se añaden formatos nuevos.
 
 Hay comandos que **solo** existen en la consola de SMAPI y no en esta lista: `p4e_pair_reject`
 (rechaza una solicitud pendiente), `p4e_checkpoint_spike` (requiere `CheckpointDebugMode`), los
 `p4e_farm_*`, `p4e_skill`, `p4e_weather`, `p4e_lightning` (requieren `EnableTestCommands`),
-`p4e_render`, `p4e_rollover_now`, `p4e_safe_restart`, `p4e_time`, `p4e_migrate_save` y
+`p4e_render`, `p4e_rollover_now`, `p4e_safe_restart`, `p4e_migrate_save` y
 `p4e_give_*`.
 
 En conexión directa por IP, un cliente actualizado que ya estuviera autorizado responde al desafío del servidor (`P4E\x02`) durante el descubrimiento, antes de recibir la lista de personajes. El desafío caduca a los 30 segundos, está ligado a la sesión del host y solo admite una respuesta. El cliente demuestra la posesión de su clave privada asimétrica mediante firma digital ECDSA NIST P-256 sin transmitir secretos por el canal de juego; cambiar de IP no exige un nuevo emparejamiento. Tanto el servidor como el cliente deben tener esta versión. Los clientes antiguos reciben un rechazo seguro con aviso de versión. La aprobación de un dispositivo nuevo se gestiona fuera de banda (por mensaje directo en Discord vía Putre) validando su huella digital pública.
@@ -399,7 +401,6 @@ consola de SMAPI (o desde otro mod):
 | `p4e_pair_reject <huella_o_alias>` | Rechaza una solicitud de alta pendiente |
 | `p4e_rollover_now` | Fuerza el cambio de día (hay ruta propia: `POST /api/rollover`) |
 | `p4e_safe_restart [motivo] [--immediate\|-i] [--minutes N\|-m N] [--cancel\|-c]` | Reinicio controlado (hay ruta propia) |
-| `p4e_time <+X\|-X\|reset\|set HH:mm>` | Desajusta el reloj (solo para pruebas) |
 | `p4e_render [status\|<minutos 1-120>\|off]` | Préstamo de dibujado |
 | `p4e_migrate_save [slot\|geo]` | Migra una partida a la Plaza Central |
 | `p4e_give_gold <cantidad> [jugador]`, `p4e_give_item <id_o_nombre> [cantidad] [jugador]` | Depuración |

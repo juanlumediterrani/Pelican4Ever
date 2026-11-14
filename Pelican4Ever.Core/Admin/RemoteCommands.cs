@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
 using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.Time;
 
 namespace Pelican4Ever.Core.Admin
 {
@@ -36,9 +37,11 @@ namespace Pelican4Ever.Core.Admin
     /// <summary>
     /// Lista cerrada de comandos de consola de Pelican 4Ever que se pueden ejecutar por la API de anfitrión. Es una
     /// lista de permitidos: lo que no está aquí no se puede invocar, aunque exista como comando. Quedan fuera a propósito:
-    /// <c>p4e_rollover_now</c> (adelanta el día), <c>p4e_safe_restart</c> (tiene su ruta con avisos), <c>p4e_time</c>
-    /// (desajusta el calendario real), <c>p4e_migrate_save</c>, <c>p4e_give_*</c>, los comandos de prueba
-    /// (<c>EnableTestCommands</c>) y los de depuración de puntos de guardado.
+    /// <c>p4e_rollover_now</c> (adelanta el día), <c>p4e_safe_restart</c> (tiene su ruta con avisos),
+    /// <c>p4e_migrate_save</c>, <c>p4e_give_*</c>, los comandos de prueba
+    /// (<c>EnableTestCommands</c>) y los de depuración de puntos de guardado. <c>p4e_time</c> sí está, como
+    /// <see cref="RemoteCommandRisk.Sensitive"/> y con validación estricta de argumentos: el dueño puede ajustar el
+    /// reloj, pero no inyectar texto libre.
     /// </summary>
     public static class RemoteCommandCatalog
     {
@@ -46,7 +49,7 @@ namespace Pelican4Ever.Core.Admin
         public const int MaxOutputLines = 40;
         public const int MaxOutputLineLength = 300;
 
-        private static readonly Regex ArgPattern = new("^[A-Za-z0-9_.@:-]{1,64}$", RegexOptions.Compiled);
+        private static readonly Regex ArgPattern = new("^[-A-Za-z0-9_.@:+=]{1,64}$", RegexOptions.Compiled);
         private static readonly string[] Seasons = { "spring", "summer", "fall", "winter" };
 
         public static readonly IReadOnlyList<RemoteCommandSpec> Commands = new List<RemoteCommandSpec>
@@ -63,6 +66,7 @@ namespace Pelican4Ever.Core.Admin
             new("p4e_pair_revoke", RemoteCommandRisk.Sensitive, 1, 1, "p4e_pair_revoke <usuario_o_ip_o_id>"),
             new("p4e_forage_wave", RemoteCommandRisk.Sensitive, 0, 0, "p4e_forage_wave"),
             new("p4e_festival_move", RemoteCommandRisk.Sensitive, 3, 3, "p4e_festival_move <spring|summer|fall|winter> <díaActual> <díaNuevo>", CheckFestivalMove),
+            new("p4e_time", RemoteCommandRisk.Sensitive, 1, 2, "p4e_time <+X|-X|reset|set HH:mm>", CheckTime),
         };
 
         public static RemoteCommandSpec? Find(string? name) =>
@@ -82,10 +86,22 @@ namespace Pelican4Ever.Core.Admin
             foreach (string arg in args)
             {
                 if (!ArgPattern.IsMatch(arg ?? string.Empty))
-                    return $"Argumento no válido '{arg}': solo letras, cifras y . _ - @ : (máx. {MaxArgLength}).";
+                    return $"Argumento no válido '{arg}': solo letras, cifras y . _ - + = @ : (máx. {MaxArgLength}).";
             }
 
             return spec.Check?.Invoke(args);
+        }
+
+        private static string? CheckTime(IReadOnlyList<string> args)
+        {
+            // Misma gramática que RealTimeClockModule.AdjustTime; no se añade ninguna otra.
+            TimeCommandParser.Parsed parsed = TimeCommandParser.Parse(string.Join(" ", args));
+            return parsed.Kind switch
+            {
+                TimeCommandParser.Kind.Reset or TimeCommandParser.Kind.Set
+                    or TimeCommandParser.Kind.Hours or TimeCommandParser.Kind.Minutes => null,
+                _ => "Uso: p4e_time <+X|-X|reset|set HH:mm> (ej: p4e_time +2, p4e_time -1, p4e_time reset)"
+            };
         }
 
         private static string? CheckFestivalMove(IReadOnlyList<string> args)

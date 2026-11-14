@@ -344,15 +344,18 @@ cannot be invoked, even if it exists as a command.
 without changing the day; `p4e_pair_allow <user> <ip>`: prepares an IP registration with a valid
 pairing code `PairingInviteTtlHours`, 72 h by default); **`Sensitive`** changes the world or a
 player (`p4e_claim_reset`, `p4e_pair_approve`, `p4e_migrate_player`, `p4e_pair_revoke`,
-`p4e_forage_wave`, `p4e_festival_move`): whoever invokes it should have the owner's approval.
+`p4e_forage_wave`, `p4e_festival_move`, `p4e_time`): whoever invokes it should have the owner's approval.
 `p4e_rollover_now` (advances the day; use `POST /api/rollover`), `p4e_safe_restart` (has its own
-route with warnings), `p4e_time` (mismatches the real calendar), `p4e_migrate_save`, `p4e_give_*`
+route with warnings), `p4e_migrate_save`, `p4e_give_*`
 and the test commands are left out on purpose.
+
+`p4e_time` uses the same grammar as the console command (`+X`, `-X`, `X`, `Xm`, `reset`,
+`set HH:mm`, `set HHMM`, `set=...`); no new formats are added.
 
 There are commands that **only** exist in the SMAPI console and not in this list:
 `p4e_pair_reject` (rejects a pending request), `p4e_checkpoint_spike` (requires
 `CheckpointDebugMode`), the `p4e_farm_*`, `p4e_skill`, `p4e_weather`, `p4e_lightning` (require
-`EnableTestCommands`), `p4e_render`, `p4e_rollover_now`, `p4e_safe_restart`, `p4e_time`,
+`EnableTestCommands`), `p4e_render`, `p4e_rollover_now`, `p4e_safe_restart`,
 `p4e_migrate_save` and `p4e_give_*`.
 
 On a direct IP connection, an updated client that is already authorised answers the server
@@ -485,7 +488,6 @@ The API list is a deliberate subset of the console. These are only launched from
 | `p4e_pair_reject <fingerprint_or_alias>` | Rejects a pending registration request |
 | `p4e_rollover_now` | Forces the day change (it has its own route: `POST /api/rollover`) |
 | `p4e_safe_restart [reason] [--immediate\|-i] [--minutes N\|-m N] [--cancel\|-c]` | Controlled restart (it has its own route) |
-| `p4e_time <+X\|-X\|reset\|set HH:mm>` | Mismatches the clock (tests only) |
 | `p4e_render [status\|<minutes 1-120>\|off]` | Render lease |
 | `p4e_migrate_save [slot\|geo]` | Migrates a save to the Central Plaza |
 | `p4e_give_gold <amount> [player]`, `p4e_give_item <id_or_name> [amount] [player]` | Debugging |
