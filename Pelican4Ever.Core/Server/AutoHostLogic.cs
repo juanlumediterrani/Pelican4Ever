@@ -20,6 +20,19 @@ namespace Pelican4Ever.Core.Server
         Load
     }
 
+    /// <summary>Qué hacer en la pantalla de título según esté libre o no el puerto UDP de juego.</summary>
+    public enum PortGateDecision
+    {
+        /// <summary>El puerto está libre: cargar la partida como anfitrión.</summary>
+        Load,
+
+        /// <summary>Puerto ocupado y dentro del margen de espera: volver a comprobar en el siguiente tick.</summary>
+        KeepWaiting,
+
+        /// <summary>Puerto ocupado tras agotar el margen: no cargar (evita el bucle de errores en el título).</summary>
+        GiveUp
+    }
+
     /// <summary>
     /// Arranque desatendido del servidor persistente: al llegar a la pantalla de título, el host carga como
     /// anfitrión de cooperativo la partida configurada, por su nombre exacto y nunca «la más reciente».
@@ -55,6 +68,23 @@ namespace Pelican4Ever.Core.Server
         public static bool ShouldExitProcessOnRestart(bool restartExitsProcess, string? autoHostSaveName)
         {
             return restartExitsProcess && !string.IsNullOrEmpty(autoHostSaveName);
+        }
+
+        /// <summary>Segundos máximos esperando a que el puerto UDP de juego se libere antes de rendirse.</summary>
+        public const int PortWaitSeconds = 60;
+
+        /// <summary>
+        /// El juego fija el puerto UDP 24642 al alojar: cargar la partida con el puerto ocupado (otra
+        /// instancia de Stardew o el propio proceso tras un <c>stopServer</c> fallido) acaba en
+        /// «Address already in use» y en un bucle de <c>NullReferenceException</c> al volver al título.
+        /// Con el puerto libre se carga; ocupado se espera hasta <c>PortWaitSeconds</c> y, si no se
+        /// libera, no se intenta: el supervisor verá la host API caída y alertará.
+        /// </summary>
+        public static PortGateDecision DecidePortGate(bool portAvailable, int waitedSeconds, int maxWaitSeconds = PortWaitSeconds)
+        {
+            if (portAvailable)
+                return PortGateDecision.Load;
+            return waitedSeconds < maxWaitSeconds ? PortGateDecision.KeepWaiting : PortGateDecision.GiveUp;
         }
     }
 }

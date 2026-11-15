@@ -51,8 +51,8 @@ namespace Pelican4Ever.Modules
                 ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
 
                 // Comandos de administración
-                ctx.Helper.ConsoleCommands.Add("p4e_festival_move", "Reprograma un festival: p4e_festival_move <season> <oldDay> <newDay>", OnFestivalMoveCommand);
-                ctx.Helper.ConsoleCommands.Add("p4e_forage_wave", "Fuerza una oleada de forrajeo en exteriores: p4e_forage_wave", OnForageWaveCommand);
+                ctx.AddCommand("p4e_festival_move", "Reprograma un festival: p4e_festival_move <season> <oldDay> <newDay>", OnFestivalMoveCommand);
+                ctx.AddCommand("p4e_forage_wave", "Fuerza una oleada de forrajeo en exteriores: p4e_forage_wave", OnForageWaveCommand);
             }
 
             ApplyHarmonyPatches(ctx.Harmony);

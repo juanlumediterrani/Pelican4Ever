@@ -1,6 +1,6 @@
 # Informe de Recortes Canónicos 40×32 y Entradas para los 24 Casos de Anexo (TASK-910 / TASK-915)
 
-> Resultado del análisis topológico y simulación visual offline mediante `MapStudio` sobre los 8 mapas vanilla oficiales de Stardew Valley 1.6, aplicando la metodología canónica de los **Mapas Puente (ADR-0005 / ADR-0007)**: un único recorte base coherente por tipo de granja, cirugía perimetral mediante `TerrainTileClassifier` y `VerticalMultiTileClassifier`, área de despeje interior de 3×4 casillas y verificación BFS según la regla real de `GameLocation.isTilePassable`.
+> Resultado del análisis topológico y simulación visual offline mediante `MapStudio` sobre los 8 mapas vanilla oficiales de Stardew Valley 1.6, aplicando la metodología canónica de los **Mapas Puente (ADR-0005 / ADR-0009)**: un único recorte base coherente por tipo de granja, cirugía perimetral mediante `TerrainTileClassifier` y `VerticalMultiTileClassifier`, área de despeje interior de 3×4 casillas y verificación BFS según la regla real de `GameLocation.isTilePassable`.
 
 ---
 

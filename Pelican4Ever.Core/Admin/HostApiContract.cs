@@ -40,6 +40,21 @@ namespace Pelican4Ever.Core.Admin
 
         /// <summary>Si la partida está abierta como servidor de cooperativo (los jugadores pueden entrar).</summary>
         public bool IsMultiplayerServer { get; set; }
+
+        /// <summary>Carpeta del último checkpoint intradía creado o restaurado, o null si no hay ninguno (TASK-1607).</summary>
+        public string? LastCheckpointName { get; set; }
+
+        /// <summary>Día de juego (<c>TotalDays</c>) del último checkpoint, o null.</summary>
+        public int? LastCheckpointGameDay { get; set; }
+
+        /// <summary>Hora del juego (<c>timeOfDay</c>) del último checkpoint, o null.</summary>
+        public int? LastCheckpointGameTime { get; set; }
+
+        /// <summary>Instante UTC ISO-8601 del último checkpoint, o null.</summary>
+        public string? LastCheckpointAtUtc { get; set; }
+
+        /// <summary>Duración del tick más largo del último checkpoint (ms), o null.</summary>
+        public double? LastCheckpointLongestTickMs { get; set; }
     }
 
     /// <summary>
@@ -186,14 +201,86 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
-    /// Petición de reinicio controlado para <c>POST /api/v1/host/restart</c> (TASK-804).
+    /// Petición de reinicio controlado para <c>POST /api/v1/host/restart</c> (TASK-804 / TASK-1608).
     /// </summary>
     public sealed class HostRestartRequestDto
     {
         public string Reason { get; set; } = string.Empty;
         public bool Immediate { get; set; }
+        public bool RestartAfterCheckpoint { get; set; }
         public int? WarningMinutes { get; set; }
         public bool Cancel { get; set; }
+    }
+
+    /// <summary>
+    /// Petición de préstamo de dibujado para <c>POST /api/v1/host/render</c>. <c>Minutes = 0</c> lo retira.
+    /// </summary>
+    public sealed class HostRenderRequestDto
+    {
+        /// <summary>Quién lo pide (1-40 caracteres [A-Za-z0-9._-]); cada uno tiene como mucho un préstamo.</summary>
+        public string Requester { get; set; } = "api";
+        /// <summary>Minutos de dibujado (1-120, se recorta); 0 retira el préstamo del solicitante.</summary>
+        public int Minutes { get; set; } = 10;
+    }
+
+    /// <summary>Préstamo vigente en <see cref="HostRenderStatusDto"/>.</summary>
+    public sealed class HostRenderLeaseDto
+    {
+        public string Requester { get; set; } = string.Empty;
+        public DateTime ExpiresAtUtc { get; set; }
+    }
+
+    /// <summary>Estado del dibujado del host para <c>GET/POST /api/v1/host/render</c>.</summary>
+    public sealed class HostRenderStatusDto
+    {
+        /// <summary><c>HeadlessRendering</c> en config.json.</summary>
+        public bool HeadlessRenderingEnabled { get; set; }
+        /// <summary>Si el host está dibujando ahora.</summary>
+        public bool Drawing { get; set; }
+        /// <summary>Motivo (<c>Disabled</c>, <c>Attended</c>, <c>WorldNotReady</c>, <c>DrawRequiredMenu</c>, <c>Lease</c>, <c>Suppressed</c>).</summary>
+        public string Reason { get; set; } = string.Empty;
+        public List<HostRenderLeaseDto> Leases { get; set; } = new();
+        /// <summary>Mensaje de la última petición (vacío en GET).</summary>
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>Petición de <c>POST /api/v1/host/command</c>: un comando de la lista de permitidos y sus argumentos.</summary>
+    public sealed class HostCommandRequestDto
+    {
+        /// <summary>Nombre del comando de consola (p. ej. <c>p4e_status</c>).</summary>
+        public string Command { get; set; } = string.Empty;
+
+        /// <summary>Argumentos, ya separados.</summary>
+        public List<string> Args { get; set; } = new();
+    }
+
+    /// <summary>Un comando de la lista de permitidos, en <c>GET /api/v1/host/commands</c>.</summary>
+    public sealed class HostCommandInfoDto
+    {
+        public string Command { get; set; } = string.Empty;
+        /// <summary><c>Read</c>, <c>Safe</c> o <c>Sensitive</c>.</summary>
+        public string Risk { get; set; } = string.Empty;
+        public string Usage { get; set; } = string.Empty;
+        /// <summary>Si el comando está registrado en este servidor ahora.</summary>
+        public bool Available { get; set; }
+    }
+
+    public sealed class HostCommandCatalogDto
+    {
+        public List<HostCommandInfoDto> Commands { get; set; } = new();
+    }
+
+    /// <summary>Resultado de <c>POST /api/v1/host/command</c>.</summary>
+    public sealed class HostCommandResultDto
+    {
+        public bool Ok { get; set; }
+        public string Command { get; set; } = string.Empty;
+        public string Risk { get; set; } = string.Empty;
+        /// <summary>Líneas que el comando escribió en el registro mientras se ejecutaba (acotadas).</summary>
+        public List<string> Output { get; set; } = new();
+        public string Message { get; set; } = string.Empty;
+        public int ExecutedOnThreadId { get; set; }
+        public long? EventId { get; set; }
     }
 
     /// <summary>
@@ -229,7 +316,12 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/announce",          MutatesGameState: true,  "Envía un aviso global por chat y/o en pantalla (HUD) a los jugadores."),
             new("POST", "/api/v1/host/rest",              MutatesGameState: true,  "Registra el descanso diario del anfitrión sin desconectar la sesión (TASK-804)."),
             new("POST", "/api/v1/host/restart",           MutatesGameState: true,  "Programa o cancela un reinicio controlado del servidor con preaviso (TASK-804)."),
-            new("GET",  "/api/v1/host/events",            MutatesGameState: false, "Devuelve la lista incremental de sucesos desde el cursor ?since=N.")
+            new("POST", "/api/v1/host/checkpoint",        MutatesGameState: true,  "Ejecuta un checkpoint intradía en el hilo del juego y devuelve su resultado (TASK-1607)."),
+            new("GET",  "/api/v1/host/events",            MutatesGameState: false, "Devuelve la lista incremental de sucesos desde el cursor ?since=N."),
+            new("GET",  "/api/v1/host/commands",          MutatesGameState: false, "Lista cerrada de comandos de consola de Pelican que se pueden ejecutar a distancia, con su riesgo."),
+            new("POST", "/api/v1/host/command",           MutatesGameState: true,  "Ejecuta un comando de consola de la lista de permitidos y devuelve lo que escribe en el registro."),
+            new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
+            new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico).")
         };
 
         /// <summary>

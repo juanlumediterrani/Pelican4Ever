@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Economy;
@@ -12,6 +14,7 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Buffs;
 using StardewValley.Locations;
+using StardewValley.Menus;
 
 namespace Pelican4Ever.Modules
 {
@@ -39,6 +42,9 @@ namespace Pelican4Ever.Modules
 
         /// <summary>Mensaje cliente → host con el estado de consumo (Saciedad y contadores diarios) del jugador local.</summary>
         public const string MsgSatietyReport = "SatietyReport";
+        private const string MsgPriceRulesRequest = "PriceRulesRequest";
+        private const string MsgPriceRulesResponse = "PriceRulesResponse";
+        private static PriceRules? syncedPriceRules;
 
         /// <summary>
         /// En un farmhand, true en cuanto el jugador ha comido o descansado en el Spa en esta sesión: a partir de ahí su copia
@@ -54,10 +60,12 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
+            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
             {
                 HasLocalConsumptionChanges = false;
+                syncedPriceRules = null;
                 spaStillSeconds = 0;
                 spaRegenCarry = 0;
                 sittingSecondAccumulator = 0;
@@ -68,10 +76,33 @@ namespace Pelican4Ever.Modules
             ApplyHarmonyPatches(ctx.Harmony);
         }
 
+        private static void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
+        {
+            if (Context.IsMainPlayer) syncedPriceRules = CurrentPriceRules();
+            else RequestPriceRules();
+        }
+
+        private static void RequestPriceRules()
+        {
+            if (context != null && Game1.MasterPlayer != null)
+                context.Helper.Multiplayer.SendMessage(string.Empty, MsgPriceRulesRequest, new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
+        private static PriceRules CurrentPriceRules() => new()
+        {
+            Crop = context!.Config.CropPriceMultiplier,
+            Artisan = context.Config.ArtisanPriceMultiplier,
+            Fish = context.Config.FishPriceMultiplier,
+            Mineral = context.Config.MineralPriceMultiplier
+        };
+
         private void OnOneSecondUpdateTicked(object? sender, OneSecondUpdateTickedEventArgs e)
         {
             if (!Context.IsWorldReady || context == null || Game1.player == null)
                 return;
+
+            if (!Context.IsMainPlayer && syncedPriceRules == null)
+                RequestPriceRules();
 
             ModContext modCtx = context;
 
@@ -93,12 +124,16 @@ namespace Pelican4Ever.Modules
                         spaRegenCarry = 0;
                         ReportConsumptionToHost(playerRecord, nowUtc);
                         Game1.addHUDMessage(new HUDMessage(
-                            $"Relajado: recuperas {modCtx.Config.SpaBuffTotalPoints} de energía y salud durante {FormatMinutes(modCtx.Config.SpaBuffDurationMinutes)}.",
+                            I18n.Get("economy.spa_relaxed", new
+                            {
+                                points = modCtx.Config.SpaBuffTotalPoints,
+                                duration = FormatMinutes(modCtx.Config.SpaBuffDurationMinutes)
+                            }),
                             HUDMessage.newQuest_type));
                     }
                     else if (!playerRecord.IsSpaBuffActive(nowUtc))
                     {
-                        Game1.showRedMessage("Ya has disfrutado del Spa hoy.");
+                        Game1.showRedMessage(I18n.Get("economy.spa_already_used"));
                     }
                 }
             }
@@ -291,7 +326,7 @@ namespace Pelican4Ever.Modules
                     return true;
                 });
 
-                Game1.addHUDMessage(new HUDMessage("Turno minero renovado: Las vetas de mineral han reaparecido.", HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("economy.mining_shift_renewed"), HUDMessage.newQuest_type));
             }
             catch (Exception ex)
             {
@@ -330,6 +365,12 @@ namespace Pelican4Ever.Modules
                     );
                 }
 
+                // Solo las consultas del ascensor son personales; la generación de pisos sigue siendo compartida.
+                var elevatorTranspiler = new HarmonyMethod(typeof(EconomyModule), nameof(Transpiler_PersonalElevator));
+                harmony.Patch(AccessTools.Constructor(typeof(MineElevatorMenu)), transpiler: elevatorTranspiler);
+                harmony.Patch(AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performAction),
+                    new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }), transpiler: elevatorTranspiler);
+
                 // Parche en Object.sellToStorePrice para multiplicadores agrícolas y artesanales
                 harmony.Patch(
                     original: AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.sellToStorePrice), new[] { typeof(long) }),
@@ -354,6 +395,30 @@ namespace Pelican4Ever.Modules
             {
                 context?.Monitor.Log($"[EconomyModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
             }
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler_PersonalElevator(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo sharedGetter = AccessTools.PropertyGetter(typeof(MineShaft), nameof(MineShaft.lowestLevelReached));
+            MethodInfo personalGetter = AccessTools.Method(typeof(EconomyModule), nameof(GetPersonalElevatorLevel));
+            int replacements = 0;
+            foreach (CodeInstruction instruction in instructions)
+            {
+                if (instruction.Calls(sharedGetter))
+                {
+                    instruction.opcode = OpCodes.Call;
+                    instruction.operand = personalGetter;
+                    replacements++;
+                }
+                yield return instruction;
+            }
+            if (replacements != 1)
+                throw new InvalidOperationException($"Se esperaba una consulta al progreso del ascensor y se encontraron {replacements}.");
+        }
+
+        public static int GetPersonalElevatorLevel()
+        {
+            return MineProgressLogic.ElevatorLevel(Game1.player.deepestMineLevel, Game1.netWorldState.Value.LowestMineLevelForOrder);
         }
 
         public static void Prefix_DoneEating(Farmer __instance)
@@ -412,24 +477,24 @@ namespace Pelican4Ever.Modules
                 {
                     if (remaining > 0)
                     {
-                        Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía ({remaining} de capacidad restante).", HUDMessage.newQuest_type));
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("economy.satiety_energy_remaining", new { gain = allowedGain, remaining }), HUDMessage.newQuest_type));
                     }
                     else
                     {
-                        Game1.addHUDMessage(new HUDMessage($"Saciedad: +{allowedGain} energía (Saciedad al máximo).", HUDMessage.newQuest_type));
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("economy.satiety_energy_max", new { gain = allowedGain }), HUDMessage.newQuest_type));
                     }
 
                     // Notificar si se alcanza el umbral de "Bien comido" (al menos 1/4 de saciedad)
                     if (oldSatiety < threshold && record.Satiety >= threshold)
                     {
                         Game1.addHUDMessage(new HUDMessage(
-                            "Bien comido: tienes suficiente saciedad para que descansar sentado recupere energía.",
+                            I18n.Get("economy.well_fed_threshold_reached"),
                             HUDMessage.newQuest_type));
                     }
                 }
                 else
                 {
-                    Game1.showRedMessage("Saciedad al máximo: no puedes consumir más energía por comida (solo recuperas salud y buffs).");
+                    Game1.showRedMessage(I18n.Get("economy.satiety_full_warning"));
                 }
             }
 
@@ -440,7 +505,7 @@ namespace Pelican4Ever.Modules
                 {
                     changed = true;
                     Game1.addHUDMessage(new HUDMessage(
-                        $"Plato cocinado: disfrutas de {FormatMinutes(context.Config.WellFedDurationMinutes)} garantizados de descanso sentado.",
+                        I18n.Get("economy.cooked_dish_buff", new { duration = FormatMinutes(context.Config.WellFedDurationMinutes) }),
                         HUDMessage.newQuest_type));
                 }
             }
@@ -476,13 +541,13 @@ namespace Pelican4Ever.Modules
 
                 string durationStr = minutesLeft > 0 ? $", {FormatMinutes(minutesLeft)}" : string.Empty;
                 Game1.addHUDMessage(new HUDMessage(
-                    $"Descansando: +1 de energía cada {context.Config.SittingRegenSeconds} s (Bien comido{durationStr}).",
+                    I18n.Get("economy.sitting_resting_hud", new { seconds = context.Config.SittingRegenSeconds, duration = durationStr }),
                     HUDMessage.stamina_type));
             }
             else if (Game1.player.Stamina < maxStamina)
             {
                 Game1.addHUDMessage(new HUDMessage(
-                    "Sentarte solo recupera energía con \"Bien comido\": come hasta llenar al menos 1/4 de saciedad.",
+                    I18n.Get("economy.sitting_need_well_fed"),
                     HUDMessage.error_type));
             }
         }
@@ -509,7 +574,28 @@ namespace Pelican4Ever.Modules
 
         private static void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
         {
-            if (context == null || e.FromModID != context.Manifest.UniqueID || e.Type != MsgSatietyReport || !Context.IsMainPlayer)
+            if (context == null || e.FromModID != context.Manifest.UniqueID)
+                return;
+
+            if (Context.IsMainPlayer && e.Type == MsgPriceRulesRequest && Game1.GetPlayer(e.FromPlayerID) != null)
+            {
+                context.Helper.Multiplayer.SendMessage(CurrentPriceRules(), MsgPriceRulesResponse, new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                return;
+            }
+
+            if (!Context.IsMainPlayer && e.Type == MsgPriceRulesResponse && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID && syncedPriceRules == null)
+            {
+                PriceRules received = e.ReadAs<PriceRules>();
+                if (received != null
+                    && float.IsFinite(received.Crop) && received.Crop > 0
+                    && float.IsFinite(received.Artisan) && received.Artisan > 0
+                    && float.IsFinite(received.Fish) && received.Fish > 0
+                    && float.IsFinite(received.Mineral) && received.Mineral > 0)
+                    syncedPriceRules = received;
+                return;
+            }
+
+            if (e.Type != MsgSatietyReport || !Context.IsMainPlayer)
                 return;
 
             ConsumptionReport report = e.ReadAs<ConsumptionReport>();
@@ -563,22 +649,22 @@ namespace Pelican4Ever.Modules
             if (context == null || __result <= 0)
                 return;
 
-            float cropMult = context.Config.CropPriceMultiplier;
-            float artisanMult = context.Config.ArtisanPriceMultiplier;
-
-            if (cropMult == 1.0f && artisanMult == 1.0f)
+            PriceRules active = !Context.IsMainPlayer && syncedPriceRules != null
+                ? syncedPriceRules
+                : CurrentPriceRules();
+            float multiplier = CategoryPriceMultiplier.ForCategory(__instance.Category,
+                active.Crop, active.Artisan, active.Fish, active.Mineral);
+            if (multiplier == 1.0f)
                 return;
+            __result = (int)Math.Max(1, Math.Round(__result * multiplier));
+        }
 
-            // Categorías agrícolas directas: -75 (Vegetable), -79 (Fruit), -80 (Flower)
-            if (__instance.Category is -75 or -79 or -80)
-            {
-                __result = (int)Math.Max(1, Math.Round(__result * cropMult));
-            }
-            // Categoría artesanal: -26 (ArtisanGoods)
-            else if (__instance.Category == -26)
-            {
-                __result = (int)Math.Max(1, Math.Round(__result * artisanMult));
-            }
+        public sealed class PriceRules
+        {
+            public float Crop { get; set; } = 1f;
+            public float Artisan { get; set; } = 1f;
+            public float Fish { get; set; } = 1f;
+            public float Mineral { get; set; } = 1f;
         }
 
         public const float BuffTimeScaleFactor = 600_000f / 7_000f; // ~85.714f (1 min real = 1 min juego)

@@ -107,4 +107,33 @@ public class CheckpointPolicyTests
         Assert.False(CheckpointPolicy.IsSlow(3000, 3000));
         Assert.False(CheckpointPolicy.IsSlow(60000, 0));
     }
+
+    [Fact]
+    public void MidDayCheckpointRestoreDetectsMatchingGameDayAndFormatsSummary()
+    {
+        var state = new Pelican4Ever.Core.World.ServerWorldState
+        {
+            SchemaVersion = 5,
+            LastRolloverGameDay = 9,
+            LastCheckpoint = new Pelican4Ever.Core.World.CheckpointMetadata
+            {
+                GameDay = 10,
+                GameTime = 1540,
+                SavedAtUtc = "2026-11-14T15:40:00Z",
+                BackupName = "Save_20261114_154000_000"
+            }
+        };
+
+        Assert.True(state.Migrate());
+        Assert.Equal(Pelican4Ever.Core.World.ServerWorldState.CurrentSchemaVersion, state.SchemaVersion);
+
+        Pelican4Ever.Core.World.CheckpointMetadata? found = CheckpointRestoreLogic.FindMidDayRestoreCheckpoint(state, loadedGameDay: 10);
+        Assert.NotNull(found);
+        string summary = CheckpointRestoreLogic.BuildRestoreLogSummary(found!);
+        Assert.Contains("restaurado al checkpoint de las 15:40", summary, StringComparison.OrdinalIgnoreCase);
+
+        // Si ya es otro día (p. ej. tras rollover), no se marca como restauración intradía del día anterior.
+        Assert.Null(CheckpointRestoreLogic.FindMidDayRestoreCheckpoint(state, loadedGameDay: 11));
+        Assert.Equal("01:50", CheckpointRestoreLogic.FormatGameTime(2550));
+    }
 }

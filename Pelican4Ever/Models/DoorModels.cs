@@ -36,7 +36,56 @@ namespace Pelican4Ever.Models
         public const string BuyAnnexRequest = "BuyAnnexRequest";
         public const string UnlockGreenhouseRequest = "UnlockGreenhouseRequest";
         public const string SyncDoorsState = "SyncDoorsState";
+        public const string RequestAnnexLocation = "RequestAnnexLocation";
+        public const string SyncAnnexLocation = "SyncAnnexLocation";
+        public const string DemolishBuildingRequest = "DemolishBuildingRequest";
+        public const string DemolishBuildingResult = "DemolishBuildingResult";
         public const string RequestDoorsSync = "RequestDoorsSync";
+        public const string PairingChallenge = "PairingChallenge";
+        public const string PairingSubmit = "PairingSubmit";
+        public const string PairingResult = "PairingResult";
+        public const string RequestTenancyRequest = "RequestTenancyRequest";
+        public const string ManageTenantRequest = "ManageTenantRequest";
+    }
+
+    public class PairingChallengePayload
+    {
+        public string Alias { get; set; } = string.Empty;
+        public int RemainingAttempts { get; set; } = 3;
+        public string PromptMessage { get; set; } = "Introduce tu código de pairing:";
+    }
+
+    /// <summary>
+    /// Petición de un cliente para que el anfitrión demuela un edificio: `demolishLock` de vanilla solo
+    /// funciona en el anfitrión, así que la operación autoritativa la ejecuta él.
+    /// </summary>
+    public class DemolishBuildingPayload
+    {
+        public string LocationId { get; set; } = string.Empty;
+        public int TileX { get; set; }
+        public int TileY { get; set; }
+    }
+
+    /// <summary>Respuesta del anfitrión a <see cref="DemolishBuildingPayload"/>: si el edificio se eliminó.</summary>
+    public class DemolishBuildingResultPayload
+    {
+        public string LocationId { get; set; } = string.Empty;
+        public int TileX { get; set; }
+        public int TileY { get; set; }
+        public bool Success { get; set; }
+    }
+
+    public class PairingSubmitPayload
+    {
+        public string Code { get; set; } = string.Empty;
+        public string ClientToken { get; set; } = string.Empty;
+    }
+
+    public class PairingResultPayload
+    {
+        public bool Ok { get; set; }
+        public int RemainingAttempts { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 
     public class UnlockGreenhousePayload
@@ -72,6 +121,27 @@ namespace Pelican4Ever.Models
         public bool FriendAdd { get; set; }
     }
 
+    public class RequestTenancyPayload
+    {
+        public string DoorId { get; set; } = string.Empty;
+        public bool Cancel { get; set; }
+    }
+
+    public enum TenantManageAction
+    {
+        Accept,
+        Reject,
+        Evict,
+        Leave
+    }
+
+    public class ManageTenantPayload
+    {
+        public string DoorId { get; set; } = string.Empty;
+        public TenantManageAction Action { get; set; }
+        public long TargetPlayerId { get; set; }
+    }
+
     public class SyncDoorsPayload
     {
         public Dictionary<string, DoorAssignment> Doors { get; set; } = new();
@@ -80,5 +150,8 @@ namespace Pelican4Ever.Models
 
         /// <summary>FarmSlotCount del host, para que el catálogo de los clientes muestre los mismos huecos.</summary>
         public int FarmSlotCount { get; set; }
+
+        /// <summary>Si las vagonetas omiten el requisito de la Sala de Calderas en el servidor.</summary>
+        public bool BypassMinecartUnlockRequirement { get; set; }
     }
 }

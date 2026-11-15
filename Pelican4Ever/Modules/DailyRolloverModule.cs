@@ -5,6 +5,7 @@ using System.Linq;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -62,7 +63,7 @@ namespace Pelican4Ever.Modules
                 ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
                 ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
                 ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-                ctx.Helper.ConsoleCommands.Add("p4e_rollover_now", "Fuerza la secuencia segura de guardado y rollover.", OnForceRollover);
+                ctx.AddCommand("p4e_rollover_now", "Fuerza la secuencia segura de guardado y rollover.", OnForceRollover);
             }
         }
 
@@ -122,6 +123,7 @@ namespace Pelican4Ever.Modules
             foreach (var kvp in worldState.Players)
             {
                 var record = kvp.Value;
+                DailyEconomyTelemetry.Record(context, record, endedDay);
                 bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == record.UniqueMultiplayerID);
                 bool isEarlyRiser = isOnline && SleepPolicy.IsEarlyRiser(record, endedDay, localNow, cfg.ParsedCalendarDayChangeTime, cfg.EarlyMorningGraceMinutes);
                 RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline, isEarlyRiser);
@@ -216,7 +218,7 @@ namespace Pelican4Ever.Modules
             if (RolloverTiming.IsWarningDue(diff, warningMinutes: 10) && !warned10)
             {
                 warned10 = true;
-                BroadcastHUDMessage("Aviso: en 10 minutos se guardará la granja y se cerrarán las conexiones para el cambio de fecha.", HUDMessage.newQuest_type);
+                BroadcastHUDMessage(I18n.Get("rollover.warning_10min"), HUDMessage.newQuest_type);
             }
 
             // Inicio de la secuencia diaria exacto a la hora configurada (primeros 3 segundos).
@@ -335,6 +337,7 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                DeliverPendingFarmhandMail();
                 PersistenceModule.FlushToSaveData(context, "rollover post-cierre");
                 postCloseSave = SaveGame.Save();
                 context.Monitor.Log("[DailyRolloverModule] Peers cerrados; guardando su estado final antes de avanzar la fecha.", LogLevel.Info);
@@ -344,6 +347,70 @@ namespace Pelican4Ever.Modules
                 postCloseSave = null;
                 rollover.Fail();
                 context.Monitor.Log($"[DailyRolloverModule] No se pudo iniciar el guardado posterior al cierre; la fecha no avanza: {ex}", LogLevel.Error);
+            }
+        }
+
+        /// <summary>
+        /// Entrega el correo «para mañana» de los farmhands que ya están desconectados. El juego nativo
+        /// solo procesa <c>mailForTomorrow</c> de <c>Game1.player</c> en cada <c>_newDayAfterFade</c>; como
+        /// este rollover cierra todos los peers antes de avanzar la fecha, sus cartas y banderas (por
+        /// ejemplo <c>copperFound</c>, que desbloquea el evento del Horno) se quedaban atascadas para siempre.
+        /// </summary>
+        private void DeliverPendingFarmhandMail()
+        {
+            int deliveredFlags = 0;
+            int deliveredLetters = 0;
+            int affectedFarmhands = 0;
+
+            foreach (Farmer farmhand in Game1.getOfflineFarmhands())
+            {
+                if (farmhand == null)
+                    continue;
+                bool knownPlayer = context.WorldState.Players.ContainsKey(farmhand.UniqueMultiplayerID);
+                if (!FarmhandMailDeliveryLogic.ShouldDeliverToFarmhand(farmhand.isUnclaimedFarmhand, knownPlayer, farmhand.mailForTomorrow.Count))
+                    continue;
+
+                string[] rawEntries = farmhand.mailForTomorrow.ToArray();
+                var planned = FarmhandMailDeliveryLogic.Plan(rawEntries);
+                if (planned.Count == 0)
+                    continue;
+
+                bool changed = false;
+                foreach (PendingFarmhandMail mail in planned)
+                {
+                    if (mail.DeliverToMailbox)
+                    {
+                        if (!farmhand.mailbox.Contains(mail.Id) && !farmhand.mailReceived.Contains(mail.Id))
+                        {
+                            farmhand.mailbox.Add(mail.Id);
+                            deliveredLetters++;
+                            changed = true;
+                        }
+                    }
+                    else if (farmhand.mailReceived.Add(mail.Id))
+                    {
+                        deliveredFlags++;
+                        changed = true;
+                    }
+                }
+
+                foreach (string rawEntry in rawEntries)
+                    farmhand.mailForTomorrow.Remove(rawEntry);
+
+                if (changed)
+                {
+                    affectedFarmhands++;
+                    context.Monitor.Log(
+                        $"[DailyRolloverModule] Farmhand {farmhand.Name} ({farmhand.UniqueMultiplayerID}): correo pendiente entregado ({string.Join(", ", planned.Select(mail => mail.Id))}).",
+                        LogLevel.Trace);
+                }
+            }
+
+            if (affectedFarmhands > 0)
+            {
+                context.Monitor.Log(
+                    $"[DailyRolloverModule] Correo pendiente entregado a {affectedFarmhands} farmhand(s) desconectado(s): {deliveredFlags} bandera(s) y {deliveredLetters} carta(s).",
+                    LogLevel.Info);
             }
         }
 
@@ -382,9 +449,9 @@ namespace Pelican4Ever.Modules
 
         private void RequestPeerClose()
         {
-            BroadcastHUDMessage("Guardado confirmado. El servidor cerrará esta conexión para cambiar la fecha.", HUDMessage.error_type);
+            BroadcastHUDMessage(I18n.Get("rollover.closing_server"), HUDMessage.error_type);
             context.Helper.Multiplayer.SendMessage(
-                message: "Guardado confirmado. Desconectando para el cambio de fecha.",
+                message: "rollover.disconnecting",
                 messageType: RolloverCloseMessageType,
                 modIDs: new[] { context.Manifest.UniqueID });
             peerCloseDeadlineUtc = DateTimeOffset.UtcNow + PeerGracePeriod;
@@ -400,7 +467,7 @@ namespace Pelican4Ever.Modules
                 return;
 
             string message = e.ReadAs<string>();
-            Game1.addHUDMessage(new HUDMessage(message, HUDMessage.error_type));
+            Game1.addHUDMessage(new HUDMessage(I18n.Get(message), HUDMessage.error_type));
             DelayedAction.functionAfterDelay(() => Game1.ExitToTitle(), 1500);
         }
 
@@ -451,6 +518,10 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                // En vanilla Game1._newDayAfterFade() solo limpia chestConsumedMineLevels (> 120) en el jugador local;
+                // como este rollover cierra los peers antes de NewDay(0f), los farmhands necesitan esa limpieza aquí.
+                ResetOfflineFarmhandSkullCavernChests();
+
                 // Game1.NewDay es la transición nativa que ejecuta ReadyCheckDialog al completarse.
                 // Todos los farmhands ya se han guardado y desconectado, así que no queda un peer bloqueando el check.
                 Game1.NewDay(0f);
@@ -484,6 +555,41 @@ namespace Pelican4Ever.Modules
             Game1.fadeScreenToBlack();
             Game1.player.Halt();
             return "host despierto: fundido lanzado por el mod";
+        }
+
+        /// <summary>
+        /// Limpia en los farmhands desconectados los cofres diarios de la Caverna Calavera (&gt; 120) antes de
+        /// <c>Game1.NewDay</c>, igual que hace el motor nativo solo en <c>Game1.player</c>.
+        /// </summary>
+        private static void ResetOfflineFarmhandSkullCavernChests()
+        {
+            int clearedFarmhands = 0;
+            int clearedLevels = 0;
+
+            foreach (Farmer farmhand in Game1.getAllFarmhands())
+            {
+                if (farmhand == null || farmhand.IsMainPlayer)
+                    continue;
+
+                int before = farmhand.chestConsumedMineLevels.Count();
+                if (before == 0)
+                    continue;
+
+                farmhand.chestConsumedMineLevels.RemoveWhere(pair => MineProgressLogic.ShouldResetMineChestOnNewDay(pair.Key));
+                int removed = before - farmhand.chestConsumedMineLevels.Count();
+                if (removed > 0)
+                {
+                    clearedFarmhands++;
+                    clearedLevels += removed;
+                }
+            }
+
+            if (clearedLevels > 0)
+            {
+                context?.Monitor.Log(
+                    $"[DailyRolloverModule] Caverna Calavera: limpiados {clearedLevels} cofre(s) diario(s) (>120) en {clearedFarmhands} farmhand(s).",
+                    LogLevel.Info);
+            }
         }
 
         /// <summary>
@@ -614,8 +720,11 @@ namespace Pelican4Ever.Modules
         /// </summary>
         public static void SetFarmerMoney(Farmer farmer, int newMoney)
         {
-            if (Game1.player?.team != null && Game1.player.team.useSeparateWallets.Value && farmer != Game1.player)
+            if (Game1.player?.team != null && farmer != Game1.player)
             {
+                // SetIndividualMoney delegates to GetMoney(farmer), which selects either that
+                // farmer's wallet or the shared team wallet. Farmer.Money rejects writes to a
+                // non-local farmer even when wallets are shared.
                 Game1.player.team.SetIndividualMoney(farmer, newMoney);
             }
             else

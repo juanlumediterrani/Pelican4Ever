@@ -22,7 +22,7 @@ namespace Pelican4Ever.Modules
     /// </summary>
     public sealed class VisitorGuardModule : IModule
     {
-        private const string DeniedMessage = "El dueño no permite a las visitas modificar esta residencia.";
+        private static string DeniedMessage => I18n.Get("visitor.denied");
 
         private static ModContext? context;
         private static int lastMessageTick = -1000;
@@ -42,6 +42,8 @@ namespace Pelican4Ever.Modules
                 Patch(AccessTools.Method(typeof(FruitTree), nameof(FruitTree.performUseAction)), nameof(Prefix_TerrainUseAction));
                 Patch(AccessTools.Method(typeof(Chest), nameof(Chest.checkForAction)), nameof(Prefix_ObjectCheckForAction));
                 Patch(AccessTools.Method(typeof(SObject), nameof(SObject.checkForAction)), nameof(Prefix_ObjectCheckForAction));
+                Patch(AccessTools.Method(typeof(GameLocation), nameof(GameLocation.checkAction),
+                    new[] { typeof(xTile.Dimensions.Location), typeof(xTile.Dimensions.Rectangle), typeof(Farmer) }), nameof(Prefix_LocationCheckAction));
                 Patch(AccessTools.Method(typeof(SObject), nameof(SObject.performObjectDropInAction),
                     new[] { typeof(Item), typeof(bool), typeof(Farmer), typeof(bool) }), nameof(Prefix_DropIn));
             }
@@ -62,7 +64,14 @@ namespace Pelican4Ever.Modules
             if (context == null || location == null || Game1.player == null)
                 return false;
 
-            string? slotId = VisitorPermissionLogic.ResidenceSlotOf(location.NameOrUniqueName);
+            if (ClientSecurityModule.IsLocalClientAwaitingPairing)
+                return true;
+
+            if (!Context.IsMainPlayer && context.Config.ProtectPublicHubs && VisitorPermissionLogic.IsProtectedPublicHub(location.NameOrUniqueName))
+                return true;
+
+            string? slotId = VisitorPermissionLogic.ResidenceSlotOf(location.NameOrUniqueName)
+                ?? VisitorPermissionLogic.ResidenceSlotOf(location.GetRootLocation()?.NameOrUniqueName);
             if (slotId == null)
                 return false;
 
@@ -90,11 +99,39 @@ namespace Pelican4Ever.Modules
             return tool is Slingshot || tool is FishingRod || tool is Wand;
         }
 
+        private static long lastGuardErrorMs;
+
         public static bool Prefix_BeginUsingTool(Farmer __instance)
         {
-            if (!__instance.IsLocalPlayer || IsAllowedTool(__instance.CurrentTool) || !IsRestricted(__instance.currentLocation))
+            try
+            {
+                if (__instance is null || !__instance.IsLocalPlayer || IsAllowedTool(__instance.CurrentTool) || !IsRestricted(__instance.currentLocation))
+                    return true;
+                return Deny();
+            }
+            catch (Exception ex)
+            {
+                // Fail-open: ante cualquier fallo inesperado (despliegue a medias, rarezas del runtime)
+                // se conserva el comportamiento vanilla en lugar de romper el bucle del juego.
+                LogGuardFailureOnce(ex);
                 return true;
-            return Deny();
+            }
+        }
+
+        private static void LogGuardFailureOnce(Exception ex)
+        {
+            try
+            {
+                long now = Environment.TickCount64;
+                if (now - lastGuardErrorMs < 10_000)
+                    return;
+                lastGuardErrorMs = now;
+                context?.Monitor.Log($"[VisitorGuard] Fallo inesperado en guardia de herramientas (fail-open): {ex.GetType().Name}: {ex.Message}", LogLevel.Warn);
+            }
+            catch
+            {
+                // Nunca romper el juego desde el propio manejador de errores.
+            }
         }
 
         public static bool Prefix_TryToPlaceItem(GameLocation location, ref bool __result)
@@ -113,11 +150,40 @@ namespace Pelican4Ever.Modules
             return Deny();
         }
 
+        public static bool Prefix_LocationCheckAction(GameLocation __instance, xTile.Dimensions.Location tileLocation, Farmer who, ref bool __result)
+        {
+            try
+            {
+                if (who == null || !who.IsLocalPlayer || __instance?.objects == null)
+                    return true;
+
+                if (!__instance.objects.TryGetValue(new Vector2(tileLocation.X, tileLocation.Y), out SObject? obj) || obj == null)
+                    return true;
+
+                if (obj.bigCraftable.Value || obj is Chest)
+                    return true;
+
+                if (!obj.IsSpawnedObject && !obj.isForage())
+                    return true;
+
+                if (!IsRestricted(__instance))
+                    return true;
+
+                __result = false;
+                return Deny();
+            }
+            catch (Exception ex)
+            {
+                LogGuardFailureOnce(ex);
+                return true;
+            }
+        }
+
         public static bool Prefix_ObjectCheckForAction(SObject __instance, Farmer who, bool justCheckingForActivity, ref bool __result)
         {
             if (justCheckingForActivity || who == null || !who.IsLocalPlayer)
                 return true;
-            // Solo cofres y objetos grandes (máquinas): el forraje y los objetos pequeños siguen su camino
+            // Solo cofres y máquinas grandes aquí; el forraje y objetos aparecidos en suelo se bloquean en Prefix_LocationCheckAction.
             if (!(__instance is Chest) && !__instance.bigCraftable.Value)
                 return true;
             if (!IsRestricted(__instance.Location))

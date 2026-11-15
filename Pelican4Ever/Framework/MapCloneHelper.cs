@@ -374,6 +374,17 @@ namespace Pelican4Ever.Framework
                 target.Properties["Warp"] = passageWarps;
             }
 
+            // 9. TASK-1501: Conectar la vagoneta en (4, 3) con la red nativa de vagonetas y mantener libre la llegada en (4, 4)
+            if (bldLayer.Tiles[MinecartPlazaLogic.BridgeMinecartTileX, MinecartPlazaLogic.BridgeMinecartTileY] is Tile minecartTile)
+            {
+                minecartTile.Properties["Action"] = MinecartPlazaLogic.GetBridgeMinecartAction(bridgeLoc.Name);
+            }
+            if (bldLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY] != null)
+            {
+                bldLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY] = null;
+            }
+            ClearBlockingAndWaterProperties(backLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY]);
+
             return target;
         }
 
@@ -879,6 +890,26 @@ namespace Pelican4Ever.Framework
 
                 SanitizeAnnexMultiTileObjects(backLayer, bldLayer, frontLayer, alwaysFrontLayer, alwaysFront2Layer, outdoorsSheet, width, height);
                 SanitizeAnnexSpawnsAndPaths(target, backLayer, bldLayer, frontLayer, alwaysFrontLayer, template, side, openingBorderTiles, width, height);
+
+                // Rellenar cualquier casilla Back nula heredada bajo acantilados o copas vanilla para satisfacer la invariante de capa Back
+                for (int x = 0; x < width; x++)
+                {
+                    for (int y = 0; y < height; y++)
+                    {
+                        if (backLayer.Tiles[x, y] != null)
+                            continue;
+
+                        bool blockedAbove = bldLayer.Tiles[x, y] != null
+                            && (!bldLayer.Tiles[x, y].Properties.TryGetValue("Passable", out var bp)
+                                || !string.Equals(bp?.ToString(), "T", StringComparison.OrdinalIgnoreCase));
+                        int fillIdx = blockedAbove ? 351 : TerrainTileClassifier.SunnyGrassTileIndex;
+                        SetTileIfValid(backLayer, outdoorsSheet, x, y, fillIdx);
+                        if (blockedAbove)
+                            SetPassableIfValid(backLayer, x, y, false);
+                        else if (backLayer.Tiles[x, y] != null)
+                            backLayer.Tiles[x, y].Properties["Type"] = "Grass";
+                    }
+                }
             }
 
             // 8. Re-asegurar el sellado perimetral en los 4 bordes salvo únicamente las 2 casillas de la apertura activa
@@ -901,6 +932,21 @@ namespace Pelican4Ever.Framework
                         if (backLayer.Tiles[x, y] != null)
                             backLayer.Tiles[x, y].Properties["Passable"] = "F";
                     }
+                }
+            }
+
+            // Mantener la entrada y su corredor libres de edificios sin cambiar su transitabilidad.
+            var entranceTiles = new HashSet<(int X, int Y)>(openingBorderTiles);
+            foreach (var ct in corridorTiles)
+            {
+                entranceTiles.Add(ct);
+            }
+
+            foreach (var (ex, ey) in entranceTiles)
+            {
+                if (ex >= 0 && ex < width && ey >= 0 && ey < height && backLayer.Tiles[ex, ey] is Tile entranceTile)
+                {
+                    entranceTile.Properties["Buildable"] = "F";
                 }
             }
 
@@ -2755,7 +2801,7 @@ namespace Pelican4Ever.Framework
                     else if (isMining)
                     {
                         bool inNorthPass = side == AnnexSide.South && (x == 15 || x == 16) && y <= 3;
-                        bool inWestPass = side == AnnexSide.East && (y == 19 || y == 20) && x <= 2;
+                        bool inWestPass = side == AnnexSide.East && (y == 19 || y == 20) && x <= 3;
                         bool inSouthPass = side == AnnexSide.North && (x == 24 || x == 25) && y >= 27;
                         bool inQuarrySouthCliff = y >= 13 && y <= 17 && x <= 28 && !(x >= 14 && x <= 17);
                         if ((y <= 3 && !inNorthPass) || (x <= 3 && !inWestPass) || x >= 37 || (y >= 28 && !inSouthPass) || inQuarrySouthCliff)
@@ -3187,7 +3233,7 @@ namespace Pelican4Ever.Framework
 
                 for (int ly = 19; ly <= 20; ly++)
                 {
-                    for (int lx = 0; lx <= 2; lx++)
+                    for (int lx = 0; lx <= 3; lx++)
                     {
                         SetDirtTile(backLayer, outdoorsSheet, lx, ly, TerrainTileClassifier.DirtPlainTileIndex);
                         backLayer.Tiles[lx, ly]?.Properties.Remove("Passable");

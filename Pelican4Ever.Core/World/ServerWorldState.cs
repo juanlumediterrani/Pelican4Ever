@@ -31,15 +31,27 @@ namespace Pelican4Ever.Core.World
 
         public long OwnerId { get; set; }
 
+        /// <summary>ID del inquilino activo en la residencia (máximo 1), o null si no hay inquilino.</summary>
+        public long? TenantId { get; set; }
+
+        /// <summary>Solicitudes de inquilinato pendientes enviadas desde el buzón exterior.</summary>
+        public HashSet<long> PendingTenantRequests { get; set; } = new();
+
         public AccessPolicy Policy { get; set; } = AccessPolicy.Locked;
 
         /// <summary>Si los visitantes pueden usar herramientas, colocar, cosechar, abrir cofres y usar máquinas.</summary>
         public bool VisitorsCanEdit { get; set; }
 
         public HashSet<long> Friends { get; set; } = new();
+
+        /// <summary>Indica si el jugador vive en esta residencia (como propietario o como inquilino).</summary>
+        public bool IsResident(long playerId)
+        {
+            return playerId != 0 && (OwnerId == playerId || (TenantId.HasValue && TenantId.Value == playerId));
+        }
     }
 
-    /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901 / TASK-912).</summary>
+    /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901).</summary>
     public class AnnexAssignment
     {
         public const int CurrentMapVersion = 4;
@@ -56,7 +68,7 @@ namespace Pelican4Ever.Core.World
 
         public DateTimeOffset AcquiredAtUtc { get; set; } = DateTimeOffset.UtcNow;
 
-        /// <summary>Versión del algoritmo de mapa con el que se generó este anexo (TASK-912: v2 composición vanilla).</summary>
+        /// <summary>Versión de generación del mapa del anexo (v2 = recorte canónico + saneado de bordes).</summary>
         public int MapVersion { get; set; } = 1;
     }
 
@@ -75,6 +87,28 @@ namespace Pelican4Ever.Core.World
         UnknownFarmType
     }
 
+    /// <summary>Metadatos del último checkpoint intradía persistido en <see cref="ServerWorldState"/> (TASK-1606).</summary>
+    public sealed class CheckpointMetadata
+    {
+        /// <summary>Día de juego (<c>Game1.Date.TotalDays</c>) en que se tomó el checkpoint, o -1 si no hay ninguno.</summary>
+        public int GameDay { get; set; } = -1;
+
+        /// <summary>Hora del juego (<c>Game1.timeOfDay</c>, HHMM) en el momento del checkpoint.</summary>
+        public int GameTime { get; set; } = 600;
+
+        /// <summary>Instante UTC ISO-8601 en que se creó el checkpoint.</summary>
+        public string SavedAtUtc { get; set; } = string.Empty;
+
+        /// <summary>Nombre de carpeta de la copia verificada en <c>checkpoints/</c>, si se creó.</summary>
+        public string BackupName { get; set; } = string.Empty;
+
+        /// <summary>Duración total del checkpoint en ms.</summary>
+        public double TotalMs { get; set; }
+
+        /// <summary>Duración del tick más largo del checkpoint en ms.</summary>
+        public double LongestTickMs { get; set; }
+    }
+
     /// <summary>
     /// Estado global autoritativo del servidor. Lo escribe SOLO el host mediante
     /// <c>Helper.Data.WriteSaveData</c> y se guarda junto a la partida maestra.
@@ -83,7 +117,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 4;
+        public const int CurrentSchemaVersion = 8;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -108,11 +142,35 @@ namespace Pelican4Ever.Core.World
         /// <summary>Puntuaciones de minijuegos en festivales asíncronos (TASK-701).</summary>
         public List<FestivalScoreEntry> FestivalScores { get; set; } = new();
 
+        /// <summary>Dispositivos de clientes autorizados en la lista blanca por huella digital pública (TASK-1802).</summary>
+        public Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice> AuthorizedDevices { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Solicitudes de alta de nuevos dispositivos pendientes de aprobación por el propietario (TASK-1803).</summary>
+        public Dictionary<string, Pelican4Ever.Core.Security.DeviceEnrollmentRequest> PendingEnrollments { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Dispositivos de clientes emparejados y autorizados en la lista blanca (clave: ClientToken).</summary>
+        public Dictionary<string, AuthorizedClient> AuthorizedClients { get; set; } = new(StringComparer.Ordinal);
+
+        /// <summary>Invitaciones de emparejamiento pendientes (con IP autorizada, código de un solo uso y caducidad de 3 días).</summary>
+        public List<PairingInvite> PairingInvites { get; set; } = new();
+
         /// <summary>Último día de juego cerrado por un Rollover (TotalDays), o -1.</summary>
         public int LastRolloverGameDay { get; set; } = -1;
 
         /// <summary>Momento (UTC) del último reinicio de minas.</summary>
         public DateTimeOffset LastMineResetUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>Metadatos del último checkpoint intradía persistido en esta partida (TASK-1606).</summary>
+        public CheckpointMetadata? LastCheckpoint { get; set; }
+
+        /// <summary>Pedidos de objetos por buzón pendientes de materializarse a mediodía (TASK-2201).</summary>
+        public List<PendingMailItemOrder> PendingMailItemOrders { get; set; } = new();
+
+        /// <summary>Pedidos de construcción/mejora por buzón pendientes de iniciar andamios a mediodía (TASK-2201).</summary>
+        public List<PendingBuildingOrder> PendingBuildingOrders { get; set; } = new();
+
+        /// <summary>Pedidos de compra de animales por buzón pendientes de llegar a mediodía (TASK-2201).</summary>
+        public List<PendingAnimalOrder> PendingAnimalOrders { get; set; } = new();
 
         /// <summary>Devuelve el registro del jugador, creándolo si no existe.</summary>
         public PlayerRecord GetOrCreatePlayer(long uniqueMultiplayerId, string name)
@@ -129,10 +187,52 @@ namespace Pelican4Ever.Core.World
             return record;
         }
 
-        /// <summary>Residencia que posee el jugador, o null. Cada granjero posee como mucho una.</summary>
-        public DoorAssignment? FindResidenceOf(long ownerId)
+        /// <summary>Indica si el jugador es residente (propietario o inquilino) de la puerta indicada.</summary>
+        public static bool IsResident(DoorAssignment? door, long playerId)
         {
-            return Doors.Values.FirstOrDefault(d => d.OwnerId == ownerId);
+            return door != null && door.IsResident(playerId);
+        }
+
+        /// <summary>
+        /// Si el propietario abandona o libera la puerta mientras hay un inquilino activo, transfiere la
+        /// titularidad al inquilino para preservar la residencia y sus edificios/animales compartidos (TASK-2308).
+        /// </summary>
+        public bool TryTransferOwnershipToTenant(string doorId, out long newOwnerId)
+        {
+            newOwnerId = 0;
+            if (string.IsNullOrWhiteSpace(doorId) || !Doors.TryGetValue(doorId, out DoorAssignment? door))
+                return false;
+
+            if (!door.TenantId.HasValue || door.TenantId.Value == 0)
+                return false;
+
+            long previousOwnerId = door.OwnerId;
+            newOwnerId = door.TenantId.Value;
+            door.OwnerId = newOwnerId;
+            door.TenantId = null;
+
+            if (Players.TryGetValue(previousOwnerId, out PlayerRecord? oldRec))
+                oldRec.FarmSlotId = null;
+
+            PlayerRecord newRec = GetOrCreatePlayer(newOwnerId, string.Empty);
+            newRec.FarmSlotId = door.FarmSlotId;
+
+            if (Annexes != null)
+            {
+                foreach (AnnexAssignment annex in GetAnnexesForResidence(door.FarmSlotId))
+                    annex.OwnerId = newOwnerId;
+            }
+
+            return true;
+        }
+
+        /// <summary>Residencia en la que vive el jugador (como propietario o inquilino), o null.</summary>
+        public DoorAssignment? FindResidenceOf(long playerId)
+        {
+            if (playerId == 0)
+                return null;
+
+            return Doors.Values.FirstOrDefault(d => d.IsResident(playerId));
         }
 
         /// <summary>Devuelve el identificador de hueco de residencia asignado al jugador (p. ej. "Pelican4Ever_Farm_01"), o null si no posee ninguna.</summary>
@@ -157,7 +257,7 @@ namespace Pelican4Ever.Core.World
             if (Doors.TryGetValue(doorId, out DoorAssignment? existing) && existing.OwnerId != playerId)
                 return DoorClaimRejection.DoorTaken;
 
-            if (Doors.Values.Any(d => d.OwnerId == playerId && d.DoorId != doorId))
+            if (Doors.Values.Any(d => d.IsResident(playerId) && d.DoorId != doorId))
                 return DoorClaimRejection.AlreadyOwnsResidence;
 
             if (!string.IsNullOrWhiteSpace(farmType) && !FarmTemplateCatalog.Templates.ContainsKey(farmType) && !FarmGrassLogic.IsMeadowlands(farmType))
@@ -207,6 +307,25 @@ namespace Pelican4Ever.Core.World
                     Doors.Remove(extra.DoorId);
                     released.Add(extra.DoorId);
                 }
+            }
+
+            // TASK-2301: normalizar inquilinos (sin auto-inquilinato, sin doble residencia ni solicitudes de jugadores ya residentes).
+            var activeOwners = new HashSet<long>(Doors.Values.Select(d => d.OwnerId).Where(id => id != 0));
+            var assignedTenants = new HashSet<long>();
+            foreach (DoorAssignment door in Doors.Values.OrderBy(d => d.DoorId, StringComparer.Ordinal))
+            {
+                door.PendingTenantRequests ??= new HashSet<long>();
+                door.Friends ??= new HashSet<long>();
+
+                if (door.TenantId.HasValue && (door.TenantId.Value == 0 || door.TenantId.Value == door.OwnerId || activeOwners.Contains(door.TenantId.Value) || !assignedTenants.Add(door.TenantId.Value)))
+                {
+                    door.TenantId = null;
+                }
+            }
+
+            foreach (DoorAssignment door in Doors.Values)
+            {
+                door.PendingTenantRequests.RemoveWhere(id => id == 0 || activeOwners.Contains(id) || assignedTenants.Contains(id));
             }
 
             foreach (PlayerRecord record in Players.Values)
@@ -308,6 +427,66 @@ namespace Pelican4Ever.Core.World
                 changed = true;
             }
 
+            // v4 → v5: soporte para dispositivos autorizados por clave pública asimétrica (TASK-1802).
+            if (SchemaVersion < 5)
+            {
+                AuthorizedDevices ??= new Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice>(StringComparer.OrdinalIgnoreCase);
+                Pelican4Ever.Core.Security.ServerDeviceRegistry.MigrateLegacyClients(this, DateTimeOffset.UtcNow);
+                SchemaVersion = 5;
+                changed = true;
+            }
+
+            // v5 → v6: metadatos del último checkpoint intradía (TASK-1606).
+            if (SchemaVersion < 6)
+            {
+                if (LastCheckpoint != null && LastCheckpoint.GameDay < 0)
+                    LastCheckpoint = null;
+                SchemaVersion = 6;
+                changed = true;
+            }
+
+            // v6 → v7: pedidos diferidos por buzón (TASK-2201).
+            if (SchemaVersion < 7)
+            {
+                PendingMailItemOrders ??= new List<PendingMailItemOrder>();
+                PendingBuildingOrders ??= new List<PendingBuildingOrder>();
+                PendingAnimalOrders ??= new List<PendingAnimalOrder>();
+                SchemaVersion = 7;
+                changed = true;
+            }
+
+            // v7 → v8: co-residencia e inquilinos en parcelas privadas (TASK-2301).
+            if (SchemaVersion < 8)
+            {
+                Doors ??= new Dictionary<string, DoorAssignment>();
+                foreach (DoorAssignment door in Doors.Values)
+                {
+                    door.PendingTenantRequests ??= new HashSet<long>();
+                    if (door.TenantId == 0)
+                        door.TenantId = null;
+                }
+                SchemaVersion = 8;
+                changed = true;
+            }
+
+            if (PendingMailItemOrders == null)
+            {
+                PendingMailItemOrders = new List<PendingMailItemOrder>();
+                changed = true;
+            }
+
+            if (PendingBuildingOrders == null)
+            {
+                PendingBuildingOrders = new List<PendingBuildingOrder>();
+                changed = true;
+            }
+
+            if (PendingAnimalOrders == null)
+            {
+                PendingAnimalOrders = new List<PendingAnimalOrder>();
+                changed = true;
+            }
+
             if (PendingMarketDeliveries == null)
             {
                 PendingMarketDeliveries = new Dictionary<string, PendingMarketDelivery>();
@@ -329,6 +508,30 @@ namespace Pelican4Ever.Core.World
             if (Annexes == null)
             {
                 Annexes = new Dictionary<string, AnnexAssignment>();
+                changed = true;
+            }
+
+            if (AuthorizedDevices == null)
+            {
+                AuthorizedDevices = new Dictionary<string, Pelican4Ever.Core.Security.AuthorizedDevice>(StringComparer.OrdinalIgnoreCase);
+                changed = true;
+            }
+
+            if (PendingEnrollments == null)
+            {
+                PendingEnrollments = new Dictionary<string, Pelican4Ever.Core.Security.DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
+                changed = true;
+            }
+
+            if (AuthorizedClients == null)
+            {
+                AuthorizedClients = new Dictionary<string, AuthorizedClient>(StringComparer.Ordinal);
+                changed = true;
+            }
+
+            if (PairingInvites == null)
+            {
+                PairingInvites = new List<PairingInvite>();
                 changed = true;
             }
 

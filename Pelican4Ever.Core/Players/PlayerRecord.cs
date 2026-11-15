@@ -3,6 +3,13 @@ using System.Collections.Generic;
 
 namespace Pelican4Ever.Core.Players
 {
+    public enum FarmCaveChoice
+    {
+        None = 0,
+        FruitBats = 1,
+        Mushrooms = 2
+    }
+
     /// <summary>Estado de descanso visible para el jugador. Se DERIVA de <see cref="PlayerRecord"/>; no se almacena.</summary>
     public enum SleepState
     {
@@ -45,6 +52,9 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Hueco de granja asignado (ej. "Pelican4Ever_Farm_02"), o null si aún no ha reclamado puerta.</summary>
         public string? FarmSlotId { get; set; }
 
+        /// <summary>Elección para las cuevas de su residencia privada.</summary>
+        public FarmCaveChoice CaveChoice { get; set; }
+
         /// <summary>Token único del equipo/cliente propietario para evitar usurpación de partida (Opción A).</summary>
         public string? OwnerToken { get; set; }
 
@@ -84,11 +94,20 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Día de juego al que corresponden los contadores diarios (si no coincide, se consideran a 0).</summary>
         public int SatietyGameDay { get; set; } = -1;
 
+        /// <summary>Contador diario y fracciones de experiencia de cada habilidad.</summary>
+        public Economy.DailySkillExperience SkillExperience { get; set; } = new();
+
+        /// <summary>Créditos diarios brutos, con ámbito y origen explícitos.</summary>
+        public Economy.DailyGoldLedger GoldLedger { get; set; } = new();
+
         /// <summary>Oro acumulado por ventas en el mercado vecinal mientras el jugador estaba desconectado.</summary>
         public int PendingMarketGold { get; set; }
 
         /// <summary>Premios de festival ganados y aún no confirmados por su cliente (claves de <c>FestivalPrizeLogic.PrizeKey</c>).</summary>
         public List<string> PendingFestivalPrizes { get; set; } = new();
+
+        /// <summary>Registro del ciclo de adopción de mascota de ranura (Épica 20).</summary>
+        public Pelican4Ever.Core.Pets.PetAdoptionRecord PetAdoption { get; set; } = new();
 
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;

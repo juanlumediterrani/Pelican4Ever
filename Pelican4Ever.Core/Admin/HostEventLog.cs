@@ -11,6 +11,10 @@ namespace Pelican4Ever.Core.Admin
     {
         public const string PlayerConnected = "player.connected";
         public const string PlayerDisconnected = "player.disconnected";
+        public const string PlayerRejected = "player.rejected";
+        public const string PlayerPairingInvited = "player.pairing.invited";
+        public const string PlayerPaired = "player.paired";
+        public const string PlayerPairingRevoked = "player.pairing.revoked";
         public const string FestivalSignUp = "festival.signup";
         public const string FestivalSignUpLeft = "festival.signup.left";
         public const string FestivalRunStarted = "festival.run.started";
@@ -19,10 +23,12 @@ namespace Pelican4Ever.Core.Admin
         public const string RolloverStarted = "rollover.started";
         public const string RolloverCompleted = "rollover.completed";
         public const string RolloverStalled = "rollover.stalled";
+        public const string DailyEconomy = "economy.daily";
         public const string BackupCreated = "backup.created";
         public const string CheckpointCreated = "checkpoint.created";
         public const string CheckpointSkipped = "checkpoint.skipped";
         public const string CheckpointFailed = "checkpoint.failed";
+        public const string CheckpointRestored = "checkpoint.restored";
         public const string HostRested = "host.rested";
         public const string HostAnnouncement = "host.announcement";
         public const string RestartScheduled = "host.restart.scheduled";
@@ -30,6 +36,9 @@ namespace Pelican4Ever.Core.Admin
         public const string RestartExecuted = "host.restart.executed";
         public const string TestCommand = "host.test.command";
         public const string AnnexMigrated = "annex.migrated";
+        public const string RemoteCommand = "host.command";
+        public const string RenderLeaseGranted = "host.render.lease.granted";
+        public const string RenderLeaseReleased = "host.render.lease.released";
     }
 
     /// <summary>

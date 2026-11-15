@@ -110,7 +110,7 @@ namespace Pelican4Ever.Modules
                 // el caso de que el interior aún no esté enlazado en este cliente.
                 bool ownResidence = farm.buildings.Any(b => b.HasIndoorsName(who.homeLocation.Value))
                     || ModContext.Current?.WorldState.Doors.Values.Any(d =>
-                        d.OwnerId == who.UniqueMultiplayerID
+                        d.IsResident(who.UniqueMultiplayerID)
                         && string.Equals(d.FarmSlotId, farmName, StringComparison.OrdinalIgnoreCase)) == true;
 
                 return ownResidence ? farm.GetMainMailboxPosition() : HiddenMailboxPosition;
@@ -130,6 +130,12 @@ namespace Pelican4Ever.Modules
                 return;
 
             if (Game1.currentLocation == null)
+                return;
+
+            // Con un menú abierto (p. ej. el propio diálogo del buzón) el botón de acción solo responde a ese menú.
+            // Sin esta guarda, la pulsación que elige "Entrar a mi granja" también reabría el menú del buzón
+            // (QuestionDialog.Ask lo difiere hasta cerrar el diálogo), mostrando un segundo menú tras el warp.
+            if (Game1.activeClickableMenu != null || Game1.dialogueUp || Game1.eventUp || Game1.player.UsingTool)
                 return;
 
             string currentLoc = Game1.currentLocation.NameOrUniqueName;
@@ -177,25 +183,42 @@ namespace Pelican4Ever.Modules
                 }
             }
 
+            long myId = Game1.player.UniqueMultiplayerID;
             var eval = TownMailboxLogic.EvaluateAccess(
-                Game1.player.UniqueMultiplayerID,
+                myId,
                 ownerId,
+                assignment?.TenantId,
                 ownerName,
                 Game1.mailbox.Count
             );
 
-            if (eval.Status == MailboxAccessStatus.Owner)
+            if (eval.Status == MailboxAccessStatus.Owner && assignment != null)
             {
+                int pendingCount = MailOrderModule.CountPendingOrdersFor(myId);
+                int reqCount = assignment.PendingTenantRequests?.Count ?? 0;
+                string tenancyLabel = assignment.TenantId.HasValue && assignment.TenantId.Value != 0
+                    ? I18n.Get("mailbox.menu.tenancy_active", new { tenant = ResolvePlayerName(assignment.TenantId.Value) })
+                    : (reqCount > 0
+                        ? I18n.Get("mailbox.menu.tenancy_requests", new { count = reqCount })
+                        : I18n.Get("mailbox.menu.tenancy"));
+
                 Response[] choices = new[]
                 {
-                    new Response("Enter", "🏠 Entrar a mi granja"),
-                    new Response("Mailbox", Game1.mailbox.Count > 0 ? $"📬 Revisar correo ({Game1.mailbox.Count} sin leer)" : "📬 Revisar correo (vacío)"),
-                    new Response("Policy", $"🔒 Configurar acceso (ahora: {VisitorPermissionLogic.Describe(assignment?.Policy ?? AccessPolicy.Locked, assignment?.VisitorsCanEdit ?? false)})"),
-                    new Response("Cancel", "Cancelar")
+                    new Response("Enter", I18n.Get("mailbox.menu.enter")),
+                    new Response("Mailbox", Game1.mailbox.Count > 0
+                        ? I18n.Get("mailbox.menu.check_mail", new { count = Game1.mailbox.Count })
+                        : I18n.Get("mailbox.menu.check_mail_empty")),
+                    new Response("ShopOrders", pendingCount > 0
+                        ? I18n.Get("mailbox.menu.shop_orders_pending", new { count = pendingCount })
+                        : I18n.Get("mailbox.menu.shop_orders")),
+                    new Response("PendingStatus", I18n.Get("mailbox.menu.view_pending", new { count = pendingCount })),
+                    new Response("Policy", I18n.Get("mailbox.menu.policy", new { status = VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit) })),
+                    new Response("Tenancy", tenancyLabel),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
                 };
 
                 QuestionDialog.Ask(
-                    $"Tu buzón / poste residencial ({door.Description}).",
+                    I18n.Get("mailbox.owner_prompt", new { description = door.Description }),
                     choices,
                     (who, whichAnswer) =>
                     {
@@ -207,9 +230,66 @@ namespace Pelican4Ever.Modules
                         {
                             Game1.currentLocation.mailbox();
                         }
+                        else if (whichAnswer == "ShopOrders")
+                        {
+                            MailOrderModule.OpenShopCatalogMenu();
+                        }
+                        else if (whichAnswer == "PendingStatus")
+                        {
+                            MailOrderModule.ShowPendingOrdersDialog();
+                        }
                         else if (whichAnswer == "Policy")
                         {
                             FarmSlotModule.ShowPolicySelectionDialog(door.DefaultSlotId);
+                        }
+                        else if (whichAnswer == "Tenancy")
+                        {
+                            ShowTenancyManagementDialog(door, assignment);
+                        }
+                    }
+                );
+            }
+            else if (eval.Status == MailboxAccessStatus.Tenant && assignment != null)
+            {
+                int pendingCount = MailOrderModule.CountPendingOrdersFor(myId);
+                Response[] choices = new[]
+                {
+                    new Response("Enter", I18n.Get("mailbox.menu.enter")),
+                    new Response("Mailbox", Game1.mailbox.Count > 0
+                        ? I18n.Get("mailbox.menu.check_mail", new { count = Game1.mailbox.Count })
+                        : I18n.Get("mailbox.menu.check_mail_empty")),
+                    new Response("ShopOrders", pendingCount > 0
+                        ? I18n.Get("mailbox.menu.shop_orders_pending", new { count = pendingCount })
+                        : I18n.Get("mailbox.menu.shop_orders")),
+                    new Response("PendingStatus", I18n.Get("mailbox.menu.view_pending", new { count = pendingCount })),
+                    new Response("LeaveTenancy", I18n.Get("mailbox.menu.leave_tenancy")),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
+                };
+
+                QuestionDialog.Ask(
+                    I18n.Get("mailbox.tenant_prompt", new { description = door.Description, owner = ownerName ?? I18n.Get("common.neighbor") }),
+                    choices,
+                    (who, whichAnswer) =>
+                    {
+                        if (whichAnswer == "Enter")
+                        {
+                            FarmSlotModule.WarpToFarm(door.DefaultSlotId);
+                        }
+                        else if (whichAnswer == "Mailbox")
+                        {
+                            Game1.currentLocation.mailbox();
+                        }
+                        else if (whichAnswer == "ShopOrders")
+                        {
+                            MailOrderModule.OpenShopCatalogMenu();
+                        }
+                        else if (whichAnswer == "PendingStatus")
+                        {
+                            MailOrderModule.ShowPendingOrdersDialog();
+                        }
+                        else if (whichAnswer == "LeaveTenancy")
+                        {
+                            ConfirmLeaveTenancy(door);
                         }
                     }
                 );
@@ -220,31 +300,226 @@ namespace Pelican4Ever.Modules
             }
             else
             {
-                if (assignment != null && VisitorPermissionLogic.CanEnter(assignment, Game1.player.UniqueMultiplayerID))
+                if (assignment != null)
                 {
-                    Response[] choices = new[]
-                    {
-                        new Response("Visit", $"🏠 Visitar granja de {ownerName}"),
-                        new Response("Cancel", "Cancelar")
-                    };
+                    bool canVisit = VisitorPermissionLogic.CanEnter(assignment, myId);
+                    bool canRequestTenancy = (!assignment.TenantId.HasValue || assignment.TenantId.Value == 0)
+                        && context.WorldState.FindResidenceOf(myId) == null;
+                    bool alreadyRequested = assignment.PendingTenantRequests?.Contains(myId) == true;
 
-                    QuestionDialog.Ask(
-                        $"{door.Description}.\nPropiedad de {ownerName}. Acceso: {VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit)}.",
-                        choices,
-                        (who, whichAnswer) =>
-                        {
-                            if (whichAnswer == "Visit")
+                    var choices = new List<Response>();
+                    if (canVisit)
+                        choices.Add(new Response("Visit", I18n.Get("mailbox.menu.visit", new { owner = ownerName })));
+
+                    if (canRequestTenancy)
+                    {
+                        choices.Add(alreadyRequested
+                            ? new Response("CancelTenancy", I18n.Get("mailbox.menu.cancel_tenancy_request"))
+                            : new Response("RequestTenancy", I18n.Get("mailbox.menu.request_tenancy")));
+                    }
+
+                    if (choices.Count > 0)
+                    {
+                        choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
+                        string prompt = canVisit
+                            ? I18n.Get("mailbox.visit_prompt", new { description = door.Description, owner = ownerName, access = VisitorPermissionLogic.Describe(assignment.Policy, assignment.VisitorsCanEdit) })
+                            : I18n.Get("mailbox.tenancy_visitor_prompt", new { description = door.Description, owner = ownerName });
+
+                        QuestionDialog.Ask(
+                            prompt,
+                            choices.ToArray(),
+                            (who, whichAnswer) =>
                             {
-                                FarmSlotModule.WarpToFarm(door.DefaultSlotId);
+                                if (whichAnswer == "Visit")
+                                {
+                                    FarmSlotModule.WarpToFarm(door.DefaultSlotId);
+                                }
+                                else if (whichAnswer == "RequestTenancy")
+                                {
+                                    SendRequestTenancy(door.DoorId, cancel: false);
+                                    Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.request_sent", new { owner = ownerName }), HUDMessage.newQuest_type));
+                                }
+                                else if (whichAnswer == "CancelTenancy")
+                                {
+                                    SendRequestTenancy(door.DoorId, cancel: true);
+                                    Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.request_cancelled"), HUDMessage.newQuest_type));
+                                }
                             }
-                        }
-                    );
+                        );
+                        return;
+                    }
                 }
-                else
+
+                Game1.drawObjectDialogue(I18n.Get("mailbox.restricted", new { owner = ownerName }));
+            }
+        }
+
+        private void ShowTenancyManagementDialog(DoorModel door, DoorAssignment assignment)
+        {
+            if (context == null)
+                return;
+
+            var choices = new List<Response>();
+            if (assignment.TenantId.HasValue && assignment.TenantId.Value != 0)
+            {
+                string tenantName = ResolvePlayerName(assignment.TenantId.Value);
+                choices.Add(new Response("Evict", I18n.Get("mailbox.tenancy.evict", new { tenant = tenantName })));
+                choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
+
+                QuestionDialog.Ask(
+                    I18n.Get("mailbox.tenancy.active_prompt", new { tenant = tenantName }),
+                    choices.ToArray(),
+                    (who, answer) =>
+                    {
+                        if (answer == "Evict")
+                        {
+                            SendManageTenant(door.DoorId, TenantManageAction.Evict, assignment.TenantId.Value);
+                            Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.evicted", new { tenant = tenantName }), HUDMessage.newQuest_type));
+                        }
+                    }
+                );
+                return;
+            }
+
+            var candidateIds = new HashSet<long>();
+            if (assignment.PendingTenantRequests != null)
+            {
+                foreach (long reqId in assignment.PendingTenantRequests)
                 {
-                    Game1.drawObjectDialogue($"Esta residencia pertenece a {ownerName}. La entrada está restringida y el buzón es privado.");
+                    if (reqId != 0 && context.WorldState.FindResidenceOf(reqId) == null)
+                    {
+                        candidateIds.Add(reqId);
+                        choices.Add(new Response($"Applicant_{reqId}", I18n.Get("mailbox.tenancy.applicant_entry", new { name = ResolvePlayerName(reqId) })));
+                    }
                 }
             }
+
+            foreach (Farmer online in Game1.getOnlineFarmers())
+            {
+                long id = online.UniqueMultiplayerID;
+                if (id != 0 && id != assignment.OwnerId && !candidateIds.Contains(id) && context.WorldState.FindResidenceOf(id) == null)
+                {
+                    choices.Add(new Response($"Invite_{id}", I18n.Get("mailbox.tenancy.invite_online", new { name = online.Name })));
+                }
+            }
+
+            if (choices.Count == 0)
+            {
+                Game1.drawObjectDialogue(I18n.Get("mailbox.tenancy.none_available"));
+                return;
+            }
+
+            choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
+            QuestionDialog.Ask(
+                I18n.Get("mailbox.tenancy.manage_prompt"),
+                choices.ToArray(),
+                (who, answer) =>
+                {
+                    if (answer.StartsWith("Applicant_", StringComparison.Ordinal) && long.TryParse(answer.Substring("Applicant_".Length), out long applicantId))
+                    {
+                        string applicantName = ResolvePlayerName(applicantId);
+                        QuestionDialog.Ask(
+                            I18n.Get("mailbox.tenancy.applicant_confirm", new { name = applicantName }),
+                            new[]
+                            {
+                                new Response("Accept", I18n.Get("mailbox.tenancy.accept")),
+                                new Response("Reject", I18n.Get("mailbox.tenancy.reject")),
+                                new Response("Cancel", I18n.Get("dialog.cancel"))
+                            },
+                            (_, decision) =>
+                            {
+                                if (decision == "Accept")
+                                {
+                                    SendManageTenant(door.DoorId, TenantManageAction.Accept, applicantId);
+                                    Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.accepted", new { name = applicantName }), HUDMessage.newQuest_type));
+                                }
+                                else if (decision == "Reject")
+                                {
+                                    SendManageTenant(door.DoorId, TenantManageAction.Reject, applicantId);
+                                    Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.rejected", new { name = applicantName }), HUDMessage.newQuest_type));
+                                }
+                            }
+                        );
+                    }
+                    else if (answer.StartsWith("Invite_", StringComparison.Ordinal) && long.TryParse(answer.Substring("Invite_".Length), out long inviteId))
+                    {
+                        string inviteName = ResolvePlayerName(inviteId);
+                        SendManageTenant(door.DoorId, TenantManageAction.Accept, inviteId);
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.accepted", new { name = inviteName }), HUDMessage.newQuest_type));
+                    }
+                }
+            );
+        }
+
+        private void ConfirmLeaveTenancy(DoorModel door)
+        {
+            QuestionDialog.Ask(
+                I18n.Get("mailbox.tenancy.leave_confirm"),
+                new[]
+                {
+                    new Response("Confirm", I18n.Get("dialog.yes")),
+                    new Response("Cancel", I18n.Get("dialog.no"))
+                },
+                (who, answer) =>
+                {
+                    if (answer == "Confirm")
+                    {
+                        SendManageTenant(door.DoorId, TenantManageAction.Leave, Game1.player.UniqueMultiplayerID);
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.tenancy.left"), HUDMessage.newQuest_type));
+                    }
+                }
+            );
+        }
+
+        private void SendRequestTenancy(string doorId, bool cancel)
+        {
+            if (context == null)
+                return;
+
+            long myId = Game1.player.UniqueMultiplayerID;
+            if (Context.IsMainPlayer)
+            {
+                FarmSlotModule.HandleRequestTenancy(myId, doorId, cancel);
+            }
+            else
+            {
+                context.Helper.Multiplayer.SendMessage(
+                    new RequestTenancyPayload { DoorId = doorId, Cancel = cancel },
+                    ModMessages.RequestTenancyRequest,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                );
+            }
+        }
+
+        private void SendManageTenant(string doorId, TenantManageAction action, long targetPlayerId)
+        {
+            if (context == null)
+                return;
+
+            long myId = Game1.player.UniqueMultiplayerID;
+            if (Context.IsMainPlayer)
+            {
+                FarmSlotModule.HandleManageTenant(myId, doorId, action, targetPlayerId);
+            }
+            else
+            {
+                context.Helper.Multiplayer.SendMessage(
+                    new ManageTenantPayload { DoorId = doorId, Action = action, TargetPlayerId = targetPlayerId },
+                    ModMessages.ManageTenantRequest,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                );
+            }
+        }
+
+        private string ResolvePlayerName(long playerId)
+        {
+            if (context != null && context.WorldState.Players.TryGetValue(playerId, out var rec) && !string.IsNullOrWhiteSpace(rec.PlayerName))
+                return rec.PlayerName;
+
+            Farmer? f = Game1.GetPlayer(playerId);
+            return !string.IsNullOrWhiteSpace(f?.Name) ? f.Name : playerId.ToString();
         }
 
         private void OnRenderedWorld(object? sender, RenderedWorldEventArgs e)
@@ -266,7 +541,7 @@ namespace Pelican4Ever.Modules
                 if (!string.Equals(currentLoc, doorLoc, StringComparison.OrdinalIgnoreCase))
                     continue;
 
-                if (context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment) && assignment.OwnerId == myId)
+                if (context.WorldState.Doors.TryGetValue(door.DoorId, out DoorAssignment? assignment) && assignment.IsResident(myId))
                 {
                     var (mbX, mbY) = TownMailboxLogic.GetMailboxCoords(door.TownTileX, door.TownTileY, door.MailboxTileX, door.MailboxTileY);
                     DrawMailboxNotice(e.SpriteBatch, mbX, mbY);

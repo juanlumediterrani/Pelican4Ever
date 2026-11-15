@@ -1,0 +1,13 @@
+# Pelican 4Ever · pantalla virtual del servidor en VPS (ver docs/despliegue/host-vps.md).
+# Sin VNC ni escucha TCP: el juego solo necesita un contexto gráfico para arrancar.
+[Unit]
+Description=Xvfb dedicado al servidor Pelican 4Ever en VPS
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/Xvfb :99 -screen 0 1280x800x24 -nolisten tcp -noreset
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

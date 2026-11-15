@@ -253,12 +253,12 @@ namespace Pelican4Ever.Modules
                 {
                     var ceremonyChoices = new List<Response>
                     {
-                        new Response("StartCeremony", $"Empezar ceremonia ahora ({attendees.Count} en la playa)"),
-                        new Response("Cancel", "Cancelar")
+                        new Response("StartCeremony", I18n.Get("festival.ceremony.start_choice", new { count = attendees.Count })),
+                        new Response("Cancel", I18n.Get("dialog.cancel"))
                     };
 
                     QuestionDialog.Ask(
-                        $"{festival.FestivalName}: la ceremonia de {ceremonyName} está programada para las 21:00 en la playa para todos los presentes.\n¿Deseas comenzarla ahora?",
+                        I18n.Get("festival.ceremony.host_prompt", new { festival = festival.FestivalName, ceremony = ceremonyName }),
                         ceremonyChoices.ToArray(),
                         (who, answer) =>
                         {
@@ -266,7 +266,7 @@ namespace Pelican4Ever.Modules
                             {
                                 if (attendees.Count == 0)
                                 {
-                                    Game1.chatBox?.addInfoMessage("[Ceremonia] No hay vecinos presentes en la playa para iniciar la ceremonia.");
+                                    Game1.chatBox?.addInfoMessage(I18n.Get("festival.ceremony.no_attendees"));
                                 }
                                 else
                                 {
@@ -280,11 +280,11 @@ namespace Pelican4Ever.Modules
                 {
                     var ceremonyChoices = new List<Response>
                     {
-                        new Response("Cancel", "Entendido")
+                        new Response("Cancel", I18n.Get("dialog.understood"))
                     };
 
                     QuestionDialog.Ask(
-                        $"{festival.FestivalName}: la ceremonia de {ceremonyName} dará comienzo a las 21:00 en la playa para todos los vecinos que se encuentren en la zona.",
+                        I18n.Get("festival.ceremony.info_prompt", new { festival = festival.FestivalName, ceremony = ceremonyName }),
                         ceremonyChoices.ToArray(),
                         (who, answer) => { }
                     );
@@ -299,16 +299,16 @@ namespace Pelican4Ever.Modules
             var choices = new List<Response>
             {
                 signedUp
-                    ? new Response("Leave", "Borrarme del evento")
-                    : new Response("Join", "Apuntarme al evento"),
-                new Response("Leaderboard", "Ver clasificación de hoy")
+                    ? new Response("Leave", I18n.Get("festival.signup.leave_choice"))
+                    : new Response("Join", I18n.Get("festival.signup.join_choice")),
+                new Response("Leaderboard", I18n.Get("festival.signup.leaderboard_choice"))
             };
             if (Context.IsMainPlayer)
-                choices.Add(new Response("Start", $"Empezar ahora ({count} apuntados)"));
-            choices.Add(new Response("Cancel", "Cancelar"));
+                choices.Add(new Response("Start", I18n.Get("festival.signup.start_choice", new { count })));
+            choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
 
             QuestionDialog.Ask(
-                $"{festival.FestivalName}: el evento principal empieza cuando el anfitrión lo confirme.\nApuntados: {count}.",
+                I18n.Get("festival.signup.prompt", new { festival = festival.FestivalName, count }),
                 choices.ToArray(),
                 (who, answer) =>
                 {
@@ -354,17 +354,17 @@ namespace Pelican4Ever.Modules
 
             if (festivalId != TodaysFestivalId())
             {
-                Reply(playerId, "Ese festival ya no está en curso.");
+                Reply(playerId, "festival.not_running");
                 return;
             }
 
-            string name = Game1.GetPlayer(playerId)?.Name ?? "Un vecino";
+            string name = Game1.GetPlayer(playerId)?.Name ?? I18n.Get("common.neighbor");
             switch (SignUps.SetSignedUp(festivalId, playerId, join))
             {
                 case SignUpResult.Joined:
-                    Reply(playerId, "Apuntado. El evento empezará cuando el anfitrión lo confirme; puedes seguir paseando por el festival.");
+                    Reply(playerId, "festival.signup.joined");
                     if (playerId != Game1.player.UniqueMultiplayerID)
-                        Game1.chatBox?.addInfoMessage($"[Festival] {name} se ha apuntado ({SignUps.Participants.Count}). Habla con Lewis o escribe /evento empezar.");
+                        Game1.chatBox?.addInfoMessage(I18n.Get("festival.chat.player_joined", new { name, count = SignUps.Participants.Count }));
                     AdminApiModule.EventLog.Append(
                         HostEventTypes.FestivalSignUp,
                         Game1.Date.TotalDays,
@@ -379,7 +379,7 @@ namespace Pelican4Ever.Modules
                         });
                     break;
                 case SignUpResult.Left:
-                    Reply(playerId, "Te has borrado del evento.");
+                    Reply(playerId, "festival.signup.left");
                     AdminApiModule.EventLog.Append(
                         HostEventTypes.FestivalSignUpLeft,
                         Game1.Date.TotalDays,
@@ -394,25 +394,25 @@ namespace Pelican4Ever.Modules
                         });
                     break;
                 case SignUpResult.AlreadyPlayed:
-                    Reply(playerId, "Ya has participado en el evento de este festival hoy.");
+                    Reply(playerId, "festival.signup.already_played");
                     break;
             }
 
             BroadcastSignUps();
         }
 
-        private static void Reply(long playerId, string message)
+        private static void Reply(long playerId, string messageOrKey)
         {
             if (context == null) return;
 
             if (playerId == Game1.player.UniqueMultiplayerID)
             {
-                Game1.addHUDMessage(new HUDMessage(message, HUDMessage.newQuest_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get(messageOrKey), HUDMessage.newQuest_type));
                 return;
             }
 
             context.Helper.Multiplayer.SendMessage(
-                new FestivalReplyPayload { Message = message },
+                new FestivalReplyPayload { Message = messageOrKey },
                 FestivalParticipationMessages.SignUpReply,
                 new[] { context.Manifest.UniqueID },
                 new[] { playerId }
@@ -443,14 +443,14 @@ namespace Pelican4Ever.Modules
             FestivalRun? run = SignUps.StartRun(TodaysFestivalId());
             if (run == null)
             {
-                Game1.chatBox?.addInfoMessage("[Festival] No hay nadie apuntado al evento.");
+                Game1.chatBox?.addInfoMessage(I18n.Get("festival.chat.no_participants"));
                 return (false, "No hay ningún jugador apuntado a la tanda del festival.", null);
             }
 
             var payload = new FestivalRunPayload { FestivalId = run.FestivalId, RunId = run.RunId, Participants = run.Participants.ToList() };
             context.Helper.Multiplayer.SendMessage(payload, FestivalParticipationMessages.StartRun, new[] { context.Manifest.UniqueID });
             BroadcastSignUps();
-            string msg = $"[Festival] Empieza el evento (tanda #{run.RunId}) con {run.Participants.Count} participantes.";
+            string msg = I18n.Get("festival.chat.run_started", new { runId = run.RunId, count = run.Participants.Count });
             Game1.chatBox?.addInfoMessage(msg);
 
             HostEventEntry evt = AdminApiModule.EventLog.Append(
@@ -481,7 +481,7 @@ namespace Pelican4Ever.Modules
             var payload = new FestivalRunPayload { FestivalId = run.FestivalId, RunId = run.RunId, Participants = run.Participants.ToList() };
             context.Helper.Multiplayer.SendMessage(payload, FestivalParticipationMessages.StartRun, new[] { context.Manifest.UniqueID });
             BroadcastSignUps();
-            Game1.chatBox?.addInfoMessage($"[Ceremonia] Comienza la ceremonia comunitaria con {run.Participants.Count} vecinos presentes.");
+            Game1.chatBox?.addInfoMessage(I18n.Get("festival.chat.ceremony_started", new { count = run.Participants.Count }));
 
             AdminApiModule.EventLog.Append(
                 HostEventTypes.FestivalCeremonyStarted,
@@ -565,7 +565,7 @@ namespace Pelican4Ever.Modules
 
             if (Game1.CurrentEvent is not { } festival || festival.id != payload.FestivalId || festival.eventSwitched)
             {
-                Game1.addHUDMessage(new HUDMessage("El evento del festival ha empezado, pero no estabas en el recinto.", HUDMessage.error_type));
+                Game1.addHUDMessage(new HUDMessage(I18n.Get("festival.hud.not_in_area"), HUDMessage.error_type));
                 return;
             }
 
@@ -599,7 +599,7 @@ namespace Pelican4Ever.Modules
                     break;
                 case FestivalParticipationMessages.SignUpReply:
                     if (e.ReadAs<FestivalReplyPayload>() is { } reply)
-                        Game1.addHUDMessage(new HUDMessage(reply.Message, HUDMessage.newQuest_type));
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get(reply.Message), HUDMessage.newQuest_type));
                     break;
                 case FestivalParticipationMessages.StartRun:
                     if (e.ReadAs<FestivalRunPayload>() is { } run)
@@ -621,7 +621,7 @@ namespace Pelican4Ever.Modules
                     ChatCommands.Register(
                         "evento",
                         HandleEventCommand,
-                        name => "Evento principal del festival: /evento (apuntados) o /evento empezar (anfitrión)",
+                        name => I18n.Get("festival.command.help"),
                         Array.Empty<string>(),
                         mainOnly: false,
                         multiplayerOnly: true,
@@ -642,7 +642,7 @@ namespace Pelican4Ever.Modules
             {
                 if (!Context.IsMainPlayer)
                 {
-                    chat.addInfoMessage("Solo el anfitrión puede empezar el evento.");
+                    chat.addInfoMessage(I18n.Get("festival.command.host_only"));
                     return;
                 }
 
@@ -651,9 +651,9 @@ namespace Pelican4Ever.Modules
             }
 
             string names = knownParticipants.Count == 0
-                ? "nadie"
+                ? I18n.Get("festival.command.nobody")
                 : string.Join(", ", knownParticipants.Select(id => Game1.GetPlayer(id)?.Name ?? id.ToString()));
-            chat.addInfoMessage($"[Festival] Apuntados al evento: {names}.");
+            chat.addInfoMessage(I18n.Get("festival.command.signups_list", new { names }));
         }
     }
 }

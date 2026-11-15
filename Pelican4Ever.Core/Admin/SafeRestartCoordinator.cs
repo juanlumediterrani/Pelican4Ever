@@ -1,6 +1,8 @@
 using System;
+using Pelican4Ever.Core.Localization;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
+using Pelican4Ever.Core.World;
 
 namespace Pelican4Ever.Core.Admin
 {
@@ -14,7 +16,7 @@ namespace Pelican4Ever.Core.Admin
         string Message);
 
     /// <summary>
-    /// Evaluación del progreso en riesgo si el servidor se reinicia antes del próximo guardado/rollover (TASK-804).
+    /// Evaluación del progreso en riesgo si el servidor se reinicia antes del próximo guardado/rollover (TASK-804 / TASK-1608).
     /// </summary>
     public sealed class ProgressAtRiskDto
     {
@@ -24,11 +26,13 @@ namespace Pelican4Ever.Core.Admin
         public int OnlinePlayersCount { get; set; }
         public int UnrestedActivePlayersCount { get; set; }
         public bool WouldLoseUnsavedDayProgress { get; set; }
+        public string? LastCheckpointAtUtc { get; set; }
+        public int? LastCheckpointGameTime { get; set; }
         public string Summary { get; set; } = string.Empty;
     }
 
     /// <summary>
-    /// Estado actual del coordinador de reinicio controlado (TASK-804).
+    /// Estado actual del coordinador de reinicio controlado (TASK-804 / TASK-1608).
     /// </summary>
     public sealed class SafeRestartStatusDto
     {
@@ -37,6 +41,7 @@ namespace Pelican4Ever.Core.Admin
         public string Reason { get; set; } = string.Empty;
         public bool Immediate { get; set; }
         public bool WaitingForNextSave { get; set; }
+        public bool RestartAfterCheckpoint { get; set; }
         public int WarningMinutes { get; set; }
         public string RequestedAtUtc { get; set; } = string.Empty;
         public string? ExecuteNotBeforeUtc { get; set; }
@@ -74,43 +79,67 @@ namespace Pelican4Ever.Core.Admin
                     RestRecorded: true,
                     GameDay: currentGameDay,
                     ShouldDisconnectSession: false,
-                    Message: "Descanso registrado. Modo anfitrión agente activo: el servidor permanece en línea.");
+                    Message: CoreI18n.Get("bed_logout.host_agent_active"));
             }
 
             return new HostRestResult(
                 RestRecorded: true,
                 GameDay: currentGameDay,
                 ShouldDisconnectSession: true,
-                Message: "Descanso registrado. Desconectando de forma segura...");
+                Message: CoreI18n.Get("bed_logout.disconnecting"));
         }
 
         /// <summary>
-        /// Calcula qué progreso diario se perdería si se reinicia antes del próximo guardado (Stardew solo guarda al cambiar de día).
+        /// Calcula qué progreso diario se perdería si se reinicia antes del próximo guardado (rollover o último checkpoint).
         /// </summary>
         public static ProgressAtRiskDto EvaluateProgressAtRisk(
             int currentGameDay,
             int currentGameTime,
             int onlinePlayersCount,
-            int unrestedActivePlayersCount)
+            int unrestedActivePlayersCount,
+            CheckpointMetadata? lastCheckpoint = null)
         {
             int clampedTime = Math.Max(GameClock.DayStartTimeOfDay, currentGameTime);
-            int minutesSinceMorning = Math.Max(0, GameClock.ToMinutes(clampedTime) - GameClock.ToMinutes(GameClock.DayStartTimeOfDay));
-            int hours = minutesSinceMorning / 60;
-            int mins = minutesSinceMorning % 60;
-            bool hasUnsavedProgress = minutesSinceMorning > 0 || onlinePlayersCount > 0 || unrestedActivePlayersCount > 0;
+            bool hasTodayCheckpoint = lastCheckpoint != null && lastCheckpoint.GameDay == currentGameDay;
+            int referenceTime = hasTodayCheckpoint
+                ? Math.Max(GameClock.DayStartTimeOfDay, lastCheckpoint!.GameTime)
+                : GameClock.DayStartTimeOfDay;
+            int minutesSinceAnchor = Math.Max(0, GameClock.ToMinutes(clampedTime) - GameClock.ToMinutes(referenceTime));
+            int hours = minutesSinceAnchor / 60;
+            int mins = minutesSinceAnchor % 60;
+            bool hasUnsavedProgress = minutesSinceAnchor > 0 || onlinePlayersCount > 0 || unrestedActivePlayersCount > 0;
 
-            string summary = $"Progreso no guardado del día {currentGameDay} ({hours}h {mins:00}m desde las 06:00, " +
-                             $"{onlinePlayersCount} jugador(es) conectado(s), {unrestedActivePlayersCount} sin descansar hoy). " +
-                             "Stardew Valley solo guarda al cambiar de día (Rollover).";
+            string summary;
+            if (hasTodayCheckpoint && lastCheckpoint != null)
+            {
+                string cpTime = CheckpointRestoreLogic.FormatGameTime(lastCheckpoint.GameTime);
+                summary = $"Progreso no guardado del día {currentGameDay} ({hours}h {mins:00}m desde el último checkpoint de las {cpTime}, " +
+                          $"{onlinePlayersCount} jugador(es) conectado(s), {unrestedActivePlayersCount} sin descansar hoy).";
+            }
+            else if (lastCheckpoint != null && lastCheckpoint.GameDay > 0)
+            {
+                string cpTime = CheckpointRestoreLogic.FormatGameTime(lastCheckpoint.GameTime);
+                summary = $"Progreso no guardado del día {currentGameDay} ({hours}h {mins:00}m desde las 06:00, " +
+                          $"{onlinePlayersCount} jugador(es) conectado(s), {unrestedActivePlayersCount} sin descansar hoy). " +
+                          $"Último checkpoint: día {lastCheckpoint.GameDay} a las {cpTime}.";
+            }
+            else
+            {
+                summary = $"Progreso no guardado del día {currentGameDay} ({hours}h {mins:00}m desde las 06:00, " +
+                          $"{onlinePlayersCount} jugador(es) conectado(s), {unrestedActivePlayersCount} sin descansar hoy). " +
+                          "Stardew Valley solo guarda al cambiar de día (Rollover).";
+            }
 
             return new ProgressAtRiskDto
             {
                 CurrentGameDay = currentGameDay,
                 CurrentGameTime = currentGameTime,
-                GameMinutesSinceMorning = minutesSinceMorning,
+                GameMinutesSinceMorning = minutesSinceAnchor,
                 OnlinePlayersCount = onlinePlayersCount,
                 UnrestedActivePlayersCount = unrestedActivePlayersCount,
                 WouldLoseUnsavedDayProgress = hasUnsavedProgress,
+                LastCheckpointAtUtc = lastCheckpoint != null && !string.IsNullOrWhiteSpace(lastCheckpoint.SavedAtUtc) ? lastCheckpoint.SavedAtUtc : null,
+                LastCheckpointGameTime = lastCheckpoint != null && lastCheckpoint.GameDay > 0 ? lastCheckpoint.GameTime : null,
                 Summary = summary
             };
         }
@@ -136,8 +165,10 @@ namespace Pelican4Ever.Core.Admin
 
         /// <summary>
         /// Programa un reinicio controlado.
-        /// Por defecto (<paramref name="immediate"/> = false) espera hasta justo después del siguiente guardado (Rollover).
-        /// Si <paramref name="immediate"/> = true, se programa tras los minutos de preaviso (<paramref name="warningMinutes"/>).
+        /// Por defecto (<paramref name="immediate"/> = false y <paramref name="restartAfterCheckpoint"/> = false)
+        /// espera hasta justo después del siguiente guardado (Rollover).
+        /// Con <paramref name="restartAfterCheckpoint"/> = true espera al siguiente checkpoint intradía (o rollover si ocurre antes).
+        /// Si <paramref name="immediate"/> = true, tras los minutos de preaviso lanza un checkpoint y reinicia al terminarlo.
         /// </summary>
         public SafeRestartStatusDto Schedule(
             string? reason,
@@ -147,7 +178,9 @@ namespace Pelican4Ever.Core.Admin
             int currentGameTime,
             int onlinePlayersCount,
             int unrestedActivePlayersCount,
-            DateTimeOffset? nowUtc = null)
+            DateTimeOffset? nowUtc = null,
+            bool restartAfterCheckpoint = false,
+            CheckpointMetadata? lastCheckpoint = null)
         {
             DateTimeOffset now = nowUtc ?? DateTimeOffset.UtcNow;
             int clampedWarning = Math.Max(0, warningMinutes);
@@ -157,17 +190,27 @@ namespace Pelican4Ever.Core.Admin
                 currentGameDay,
                 currentGameTime,
                 onlinePlayersCount,
-                unrestedActivePlayersCount);
+                unrestedActivePlayersCount,
+                lastCheckpoint);
 
             DateTimeOffset? notBefore = immediate
                 ? now.AddMinutes(clampedWarning)
                 : null;
 
+            bool waitAfterCheckpoint = !immediate && restartAfterCheckpoint;
+            string mode = immediate
+                ? "immediate"
+                : waitAfterCheckpoint
+                    ? "after_next_checkpoint"
+                    : "after_next_save";
+
             string timingText = immediate
                 ? (clampedWarning > 0
-                    ? $"en {clampedWarning} minuto(s) (reinicio inmediato por causa mayor)"
-                    : "ahora mismo (reinicio inmediato por causa mayor)")
-                : $"justo después del próximo guardado/Rollover (preaviso de {clampedWarning} min)";
+                    ? $"en {clampedWarning} minuto(s) tras intentar un checkpoint (reinicio inmediato)"
+                    : "ahora mismo tras intentar un checkpoint (reinicio inmediato)")
+                : waitAfterCheckpoint
+                    ? $"justo después del próximo checkpoint (preaviso de {clampedWarning} min)"
+                    : $"justo después del próximo guardado/Rollover (preaviso de {clampedWarning} min)";
 
             string announcement = $"[Reinicio Controlado] El servidor se reiniciará {timingText}. Motivo: {cleanReason}. {risk.Summary}";
 
@@ -177,10 +220,11 @@ namespace Pelican4Ever.Core.Admin
                 current = new SafeRestartStatusDto
                 {
                     IsPending = true,
-                    Mode = immediate ? "immediate" : "after_next_save",
+                    Mode = mode,
                     Reason = cleanReason,
                     Immediate = immediate,
                     WaitingForNextSave = !immediate,
+                    RestartAfterCheckpoint = waitAfterCheckpoint,
                     WarningMinutes = clampedWarning,
                     RequestedAtUtc = now.ToUniversalTime().ToString("O"),
                     ExecuteNotBeforeUtc = notBefore?.ToUniversalTime().ToString("O"),
@@ -205,6 +249,7 @@ namespace Pelican4Ever.Core.Admin
                     Reason = string.Empty,
                     Immediate = false,
                     WaitingForNextSave = false,
+                    RestartAfterCheckpoint = false,
                     WarningMinutes = 0,
                     RequestedAtUtc = string.Empty,
                     ExecuteNotBeforeUtc = null,
@@ -217,18 +262,19 @@ namespace Pelican4Ever.Core.Admin
         }
 
         /// <summary>
-        /// Notifica que el guardado del cambio de día (Rollover) acaba de completarse.
-        /// Si había un reinicio en modo por defecto (<c>WaitingForNextSave</c>), lo consume y devuelve true para ejecutar el reinicio.
+        /// Notifica que un guardado (<paramref name="isCheckpoint"/> = false para rollover, true para checkpoint intradía)
+        /// acaba de completarse. Devuelve true y consume el estado cuando el modo programado corresponde a ese guardado.
         /// </summary>
-        public bool ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggeredStatus)
+        public bool ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggeredStatus, bool isCheckpoint = false)
         {
             lock (syncRoot)
             {
-                if (current.IsPending && current.WaitingForNextSave)
+                if (current.IsPending && current.WaitingForNextSave && (!isCheckpoint || current.RestartAfterCheckpoint))
                 {
                     triggeredStatus = CloneStatus(current);
                     current.IsPending = false;
                     current.WaitingForNextSave = false;
+                    current.RestartAfterCheckpoint = false;
                     executeNotBefore = null;
                     return true;
                 }
@@ -267,6 +313,7 @@ namespace Pelican4Ever.Core.Admin
                 Reason = src.Reason,
                 Immediate = src.Immediate,
                 WaitingForNextSave = src.WaitingForNextSave,
+                RestartAfterCheckpoint = src.RestartAfterCheckpoint,
                 WarningMinutes = src.WarningMinutes,
                 RequestedAtUtc = src.RequestedAtUtc,
                 ExecuteNotBeforeUtc = src.ExecuteNotBeforeUtc,
@@ -279,6 +326,8 @@ namespace Pelican4Ever.Core.Admin
                     OnlinePlayersCount = src.ProgressAtRisk.OnlinePlayersCount,
                     UnrestedActivePlayersCount = src.ProgressAtRisk.UnrestedActivePlayersCount,
                     WouldLoseUnsavedDayProgress = src.ProgressAtRisk.WouldLoseUnsavedDayProgress,
+                    LastCheckpointAtUtc = src.ProgressAtRisk.LastCheckpointAtUtc,
+                    LastCheckpointGameTime = src.ProgressAtRisk.LastCheckpointGameTime,
                     Summary = src.ProgressAtRisk.Summary
                 }
             };

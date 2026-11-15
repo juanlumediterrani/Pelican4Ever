@@ -18,6 +18,8 @@ namespace Pelican4Ever
 
         public override void Entry(IModHelper helper)
         {
+            I18n.Init(helper.Translation);
+
             ServerConfig config = helper.ReadConfig<ServerConfig>();
             IReadOnlyList<string> errors = config.Validate();
             if (errors.Count > 0)
@@ -28,31 +30,41 @@ namespace Pelican4Ever
                 return;
             }
 
-            context = new ModContext(helper, Monitor, ModManifest, config, new Harmony(ModManifest.UniqueID));
+            context = new ModContext(helper, new CapturingMonitor(Monitor), ModManifest, config, new Harmony(ModManifest.UniqueID));
+
+            Diagnostics.Configure(helper.DirectoryPath);
 
             // Orden de registro = orden de dependencia. Cada iteración del backlog añade aquí sus módulos.
             RegisterModules(
                 new PersistenceModule(),
                 new ClientVersionGuardModule(),
-                new MaintenanceLockModule(),
+                new RolloverLockModule(),
                 new ClientSecurityModule(),
                 new StatusCommandModule(),
                 new DebugGiveModule(),
                 new FarmTestCommandsModule(),
-                new AnnexReviewModule(),
                 new RealTimeClockModule(),
                 new BedLogoutModule(),
                 new DailyRolloverModule(),
                 new CheckpointModule(),
                 new CheckpointSpikeModule(),
                 new FarmSlotModule(),
+                new AnnexReviewModule(),
                 new FarmTypeModule(),
                 new FarmTypeLootModule(),
                 new VisitorGuardModule(),
                 new TownMailboxModule(),
+                new MailOrderModule(),
                 new ChatChannelModule(),
                 new CommunityMarketModule(),
                 new EconomyModule(),
+                new FurnaceUnlockModule(),
+                new RecipeFallbackModule(),
+                new SkillExperienceModule(),
+                new SkullCavernDescentModule(),
+                new MineLadderModule(),
+                new FishingRebalanceModule(),
+                new DailyGoldTelemetryModule(),
                 new GroundSitModule(),
                 new WorldLifeModule(),
                 new FestivalMinigameModule(),
@@ -60,17 +72,30 @@ namespace Pelican4Ever
                 new FestivalParticipationModule(),
                 new AgentCosmeticsModule(),
                 new AdminApiModule(),
-                new AutoHostModule()
+                new AutoHostModule(),
+                new HeadlessRenderModule(),
+                new ClientPetAdoptionModule(),
+                new ModToggleModule()
             );
+
+            context.SyncInitialActivationState();
+            context.RawHelper.Events.GameLoop.GameLaunched += (_, _) => context.SyncInitialActivationState();
+
+            if (!context.IsModEnabled)
+                Monitor.Log("Pelican 4Ever inicia DESACTIVADO internamente por configuración (config.json -> Enabled=false).", LogLevel.Info);
 
             Monitor.Log($"Cargado (cambio de fecha {config.CalendarDayChangeTime}, inicio de reloj/horarios {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
         }
+
+        /// <summary>API para otros mods (por ejemplo, el puente de Stardew Voyager). Ver <see cref="PelicanApi"/>.</summary>
+        public override object? GetApi() => context == null || !context.IsModEnabled ? null : new PelicanApi();
 
         private void RegisterModules(params IModule[] modules)
         {
             foreach (IModule module in modules)
             {
-                if (!context.Config.IsModuleEnabled(module.Name))
+                if (!string.Equals(module.Name, "ModToggle", System.StringComparison.OrdinalIgnoreCase) &&
+                    !context.Config.IsModuleEnabled(module.Name))
                 {
                     Monitor.Log($"Módulo '{module.Name}' desactivado en config.json.", LogLevel.Info);
                     continue;

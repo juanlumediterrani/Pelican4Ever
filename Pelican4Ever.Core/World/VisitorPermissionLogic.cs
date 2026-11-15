@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using Pelican4Ever.Core.Localization;
 
 namespace Pelican4Ever.Core.World
 {
@@ -46,12 +48,12 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
-        /// Indica si el jugador puede entrar: es el dueño, la residencia está abierta o, con
+        /// Indica si el jugador puede entrar: es residente (propietario o inquilino), la residencia está abierta o, con
         /// <see cref="AccessPolicy.Friends"/>, el dueño lo tiene en su lista de amigos.
         /// </summary>
         public static bool CanEnter(DoorAssignment? assignment, long playerId)
         {
-            if (assignment == null || assignment.OwnerId == 0 || assignment.OwnerId == playerId)
+            if (assignment == null || assignment.OwnerId == 0 || assignment.IsResident(playerId))
                 return true;
             return assignment.Policy switch
             {
@@ -61,27 +63,80 @@ namespace Pelican4Ever.Core.World
             };
         }
 
-        /// <summary>Indica si el jugador puede modificar la residencia: es el dueño o el dueño permite editar a los visitantes.</summary>
+        /// <summary>Indica si el jugador puede modificar la residencia: es residente (propietario o inquilino) o el dueño permite editar a los visitantes.</summary>
         public static bool CanEdit(DoorAssignment? assignment, long playerId)
         {
             return assignment == null
                 || assignment.OwnerId == 0
-                || assignment.OwnerId == playerId
+                || assignment.IsResident(playerId)
                 || assignment.VisitorsCanEdit;
         }
 
-        /// <summary>Texto del estado de acceso para los diálogos.</summary>
-        public static string Describe(AccessPolicy policy, bool visitorsCanEdit)
+        /// <summary>Indica si el jugador puede recoger forraje u objetos aparecidos en el suelo de la residencia.</summary>
+        public static bool CanPickUpForage(DoorAssignment? assignment, long playerId, bool isSpawnedObject, bool isForage)
         {
+            if (!isSpawnedObject && !isForage)
+                return true;
+            return CanEdit(assignment, playerId);
+        }
+
+        /// <summary>
+        /// Determina si un jugador que se encuentra dentro de <paramref name="currentLocationName"/> (o su ubicación raíz
+        /// <paramref name="rootLocationName"/>, para establos/galpones) ha perdido el permiso de entrada tras un cambio
+        /// de política o retirada de la lista de amigos.
+        /// </summary>
+        public static bool ShouldEvictVisitor(
+            string? currentLocationName,
+            string? rootLocationName,
+            IReadOnlyDictionary<string, DoorAssignment> doors,
+            long playerId,
+            out DoorAssignment? revokedDoor)
+        {
+            revokedDoor = null;
+            string? slotId = ResidenceSlotOf(currentLocationName) ?? ResidenceSlotOf(rootLocationName);
+            if (slotId == null)
+                return false;
+
+            foreach (DoorAssignment door in doors.Values)
+            {
+                if (string.Equals(door.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!CanEnter(door, playerId))
+                    {
+                        revokedDoor = door;
+                        return true;
+                    }
+                    return false;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Indica si la ubicación forma parte de la Plaza Central común (<c>Farm</c> o <c>Pelican4Ever_Bridge_*</c>),
+        /// donde solo el anfitrión puede usar herramientas de trabajo, colocar objetos o abrir cofres/máquinas.
+        /// </summary>
+        public static bool IsProtectedPublicHub(string? locationName)
+        {
+            return HostPlazaLayout.IsPlazaLocation(locationName);
+        }
+
+        /// <summary>Texto del estado de acceso para los diálogos.</summary>
+        public static string Describe(AccessPolicy policy, bool visitorsCanEdit, ITranslationProvider? translations = null)
+        {
+            var provider = translations ?? CoreI18n.Current;
             string access = policy switch
             {
-                AccessPolicy.Public => "abierta",
-                AccessPolicy.Friends => "solo amigos",
-                _ => "cerrada"
+                AccessPolicy.Public => provider.Get("residence.permission.open"),
+                AccessPolicy.Friends => provider.Get("residence.permission.friends_only"),
+                _ => provider.Get("residence.permission.closed")
             };
             if (policy == AccessPolicy.Locked)
                 return access;
-            return visitorsCanEdit ? $"{access}, visitas pueden editar" : $"{access}, visitas solo miran";
+            return visitorsCanEdit
+                ? provider.Get("residence.permission.visitors_can_edit", new { access })
+                : provider.Get("residence.permission.visitors_view_only", new { access });
         }
     }
 }

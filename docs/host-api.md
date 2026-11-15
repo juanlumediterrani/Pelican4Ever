@@ -14,7 +14,7 @@ Contrato HTTP local para operar un servidor Pelican 4Ever desde fuera del juego.
 2. **Rechazo de arranque con el token por defecto:**
    - Si `AdminApiToken` está vacío o conserva el valor por defecto `pelican4ever_secret_admin_token`, `AdminApiModule` **no arranca** el `HttpListener` y registra un error en el log de SMAPI.
 3. **Autenticación obligatoria en todas las rutas:**
-   - Tanto el panel web (`GET /`, `GET /dashboard`) como cualquier ruta `/api/*` y `/api/v1/host/*` exigen `Authorization: Bearer <AdminApiToken>` (o `?token=<AdminApiToken>` para el panel web).
+   - Toda ruta `/api/*` y `/api/v1/host/*` exige `Authorization: Bearer <AdminApiToken>` (o `?token=<AdminApiToken>`).
    - Sin token válido, el servidor responde `401 Unauthorized`.
 4. **Despacho en el hilo principal del juego (`UpdateTicked`):**
    - Toda consulta del mundo o acción mutadora encolada desde un hilo HTTP se ejecuta en el hilo principal de Stardew Valley a través de `MainThreadActionQueue.Drain()` durante el evento `GameLoop.UpdateTicked`.
@@ -46,11 +46,16 @@ Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`
   "LastBackupFileName": "PelicanValley_20261031_020000_000",
   "LastBackupCreatedUtc": "2026-10-31T01:00:00.0000000Z",
   "SaveFolderName": "PelicanValley_452974881",
-  "IsMultiplayerServer": true
+  "IsMultiplayerServer": true,
+  "LastCheckpointName": "PelicanValley_20261031_154000_000",
+  "LastCheckpointGameDay": 12,
+  "LastCheckpointGameTime": 1540,
+  "LastCheckpointAtUtc": "2026-10-31T14:40:00.0000000Z",
+  "LastCheckpointLongestTickMs": 420
 }
 ```
 
-`SaveFolderName` es la carpeta de `Saves/` de la partida cargada e `IsMultiplayerServer` indica si está abierta como servidor de cooperativo; un supervisor desatendido los usa para comprobar que el servidor sirve la partida autorizada (`TASK-805`, ver `docs/servidor-persistente.md`).
+`SaveFolderName` es la carpeta de `Saves/` de la partida cargada e `IsMultiplayerServer` indica si está abierta como servidor de cooperativo; un supervisor desatendido los usa para comprobar que el servidor sirve la partida autorizada (guía: [despliegue/host-vps.md](despliegue/host-vps.md)). Los campos `LastCheckpoint*` son `null` hasta el primer checkpoint intradía.
 
 ### `GET /api/v1/host/players`
 
@@ -191,17 +196,19 @@ Registra el descanso diario del jugador anfitrión (`RestedOnGameDay` y `LastAct
 
 ### `POST /api/v1/host/restart`
 
-Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente al comando de consola `p4e_safe_restart`.
+Programa o cancela un reinicio controlado del servidor (`TASK-804` / `TASK-1608`), equivalente al comando de consola `p4e_safe_restart`.
 - Avisa a los jugadores conectados con antelación configurable (`warningMinutes`).
-- Calcula e informa del progreso diario no guardado en riesgo (`ProgressAtRisk`), dado que Stardew Valley solo guarda al cambiar de día.
-- Por defecto (`immediate: false`), espera hasta justo después del siguiente guardado/Rollover (`WaitingForNextSave: true`).
-- Si se solicita `immediate: true` por causa mayor, ejecuta el reinicio tras los minutos de preaviso indicados.
+- Calcula e informa del progreso diario en riesgo (`ProgressAtRisk`) desde el último checkpoint intradía (o desde las 06:00 si no hubo ninguno hoy).
+- Por defecto (`immediate: false`, `restartAfterCheckpoint: false`), espera hasta justo después del siguiente guardado/Rollover (`WaitingForNextSave: true`).
+- Con `restartAfterCheckpoint: true`, reinicia justo después del siguiente checkpoint intradía completado (o tras el rollover si llega antes).
+- Si se solicita `immediate: true` por causa mayor, intenta lanzar un checkpoint tras los minutos de preaviso y ejecuta el reinicio al terminar (o aunque el checkpoint se omita/falle).
 
 **Cuerpo de petición (`HostRestartRequestDto`):**
 ```json
 {
   "reason": "Actualización de mantenimiento",
   "immediate": false,
+  "restartAfterCheckpoint": false,
   "warningMinutes": 5,
   "cancel": false
 }
@@ -215,6 +222,7 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
   "Reason": "Actualización de mantenimiento",
   "Immediate": false,
   "WaitingForNextSave": true,
+  "RestartAfterCheckpoint": false,
   "WarningMinutes": 5,
   "RequestedAtUtc": "2026-10-31T15:10:00.0000000Z",
   "ExecuteNotBeforeUtc": null,
@@ -226,16 +234,32 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804`), equivalente
     "OnlinePlayersCount": 2,
     "UnrestedActivePlayersCount": 1,
     "WouldLoseUnsavedDayProgress": true,
+    "LastCheckpointAtUtc": null,
+    "LastCheckpointGameTime": null,
     "Summary": "Progreso no guardado del día 12 (8h 30m desde las 06:00, 2 jugador(es) conectado(s), 1 sin descansar hoy). Stardew Valley solo guarda al cambiar de día (Rollover)."
   },
   "EventId": 57
 }
 ```
 
+### `POST /api/v1/host/checkpoint`
+
+Ejecuta un checkpoint intradía en el hilo principal del juego (`TASK-1607`, equivalente a `p4e_checkpoint_now`). Si no hay farmhands conectados y las comprobaciones de seguridad de `CheckpointPolicy` permiten guardar, ejecuta el guardado y copia verificada síncronamente; si hay farmhands conectados, inicia el aviso y la sincronización de XP previa y devuelve `Ok: true`. Si una condición de seguridad bloquea el checkpoint (`FestivalOrEvent`, `NearRollover`, `RolloverActive`, etc.), devuelve `Ok: false` con el motivo y el `EventId` de `checkpoint.skipped`.
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "Checkpoint guardado y copiado (420 ms).",
+  "ExecutedOnThreadId": 1,
+  "EventId": 58
+}
+```
+
 ### `GET /api/v1/host/events?since=N`
 
 Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados. Si `LastEventId` es menor que el cursor solicitado, el registro se ha reiniciado y el cliente debe volver a consultar desde 0.
-Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`).
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`), préstamos de dibujado (`host.render.lease.granted`, `host.render.lease.released`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`), expulsión por mods (`player.rejected`, con el motivo), emparejamiento (`player.paired`, `player.pairing.invited`, `player.pairing.revoked`) y comandos remotos (`host.command`, `host.test.command`).
 
 **Respuesta `200 OK` (`HostEventsResponseDto`):**
 ```json
@@ -272,3 +296,139 @@ Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), 
   ]
 }
 ```
+
+### `GET /api/v1/host/commands`
+
+Lista **cerrada** de comandos de consola de Pelican que se pueden ejecutar a distancia. Con la consola de SMAPI desactivada (servidor sin terminal) es la única forma de lanzarlos. Lo que no está en la lista no se puede invocar, aunque exista como comando.
+
+**Respuesta `200 OK` (`HostCommandCatalogDto`):**
+```json
+{
+  "Commands": [
+    { "Command": "p4e_status", "Risk": "Read", "Usage": "p4e_status", "Available": true },
+    { "Command": "p4e_checkpoint_now", "Risk": "Safe", "Usage": "p4e_checkpoint_now", "Available": true },
+    { "Command": "p4e_claim_reset", "Risk": "Sensitive", "Usage": "p4e_claim_reset <nombre_o_id>", "Available": true }
+  ]
+}
+```
+
+`Risk`: **`Read`** solo informa (`p4e_status`, `p4e_doors`, `p4e_claim_list`, `p4e_pair_list`); **`Safe`** cambia algo sin poder perder progreso (`p4e_checkpoint_now`: guarda y copia sin cambiar de día; `p4e_pair_allow <usuario> <ip>`: prepara un alta por IP con código de pairing válido `PairingInviteTtlHours`, 72 h por defecto); **`Sensitive`** cambia el mundo o a un jugador (`p4e_claim_reset`, `p4e_pair_approve`, `p4e_migrate_player`, `p4e_pair_revoke`, `p4e_forage_wave`, `p4e_festival_move`, `p4e_time`): quien lo invoque debería tener la aprobación del dueño. Quedan fuera a propósito `p4e_rollover_now` (adelanta el día; usa `POST /api/rollover`), `p4e_safe_restart` (tiene su ruta con avisos), `p4e_migrate_save`, `p4e_give_*` y los comandos de prueba.
+
+`p4e_time` usa la misma gramática que el comando de consola (`+X`, `-X`, `X`, `Xm`, `reset`, `set HH:mm`, `set HHMM`, `set=...`); no se añaden formatos nuevos.
+
+Hay comandos que **solo** existen en la consola de SMAPI y no en esta lista: `p4e_pair_reject`
+(rechaza una solicitud pendiente), `p4e_checkpoint_spike` (requiere `CheckpointDebugMode`), los
+`p4e_farm_*`, `p4e_skill`, `p4e_weather`, `p4e_lightning` (requieren `EnableTestCommands`),
+`p4e_render`, `p4e_rollover_now`, `p4e_safe_restart`, `p4e_migrate_save` y
+`p4e_give_*`.
+
+En conexión directa por IP, un cliente actualizado que ya estuviera autorizado responde al desafío del servidor (`P4E\x02`) durante el descubrimiento, antes de recibir la lista de personajes. El desafío caduca a los 30 segundos, está ligado a la sesión del host y solo admite una respuesta. El cliente demuestra la posesión de su clave privada asimétrica mediante firma digital ECDSA NIST P-256 sin transmitir secretos por el canal de juego; cambiar de IP no exige un nuevo emparejamiento. Tanto el servidor como el cliente deben tener esta versión. Los clientes antiguos reciben un rechazo seguro con aviso de versión. La aprobación de un dispositivo nuevo se gestiona fuera de banda (por mensaje directo en Discord vía Putre) validando su huella digital pública.
+
+Este desafío autentica la identidad del dispositivo y el acceso a la ranura de peón hasta la entrada al juego. El cifrado del tráfico UDP durante la partida queda fuera del alcance acordado.
+
+### `POST /api/v1/host/command`
+
+Ejecuta **en el hilo del juego** un comando de esa lista y devuelve lo que escribe en el registro de SMAPI mientras se ejecuta (hasta 40 líneas de 300 caracteres; lo que emita más tarde, en otros ticks, no entra). Valida el comando, el número de argumentos y su alfabeto (`A-Z a-z 0-9 . _ - @ :`, máx. 64 para huellas SHA-256) y exige una partida cargada. Todo intento, aceptado o rechazado, deja un suceso `host.command`.
+
+**Cuerpo de petición (`HostCommandRequestDto`):**
+```json
+{
+  "Command": "p4e_claim_reset",
+  "Args": [ "mTx" ]
+}
+```
+
+**Respuesta `200 OK` (`HostCommandResultDto`):**
+```json
+{
+  "Ok": true,
+  "Command": "p4e_claim_reset",
+  "Risk": "Sensitive",
+  "Output": [ "Posesión de 'mTx' liberada." ],
+  "Message": "p4e_claim_reset ejecutado.",
+  "ExecutedOnThreadId": 1,
+  "EventId": 31
+}
+```
+
+Un comando no permitido o con argumentos no válidos devuelve `Ok: false` con el motivo en `Message` y no se ejecuta.
+
+### `GET /api/v1/host/render`
+
+Estado del **servidor sin dibujado** (`HeadlessRendering`). En un servidor desatendido (`AutoHostSaveName` configurado) el host deja de dibujar con el mundo cargado: la simulación sigue a 60 Hz, la red funciona igual y cada cliente dibuja lo suyo. Sin GPU, dibujar por CPU ocupa núcleos enteros aunque nadie mire la pantalla del host. Se dibuja igualmente en el título y la carga, con la pantalla de guardado abierta (`SaveGameMenu` no empieza a guardar hasta haberse dibujado) y mientras haya un préstamo de dibujado.
+
+**Respuesta `200 OK` (`HostRenderStatusDto`):**
+```json
+{
+  "HeadlessRenderingEnabled": true,
+  "Drawing": false,
+  "Reason": "Suppressed",
+  "Leases": [],
+  "Message": ""
+}
+```
+
+`Reason`: `Disabled` (opción desactivada), `Attended` (sin `AutoHostSaveName`: hay una persona de host), `WorldNotReady` (título o carga), `DrawRequiredMenu` (pantalla de guardado), `Lease` (préstamo vigente) o `Suppressed` (sin dibujar).
+
+### `POST /api/v1/host/render`
+
+Pide o retira un **préstamo de dibujado** con caducidad, para quien necesite ver la pantalla del host (Stardew Voyager manejando menús, Putre o un diagnóstico). Cada solicitante tiene como mucho uno: pedirlo de nuevo lo renueva. Dura entre 1 y 120 minutos (se recorta); si quien lo pidió se cae, caduca solo y el host vuelve a no dibujar. `Minutes: 0` lo retira. No toca el estado del juego. Las capturas de `takeMapScreenshot` (las del puente de Voyager) no necesitan préstamo.
+
+También: comando de consola `p4e_render [status] | <minutos> | off` (solicitante `console`) y, para otros mods, la API de mod `RequestRendering(requester, minutes)` / `ReleaseRendering(requester)` / `IsHostDrawing()` (`Helper.ModRegistry.GetApi<...>("Pelican4Ever.SVRTMP")`).
+
+**Cuerpo de petición (`HostRenderRequestDto`):**
+```json
+{
+  "Requester": "putre",
+  "Minutes": 15
+}
+```
+
+**Respuesta `200 OK` (`HostRenderStatusDto`):**
+```json
+{
+  "HeadlessRenderingEnabled": true,
+  "Drawing": true,
+  "Reason": "Lease",
+  "Leases": [
+    { "Requester": "putre", "ExpiresAtUtc": "2026-11-09T05:15:00Z" }
+  ],
+  "Message": "Dibujado prestado a 'putre' hasta 2026-11-09T05:15:00.0000000Z."
+}
+```
+
+---
+
+## 3. Rutas clásicas `/api/`
+
+Rutas anteriores, mantenidas por compatibilidad con clientes externos (puente de Voyager, scripts de
+supervisión). Mismas reglas de autenticación y de hilo principal.
+
+| Método | Ruta | Efecto |
+| --- | --- | --- |
+| GET | `/api/status` | `ServerStatusDto`: versión del mod, reloj, `DedicatedHost`, jugadores, puertas y mercado |
+| POST | `/api/rollover` | Fuerza el cambio de día (guarda, backup y cierre de peers) |
+| POST | `/api/mines/reset` | Regenera los pisos mineros desocupados |
+| POST | `/api/festival/reschedule` | Reprograma un festival: cuerpo `{"originalDate": "...", "newDate": "..."}`, ambos obligatorios (400 si falta uno) |
+
+Cualquier otra ruta devuelve `404 {"error": "Not found"}`.
+
+---
+
+## 4. Comandos de consola no remotos
+
+La lista de la API es un subconjunto deliberado de la consola. Estos solo se lanzan desde la
+consola de SMAPI (o desde otro mod):
+
+| Comando | Qué hace |
+| --- | --- |
+| `p4e_pair_reject <huella_o_alias>` | Rechaza una solicitud de alta pendiente |
+| `p4e_rollover_now` | Fuerza el cambio de día (hay ruta propia: `POST /api/rollover`) |
+| `p4e_safe_restart [motivo] [--immediate\|-i] [--minutes N\|-m N] [--cancel\|-c]` | Reinicio controlado (hay ruta propia) |
+| `p4e_render [status\|<minutos 1-120>\|off]` | Préstamo de dibujado |
+| `p4e_migrate_save [slot\|geo]` | Migra una partida a la Plaza Central |
+| `p4e_give_gold <cantidad> [jugador]`, `p4e_give_item <id_o_nombre> [cantidad] [jugador]` | Depuración |
+| `p4e_farm_found`, `p4e_farm_tp`, `p4e_farm_inspect`, `p4e_farm_spawn`, `p4e_lightning`, `p4e_weather`, `p4e_skill` | Pruebas de residencias: requieren `EnableTestCommands: true` |
+| `p4e_checkpoint_spike [clonar] [forzar]` | Diagnóstico destructivo: requiere `CheckpointDebugMode: true` |
+| `p4e_dr4co_sprite`, `p4e_putre_sprite` | Cosmética del host |
+

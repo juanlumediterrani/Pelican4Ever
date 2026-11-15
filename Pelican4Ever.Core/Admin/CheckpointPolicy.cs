@@ -140,4 +140,48 @@ namespace Pelican4Ever.Core.Admin
         private static CheckpointDecision Skip(CheckpointSkipReason reason, bool due, TimeSpan interval) =>
             new(false, reason, due, interval);
     }
+
+    /// <summary>
+    /// Reglas puras para detectar cargas desde un checkpoint de mitad de día y formatear sus mensajes (TASK-1606).
+    /// </summary>
+    public static class CheckpointRestoreLogic
+    {
+        /// <summary>Formatea una hora de Stardew (<c>HHMM</c>, p. ej. 1540 o 2550) como <c>HH:MM</c>.</summary>
+        public static string FormatGameTime(int gameTime)
+        {
+            if (gameTime < 0)
+                return "06:00";
+
+            int hour = (gameTime / 100) % 24;
+            int minute = Math.Clamp(gameTime % 100, 0, 59);
+            return $"{hour:D2}:{minute:D2}";
+        }
+
+        /// <summary>
+        /// Devuelve los metadatos del checkpoint si la partida cargada corresponde exactamente al día de juego de dicho
+        /// checkpoint intradía y ese día aún no se ha cerrado por rollover.
+        /// </summary>
+        public static Pelican4Ever.Core.World.CheckpointMetadata? FindMidDayRestoreCheckpoint(
+            Pelican4Ever.Core.World.ServerWorldState? state,
+            int loadedGameDay)
+        {
+            if (state?.LastCheckpoint == null || loadedGameDay <= 0)
+                return null;
+
+            if (state.LastCheckpoint.GameDay != loadedGameDay)
+                return null;
+
+            return state.LastCheckpoint;
+        }
+
+        /// <summary>Texto de registro canonizado para restauraciones desde checkpoint intradía.</summary>
+        public static string BuildRestoreLogSummary(Pelican4Ever.Core.World.CheckpointMetadata checkpoint)
+        {
+            if (checkpoint == null)
+                throw new ArgumentNullException(nameof(checkpoint));
+
+            string hhmm = FormatGameTime(checkpoint.GameTime);
+            return $"Servidor restaurado al checkpoint de las {hhmm} (día {checkpoint.GameDay}).";
+        }
+    }
 }

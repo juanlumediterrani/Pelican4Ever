@@ -21,7 +21,7 @@ namespace Pelican4Ever.Tests
                     AnnexWindowLayout layout = template.GetWindowLayoutForSide(side);
                     Assert.NotNull(layout);
 
-                    // Recorte canónico 40×32 unificado para cada tipo de granja (ADR-0007 / TASK-910)
+                    // Recorte canónico 40×32 unificado para cada tipo de granja (ADR-0009 / TASK-910)
                     Assert.Equal(template.SourceCropX, layout.CropX);
                     Assert.Equal(template.SourceCropY, layout.CropY);
 

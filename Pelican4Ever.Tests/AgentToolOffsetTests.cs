@@ -44,7 +44,7 @@ namespace Pelican4Ever.Tests
             using JsonDocument body = JsonDocument.Parse(File.ReadAllText(Path.Combine(pack, "Bodies", "Dr4co", "body.json")));
 
             string expected = $"{manifest.RootElement.GetProperty("UniqueID").GetString()}/Player/{body.RootElement.GetProperty("Name").GetString()}";
-            Assert.Equal(expected, AgentToolOffset.Dr4coBodyId);
+            Assert.Equal(AgentToolOffset.Dr4coBodyId, expected);
         }
 
         private static string FindRepoRoot()

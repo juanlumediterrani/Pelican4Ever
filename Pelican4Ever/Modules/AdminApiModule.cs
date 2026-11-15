@@ -61,9 +61,9 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
 
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_safe_restart",
-                "Programa o cancela un reinicio controlado del servidor (TASK-804). Uso: p4e_safe_restart [motivo] [--immediate] [--minutes N] [--cancel]",
+                "Programa o cancela un reinicio controlado del servidor (TASK-804 / TASK-1608). Uso: p4e_safe_restart [motivo] [--immediate] [--after-checkpoint] [--minutes N] [--cancel]",
                 OnConsoleSafeRestart);
         }
 
@@ -92,17 +92,18 @@ namespace Pelican4Ever.Modules
                 RestartCoordinator.ConsumeIfImmediateTimerElapsed(DateTimeOffset.UtcNow, out SafeRestartStatusDto? triggered) &&
                 triggered != null)
             {
-                ExecuteControlledRestart(triggered);
+                CheckpointModule.RunBeforeImmediateRestart(() => ExecuteControlledRestart(triggered));
             }
         }
 
         /// <summary>
-        /// Invocado desde <see cref="DailyRolloverModule"/> justo tras completarse el guardado del cambio de día.
-        /// Si había un reinicio controlado en modo por defecto (<c>WaitingForNextSave</c>), lo ejecuta ahora (TASK-804).
+        /// Invocado desde <see cref="DailyRolloverModule"/> (<paramref name="isCheckpoint"/> = false) o
+        /// <see cref="CheckpointModule"/> (<paramref name="isCheckpoint"/> = true) justo tras completarse un guardado.
+        /// Si había un reinicio controlado esperando ese guardado, lo ejecuta ahora (TASK-804 / TASK-1608).
         /// </summary>
-        public static void NotifySaveCompleted()
+        public static void NotifySaveCompleted(bool isCheckpoint = false)
         {
-            if (RestartCoordinator.ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggered) && triggered != null)
+            if (RestartCoordinator.ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggered, isCheckpoint) && triggered != null)
             {
                 ExecuteControlledRestart(triggered);
             }
@@ -152,6 +153,7 @@ namespace Pelican4Ever.Modules
             }
 
             bool immediate = false;
+            bool restartAfterCheckpoint = false;
             bool cancel = false;
             int? warningMinutes = null;
             var reasonWords = new List<string>();
@@ -163,6 +165,11 @@ namespace Pelican4Ever.Modules
                     string.Equals(arg, "-i", StringComparison.OrdinalIgnoreCase))
                 {
                     immediate = true;
+                }
+                else if (string.Equals(arg, "--after-checkpoint", StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(arg, "--checkpoint", StringComparison.OrdinalIgnoreCase))
+                {
+                    restartAfterCheckpoint = true;
                 }
                 else if (string.Equals(arg, "--cancel", StringComparison.OrdinalIgnoreCase) ||
                          string.Equals(arg, "-c", StringComparison.OrdinalIgnoreCase))
@@ -188,6 +195,7 @@ namespace Pelican4Ever.Modules
             {
                 Reason = reason,
                 Immediate = immediate,
+                RestartAfterCheckpoint = restartAfterCheckpoint,
                 WarningMinutes = warningMinutes,
                 Cancel = cancel
             });
@@ -258,7 +266,7 @@ namespace Pelican4Ever.Modules
                 try
                 {
                     HttpListenerContext httpCtx = listener.GetContext();
-                    ThreadPool.QueueUserWorkItem(_ => ProcessRequest(httpCtx));
+                    ThreadPool.QueueUserWorkItem(_ => ProcessRequestSafe(httpCtx));
                 }
                 catch (HttpListenerException)
                 {
@@ -274,10 +282,52 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        /// <summary>
+        /// Envoltorio de último recurso: corre en un hilo del pool, donde una excepción sin capturar aborta el proceso
+        /// del juego entero (SIGABRT). Nada de lo que haga un cliente HTTP puede tumbar el servidor.
+        /// </summary>
+        private void ProcessRequestSafe(HttpListenerContext httpCtx)
+        {
+            try
+            {
+                ProcessRequest(httpCtx);
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[AdminApiModule] Petición {httpCtx.Request.HttpMethod} {httpCtx.Request.Url?.AbsolutePath} falló: {ex.GetType().Name}: {ex.Message}", LogLevel.Warn);
+                TryWriteError(httpCtx.Response, HttpStatusCode.InternalServerError, ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Escribe una respuesta de error si todavía se puede. Si el cliente ya se fue o la respuesta ya se envió (por
+        /// ejemplo, el 411 automático de <c>HttpListener</c>), no hay nada que hacer y no debe propagarse.
+        /// </summary>
+        private static void TryWriteError(HttpListenerResponse res, HttpStatusCode status, string message)
+        {
+            try
+            {
+                res.StatusCode = (int)status;
+                WriteJson(res, new { error = message });
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException or HttpListenerException or InvalidOperationException or System.IO.IOException)
+            {
+                // Respuesta ya cerrada: el cliente ya tiene su respuesta (o se fue).
+            }
+        }
+
         private void ProcessRequest(HttpListenerContext httpCtx)
         {
             HttpListenerRequest req = httpCtx.Request;
             HttpListenerResponse res = httpCtx.Response;
+
+            // HttpListener ya ha contestado 411 a un POST sin longitud y ha cerrado la respuesta: no ejecutar la acción.
+            if (AdminApiLogic.IsMissingRequiredBodyLength(req.HttpMethod, req.Headers["Content-Length"], req.Headers["Transfer-Encoding"]))
+            {
+                context?.Monitor.Log($"[AdminApiModule] Descartada {req.HttpMethod} {req.Url?.AbsolutePath} sin Content-Length (411): no se ejecuta.", LogLevel.Warn);
+                TryWriteError(res, HttpStatusCode.LengthRequired, "Las peticiones POST deben llevar cuerpo (aunque sea {}).");
+                return;
+            }
 
             if (req.HttpMethod == "OPTIONS")
             {
@@ -307,13 +357,6 @@ namespace Pelican4Ever.Modules
                 {
                     res.StatusCode = access.StatusCode;
                     WriteJson(res, new { error = access.ErrorMessage });
-                    return;
-                }
-
-                // ── Panel Web Dashboard ──
-                if (method == "GET" && (normPath == "/" || normPath == "/dashboard"))
-                {
-                    ServeDashboard(res);
                     return;
                 }
 
@@ -360,8 +403,7 @@ namespace Pelican4Ever.Modules
             }
             catch (Exception ex)
             {
-                res.StatusCode = (int)HttpStatusCode.InternalServerError;
-                WriteJson(res, new { error = ex.Message });
+                TryWriteError(res, HttpStatusCode.InternalServerError, ex.Message);
             }
         }
 
@@ -494,6 +536,60 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "POST /api/v1/host/checkpoint":
+                {
+                    MainThreadExecutionResult<(bool Ok, string Message, long? EventId)> result =
+                        ExecuteWithThreadInfoOnGameThread(CheckpointModule.RequestFromHostApi);
+
+                    WriteJson(res, new HostActionResultDto
+                    {
+                        Ok = result.Value.Ok,
+                        Message = result.Value.Message,
+                        ExecutedOnThreadId = result.ExecutedOnThreadId,
+                        EventId = result.Value.EventId
+                    });
+                    break;
+                }
+
+                case "GET /api/v1/host/commands":
+                {
+                    HostCommandCatalogDto dto = ExecuteOnGameThread(() => new HostCommandCatalogDto
+                    {
+                        Commands = RemoteCommandCatalog.Commands.Select(c => new HostCommandInfoDto
+                        {
+                            Command = c.Name,
+                            Risk = c.Risk.ToString(),
+                            Usage = c.Usage,
+                            Available = context != null && context.HasCommand(c.Name)
+                        }).ToList()
+                    });
+                    WriteJson(res, dto);
+                    break;
+                }
+
+                case "POST /api/v1/host/command":
+                {
+                    HostCommandRequestDto body = ReadJsonBody<HostCommandRequestDto>(req) ?? new HostCommandRequestDto();
+                    MainThreadExecutionResult<HostCommandResultDto> result = ExecuteWithThreadInfoOnGameThread(() => RunRemoteCommandOnMainThread(body));
+                    result.Value.ExecutedOnThreadId = result.ExecutedOnThreadId;
+                    WriteJson(res, result.Value);
+                    break;
+                }
+
+                case "GET /api/v1/host/render":
+                {
+                    WriteJson(res, HeadlessRenderModule.GetStatus());
+                    break;
+                }
+
+                case "POST /api/v1/host/render":
+                {
+                    // El registro de préstamos es seguro entre hilos y no toca el juego: no hace falta ir al hilo principal.
+                    HostRenderRequestDto body = ReadJsonBody<HostRenderRequestDto>(req) ?? new HostRenderRequestDto();
+                    WriteJson(res, HeadlessRenderModule.RequestRendering(body.Requester, body.Minutes));
+                    break;
+                }
+
                 case "GET /api/v1/host/events":
                 {
                     long sinceId = 0;
@@ -572,7 +668,9 @@ namespace Pelican4Ever.Modules
                 time,
                 onlineIds.Count,
                 unrestedActive,
-                DateTimeOffset.UtcNow);
+                DateTimeOffset.UtcNow,
+                request.RestartAfterCheckpoint,
+                context?.WorldState.LastCheckpoint);
 
             BroadcastToAllPlayers(scheduled.WarningAnnouncement, "both");
 
@@ -586,6 +684,7 @@ namespace Pelican4Ever.Modules
                     ["mode"] = scheduled.Mode,
                     ["reason"] = scheduled.Reason,
                     ["immediate"] = scheduled.Immediate,
+                    ["restartAfterCheckpoint"] = scheduled.RestartAfterCheckpoint,
                     ["warningMinutes"] = scheduled.WarningMinutes,
                     ["waitingForNextSave"] = scheduled.WaitingForNextSave,
                     ["unrestedActivePlayers"] = scheduled.ProgressAtRisk.UnrestedActivePlayersCount
@@ -622,6 +721,20 @@ namespace Pelican4Ever.Modules
             DateTime nextRolloverLocal = localNow.Add(untilRollover);
             int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
 
+            SaveBackupResult? liveCheckpoint = CheckpointModule.LastCheckpoint;
+            Pelican4Ever.Core.World.CheckpointMetadata? savedCheckpoint = context.WorldState.LastCheckpoint;
+            string? checkpointName = liveCheckpoint?.FolderName;
+            if (string.IsNullOrWhiteSpace(checkpointName) && savedCheckpoint != null && !string.IsNullOrWhiteSpace(savedCheckpoint.BackupName))
+                checkpointName = savedCheckpoint.BackupName;
+            string? checkpointAtUtc = liveCheckpoint?.CreatedUtc.ToUniversalTime().ToString("O");
+            if (string.IsNullOrWhiteSpace(checkpointAtUtc) && savedCheckpoint != null && !string.IsNullOrWhiteSpace(savedCheckpoint.SavedAtUtc))
+                checkpointAtUtc = savedCheckpoint.SavedAtUtc;
+            double? checkpointLongestMs = liveCheckpoint != null
+                ? Math.Round(CheckpointModule.LastCheckpointLongestTickMs)
+                : savedCheckpoint != null && savedCheckpoint.GameDay > 0
+                    ? Math.Round(savedCheckpoint.LongestTickMs)
+                    : null;
+
             return new HostClockDto
             {
                 RealTimeUtc = DateTimeOffset.UtcNow.ToString("O"),
@@ -640,7 +753,12 @@ namespace Pelican4Ever.Modules
                 LastBackupFileName = DailyRolloverModule.LastBackupFileName,
                 LastBackupCreatedUtc = DailyRolloverModule.LastBackupCreatedUtc,
                 SaveFolderName = Context.IsWorldReady ? Constants.SaveFolderName ?? string.Empty : string.Empty,
-                IsMultiplayerServer = Context.IsWorldReady && Game1.IsServer && Game1.server != null
+                IsMultiplayerServer = Context.IsWorldReady && Game1.IsServer && Game1.server != null,
+                LastCheckpointName = checkpointName,
+                LastCheckpointGameDay = savedCheckpoint != null && savedCheckpoint.GameDay > 0 ? savedCheckpoint.GameDay : null,
+                LastCheckpointGameTime = savedCheckpoint != null && savedCheckpoint.GameDay > 0 ? savedCheckpoint.GameTime : null,
+                LastCheckpointAtUtc = checkpointAtUtc,
+                LastCheckpointLongestTickMs = checkpointLongestMs
             };
         }
 
@@ -764,9 +882,13 @@ namespace Pelican4Ever.Modules
             {
                 bool occupied = state.Doors.TryGetValue(d.DoorId, out var ass);
                 string ownerName = "";
-                if (occupied && ass != null && state.Players.TryGetValue(ass.OwnerId, out var ownerRec))
+                string tenantName = "";
+                if (occupied && ass != null)
                 {
-                    ownerName = ownerRec.PlayerName;
+                    if (state.Players.TryGetValue(ass.OwnerId, out var ownerRec))
+                        ownerName = ownerRec.PlayerName;
+                    if (ass.TenantId.HasValue && ass.TenantId.Value != 0 && state.Players.TryGetValue(ass.TenantId.Value, out var tenantRec))
+                        tenantName = tenantRec.PlayerName;
                 }
 
                 statusDto.Doors.Add(new DoorStatusDto
@@ -778,12 +900,54 @@ namespace Pelican4Ever.Modules
                     SlotId = d.DefaultSlotId,
                     IsOccupied = occupied,
                     OwnerName = ownerName,
+                    TenantId = ass?.TenantId,
+                    TenantName = tenantName,
+                    PendingTenantRequests = ass?.PendingTenantRequests?.Count ?? 0,
                     FarmType = ass?.FarmType ?? "Standard",
                     Policy = ass?.Policy.ToString() ?? "—"
                 });
             }
 
             return statusDto;
+        }
+
+        /// <summary>
+        /// Ejecuta en el hilo del juego un comando de la lista de permitidos (<see cref="RemoteCommandCatalog"/>). Todo intento,
+        /// aceptado o rechazado, queda en el registro de sucesos: es una acción administrativa a distancia.
+        /// </summary>
+        private HostCommandResultDto RunRemoteCommandOnMainThread(HostCommandRequestDto body)
+        {
+            var result = new HostCommandResultDto { Command = body.Command?.Trim() ?? string.Empty };
+            List<string> args = (body.Args ?? new List<string>()).Select(a => a?.Trim() ?? string.Empty).ToList();
+
+            string? rejection = RemoteCommandCatalog.Validate(result.Command, args, out RemoteCommandSpec? spec);
+            if (spec != null)
+                result.Risk = spec.Risk.ToString();
+            if (rejection == null && !Context.IsWorldReady)
+                rejection = "No hay una partida cargada: los comandos solo se ejecutan con el mundo listo.";
+
+            if (rejection != null)
+            {
+                result.Ok = false;
+                result.Message = rejection;
+            }
+            else
+            {
+                result.Ok = context!.TryRunRemote(spec!.Name, args.ToArray(), out IReadOnlyList<string> output, out string? error);
+                result.Output = output.ToList();
+                result.Message = result.Ok
+                    ? $"{spec.Name} ejecutado.{(output.Count == 0 ? " No escribió nada en el registro (puede terminar en los siguientes ticks)." : string.Empty)}"
+                    : error ?? "El comando falló.";
+            }
+
+            context?.Monitor.Log($"[RemoteCommand] {result.Command} {string.Join(" ", args)} -> {(result.Ok ? "ok" : "rechazado/falló: " + result.Message)}", LogLevel.Info);
+            result.EventId = EventLog.Append(
+                HostEventTypes.RemoteCommand,
+                Game1.Date.TotalDays,
+                Game1.timeOfDay,
+                $"Comando remoto {result.Command} {string.Join(" ", args)}: {(result.Ok ? "ejecutado" : "no ejecutado")}",
+                new Dictionary<string, object?> { ["command"] = result.Command, ["args"] = args, ["ok"] = result.Ok, ["risk"] = result.Risk }).Id;
+            return result;
         }
 
         // ── /api/v1/host/map ─────────────────────────────────────────────────────────
@@ -984,17 +1148,6 @@ namespace Pelican4Ever.Modules
                 Season        = Game1.currentSeason ?? "spring",
                 GameDay       = Game1.Date?.TotalDays ?? 0
             };
-        }
-
-        private void ServeDashboard(HttpListenerResponse res)
-        {
-            string html = AdminApiLogic.GetDashboardHtml("");
-            byte[] bytes = Encoding.UTF8.GetBytes(html);
-            res.ContentType = "text/html; charset=utf-8";
-            res.ContentLength64 = bytes.Length;
-            res.StatusCode = (int)HttpStatusCode.OK;
-            res.OutputStream.Write(bytes, 0, bytes.Length);
-            res.OutputStream.Close();
         }
 
         private void HandleFestivalReschedule(HttpListenerRequest req, HttpListenerResponse res)

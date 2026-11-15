@@ -144,5 +144,33 @@ namespace Pelican4Ever.Core.World
         {
             return keepRobinInShopConfig && string.Equals(builder, "Robin", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Evalúa si un edificio dentro de una residencia privada o anexo puede moverse en CarpenterMenu (TASK-607).
+        /// Vanilla comprobaba <c>Game1.getFarm().greenhouseUnlocked</c> (solo el host) y exigía permisos globales de cabaña.
+        /// </summary>
+        public static bool CanMoveResidenceBuilding(
+            bool isGreenhouse,
+            bool residenceGreenhouseUnlocked,
+            bool isMasterGame,
+            bool canManageLocation)
+        {
+            if (isGreenhouse && !residenceGreenhouseUnlocked)
+                return false;
+
+            return isMasterGame || canManageLocation;
+        }
+
+        /// <summary>
+        /// Determina si al mover un edificio en una residencia hay que limpiar los valores cacheados
+        /// (<c>mainFarmhouseEntry</c> y <c>mapMainMailboxPosition</c>) de la instancia <see cref="Farm"/> (TASK-607).
+        /// Vanilla solo llama a <c>UnsetFarmhouseValues()</c> si el interior se llama literalmente <c>"FarmHouse"</c>.
+        /// </summary>
+        public static bool NeedsResidenceFarmhouseCacheReset(string? locationName, string? buildingType)
+        {
+            return !string.IsNullOrWhiteSpace(locationName)
+                && locationName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(buildingType, "Farmhouse", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

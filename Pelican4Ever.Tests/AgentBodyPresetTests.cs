@@ -42,6 +42,67 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
+        public void PutrePreset_ContainsExactVanillaParametersAndColors()
+        {
+            var p = AgentBodyPreset.PutrePreset;
+
+            Assert.Equal(17, p.Skin);
+            Assert.Equal(50, p.Hair);
+            Assert.Equal("21", p.Shirt);
+            Assert.Equal("1", p.Pants);
+            Assert.Equal(2, p.Accessory);
+            Assert.True(p.IsMale);
+
+            // Colores calculados a partir de los deslizadores (H, S, V)
+            Assert.Equal(181, p.EyeColorR);
+            Assert.Equal(50, p.EyeColorG);
+            Assert.Equal(21, p.EyeColorB);
+
+            Assert.Equal(45, p.HairColorR);
+            Assert.Equal(91, p.HairColorG);
+            Assert.Equal(23, p.HairColorB);
+
+            Assert.Equal(36, p.PantsColorR);
+            Assert.Equal(43, p.PantsColorG);
+            Assert.Equal(37, p.PantsColorB);
+
+            // Mascota y cosas favoritas
+            Assert.Equal("Dog", p.PetType);
+            Assert.Equal("0", p.PetBreed);
+            Assert.False(p.CatPerson);
+            Assert.Equal("Zerbesa", p.FavoriteThing);
+            Assert.Equal("Putre", p.Name);
+        }
+
+        [Fact]
+        public void FashionSenseOverrideKeys_ContainsAllOverridableLayers()
+        {
+            var keys = AgentBodyPreset.FashionSenseOverrideKeys;
+
+            Assert.Contains(AgentToolOffset.BodyModDataKey, keys);
+            Assert.Contains("FashionSense.CustomHair.Id", keys);
+            Assert.Contains("FashionSense.CustomShirt.Id", keys);
+            Assert.Contains("FashionSense.CustomPants.Id", keys);
+            Assert.Contains("FashionSense.CustomShoes.Id", keys);
+        }
+
+        [Fact]
+        public void DefaultVanillaPreset_ContainsExpectedDefaults()
+        {
+            var p = AgentBodyPreset.DefaultVanillaPreset;
+
+            Assert.Equal(0, p.Skin);
+            Assert.Equal(0, p.Hair);
+            Assert.Equal("0", p.Shirt);
+            Assert.Equal("0", p.Pants);
+            Assert.Equal(-1, p.Accessory);
+            Assert.True(p.IsMale);
+            Assert.Equal("Dog", p.PetType);
+            Assert.Equal("0", p.PetBreed);
+            Assert.False(p.CatPerson);
+        }
+
+        [Fact]
         public void EveryReferencedAppearanceExistsInThePack()
         {
             string pack = Path.Combine(FindRepoRoot(), "agents", "Dr4co.FashionSense");

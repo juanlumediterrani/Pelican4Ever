@@ -68,7 +68,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
 
             // Comandos para host para forzar o adelantar/retrasar horas (+X, -X, reset)
-            ctx.Helper.ConsoleCommands.Add(
+            ctx.AddCommand(
                 "p4e_time",
                 "Ajusta o fuerza la hora del juego en el servidor. Uso: p4e_time <+X|-X|reset|set HH:mm> (ej: p4e_time +2, p4e_time -1, p4e_time reset)",
                 OnConsoleTime
@@ -89,7 +89,7 @@ namespace Pelican4Ever.Modules
                     ChatCommands.Register(
                         "time",
                         HandleTimeChatCommand,
-                        name => "Ajusta la hora del juego en el servidor (/time o /hora <+X|-X|reset|set HH:mm>)",
+                        name => I18n.Get("clock.command_help"),
                         new[] { "hora" },
                         mainOnly: true,
                         multiplayerOnly: false,
@@ -122,65 +122,50 @@ namespace Pelican4Ever.Modules
         {
             if (string.IsNullOrWhiteSpace(input))
             {
-                message = $"[Reloj] Offset actual: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}. Uso: /time <+X|-X|reset|set HH:mm>";
+                message = I18n.Get("clock.status_usage", new { offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay) });
                 return false;
             }
 
-            input = input.Trim().ToLowerInvariant();
-
-            if (input == "reset")
+            TimeCommandParser.Parsed parsed = TimeCommandParser.Parse(input);
+            switch (parsed.Kind)
             {
-                ManualTimeOffset = TimeSpan.Zero;
-                ApplyCurrentClock();
-                BroadcastTimeOffset();
-                message = $"[Reloj] Restablecido a hora real. Hora del juego: {Game1.getTimeOfDayString(Game1.timeOfDay)}.";
-                return true;
-            }
+                case TimeCommandParser.Kind.Reset:
+                    ManualTimeOffset = TimeSpan.Zero;
+                    ApplyCurrentClock();
+                    BroadcastTimeOffset();
+                    message = I18n.Get("clock.reset", new { time = Game1.getTimeOfDayString(Game1.timeOfDay) });
+                    return true;
 
-            if (input.StartsWith("set ") || input.StartsWith("set="))
-            {
-                string val = input.Substring(4).Trim();
-                if (TimeSpan.TryParse(val, out TimeSpan targetSpan) || (int.TryParse(val, out int rawTime) && TryConvertRawTimeToSpan(rawTime, out targetSpan)))
-                {
+                case TimeCommandParser.Kind.Set:
                     DateTime baseNow = ServerTime.LocalNow(context?.Config.TimeZoneId ?? "Europe/Madrid");
-                    ManualTimeOffset = targetSpan - baseNow.TimeOfDay;
+                    ManualTimeOffset = parsed.Value - baseNow.TimeOfDay;
                     ApplyCurrentClock();
                     BroadcastTimeOffset();
-                    message = $"[Reloj] Hora fijada a {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                    message = I18n.Get("clock.set", new { time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
-                }
-                message = "[Reloj] Formato de hora no válido. Usa HH:mm (ej: /time set 14:00 o /time set 08:30).";
-                return false;
-            }
 
-            bool isMinus = input.StartsWith("-");
-            bool isPlus = input.StartsWith("+");
-            string numStr = input.TrimStart('+', '-').TrimEnd('h');
-
-            if (numStr.EndsWith("m"))
-            {
-                if (double.TryParse(numStr.TrimEnd('m'), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double minutes))
-                {
-                    TimeSpan delta = TimeSpan.FromMinutes(isMinus ? -minutes : minutes);
-                    ManualTimeOffset += delta;
+                case TimeCommandParser.Kind.Hours:
+                    ManualTimeOffset += parsed.Value;
                     ApplyCurrentClock();
                     BroadcastTimeOffset();
-                    message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{minutes} min. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
+                    message = I18n.Get("clock.adjusted_hours", new { sign = parsed.IsMinus ? "-" : "+", hours = parsed.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
-                }
-            }
-            else if (double.TryParse(numStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out double hours))
-            {
-                TimeSpan delta = TimeSpan.FromHours(isMinus ? -hours : hours);
-                ManualTimeOffset += delta;
-                ApplyCurrentClock();
-                BroadcastTimeOffset();
-                message = $"[Reloj] Ajustado {(isMinus ? "-" : "+")}{hours}h. Nueva hora: {Game1.getTimeOfDayString(Game1.timeOfDay)} (Offset total: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h).";
-                return true;
-            }
 
-            message = "[Reloj] Formato no válido. Ejemplos válidos: /time +2, /time -1, /time +30m, /time reset, /time set 14:00";
-            return false;
+                case TimeCommandParser.Kind.Minutes:
+                    ManualTimeOffset += parsed.Value;
+                    ApplyCurrentClock();
+                    BroadcastTimeOffset();
+                    message = I18n.Get("clock.adjusted_minutes", new { sign = parsed.IsMinus ? "-" : "+", minutes = parsed.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
+                    return true;
+
+                case TimeCommandParser.Kind.SetInvalid:
+                    message = I18n.Get("clock.invalid_time_format");
+                    return false;
+
+                default:
+                    message = I18n.Get("clock.invalid_format");
+                    return false;
+            }
         }
 
         private static void BroadcastTimeOffset()
@@ -214,19 +199,6 @@ namespace Pelican4Ever.Modules
                 ManualTimeOffset = TimeSpan.FromTicks(ticks);
                 context.Monitor.Log($"[RealTimeClockModule] Offset horario sincronizado desde anfitrión: {ManualTimeOffset.TotalHours:+0.##;-0.##;0}h.", LogLevel.Trace);
             }
-        }
-
-        private static bool TryConvertRawTimeToSpan(int raw, out TimeSpan span)
-        {
-            int hours = raw / 100;
-            int mins = raw % 100;
-            if (hours >= 0 && hours < 24 && mins >= 0 && mins < 60)
-            {
-                span = new TimeSpan(hours, mins, 0);
-                return true;
-            }
-            span = TimeSpan.Zero;
-            return false;
         }
 
         public static void ApplyCurrentClock()
@@ -383,6 +355,7 @@ namespace Pelican4Ever.Modules
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
             NightHoldTicksSimulated = 0;
+            NightHoldWorldSimulator.ResetForNewDay();
             if (Context.IsMainPlayer)
             {
                 Game1.realMilliSecondsPerGameTenMinutes = 600_000;
@@ -464,9 +437,10 @@ namespace Pelican4Ever.Modules
                     for (int i = 0; i < ticksToRun; i++)
                     {
                         PassTimeForNightHold(10);
+                        NightHoldWorldSimulator.SimulateTick(context, NightHoldTicksSimulated);
                         NightHoldTicksSimulated++;
                     }
-                    context.Monitor.Log($"[RealTimeClockModule] Madrugada: procesados {ticksToRun * 10} min en máquinas (total noche: {NightHoldTicksSimulated * 10} min).", LogLevel.Trace);
+                    context.Monitor.Log($"[RealTimeClockModule] Madrugada: procesados {ticksToRun * 10} min en máquinas y entorno (total noche: {NightHoldTicksSimulated * 10} min).", LogLevel.Trace);
                 }
                 else if (targetTicks < NightHoldTicksSimulated)
                 {

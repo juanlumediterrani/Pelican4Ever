@@ -33,12 +33,6 @@ namespace Pelican4Ever.Core.Config
         public int[] RolloverWarningMinutes { get; set; } = { 10 };
 
         /// <summary>
-        /// Minutos, desde el cambio de fecha (02:00), durante los que el host rechaza conexiones nuevas
-        /// (modo mantenimiento: guardado, copia, avance de día y actualización del runtime). 0 lo desactiva.
-        /// </summary>
-        public int MaintenanceWindowMinutes { get; set; } = 25;
-
-        /// <summary>
         /// Fecha real (yyyy-MM-dd, debe ser lunes) que corresponde al Día 1 de Primavera del Año 1.
         /// La fecha de juego se calcula siempre a partir de esta época, nunca se "incrementa".
         /// </summary>
@@ -124,6 +118,30 @@ namespace Pelican4Ever.Core.Config
         /// <summary>Multiplicador de precio de productos artesanales (provisional; pendiente de simulación).</summary>
         public float ArtisanPriceMultiplier { get; set; } = 1.0f;
 
+        /// <summary>Multiplicador del precio de pescado; neutro mientras se calibra la economía.</summary>
+        public float FishPriceMultiplier { get; set; } = 1.0f;
+
+        /// <summary>Multiplicador del precio de gemas, minerales y menas; neutro por defecto.</summary>
+        public float MineralPriceMultiplier { get; set; } = 1.0f;
+
+        /// <summary>Cupo diario de XP por habilidad tras el multiplicador fijo; ausente o cero lo desactiva.</summary>
+        public Dictionary<string, int> SkillDailyFullXp { get; set; } = new()
+        {
+            ["Fishing"] = 300, ["Foraging"] = 300, ["Mining"] = 300, ["Combat"] = 300
+        };
+
+        /// <summary>Fracción del XP que se concede por encima del cupo diario.</summary>
+        public decimal SkillOverflowXpMultiplier { get; set; } = 0.25m;
+
+        /// <summary>Multiplicador aplicado antes del cupo; una habilidad ausente usa 1.</summary>
+        public Dictionary<string, decimal> SkillXpMultiplier { get; set; } = new();
+
+        /// <summary>Multiplica el tiempo hasta la picada fuera de estanques y festivales.</summary>
+        public double FishingBiteTimeMultiplier { get; set; } = 2.5;
+
+        /// <summary>Multiplica la duración del minijuego de pesca fuera de festivales.</summary>
+        public double FishingMinigameDurationMultiplier { get; set; } = 1.5;
+
         // ─────────────────────────── Minas ───────────────────────────
 
         /// <summary>Horas reales (HH:mm) en las que se regeneran los pisos de minas, Caverna Calavera y Volcán.</summary>
@@ -131,6 +149,18 @@ namespace Pelican4Ever.Core.Config
 
         /// <summary>Minutos reales consecutivos que un piso de la mina debe permanecer desocupado para regenerarse (GAP-14).</summary>
         public int MineFloorCooldownMinutes { get; set; } = 45;
+
+        /// <summary>Multiplica la probabilidad aleatoria de escalera por piedra; no afecta la última piedra.</summary>
+        public double MineStoneLadderChanceMultiplier { get; set; } = 0.5;
+
+        /// <summary>Probabilidad base de escalera por monstruo, antes de la bonificación de la estatua.</summary>
+        public double MineMonsterLadderChance { get; set; } = 0.08;
+
+        /// <summary>Coste de energía por piso descendido en la Caverna Calavera.</summary>
+        public double SkullCavernDescentBaseCost { get; set; } = 1;
+
+        /// <summary>Divisor de la profundidad para el coste; cero desactiva el componente de profundidad.</summary>
+        public double SkullCavernDescentDepthDivisor { get; set; } = 25;
 
         // ─────────────────────────── Comercio y Construcción ───────────────────────────
 
@@ -150,11 +180,40 @@ namespace Pelican4Ever.Core.Config
 
         // ─────────────────────────── Servidor ───────────────────────────
 
+        /// <summary>Si es false, Pelican 4Ever permanece desactivado internamente en el cliente para jugar otras partidas o mods sin quitar archivos.</summary>
+        public bool Enabled { get; set; } = true;
+
         /// <summary>Si es true, el host se marca como host dedicado nativo (1.6.15+) y se oculta al jugador anfitrión.</summary>
         public bool DedicatedServerMode { get; set; } = true;
 
         /// <summary>Si es true, el host expulsa a los clientes que no tengan Pelican 4Ever con versión compatible.</summary>
         public bool RequireClientMod { get; set; } = true;
+
+        /// <summary>
+        /// Si es true (por defecto), solo pueden acceder los dispositivos emparejados en la lista blanca o las conexiones
+        /// cuya IP tenga una invitación activa (<c>p4e_pair_allow &lt;usuario&gt; &lt;ip&gt;</c>) pendiente de introducir el código de pairing.
+        /// </summary>
+        public bool RequirePairingWhitelist { get; set; } = true;
+
+        /// <summary>
+        /// Horas de validez de un código de emparejamiento asíncrono desde que se genera (por defecto 72h = 3 días).
+        /// </summary>
+        public int PairingInviteTtlHours { get; set; } = 72;
+
+        /// <summary>
+        /// Si es true, impide a los jugadores que no sean el anfitrión usar herramientas de trabajo, colocar objetos/bombas
+        /// o abrir cofres/máquinas en la Plaza Central (<c>Farm</c>) y en los puentes (<c>Pelican4Ever_Bridge_*</c>).
+        /// Desactivado (<c>false</c>) por defecto.
+        /// </summary>
+        public bool ProtectPublicHubs { get; set; } = false;
+
+        /// <summary>
+        /// Resto del modpack que debe tener cada cliente (UniqueID de SMAPI), además de Pelican 4Ever. La versión exigida es
+        /// la que tiene instalada el host, exacta: actualizar un mod en el servidor cambia la exigencia sin tocar este
+        /// fichero. Un ID que el host no tenga instalado se ignora con un aviso. Vacío (por defecto) = solo Pelican 4Ever.
+        /// Requiere <see cref="RequireClientMod"/>.
+        /// </summary>
+        public List<string> RequiredClientMods { get; set; } = new();
 
         /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations.</summary>
         public int FarmSlotCount { get; set; } = 4;
@@ -167,6 +226,9 @@ namespace Pelican4Ever.Core.Config
 
         /// <summary>Multiplicador de precio para el segundo anexo temático de una residencia (por defecto 1.00 = 100% del precio base normal).</summary>
         public float SecondAnnexPriceMultiplier { get; set; } = 1.00f;
+
+        /// <summary>Si es true, permite usar la red de vagonetas (y el destino a la Plaza) sin exigir completar la Sala de Calderas (<c>ccBoilerRoom</c>).</summary>
+        public bool BypassMinecartUnlockRequirement { get; set; } = false;
 
         // ─────────────────────────── Panel de Administración y API REST ───────────────────────────
 
@@ -208,6 +270,15 @@ namespace Pelican4Ever.Core.Config
         /// supervisor (systemd) lo relance con el mod actualizado. Requiere <see cref="AutoHostSaveName"/>.
         /// </summary>
         public bool RestartExitsProcess { get; set; } = false;
+
+        /// <summary>
+        /// Servidor desatendido sin dibujado: con <see cref="AutoHostSaveName"/> configurado, el host deja de dibujar
+        /// mientras el mundo está cargado (la simulación sigue a 60 Hz y la red igual; cada cliente dibuja lo suyo).
+        /// Sin GPU, dibujar por CPU ocupa núcleos enteros aunque no haya nadie. Se dibuja igualmente en el título, con la
+        /// pantalla de guardado abierta (el juego la necesita) y mientras haya un préstamo de dibujado
+        /// (<c>POST /api/v1/host/render</c>, <c>p4e_render</c> o la API de mod). Sin efecto si un humano hace de host.
+        /// </summary>
+        public bool HeadlessRendering { get; set; } = true;
 
         // ─────────────────────── Checkpoints intradía (Épica 11) ───────────────────────
 
@@ -275,9 +346,6 @@ namespace Pelican4Ever.Core.Config
             if (ParsedCalendarDayChangeTime != new TimeSpan(2, 0, 0))
                 errors.Add($"{nameof(CalendarDayChangeTime)} debe ser 02:00 para separar la fecha del inicio de luz/horarios (06:00). Valor: '{CalendarDayChangeTime}'.");
 
-            if (MaintenanceWindowMinutes < 0 || MaintenanceWindowMinutes > Pelican4Ever.Core.Time.MaintenanceWindow.MaxMinutes)
-                errors.Add($"{nameof(MaintenanceWindowMinutes)} debe estar entre 0 y {Pelican4Ever.Core.Time.MaintenanceWindow.MaxMinutes}. Valor: {MaintenanceWindowMinutes}.");
-
             if (ParsedNightHoldStart < TimeSpan.Zero || ParsedNightHoldStart > new TimeSpan(1, 50, 0))
                 errors.Add($"{nameof(NightHoldStartTime)} debe estar entre 00:00 y 01:50 (equivale a 2400–2550). Valor: '{NightHoldStartTime}'.");
 
@@ -308,6 +376,30 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(SatietyDrainHours)} debe ser > 0.");
             if (CropPriceMultiplier <= 0 || ArtisanPriceMultiplier <= 0)
                 errors.Add("Los multiplicadores de precio deben ser > 0.");
+            if (!float.IsFinite(FishPriceMultiplier) || FishPriceMultiplier <= 0)
+                errors.Add($"{nameof(FishPriceMultiplier)} debe ser finito y mayor que cero.");
+            if (!float.IsFinite(MineralPriceMultiplier) || MineralPriceMultiplier <= 0)
+                errors.Add($"{nameof(MineralPriceMultiplier)} debe ser finito y mayor que cero.");
+            if (SkillOverflowXpMultiplier < 0)
+                errors.Add($"{nameof(SkillOverflowXpMultiplier)} no puede ser negativo.");
+            if (!double.IsFinite(FishingBiteTimeMultiplier) || FishingBiteTimeMultiplier <= 0)
+                errors.Add($"{nameof(FishingBiteTimeMultiplier)} debe ser finito y mayor que cero.");
+            if (!double.IsFinite(FishingMinigameDurationMultiplier) || FishingMinigameDurationMultiplier <= 0)
+                errors.Add($"{nameof(FishingMinigameDurationMultiplier)} debe ser finito y mayor que cero.");
+            if (SkillDailyFullXp == null)
+                errors.Add($"{nameof(SkillDailyFullXp)} no puede ser null.");
+            else foreach (var entry in SkillDailyFullXp)
+            {
+                if (!IsSkillName(entry.Key) || entry.Value < 0)
+                    errors.Add($"{nameof(SkillDailyFullXp)} contiene una habilidad desconocida o un cupo negativo: '{entry.Key}'.");
+            }
+            if (SkillXpMultiplier == null)
+                errors.Add($"{nameof(SkillXpMultiplier)} no puede ser null.");
+            else foreach (var entry in SkillXpMultiplier)
+            {
+                if (!IsSkillName(entry.Key) || entry.Value < 0)
+                    errors.Add($"{nameof(SkillXpMultiplier)} contiene una habilidad desconocida o un multiplicador negativo: '{entry.Key}'.");
+            }
             if (WellFedDurationMinutes <= 0)
                 errors.Add($"{nameof(WellFedDurationMinutes)} debe ser > 0.");
             if (SpaStillSeconds <= 0)
@@ -322,6 +414,14 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(OfflineRegenFullBarHours)} no puede ser negativo.");
             if (MineFloorCooldownMinutes < 0)
                 errors.Add($"{nameof(MineFloorCooldownMinutes)} no puede ser negativo.");
+            if (!double.IsFinite(MineStoneLadderChanceMultiplier) || MineStoneLadderChanceMultiplier < 0)
+                errors.Add($"{nameof(MineStoneLadderChanceMultiplier)} debe ser finito y no negativo.");
+            if (!double.IsFinite(MineMonsterLadderChance) || MineMonsterLadderChance < 0 || MineMonsterLadderChance > 1)
+                errors.Add($"{nameof(MineMonsterLadderChance)} debe estar entre 0 y 1.");
+            if (!double.IsFinite(SkullCavernDescentBaseCost) || SkullCavernDescentBaseCost < 0)
+                errors.Add($"{nameof(SkullCavernDescentBaseCost)} debe ser finito y no negativo.");
+            if (!double.IsFinite(SkullCavernDescentDepthDivisor) || SkullCavernDescentDepthDivisor < 0)
+                errors.Add($"{nameof(SkullCavernDescentDepthDivisor)} debe ser finito y no negativo.");
             if (FarmSlotCount is < 1 or > 16)
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
             if (MaxAnnexesPerResidence is < 0 or > 3)
@@ -348,11 +448,20 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
             if (BackupRetentionDays < 0)
                 errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
+            if (PairingInviteTtlHours is < 1 or > 720)
+                errors.Add($"{nameof(PairingInviteTtlHours)} debe estar entre 1 y 720 horas. Valor: {PairingInviteTtlHours}.");
+            foreach (string id in RequiredClientMods ?? new List<string>())
+            {
+                if (!Pelican4Ever.Core.Networking.ClientModRequirements.IsValidUniqueId(id))
+                    errors.Add($"{nameof(RequiredClientMods)} contiene un UniqueID no válido: '{id}'.");
+            }
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
                 errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
 
             return errors;
         }
+
+        private static bool IsSkillName(string name) => name is "Farming" or "Fishing" or "Foraging" or "Mining" or "Combat";
 
         private static TimeSpan ParseTime(string field, string? raw, List<string> errors)
         {

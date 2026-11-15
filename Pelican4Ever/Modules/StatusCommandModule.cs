@@ -19,7 +19,7 @@ namespace Pelican4Ever.Modules
         public void Register(Framework.ModContext context)
         {
             this.context = context;
-            context.Helper.ConsoleCommands.Add("p4e_status", "Muestra el estado de Pelican 4Ever (reloj, calendario, jugadores).", OnStatus);
+            context.AddCommand("p4e_status", "Muestra el estado de Pelican 4Ever (reloj, calendario, jugadores).", OnStatus);
         }
 
         private void OnStatus(string command, string[] args)

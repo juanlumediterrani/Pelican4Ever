@@ -28,25 +28,6 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void GetDashboardHtml_ContainsExpectedElements()
-        {
-            string html = AdminApiLogic.GetDashboardHtml("test_token");
-            Assert.Contains("Pelican 4Ever — Panel de Control", html);
-            Assert.Contains("/api/status", html);
-            Assert.Contains("/api/rollover", html);
-            Assert.Contains("/api/mines/reset", html);
-            Assert.Contains("test_token", html);
-        }
-
-        [Fact]
-        public void GetDashboardHtml_EncodesTokenInTheHtmlAttribute()
-        {
-            string html = AdminApiLogic.GetDashboardHtml("\" onfocus=\"alert(1)\" <&");
-            Assert.Contains("&quot; onfocus=&quot;alert(1)&quot; &lt;&amp;", html);
-            Assert.DoesNotContain("value=\"\" onfocus=", html);
-        }
-
-        [Fact]
         public void HostEventLog_ReportsCurrentCursorWhenClientCursorBelongsToAnOlderProcess()
         {
             var log = new HostEventLog();
@@ -73,8 +54,6 @@ namespace Pelican4Ever.Tests
         }
 
         [Theory]
-        [InlineData("/")]
-        [InlineData("/dashboard")]
         [InlineData("/api/status")]
         [InlineData("/api/rollover")]
         [InlineData("/api/v1/host/clock")]
@@ -141,8 +120,9 @@ namespace Pelican4Ever.Tests
                 return await queue.EnqueueWithThreadInfoAsync(() => $"ok-on-{Environment.CurrentManagedThreadId}");
             });
 
-            // Esperar a que la tarea esté en la cola
-            SpinWait.SpinUntil(() => queue.PendingCount == 1, TimeSpan.FromSeconds(2));
+            // Esperar sin acaparar la CPU (en una VM de 2 vCPU, SpinWait puede dejar sin hilo al ThreadPool de Task.Run)
+            for (int i = 0; i < 200 && queue.PendingCount == 0; i++)
+                await Task.Delay(10);
             Assert.Equal(1, queue.PendingCount);
 
             // Drenar desde un hilo dedicado que simula el hilo principal de UpdateTicked
@@ -355,6 +335,76 @@ namespace Pelican4Ever.Tests
             Assert.NotNull(triggered);
             Assert.Equal("Fallo crítico de red", triggered!.Reason);
             Assert.False(coordinator.GetStatus().IsPending);
+        }
+
+        [Fact]
+        public void SafeRestartCoordinator_DefaultModeIgnoresCheckpoints_WhileAfterCheckpointTriggersOnCheckpointAndSummarizesTime()
+        {
+            var coordinator = new SafeRestartCoordinator();
+            var now = new DateTimeOffset(2026, 10, 31, 16, 0, 0, TimeSpan.Zero);
+            var cp = new Pelican4Ever.Core.World.CheckpointMetadata
+            {
+                GameDay = 20,
+                GameTime = 1520,
+                SavedAtUtc = "2026-10-31T15:20:00Z",
+                BackupName = "PelicanValley_20261031_152000_000"
+            };
+
+            // Criterio 1 (TASK-1608): sin RestartAfterCheckpoint, un checkpoint no dispara el reinicio pendiente
+            SafeRestartStatusDto defaultStatus = coordinator.Schedule(
+                reason: "Rollover normal",
+                immediate: false,
+                warningMinutes: 5,
+                currentGameDay: 20,
+                currentGameTime: 1600,
+                onlinePlayersCount: 2,
+                unrestedActivePlayersCount: 1,
+                nowUtc: now,
+                restartAfterCheckpoint: false,
+                lastCheckpoint: cp);
+
+            Assert.False(defaultStatus.RestartAfterCheckpoint);
+            Assert.Equal(40, defaultStatus.ProgressAtRisk.GameMinutesSinceMorning);
+            Assert.Contains("15:20", defaultStatus.ProgressAtRisk.Summary);
+            Assert.False(coordinator.ConsumeOnSaveCompleted(out _, isCheckpoint: true));
+            Assert.True(coordinator.GetStatus().IsPending);
+
+            // Criterio 2 (TASK-1608): con RestartAfterCheckpoint=true, el siguiente checkpoint sí consume y dispara el reinicio
+            SafeRestartStatusDto cpStatus = coordinator.Schedule(
+                reason: "Parche en caliente",
+                immediate: false,
+                warningMinutes: 2,
+                currentGameDay: 20,
+                currentGameTime: 1630,
+                onlinePlayersCount: 1,
+                unrestedActivePlayersCount: 0,
+                nowUtc: now,
+                restartAfterCheckpoint: true,
+                lastCheckpoint: cp);
+
+            Assert.True(cpStatus.RestartAfterCheckpoint);
+            Assert.Equal("after_next_checkpoint", cpStatus.Mode);
+            Assert.Contains("15:20", cpStatus.ProgressAtRisk.Summary);
+            Assert.True(coordinator.ConsumeOnSaveCompleted(out SafeRestartStatusDto? triggered, isCheckpoint: true));
+            Assert.NotNull(triggered);
+            Assert.Equal("Parche en caliente", triggered!.Reason);
+            Assert.False(coordinator.GetStatus().IsPending);
+        }
+
+        [Fact]
+        public void HostApiCatalog_IncludesCheckpointRouteWithAuthParity()
+        {
+            HostApiRouteSpec? route = HostApiCatalog.MatchRoute("POST", "/api/v1/host/checkpoint");
+            Assert.NotNull(route);
+            Assert.True(route!.MutatesGameState);
+
+            ApiAccessCheckResult noToken = AdminApiLogic.CheckAccess("/api/v1/host/checkpoint", null, null, "custom_secure_token_999");
+            Assert.False(noToken.Allowed);
+            Assert.Equal(401, noToken.StatusCode);
+
+            ApiAccessCheckResult validToken = AdminApiLogic.CheckAccess("/api/v1/host/checkpoint", "Bearer custom_secure_token_999", null, "custom_secure_token_999");
+            Assert.True(validToken.Allowed);
+            Assert.Equal(200, validToken.StatusCode);
         }
     }
 }

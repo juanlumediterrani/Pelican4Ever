@@ -33,6 +33,19 @@ namespace Pelican4Ever.Core.World
             long? ownerId,
             IReadOnlyCollection<long>? onlinePlayerIds)
         {
+            return ShouldKeepActive(locationName, farmersInsideCount, ownerId, tenantId: null, onlinePlayerIds);
+        }
+
+        /// <summary>
+        /// Determina si una ubicación debe permanecer activa en la sincronización de red considerando propietario e inquilino.
+        /// </summary>
+        public static bool ShouldKeepActive(
+            string? locationName,
+            int farmersInsideCount,
+            long? ownerId,
+            long? tenantId,
+            IReadOnlyCollection<long>? onlinePlayerIds)
+        {
             if (string.IsNullOrWhiteSpace(locationName))
                 return true;
 
@@ -44,11 +57,16 @@ namespace Pelican4Ever.Core.World
             if (farmersInsideCount > 0)
                 return true;
 
-            // Si el propietario está conectado en el servidor, se mantiene activa
-            if (ownerId.HasValue && onlinePlayerIds != null && onlinePlayerIds.Contains(ownerId.Value))
-                return true;
+            // Si el propietario o el inquilino están conectados en el servidor, se mantiene activa
+            if (onlinePlayerIds != null)
+            {
+                if (ownerId.HasValue && ownerId.Value != 0 && onlinePlayerIds.Contains(ownerId.Value))
+                    return true;
+                if (tenantId.HasValue && tenantId.Value != 0 && onlinePlayerIds.Contains(tenantId.Value))
+                    return true;
+            }
 
-            // Propietario offline y sin visitantes: se desactiva de la sincronización continua
+            // Residentes offline y sin visitantes: se desactiva de la sincronización continua
             return false;
         }
     }
