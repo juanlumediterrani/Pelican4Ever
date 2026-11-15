@@ -74,20 +74,28 @@ namespace Pelican4Ever
                 new AdminApiModule(),
                 new AutoHostModule(),
                 new HeadlessRenderModule(),
-                new ClientPetAdoptionModule()
+                new ClientPetAdoptionModule(),
+                new ModToggleModule()
             );
+
+            context.SyncInitialActivationState();
+            context.RawHelper.Events.GameLoop.GameLaunched += (_, _) => context.SyncInitialActivationState();
+
+            if (!context.IsModEnabled)
+                Monitor.Log("Pelican 4Ever inicia DESACTIVADO internamente por configuración (config.json -> Enabled=false).", LogLevel.Info);
 
             Monitor.Log($"Cargado (cambio de fecha {config.CalendarDayChangeTime}, inicio de reloj/horarios {config.DayStartTime}, Madrugada desde {config.NightHoldStartTime}, época {config.CalendarEpoch}, zona '{config.TimeZoneId}').", LogLevel.Info);
         }
 
         /// <summary>API para otros mods (por ejemplo, el puente de Stardew Voyager). Ver <see cref="PelicanApi"/>.</summary>
-        public override object? GetApi() => context == null ? null : new PelicanApi();
+        public override object? GetApi() => context == null || !context.IsModEnabled ? null : new PelicanApi();
 
         private void RegisterModules(params IModule[] modules)
         {
             foreach (IModule module in modules)
             {
-                if (!context.Config.IsModuleEnabled(module.Name))
+                if (!string.Equals(module.Name, "ModToggle", System.StringComparison.OrdinalIgnoreCase) &&
+                    !context.Config.IsModuleEnabled(module.Name))
                 {
                     Monitor.Log($"Módulo '{module.Name}' desactivado en config.json.", LogLevel.Info);
                     continue;

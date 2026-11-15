@@ -1094,16 +1094,35 @@ namespace Pelican4Ever.Modules
             isAdoptionPromptActive = false;
         }
 
+        private static bool IsResidentOfSlot(string? slotName, long playerId)
+        {
+            if (string.IsNullOrWhiteSpace(slotName) || playerId == 0)
+                return false;
+
+            long slotOwner = ResolveSlotOwnerId(slotName);
+            if (PetAdoptionLogic.CanClaimOrManagePet(slotOwner, playerId))
+                return true;
+
+            if (context?.WorldState.FindResidenceOf(playerId) is { } res && !string.IsNullOrWhiteSpace(res.FarmSlotId))
+            {
+                string? targetBaseSlot = VisitorPermissionLogic.ResidenceSlotOf(slotName) ?? slotName;
+                if (string.Equals(res.FarmSlotId, targetBaseSlot, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return Game1.getLocationFromName(slotName)?.IsLocationResident(playerId) == true;
+        }
+
         private static void ProcessPetAdoption(long playerId, PetAdoptedPayload payload)
         {
             if (context == null) return;
 
             var playerRecord = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
 
-            // Verificar que la ubicación de destino pertenece al jugador (no permitir reclamar/adoptar en ranura ajena)
-            long slotOwner = ResolveSlotOwnerId(payload.SlotName);
-            if (!PetAdoptionLogic.CanClaimOrManagePet(slotOwner, playerId))
+            // Verificar que la ubicación de destino pertenece al jugador (propietario o inquilino)
+            if (!IsResidentOfSlot(payload.SlotName, playerId))
             {
+                long slotOwner = ResolveSlotOwnerId(payload.SlotName);
                 context.Monitor.Log(
                     $"[ClientPetAdoption] Adopción rechazada para {playerId} en '{payload.SlotName}': la ranura pertenece a {slotOwner}.",
                     LogLevel.Warn);
@@ -1203,10 +1222,10 @@ namespace Pelican4Ever.Modules
             {
                 if (e.Type == MsgBowlPurchased && e.ReadAs<PetBowlPurchasedPayload>() is { } bowlPayload)
                 {
-                    long slotOwner = ResolveSlotOwnerId(bowlPayload.SlotName);
-                    if (!PetAdoptionLogic.CanClaimOrManagePet(slotOwner, e.FromPlayerID))
+                    if (!IsResidentOfSlot(bowlPayload.SlotName, e.FromPlayerID))
                     {
-                        context.Monitor.Log($"[ClientPetAdoption] Compra de cuenco ignorada: {e.FromPlayerID} no es propietario de '{bowlPayload.SlotName}' (dueño={slotOwner}).", LogLevel.Warn);
+                        long slotOwner = ResolveSlotOwnerId(bowlPayload.SlotName);
+                        context.Monitor.Log($"[ClientPetAdoption] Compra de cuenco ignorada: {e.FromPlayerID} no reside en '{bowlPayload.SlotName}' (dueño={slotOwner}).", LogLevel.Warn);
                         return;
                     }
 
@@ -1280,9 +1299,9 @@ namespace Pelican4Ever.Modules
 
             string slotName = ___TargetLocation.NameOrUniqueName;
             long playerId = Game1.player.UniqueMultiplayerID;
-            long slotOwner = ResolveSlotOwnerId(slotName);
-            if (!PetAdoptionLogic.CanClaimOrManagePet(slotOwner, playerId))
+            if (!IsResidentOfSlot(slotName, playerId))
             {
+                long slotOwner = ResolveSlotOwnerId(slotName);
                 context.Monitor.Log($"[ClientPetAdoption] Cuenco construido en '{slotName}' no pertenece al jugador {playerId} (dueño={slotOwner}); no se registra adopción.", LogLevel.Warn);
                 return;
             }

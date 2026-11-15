@@ -19,6 +19,9 @@ namespace Pelican4Ever.Framework
 
         public IModHelper Helper { get; }
 
+        /// <summary>Helper sin filtrar para el módulo de activación/desactivación del mod y comandos de diagnóstico.</summary>
+        public IModHelper RawHelper { get; }
+
         public IMonitor Monitor { get; }
 
         public IManifest Manifest { get; }
@@ -27,8 +30,13 @@ namespace Pelican4Ever.Framework
 
         public Harmony Harmony { get; }
 
+        /// <summary>Indica si Pelican 4Ever está activo actualmente en esta sesión de cliente.</summary>
+        public bool IsModEnabled { get; private set; }
+
         /// <summary>Estado autoritativo del servidor. Solo es significativo en el host tras cargar la partida.</summary>
         public ServerWorldState WorldState { get; set; } = new();
+
+        private readonly HarmonyPatchToggle patchToggle = new();
 
         private readonly Dictionary<string, Action<string, string[]>> commands = new(StringComparer.OrdinalIgnoreCase);
 
@@ -80,12 +88,71 @@ namespace Pelican4Ever.Framework
 
         public ModContext(IModHelper helper, IMonitor monitor, IManifest manifest, ServerConfig config, Harmony harmony)
         {
-            Helper = helper;
+            RawHelper = helper;
+            Config = config;
+            IsModEnabled = ModActivationLogic.IsEffectivelyEnabled(config.Enabled, config.AutoHostSaveName);
+            Helper = new GatedModHelper(helper, () => IsModEnabled);
             Monitor = monitor;
             Manifest = manifest;
-            Config = config;
             Harmony = harmony;
             Current = this;
+        }
+
+        /// <summary>
+        /// Captura los parches Harmony aplicados hasta el momento y aplica el estado inicial de activación del mod.
+        /// </summary>
+        public void SyncInitialActivationState()
+        {
+            patchToggle.CaptureOwnedPatches(Harmony);
+            if (!IsModEnabled)
+                ApplyRuntimeActivation(enabled: false, invalidateCaches: true);
+        }
+
+        /// <summary>
+        /// Activa o desactiva Pelican 4Ever en caliente, guardando la preferencia en config.json si corresponde.
+        /// </summary>
+        public void SetModEnabled(bool enabled, bool persist = true)
+        {
+            bool effectiveEnabled = ModActivationLogic.IsEffectivelyEnabled(enabled, Config.AutoHostSaveName);
+            bool changed = IsModEnabled != effectiveEnabled;
+            IsModEnabled = effectiveEnabled;
+
+            if (persist && Config.Enabled != effectiveEnabled)
+            {
+                Config.Enabled = effectiveEnabled;
+                RawHelper.WriteConfig(Config);
+            }
+
+            ApplyRuntimeActivation(effectiveEnabled, invalidateCaches: changed);
+        }
+
+        private void ApplyRuntimeActivation(bool enabled, bool invalidateCaches)
+        {
+            if (enabled)
+            {
+                patchToggle.Enable(Harmony);
+                if (Context.IsMainPlayer && Config.IsModuleEnabled("RealTimeClock"))
+                    StardewValley.Game1.realMilliSecondsPerGameTenMinutes = 600_000;
+            }
+            else
+            {
+                patchToggle.Disable(Harmony);
+                StardewValley.Game1.realMilliSecondsPerGameTenMinutes = 7000;
+            }
+
+            if (invalidateCaches && StardewValley.Game1.content != null)
+                InvalidateModAssets();
+        }
+
+        private void InvalidateModAssets()
+        {
+            RawHelper.GameContent.InvalidateCache("Data/Locations");
+            RawHelper.GameContent.InvalidateCache("Data/Objects");
+            RawHelper.GameContent.InvalidateCache("Data/Events/Farm");
+            RawHelper.GameContent.InvalidateCache("Characters/Dialogue/Marnie");
+            RawHelper.GameContent.InvalidateCache(asset =>
+                asset.Name.BaseName.StartsWith("Data/Festivals/", StringComparison.OrdinalIgnoreCase) ||
+                asset.Name.BaseName.StartsWith("Maps/", StringComparison.OrdinalIgnoreCase));
         }
     }
 }

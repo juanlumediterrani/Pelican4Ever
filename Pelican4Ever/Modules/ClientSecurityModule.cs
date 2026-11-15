@@ -1387,7 +1387,7 @@ namespace Pelican4Ever.Modules
         {
             try
             {
-                if (context == null || !Context.IsMainPlayer || !context.Config.RequirePairingWhitelist)
+                if (context == null || !Context.IsMainPlayer)
                     return true;
 
                 string clientIp = message?.SenderEndPoint?.Address?.ToString() ?? string.Empty;

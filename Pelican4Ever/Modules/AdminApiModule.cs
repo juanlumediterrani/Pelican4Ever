@@ -882,9 +882,13 @@ namespace Pelican4Ever.Modules
             {
                 bool occupied = state.Doors.TryGetValue(d.DoorId, out var ass);
                 string ownerName = "";
-                if (occupied && ass != null && state.Players.TryGetValue(ass.OwnerId, out var ownerRec))
+                string tenantName = "";
+                if (occupied && ass != null)
                 {
-                    ownerName = ownerRec.PlayerName;
+                    if (state.Players.TryGetValue(ass.OwnerId, out var ownerRec))
+                        ownerName = ownerRec.PlayerName;
+                    if (ass.TenantId.HasValue && ass.TenantId.Value != 0 && state.Players.TryGetValue(ass.TenantId.Value, out var tenantRec))
+                        tenantName = tenantRec.PlayerName;
                 }
 
                 statusDto.Doors.Add(new DoorStatusDto
@@ -896,6 +900,9 @@ namespace Pelican4Ever.Modules
                     SlotId = d.DefaultSlotId,
                     IsOccupied = occupied,
                     OwnerName = ownerName,
+                    TenantId = ass?.TenantId,
+                    TenantName = tenantName,
+                    PendingTenantRequests = ass?.PendingTenantRequests?.Count ?? 0,
                     FarmType = ass?.FarmType ?? "Standard",
                     Policy = ass?.Policy.ToString() ?? "—"
                 });

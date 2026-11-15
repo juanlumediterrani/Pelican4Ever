@@ -104,7 +104,7 @@ namespace Pelican4Ever.Core.World
                 return new AnnexPurchaseResult(false, AnnexPurchaseRejection.ResidenceNotFound, null, playerMoney);
             }
 
-            if (residenceDoor.OwnerId != playerId)
+            if (!residenceDoor.IsResident(playerId))
             {
                 return new AnnexPurchaseResult(false, AnnexPurchaseRejection.NotResidenceOwner, null, playerMoney);
             }

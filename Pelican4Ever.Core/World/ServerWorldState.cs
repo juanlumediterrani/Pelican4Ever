@@ -31,12 +31,24 @@ namespace Pelican4Ever.Core.World
 
         public long OwnerId { get; set; }
 
+        /// <summary>ID del inquilino activo en la residencia (máximo 1), o null si no hay inquilino.</summary>
+        public long? TenantId { get; set; }
+
+        /// <summary>Solicitudes de inquilinato pendientes enviadas desde el buzón exterior.</summary>
+        public HashSet<long> PendingTenantRequests { get; set; } = new();
+
         public AccessPolicy Policy { get; set; } = AccessPolicy.Locked;
 
         /// <summary>Si los visitantes pueden usar herramientas, colocar, cosechar, abrir cofres y usar máquinas.</summary>
         public bool VisitorsCanEdit { get; set; }
 
         public HashSet<long> Friends { get; set; } = new();
+
+        /// <summary>Indica si el jugador vive en esta residencia (como propietario o como inquilino).</summary>
+        public bool IsResident(long playerId)
+        {
+            return playerId != 0 && (OwnerId == playerId || (TenantId.HasValue && TenantId.Value == playerId));
+        }
     }
 
     /// <summary>Asignación de un anexo temático adquirido para una residencia privada (TASK-901).</summary>
@@ -105,7 +117,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 7;
+        public const int CurrentSchemaVersion = 8;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -175,10 +187,52 @@ namespace Pelican4Ever.Core.World
             return record;
         }
 
-        /// <summary>Residencia que posee el jugador, o null. Cada granjero posee como mucho una.</summary>
-        public DoorAssignment? FindResidenceOf(long ownerId)
+        /// <summary>Indica si el jugador es residente (propietario o inquilino) de la puerta indicada.</summary>
+        public static bool IsResident(DoorAssignment? door, long playerId)
         {
-            return Doors.Values.FirstOrDefault(d => d.OwnerId == ownerId);
+            return door != null && door.IsResident(playerId);
+        }
+
+        /// <summary>
+        /// Si el propietario abandona o libera la puerta mientras hay un inquilino activo, transfiere la
+        /// titularidad al inquilino para preservar la residencia y sus edificios/animales compartidos (TASK-2308).
+        /// </summary>
+        public bool TryTransferOwnershipToTenant(string doorId, out long newOwnerId)
+        {
+            newOwnerId = 0;
+            if (string.IsNullOrWhiteSpace(doorId) || !Doors.TryGetValue(doorId, out DoorAssignment? door))
+                return false;
+
+            if (!door.TenantId.HasValue || door.TenantId.Value == 0)
+                return false;
+
+            long previousOwnerId = door.OwnerId;
+            newOwnerId = door.TenantId.Value;
+            door.OwnerId = newOwnerId;
+            door.TenantId = null;
+
+            if (Players.TryGetValue(previousOwnerId, out PlayerRecord? oldRec))
+                oldRec.FarmSlotId = null;
+
+            PlayerRecord newRec = GetOrCreatePlayer(newOwnerId, string.Empty);
+            newRec.FarmSlotId = door.FarmSlotId;
+
+            if (Annexes != null)
+            {
+                foreach (AnnexAssignment annex in GetAnnexesForResidence(door.FarmSlotId))
+                    annex.OwnerId = newOwnerId;
+            }
+
+            return true;
+        }
+
+        /// <summary>Residencia en la que vive el jugador (como propietario o inquilino), o null.</summary>
+        public DoorAssignment? FindResidenceOf(long playerId)
+        {
+            if (playerId == 0)
+                return null;
+
+            return Doors.Values.FirstOrDefault(d => d.IsResident(playerId));
         }
 
         /// <summary>Devuelve el identificador de hueco de residencia asignado al jugador (p. ej. "Pelican4Ever_Farm_01"), o null si no posee ninguna.</summary>
@@ -203,7 +257,7 @@ namespace Pelican4Ever.Core.World
             if (Doors.TryGetValue(doorId, out DoorAssignment? existing) && existing.OwnerId != playerId)
                 return DoorClaimRejection.DoorTaken;
 
-            if (Doors.Values.Any(d => d.OwnerId == playerId && d.DoorId != doorId))
+            if (Doors.Values.Any(d => d.IsResident(playerId) && d.DoorId != doorId))
                 return DoorClaimRejection.AlreadyOwnsResidence;
 
             if (!string.IsNullOrWhiteSpace(farmType) && !FarmTemplateCatalog.Templates.ContainsKey(farmType) && !FarmGrassLogic.IsMeadowlands(farmType))
@@ -253,6 +307,25 @@ namespace Pelican4Ever.Core.World
                     Doors.Remove(extra.DoorId);
                     released.Add(extra.DoorId);
                 }
+            }
+
+            // TASK-2301: normalizar inquilinos (sin auto-inquilinato, sin doble residencia ni solicitudes de jugadores ya residentes).
+            var activeOwners = new HashSet<long>(Doors.Values.Select(d => d.OwnerId).Where(id => id != 0));
+            var assignedTenants = new HashSet<long>();
+            foreach (DoorAssignment door in Doors.Values.OrderBy(d => d.DoorId, StringComparer.Ordinal))
+            {
+                door.PendingTenantRequests ??= new HashSet<long>();
+                door.Friends ??= new HashSet<long>();
+
+                if (door.TenantId.HasValue && (door.TenantId.Value == 0 || door.TenantId.Value == door.OwnerId || activeOwners.Contains(door.TenantId.Value) || !assignedTenants.Add(door.TenantId.Value)))
+                {
+                    door.TenantId = null;
+                }
+            }
+
+            foreach (DoorAssignment door in Doors.Values)
+            {
+                door.PendingTenantRequests.RemoveWhere(id => id == 0 || activeOwners.Contains(id) || assignedTenants.Contains(id));
             }
 
             foreach (PlayerRecord record in Players.Values)
@@ -379,6 +452,20 @@ namespace Pelican4Ever.Core.World
                 PendingBuildingOrders ??= new List<PendingBuildingOrder>();
                 PendingAnimalOrders ??= new List<PendingAnimalOrder>();
                 SchemaVersion = 7;
+                changed = true;
+            }
+
+            // v7 → v8: co-residencia e inquilinos en parcelas privadas (TASK-2301).
+            if (SchemaVersion < 8)
+            {
+                Doors ??= new Dictionary<string, DoorAssignment>();
+                foreach (DoorAssignment door in Doors.Values)
+                {
+                    door.PendingTenantRequests ??= new HashSet<long>();
+                    if (door.TenantId == 0)
+                        door.TenantId = null;
+                }
+                SchemaVersion = 8;
                 changed = true;
             }
 

@@ -73,6 +73,7 @@ namespace Pelican4Ever.Modules
 
             // Comandos de consola y chat
             ctx.AddCommand("p4e_doors", "Muestra el estado y ubicación de las 16 residencias.", OnConsoleDoors);
+            ctx.AddCommand("p4e_tenant", "Gestiona el inquilino de una residencia: p4e_tenant <status|set|clear> [doorId] [playerId]", OnConsoleTenant);
             ctx.AddCommand("p4e_migrate_save", "Migra y sanea el mapa host y las salidas de la partida actual al nuevo diseño de Plaza Central: p4e_migrate_save [slot|geo]", OnConsoleMigrateSave);
             ctx.Helper.Events.GameLoop.GameLaunched += (s, e) =>
             {
@@ -1711,22 +1712,22 @@ namespace Pelican4Ever.Modules
                     GameLocation? loc = Game1.getLocationFromName(assignment.FarmSlotId);
                     if (loc != null)
                     {
-                        loc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                        loc.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
                     }
                     GameLocation? caveLoc = Game1.getLocationFromName($"{assignment.FarmSlotId}_Cave");
                     if (caveLoc != null)
                     {
-                        caveLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                        caveLoc.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
                     }
                     GameLocation? cellarLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotCellarName(assignment.FarmSlotId));
                     if (cellarLoc != null)
                     {
-                        cellarLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                        cellarLoc.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
                     }
                     GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(assignment.FarmSlotId));
                     if (ghLoc != null)
                     {
-                        ghLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                        ghLoc.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
                     }
                 }
 
@@ -2043,7 +2044,7 @@ namespace Pelican4Ever.Modules
             // Colocar o actualizar letrero de vuelta interior en el anexo (TASK-914)
             UpdateAnnexReturnSign(annexFarm, annex, template);
 
-            annexFarm.PublishOwnership(ownerId, policy);
+            annexFarm.PublishOwnership(ownerId, policy, parentResidence?.TenantId);
             return annexFarm;
         }
 
@@ -2397,7 +2398,7 @@ namespace Pelican4Ever.Modules
 
                     if (!welcomeNotified)
                     {
-                        bool hasResidence = context.WorldState.Doors.Values.Any(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+                        bool hasResidence = context.WorldState.FindResidenceOf(Game1.player.UniqueMultiplayerID) != null;
                         if (!hasResidence)
                         {
                             welcomeNotified = true;
@@ -2510,11 +2511,11 @@ namespace Pelican4Ever.Modules
             string slotId = pendingResidenceWakeSlotId;
             pendingResidenceWakeSlotId = null;
 
-            // Verificación estricta de propiedad: nunca viajar si el jugador no es dueño de la residencia
-            var assignment = context?.WorldState?.Doors?.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+            // Verificación estricta de residencia (propietario o inquilino)
+            var assignment = context?.WorldState?.FindResidenceOf(Game1.player.UniqueMultiplayerID);
             if (assignment == null || !string.Equals(assignment.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
             {
-                context?.Monitor.Log($"[FarmSlotModule] Cancelado viaje diferido: el jugador {Game1.player.Name} ({Game1.player.UniqueMultiplayerID}) no posee la residencia {slotId}.", LogLevel.Warn);
+                context?.Monitor.Log($"[FarmSlotModule] Cancelado viaje diferido: el jugador {Game1.player.Name} ({Game1.player.UniqueMultiplayerID}) no reside en {slotId}.", LogLevel.Warn);
                 return;
             }
 
@@ -2522,8 +2523,12 @@ namespace Pelican4Ever.Modules
             if (string.Equals(Game1.currentLocation?.NameOrUniqueName, home, StringComparison.OrdinalIgnoreCase))
                 return;
 
+            var wakeSpot = assignment.TenantId == Game1.player.UniqueMultiplayerID
+                ? ResidenceInteriorLogic.TenantBedPlacement
+                : ResidenceInteriorLogic.BedPlacement;
+
             context?.Monitor.Log($"[FarmSlotModule] Residencia {home} no cargada al despertar; viajando a la cama.", LogLevel.Debug);
-            Game1.warpFarmer(home, ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY, false);
+            Game1.warpFarmer(home, wakeSpot.TargetX, wakeSpot.TargetY, false);
         }
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
@@ -3286,7 +3291,7 @@ namespace Pelican4Ever.Modules
             {
                 if (assignment != null && assignment.OwnerId != 0)
                 {
-                    cave.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    cave.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
                 }
 
                 UpdateOrCreateWarp(farm, farmTemplate.CaveEntranceX, farmTemplate.CaveEntranceY, caveId, 8, 11);
@@ -3324,7 +3329,7 @@ namespace Pelican4Ever.Modules
 
             if (cellar != null && assignment != null && assignment.OwnerId != 0)
             {
-                cellar.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                cellar.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
             }
 
             if (cabin.upgradeLevel >= 3)
@@ -3378,7 +3383,7 @@ namespace Pelican4Ever.Modules
 
                 if (assignment != null && assignment.OwnerId != 0)
                 {
-                    ghLoc.PublishOwnership(assignment.OwnerId, assignment.Policy);
+                    ghLoc.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
 
                     // Sincronizar desbloqueo si el propietario ya tiene ccPantry o jojaPantry
                     Farmer? owner = Game1.GetPlayer(assignment.OwnerId);
@@ -3627,6 +3632,22 @@ namespace Pelican4Ever.Modules
                         HandleChangePolicy(e.FromPlayerID, payload.FarmSlotId, payload.Policy, payload.VisitorsCanEdit);
                 }
             }
+            else if (e.Type == ModMessages.RequestTenancyRequest && Context.IsMainPlayer)
+            {
+                var payload = e.ReadAs<RequestTenancyPayload>();
+                if (payload != null)
+                {
+                    HandleRequestTenancy(e.FromPlayerID, payload.DoorId, payload.Cancel);
+                }
+            }
+            else if (e.Type == ModMessages.ManageTenantRequest && Context.IsMainPlayer)
+            {
+                var payload = e.ReadAs<ManageTenantPayload>();
+                if (payload != null)
+                {
+                    HandleManageTenant(e.FromPlayerID, payload.DoorId, payload.Action, payload.TargetPlayerId);
+                }
+            }
             else if (e.Type == ModMessages.BuyAnnexRequest && Context.IsMainPlayer)
             {
                 var payload = e.ReadAs<BuyAnnexPayload>();
@@ -3661,7 +3682,6 @@ namespace Pelican4Ever.Modules
                 // en él sin haberlo visitado todavía en esta sesión.
                 var annex = context.WorldState.FindAnnexById(e.ReadAs<string>());
                 if (annex != null
-                    && annex.OwnerId == e.FromPlayerID
                     && string.Equals(context.WorldState.FindResidenceOf(e.FromPlayerID)?.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase)
                     && (Game1.getLocationFromName(annex.AnnexId) ?? EnsureAnnexLocation(annex, regenerate: false)) is Farm farm)
                 {
@@ -3678,7 +3698,8 @@ namespace Pelican4Ever.Modules
                 // Registrar la raíz del host para recibir los deltas de edificios y animales incluso fuera del anexo.
                 var multiplayer = context.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
                 if (multiplayer.readObjectFull<GameLocation>(reader).Value is Farm farm
-                    && context.WorldState.FindAnnexById(farm.NameOrUniqueName)?.OwnerId == Game1.player.UniqueMultiplayerID
+                    && context.WorldState.FindAnnexById(farm.NameOrUniqueName) is { } syncedAnnex
+                    && string.Equals(context.WorldState.FindResidenceOf(Game1.player.UniqueMultiplayerID)?.FarmSlotId, syncedAnnex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase)
                     && Game1.getLocationFromName(farm.NameOrUniqueName) == null)
                 {
                     RetainSyncedOwnPrivateLocation(farm);
@@ -3745,12 +3766,18 @@ namespace Pelican4Ever.Modules
                         context.WorldState.Players[kvp.Key] = kvp.Value;
                     }
 
+                    DoorAssignment? myDoor = null;
                     if (!Context.IsMainPlayer && Game1.player != null)
                     {
-                        var myDoor = context.WorldState.Doors.Values.FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+                        myDoor = context.WorldState.FindResidenceOf(Game1.player.UniqueMultiplayerID);
                         if (myDoor != null && !string.IsNullOrEmpty(myDoor.FarmSlotId))
                         {
-                            Game1.player.homeLocation.Value = $"{myDoor.FarmSlotId}_Home";
+                            // TASK-2303: Solo el propietario enlaza su Cabin de autenticación con {FarmSlotId}_Home;
+                            // el inquilino conserva su Cabin técnico de red para no colisionar en login.
+                            if (myDoor.OwnerId == Game1.player.UniqueMultiplayerID)
+                            {
+                                Game1.player.homeLocation.Value = $"{myDoor.FarmSlotId}_Home";
+                            }
 
                             // Si el jugador despertó en el fallback provisional de la plaza ("Farm" 64, 15) al unirse
                             // antes de recibir la sincronización de puertas, programar el viaje a la cama de su residencia.
@@ -3765,14 +3792,18 @@ namespace Pelican4Ever.Modules
                     context.Monitor.Log($"[FarmSlotModule] Sincronización de residencias recibida del host ({context.WorldState.Doors.Count} ocupadas, {context.WorldState.Annexes.Count} anexos).", LogLevel.Info);
                     RefreshSlotLocationData();
 
-                    // Los anexos propios que aún no existen en este cliente se piden al host para poder
-                    // construir o comprar animales en ellos (TASK-2011).
-                    foreach (var annex in context.WorldState.Annexes.Values)
+                    // Los anexos de la residencia que aún no existen en este cliente se piden al host para poder
+                    // construir o comprar animales en ellos (TASK-2011 / TASK-2306).
+                    if (myDoor != null && !string.IsNullOrEmpty(myDoor.FarmSlotId))
                     {
-                        if (annex.OwnerId == localId && Game1.getLocationFromName(annex.AnnexId) == null)
+                        foreach (var annex in context.WorldState.Annexes.Values)
                         {
-                            context.Helper.Multiplayer.SendMessage(annex.AnnexId, ModMessages.RequestAnnexLocation,
-                                new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                            if (string.Equals(annex.ResidenceSlotId, myDoor.FarmSlotId, StringComparison.OrdinalIgnoreCase)
+                                && Game1.getLocationFromName(annex.AnnexId) == null)
+                            {
+                                context.Helper.Multiplayer.SendMessage(annex.AnnexId, ModMessages.RequestAnnexLocation,
+                                    new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                            }
                         }
                     }
 
@@ -3984,28 +4015,7 @@ namespace Pelican4Ever.Modules
             if (string.IsNullOrWhiteSpace(policyStr) || Enum.TryParse(policyStr, ignoreCase: true, out newPolicy))
             {
                 doorEntry.Policy = newPolicy;
-                GameLocation? loc = Game1.getLocationFromName(farmSlotId);
-                if (loc != null)
-                {
-                    loc.PublishOwnership(playerId, newPolicy);
-                }
-
-                // TASK-903: Propagar la política de acceso actualizada a todos los anexos de esta residencia
-                foreach (AnnexAssignment annex in worldState.GetAnnexesForResidence(farmSlotId))
-                {
-                    GameLocation? annexLoc = Game1.getLocationFromName(annex.AnnexId);
-                    annexLoc?.PublishOwnership(playerId, newPolicy);
-                }
-
-                // Propagar también a la cueva, sótano e invernadero privados de la residencia
-                GameLocation? caveLoc = Game1.getLocationFromName($"{farmSlotId}_Cave");
-                caveLoc?.PublishOwnership(playerId, newPolicy);
-
-                GameLocation? cellarLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotCellarName(farmSlotId));
-                cellarLoc?.PublishOwnership(playerId, newPolicy);
-
-                GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(farmSlotId));
-                ghLoc?.PublishOwnership(playerId, newPolicy);
+                PropagateResidenceOwnership(doorEntry);
 
                 context.Monitor.Log($"[FarmSlotModule] Política de {farmSlotId} cambiada a {newPolicy} (visitas editan: {doorEntry.VisitorsCanEdit}) por propietario {playerId}.", LogLevel.Info);
 
@@ -4013,6 +4023,215 @@ namespace Pelican4Ever.Modules
                 BroadcastDoorsSync();
                 EvictLocalPlayerIfUnauthorized();
             }
+        }
+
+        private static void PropagateResidenceOwnership(DoorAssignment doorEntry)
+        {
+            if (context == null)
+                return;
+
+            string farmSlotId = doorEntry.FarmSlotId;
+            GameLocation? loc = Game1.getLocationFromName(farmSlotId);
+            loc?.PublishOwnership(doorEntry.OwnerId, doorEntry.Policy, doorEntry.TenantId);
+
+            foreach (AnnexAssignment annex in context.WorldState.GetAnnexesForResidence(farmSlotId))
+            {
+                GameLocation? annexLoc = Game1.getLocationFromName(annex.AnnexId);
+                annexLoc?.PublishOwnership(doorEntry.OwnerId, doorEntry.Policy, doorEntry.TenantId);
+            }
+
+            GameLocation? caveLoc = Game1.getLocationFromName($"{farmSlotId}_Cave");
+            caveLoc?.PublishOwnership(doorEntry.OwnerId, doorEntry.Policy, doorEntry.TenantId);
+
+            GameLocation? cellarLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotCellarName(farmSlotId));
+            cellarLoc?.PublishOwnership(doorEntry.OwnerId, doorEntry.Policy, doorEntry.TenantId);
+
+            GameLocation? ghLoc = Game1.getLocationFromName(ResidenceUpgradeLogic.GetSlotGreenhouseName(farmSlotId));
+            ghLoc?.PublishOwnership(doorEntry.OwnerId, doorEntry.Policy, doorEntry.TenantId);
+        }
+
+        public static bool HandleRequestTenancy(long playerId, string doorId, bool cancel)
+        {
+            if (context == null || !Context.IsMainPlayer || playerId == 0 || string.IsNullOrWhiteSpace(doorId))
+                return false;
+
+            if (!context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? door) || door.OwnerId == 0)
+                return false;
+
+            door.PendingTenantRequests ??= new HashSet<long>();
+
+            if (cancel)
+            {
+                bool removed = door.PendingTenantRequests.Remove(playerId);
+                if (removed)
+                    BroadcastDoorsSync();
+                return removed;
+            }
+
+            if (door.TenantId.HasValue && door.TenantId.Value != 0)
+                return false;
+
+            if (context.WorldState.FindResidenceOf(playerId) != null)
+                return false;
+
+            if (!door.PendingTenantRequests.Add(playerId))
+                return true;
+
+            context.Monitor.Log($"[FarmSlotModule] Jugador {playerId} solicitó ser inquilino en {doorId} ({door.FarmSlotId}).", LogLevel.Info);
+            BroadcastDoorsSync();
+            return true;
+        }
+
+        public static bool HandleManageTenant(long actorPlayerId, string doorId, TenantManageAction action, long targetPlayerId)
+        {
+            if (context == null || !Context.IsMainPlayer || actorPlayerId == 0 || string.IsNullOrWhiteSpace(doorId))
+                return false;
+
+            if (!context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? door) || door.OwnerId == 0)
+                return false;
+
+            door.PendingTenantRequests ??= new HashSet<long>();
+
+            switch (action)
+            {
+                case TenantManageAction.Accept:
+                {
+                    if (door.OwnerId != actorPlayerId)
+                        return false;
+                    if (door.TenantId.HasValue && door.TenantId.Value != 0)
+                        return false;
+                    if (targetPlayerId == 0 || targetPlayerId == door.OwnerId)
+                        return false;
+                    if (context.WorldState.FindResidenceOf(targetPlayerId) != null)
+                        return false;
+
+                    door.TenantId = targetPlayerId;
+                    foreach (DoorAssignment otherDoor in context.WorldState.Doors.Values)
+                        otherDoor.PendingTenantRequests?.Remove(targetPlayerId);
+
+                    PlayerRecord tenantRec = context.WorldState.GetOrCreatePlayer(targetPlayerId, Game1.GetPlayer(targetPlayerId)?.Name ?? string.Empty);
+                    tenantRec.FarmSlotId = door.FarmSlotId;
+
+                    PropagateResidenceOwnership(door);
+                    if (ResolveResidenceCabin($"{door.FarmSlotId}_Home", door) is Cabin cabin)
+                    {
+                        EnsureTenantBed(cabin, door);
+                    }
+
+                    context.Monitor.Log($"[FarmSlotModule] Inquilino {targetPlayerId} aceptado en {doorId} ({door.FarmSlotId}) por propietario {actorPlayerId}.", LogLevel.Info);
+                    BroadcastDoorsSync();
+                    return true;
+                }
+                case TenantManageAction.Reject:
+                {
+                    if (door.OwnerId != actorPlayerId)
+                        return false;
+                    if (door.PendingTenantRequests.Remove(targetPlayerId))
+                    {
+                        BroadcastDoorsSync();
+                        return true;
+                    }
+                    return false;
+                }
+                case TenantManageAction.Evict:
+                {
+                    if (door.OwnerId != actorPlayerId || !door.TenantId.HasValue || door.TenantId.Value == 0)
+                        return false;
+                    ClearTenancyOnHost(door, door.TenantId.Value);
+                    return true;
+                }
+                case TenantManageAction.Leave:
+                {
+                    if (door.TenantId != actorPlayerId)
+                        return false;
+                    ClearTenancyOnHost(door, actorPlayerId);
+                    return true;
+                }
+                default:
+                    return false;
+            }
+        }
+
+        private static void OnConsoleTenant(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                context?.Monitor.Log("[p4e_tenant] Solo disponible en el Host con partida cargada.", LogLevel.Warn);
+                return;
+            }
+
+            string sub = args.Length > 0 ? args[0].ToLowerInvariant() : "status";
+            if (sub == "status")
+            {
+                foreach (var door in context.WorldState.Doors.Values.OrderBy(d => d.DoorId, StringComparer.Ordinal))
+                {
+                    string tenantInfo = door.TenantId.HasValue && door.TenantId.Value != 0
+                        ? $"Inquilino={door.TenantId.Value}"
+                        : $"Sin inquilino (solicitudes={door.PendingTenantRequests?.Count ?? 0})";
+                    context.Monitor.Log($"  {door.DoorId} ({door.FarmSlotId}): Dueño={door.OwnerId} | {tenantInfo}", LogLevel.Info);
+                }
+                return;
+            }
+
+            if (args.Length < 2)
+            {
+                context.Monitor.Log("Uso: p4e_tenant <status|set|clear> <doorId> [playerId]", LogLevel.Info);
+                return;
+            }
+
+            string doorId = args[1];
+            if (!context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? targetDoor))
+            {
+                context.Monitor.Log($"[p4e_tenant] Puerta '{doorId}' no encontrada o sin propietario.", LogLevel.Warn);
+                return;
+            }
+
+            if (sub == "clear")
+            {
+                if (!targetDoor.TenantId.HasValue || targetDoor.TenantId.Value == 0)
+                {
+                    context.Monitor.Log($"[p4e_tenant] {doorId} no tiene inquilino.", LogLevel.Info);
+                    return;
+                }
+                bool ok = HandleManageTenant(targetDoor.OwnerId, doorId, TenantManageAction.Evict, targetDoor.TenantId.Value);
+                context.Monitor.Log($"[p4e_tenant] Inquilino retirado de {doorId}: ok={ok}", LogLevel.Info);
+                return;
+            }
+
+            if (sub == "set" && args.Length >= 3 && long.TryParse(args[2], out long tenantId))
+            {
+                bool ok = HandleManageTenant(targetDoor.OwnerId, doorId, TenantManageAction.Accept, tenantId);
+                context.Monitor.Log($"[p4e_tenant] Asignado inquilino {tenantId} a {doorId}: ok={ok}", LogLevel.Info);
+                return;
+            }
+
+            context.Monitor.Log("Uso: p4e_tenant <status|set|clear> <doorId> [playerId]", LogLevel.Info);
+        }
+
+        private static void ClearTenancyOnHost(DoorAssignment door, long exTenantId)
+        {
+            if (context == null)
+                return;
+
+            door.TenantId = null;
+
+            if (context.WorldState.Players.TryGetValue(exTenantId, out PlayerRecord? rec))
+            {
+                rec.FarmSlotId = null;
+            }
+
+            Farmer? exTenantFarmer = Game1.GetPlayer(exTenantId);
+            if (exTenantFarmer != null && !string.IsNullOrEmpty(exTenantFarmer.lastSleepLocation.Value)
+                && string.Equals(VisitorPermissionLogic.ResidenceSlotOf(exTenantFarmer.lastSleepLocation.Value), door.FarmSlotId, StringComparison.OrdinalIgnoreCase))
+            {
+                exTenantFarmer.lastSleepLocation.Value = "Farm";
+                exTenantFarmer.lastSleepPoint.Value = Point.Zero;
+            }
+
+            PropagateResidenceOwnership(door);
+            context.Monitor.Log($"[FarmSlotModule] Inquilinato finalizado para {exTenantId} en {door.DoorId} ({door.FarmSlotId}).", LogLevel.Info);
+            BroadcastDoorsSync();
+            EvictLocalPlayerIfUnauthorized();
         }
 
         private static void EvictLocalPlayerIfUnauthorized()
@@ -4525,7 +4744,7 @@ namespace Pelican4Ever.Modules
 
             long myId = Game1.player.UniqueMultiplayerID;
             var doorAssignment = worldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == residenceSlotId);
-            if (doorAssignment == null || doorAssignment.OwnerId != myId)
+            if (doorAssignment == null || !doorAssignment.IsResident(myId))
             {
                 Game1.drawObjectDialogue(I18n.Get("annex.owner_only_short"));
                 return;
@@ -5294,9 +5513,8 @@ namespace Pelican4Ever.Modules
             string playerName = who?.Name ?? "<sin jugador>";
             long playerId = who?.UniqueMultiplayerID ?? 0;
 
-            // Obtener el hueco de residencia asignado al jugador actual
-            string? residenceSlotId = context.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == playerId)?.FarmSlotId;
+            // Obtener el hueco de residencia asignado al jugador actual (propietario o inquilino)
+            string? residenceSlotId = context.WorldState.FindResidenceOf(playerId)?.FarmSlotId;
 
             if (string.IsNullOrEmpty(residenceSlotId))
             {
@@ -5434,7 +5652,7 @@ namespace Pelican4Ever.Modules
             if (context?.WorldState != null)
             {
                 var assignment = context.WorldState.Doors.Values.FirstOrDefault(d => d.FarmSlotId == farmSlotId);
-                if (assignment != null && assignment.OwnerId == who.UniqueMultiplayerID)
+                if (assignment != null && assignment.IsResident(who.UniqueMultiplayerID))
                 {
                     isOwner = true;
                 }
@@ -5932,8 +6150,7 @@ namespace Pelican4Ever.Modules
             if (__instance.QualifiedItemId != "(O)688")
                 return true;
 
-            var assignment = context?.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == Game1.player.UniqueMultiplayerID);
+            var assignment = context?.WorldState.FindResidenceOf(Game1.player.UniqueMultiplayerID);
 
             if (assignment != null && !string.IsNullOrEmpty(assignment.FarmSlotId))
             {
@@ -5963,8 +6180,7 @@ namespace Pelican4Ever.Modules
             if (ArgUtility.Get(action, 0) != "FarmObelisk")
                 return true;
 
-            var assignment = context?.WorldState.Doors.Values
-                .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
+            var assignment = context?.WorldState.FindResidenceOf(who.UniqueMultiplayerID);
 
             if (assignment == null || string.IsNullOrEmpty(assignment.FarmSlotId))
                 return true;
@@ -6099,9 +6315,8 @@ namespace Pelican4Ever.Modules
             {
                 SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? 16);
 
-                // 1. Identificar si el jugador posee una residencia asignada en WorldState
-                DoorAssignment? assignment = context?.WorldState?.Doors?.Values
-                    .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
+                // 1. Identificar si el jugador reside en una parcela asignada en WorldState (propietario o inquilino)
+                DoorAssignment? assignment = context?.WorldState?.FindResidenceOf(who.UniqueMultiplayerID);
 
                 string? assignedSlotId = assignment?.FarmSlotId;
                 if (string.IsNullOrEmpty(assignedSlotId) && context?.WorldState?.Players != null
@@ -6110,7 +6325,9 @@ namespace Pelican4Ever.Modules
                     assignedSlotId = playerRec.FarmSlotId;
                 }
 
-                if (!string.IsNullOrEmpty(assignedSlotId))
+                // TASK-2303: Solo el propietario enlaza su Cabin de autenticación con {assignedSlotId}_Home;
+                // el inquilino mantiene su Cabin de red independiente.
+                if (!string.IsNullOrEmpty(assignedSlotId) && assignment?.OwnerId == who.UniqueMultiplayerID)
                 {
                     who.homeLocation.Value = $"{assignedSlotId}_Home";
                 }
@@ -6175,8 +6392,16 @@ namespace Pelican4Ever.Modules
 
                         if (farmHouse != null)
                         {
+                            if (homeCabin != null && assignment != null)
+                            {
+                                EnsureTenantBed(homeCabin, assignment);
+                            }
+
                             who.currentLocation = farmHouse;
-                            Point bedSpot = farmHouse.GetPlayerBedSpot();
+                            bool isTenantWake = assignment != null && assignment.TenantId == who.UniqueMultiplayerID;
+                            Point bedSpot = isTenantWake
+                                ? new Point(ResidenceInteriorLogic.TenantBedPlacement.TargetX, ResidenceInteriorLogic.TenantBedPlacement.TargetY)
+                                : farmHouse.GetPlayerBedSpot();
                             if (bedSpot == Point.Zero)
                             {
                                 bedSpot = new Point(ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY);
@@ -6227,8 +6452,7 @@ namespace Pelican4Ever.Modules
             catch (Exception ex)
             {
                 context?.Monitor.Log($"[FarmSlotModule] Advertencia en Prefix_ApplyWakeUpPosition: {ex.Message}. Aplicando recuperación segura.", LogLevel.Warn);
-                DoorAssignment? assignment = context?.WorldState?.Doors?.Values
-                    .FirstOrDefault(d => d.OwnerId == who.UniqueMultiplayerID);
+                DoorAssignment? assignment = context?.WorldState?.FindResidenceOf(who.UniqueMultiplayerID);
                 string? assignedSlotId = assignment?.FarmSlotId;
                 if (string.IsNullOrEmpty(assignedSlotId) && context?.WorldState?.Players != null
                     && context.WorldState.Players.TryGetValue(who.UniqueMultiplayerID, out var pRec) && !string.IsNullOrEmpty(pRec.FarmSlotId))
@@ -6430,7 +6654,7 @@ namespace Pelican4Ever.Modules
             if (location != null && tool != null && LocationCullingLogic.IsPrivateFarmOrAnnex(location.NameOrUniqueName))
             {
                 long? ownerId = location.GetFarmOwnerId();
-                if (ownerId.HasValue && ownerId.Value != __instance.UniqueMultiplayerID)
+                if (ownerId.HasValue && !location.IsLocationResident(__instance.UniqueMultiplayerID))
                 {
                     if (tool is Pickaxe or Axe or Hoe)
                     {
@@ -6451,7 +6675,7 @@ namespace Pelican4Ever.Modules
             if (location != null && LocationCullingLogic.IsPrivateFarmOrAnnex(location.NameOrUniqueName))
             {
                 long? ownerId = location.GetFarmOwnerId();
-                if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
+                if (ownerId.HasValue && !location.IsLocationResident(who.UniqueMultiplayerID))
                 {
                     if (__instance is Pickaxe or Axe or Hoe)
                     {
@@ -6473,7 +6697,7 @@ namespace Pelican4Ever.Modules
             if (loc != null && LocationCullingLogic.IsPrivateFarmOrAnnex(loc.NameOrUniqueName))
             {
                 long? ownerId = loc.GetFarmOwnerId();
-                if (ownerId.HasValue && ownerId.Value != who.UniqueMultiplayerID)
+                if (ownerId.HasValue && !loc.IsLocationResident(who.UniqueMultiplayerID))
                 {
                     Game1.showRedMessage(I18n.Get("residence.chest_private"));
                     __result = false;
@@ -6919,6 +7143,7 @@ namespace Pelican4Ever.Modules
             long? ownerId = doorAssignment?.OwnerId
                          ?? context.WorldState.FindAnnexById(location.NameOrUniqueName)?.OwnerId
                          ?? location.GetFarmOwnerId();
+            long? tenantId = doorAssignment?.TenantId ?? location.GetFarmTenantId();
 
             var onlineFarmerIds = Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet();
 
@@ -6926,6 +7151,7 @@ namespace Pelican4Ever.Modules
                 location.NameOrUniqueName,
                 location.farmers.Count,
                 ownerId,
+                tenantId,
                 onlineFarmerIds
             );
         }
@@ -6942,7 +7168,34 @@ namespace Pelican4Ever.Modules
             RepositionResidenceFurniture(cabin);
             EnsureStarterDecorations(cabin);
             RepositionStarterChests(cabin);
+            EnsureTenantBed(cabin);
             RefreshResidenceFurnitureDrawPositions(cabin);
+        }
+
+        /// <summary>
+        /// Garantiza que exista una segunda cama en el interior compartido cuando la residencia tiene un inquilino activo (TASK-2305).
+        /// </summary>
+        public static void EnsureTenantBed(Cabin cabin, DoorAssignment? assignment = null)
+        {
+            if (cabin == null || context == null)
+                return;
+
+            string? slotId = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(cabin.NameOrUniqueName);
+            assignment ??= !string.IsNullOrEmpty(slotId)
+                ? context.WorldState.Doors.Values.FirstOrDefault(d => string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            if (assignment == null || !assignment.TenantId.HasValue || assignment.TenantId.Value == 0)
+                return;
+
+            int bedCount = cabin.furniture.OfType<BedFurniture>().Count();
+            if (bedCount >= 2)
+                return;
+
+            var target = ResidenceInteriorLogic.TenantBedPlacement;
+            string bedId = cabin.furniture.OfType<BedFurniture>().FirstOrDefault()?.ItemId ?? "2048";
+            var secondBed = new BedFurniture(bedId, new Vector2(target.TargetX, target.TargetY));
+            cabin.furniture.Add(secondBed);
         }
 
         /// <summary>
@@ -7426,21 +7679,24 @@ namespace Pelican4Ever.Modules
             return IsOwnedByPlayer(location, Game1.player.UniqueMultiplayerID);
         }
 
-        /// <summary>Indica si una ubicación (o su granja padre) pertenece al jugador indicado.</summary>
+        /// <summary>Indica si una ubicación (o su granja padre) pertenece al jugador indicado (propietario o inquilino).</summary>
         private static bool IsOwnedByPlayer(GameLocation location, long playerId)
         {
             if (context == null || playerId == 0) return false;
 
             string name = location.NameOrUniqueName;
 
-            if (context.WorldState.Doors.Values.Any(d => d.OwnerId == playerId && string.Equals(d.FarmSlotId, name, StringComparison.OrdinalIgnoreCase)))
+            if (context.WorldState.Doors.Values.Any(d => d.IsResident(playerId) && string.Equals(d.FarmSlotId, name, StringComparison.OrdinalIgnoreCase)))
                 return true;
             if (context.WorldState.Players.TryGetValue(playerId, out var rec) && string.Equals(rec.FarmSlotId, name, StringComparison.OrdinalIgnoreCase))
                 return true;
-            if (context.WorldState.FindAnnexById(name)?.OwnerId == playerId)
+
+            if (context.WorldState.FindAnnexById(name) is { } annex
+                && context.WorldState.FindResidenceOf(playerId) is { } res
+                && string.Equals(res.FarmSlotId, annex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            if (location.GetFarmOwnerId() == playerId)
+            if (location.IsLocationResident(playerId))
                 return true;
 
             // Interiores de la residencia (Pelican4Ever_Farm_02_Home, _Cave, _Cellar, _Greenhouse):
@@ -7454,8 +7710,11 @@ namespace Pelican4Ever.Modules
                     continue;
 
                 string slotId = name.Substring(0, name.Length - suffix.Length);
-                if (context.WorldState.Doors.Values.Any(d => d.OwnerId == playerId && string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
-                    || context.WorldState.FindAnnexById(slotId)?.OwnerId == playerId)
+                if (context.WorldState.Doors.Values.Any(d => d.IsResident(playerId) && string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase)))
+                    return true;
+                if (context.WorldState.FindAnnexById(slotId) is { } subAnnex
+                    && context.WorldState.FindResidenceOf(playerId) is { } subRes
+                    && string.Equals(subRes.FarmSlotId, subAnnex.ResidenceSlotId, StringComparison.OrdinalIgnoreCase))
                     return true;
             }
 
@@ -7506,8 +7765,7 @@ namespace Pelican4Ever.Modules
             string? residenceId = context!.WorldState.ResolvePlayerResidenceSlot(playerId);
             var annexes = string.IsNullOrEmpty(residenceId)
                 ? null
-                : context.WorldState.GetAnnexesForResidence(residenceId)
-                    .Where(annex => annex.OwnerId == playerId).ToList();
+                : context.WorldState.GetAnnexesForResidence(residenceId);
 
             var destinations = ConstructionLocationFilter.GetAllowedConstructionLocations(
                 playerId, Context.IsMainPlayer, residenceId, annexes);
