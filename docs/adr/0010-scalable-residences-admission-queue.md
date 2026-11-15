@@ -21,15 +21,16 @@ Hechos verificados sobre el decompilado de Stardew Valley 1.6.15 y el código de
 
 ## Decisión
 
-### 1. Tres magnitudes independientes
+### 1. Magnitudes independientes
 
 | Magnitud | Clave de configuración | Valores en 0.5 |
 | --- | --- | --- |
 | Residencias | `FarmSlotCount` (se conserva el nombre) | `1..16`, `32` o `64` |
 | Jugadores simultáneos (clientes, sin contar al host) | `MaxConcurrentPlayers` (nueva) | `1..16`, por defecto `16` |
 | Plazas de espera | `AdmissionQueueCapacity` (nueva) | `0..32`, por defecto `16` |
+| Reserva de plaza tras caída de red | `ReconnectGraceMinutes` (nueva) | `0..30`, por defecto `5` (`0` la desactiva) |
 
-`FarmSlotCount` deja de alimentar `highestPlayerLimit` y `currentPlayerLimit`. `LidgrenServer` se inicializa con `MaximumConnections = MaxConcurrentPlayers + AdmissionQueueCapacity`. Cambiar cualquiera de las tres exige reiniciar el servidor.
+`FarmSlotCount` deja de alimentar `highestPlayerLimit` y `currentPlayerLimit`. `LidgrenServer` se inicializa con `MaximumConnections = MaxConcurrentPlayers + AdmissionQueueCapacity`. Cambiar cualquiera de ellas exige reiniciar el servidor.
 
 ### 2. Admisión por orden de llegada con cola
 
@@ -39,14 +40,23 @@ Hechos verificados sobre el decompilado de Stardew Valley 1.6.15 y el código de
 4. Con la cola llena, la conexión se cierra con un mensaje que lo dice.
 5. La cola no se persiste: tras el cierre ordenado del cambio de día, la entrada vuelve a ser por orden de llegada.
 
-### 3. Expulsión por inactividad
+### 3. Reserva de plaza tras una caída de red
 
-1. Un jugador está inactivo cuando pasan `IdleKickMinutes` (por defecto `15`) sin movimiento, uso de herramienta, interacción ni mensaje de chat.
-2. **Solo se expulsa si hay alguien en la cola.** Sin espera, estar quieto no perjudica a nadie y forma parte del juego (descanso sentado de «Bien comido», buff del spa).
-3. Antes de expulsar se avisa con `IdleKickWarningMinutes` de antelación (por defecto `2`); cualquier acción del jugador reinicia el contador.
-4. La expulsión es un cierre ordenado: se guarda el estado vivo del jugador igual que en una desconexión normal y no cuenta como penalización de sueño.
+1. Cuando un jugador en juego pierde la conexión **sin haberla cerrado él** (corte de red, tiempo de espera agotado, cierre inesperado del cliente), su plaza queda reservada durante `ReconnectGraceMinutes` (por defecto `5`).
+2. Mientras dura la reserva, la plaza cuenta como ocupada para la admisión: la cola no avanza sobre ella.
+3. Si el mismo dispositivo vuelve dentro del plazo, entra directamente en su plaza sin pasar por la cola. Pasado el plazo, la plaza se libera y el jugador entra como cualquier otro.
+4. No generan reserva: la salida voluntaria (salir al título, cerrar sesión en la cama), la expulsión por inactividad, la expulsión por administración ni el cierre ordenado del cambio de día.
+5. Las reservas no se persisten: un reinicio del servidor las anula.
 
-### 4. Saludo con lista de peones filtrada
+### 4. Expulsión por inactividad
+
+1. Un jugador está inactivo cuando pasan `IdleKickMinutes` (por defecto `30`) sin movimiento, uso de herramienta, interacción ni mensaje de chat.
+2. **Solo se expulsa cuando el servidor está por encima de la mitad de su capacidad:** los jugadores conectados, contando al inactivo, superan `MaxConcurrentPlayers / 2`. Con capacidad para 16 se expulsa a partir de 9 conectados; con 8 o menos, no. Por debajo de ese umbral, estar quieto no perjudica a nadie y forma parte del juego (descanso sentado de «Bien comido», buff del spa).
+3. El contador de inactividad corre siempre; el umbral de ocupación se comprueba en el momento de expulsar. Quien lleva 30 minutos quieto con 8 conectados es expulsado cuando entra el noveno, tras el aviso.
+4. Antes de expulsar se avisa con `IdleKickWarningMinutes` de antelación (por defecto `2`); cualquier acción del jugador reinicia el contador.
+5. La expulsión es un cierre ordenado: se guarda el estado vivo del jugador igual que en una desconexión normal y no cuenta como penalización de sueño.
+
+### 5. Saludo con lista de peones filtrada
 
 `Prefix_SendAvailableFarmhands` envía únicamente:
 
@@ -55,7 +65,7 @@ Hechos verificados sobre el decompilado de Stardew Valley 1.6.15 y el código de
 
 Nunca se serializa el peón de otro jugador.
 
-### 5. Topología: cadenas ancladas
+### 6. Topología: cadenas ancladas
 
 La plaza pasa de una cadena a un conjunto de **cadenas con ancla**:
 
@@ -72,11 +82,11 @@ La plaza pasa de una cadena a un conjunto de **cadenas con ancla**:
 5. Cada puente del este tiene vagoneta en la red existente (`MinecartPlazaLogic`).
 6. **Los puentes `4..15` se registran sin `AlwaysActive`.** Los puentes `1..3` se migran a la misma condición si la verificación no encuentra código que dependa de tenerlos sincronizados fuera de ellos.
 
-### 6. Desescalado seguro
+### 7. Desescalado seguro
 
 El host no reduce las residencias por debajo de la residencia reclamada más alta. Si `FarmSlotCount` es menor, arranca con el menor de los valores admitidos (`16`, `32`, `64`) que la conserva y lo avisa en el registro. Los retornos desde un puente inactivo siguen la regla de ADR-0005, con destino a la casilla interior del gate de `Town` para las cadenas del este.
 
-### 7. 64 residencias, condicionado a medición
+### 8. 64 residencias, condicionado a medición
 
 Cada residencia son hasta 7 ubicaciones (granja 80×65, casa, cueva, sótano, invernadero y dos anexos): unas 450 con 64. Todas pasan por el cambio de día, el guardado, la copia de seguridad y los checkpoints. `FarmSlotCount = 64` se documenta como soportado solo si, en el host de referencia y con las 64 residencias pobladas:
 
@@ -87,7 +97,7 @@ Si no se cumple, 64 queda marcado como experimental y 32 como máximo soportado.
 
 ## Consecuencias
 
-* **Positivas:** más vecinos sin más carga de red por cliente; el jugador que no cabe sabe su posición en la cola; el saludo deja de crecer con el número de cuentas y de exponer personajes ajenos; la topología por cadenas admite nuevas anclas sin rehacer el modelo.
+* **Positivas:** más vecinos sin más carga de red por cliente; el jugador que no cabe sabe su posición en la cola; una caída de red no manda al jugador al final de la cola; el saludo deja de crecer con el número de cuentas y de exponer personajes ajenos; la topología por cadenas admite nuevas anclas sin rehacer el modelo.
 * **Negativas:** `Maps/Town` pasa a depender de la configuración del servidor (host y clientes deben coincidir, como ya ocurre con los puentes); las cadenas del este llegan a seis pantallas, que la vagoneta acorta pero no elimina; el guardado y el cambio de día crecen linealmente con las residencias.
 * **Migración:** las partidas con 16 residencias no cambian. `ServerWorldState` no necesita campos nuevos para las residencias `17..64` (los identificadores `Pelican4Ever_Farm_NN` ya son de dos dígitos); `doors.json` crece o se genera para los puentes `4..15`.
 
@@ -98,7 +108,4 @@ Si no se cumple, 64 queda marcado como experimental y 32 como máximo soportado.
 3. Que ningún módulo dependa de que los puentes `1..3` estén siempre activos en los clientes.
 4. El comportamiento de los gates durante los festivales, que sustituyen `Town` por un mapa temporal.
 5. Si `currentPlayerLimit` sigue haciendo falta para algo más que el tope de cabañas de Robin una vez separado de `FarmSlotCount`.
-
-## Pendiente de confirmar
-
-* **Reserva de plaza al reconectar:** conservar la plaza unos minutos a quien se cae por fallo de red, para que no vuelva al final de la cola. No está decidido; se evalúa en la tarea de la cola.
+6. Cómo distingue el host con fiabilidad una caída de red de una salida voluntaria (motivo de desconexión de Lidgren frente al mensaje de despedida del cliente).

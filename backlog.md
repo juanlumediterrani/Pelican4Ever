@@ -2349,7 +2349,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 ---
 
 ### Épica 24 (v0.5): Residencias Escalables 16/32/64, Cola de Admisión y Gates al Este de Pelican Town (rama `feat/v0.5-residence-scaling`)
-> **Objetivo:** Alojar 16, 32 o 64 residencias en un mismo mundo manteniendo **16 jugadores simultáneos**, que entran por orden de llegada con cola y expulsión por inactividad. Las residencias `17..64` se alcanzan por dos gates nuevos en el borde este de `Town` (a la altura de la casa de Clint y del museo) que abren cadenas de mapas puente. Se activa desde la configuración del servidor y requiere reinicio. Decisiones en [ADR-0010](docs/adr/0010-scalable-residences-admission-queue.md).
+> **Objetivo:** Alojar 16, 32 o 64 residencias en un mismo mundo manteniendo **16 jugadores simultáneos**, que entran por orden de llegada con cola, reserva de plaza de 5 minutos tras una caída de red y expulsión por inactividad a los 30 minutos cuando el servidor supera la mitad de su capacidad. Las residencias `17..64` se alcanzan por dos gates nuevos en el borde este de `Town` (a la altura de la casa de Clint y del museo) que abren cadenas de mapas puente. Se activa desde la configuración del servidor y requiere reinicio. Decisiones en [ADR-0010](docs/adr/0010-scalable-residences-admission-queue.md).
 
 #### 24.0 Reglas de Producto y Puntos de Conflicto del Motor (Stardew Valley 1.6.15)
 
@@ -2364,6 +2364,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
    - **Conflicto 5 — Puentes siempre activos:** 15 puentes con `AlwaysActive = true` se enviarían completos a cada cliente al conectar y el host los actualizaría en cada tick.
    - **Conflicto 6 — Coste del host con 64 residencias:** unas 450 ubicaciones en el cambio de día, el guardado, la copia de seguridad y los checkpoints.
    - **Conflicto 7 — Inactividad legítima:** el descanso sentado de «Bien comido» y el buff del spa exigen estar quieto.
+   - **Conflicto 8 — Caída de red frente a salida voluntaria:** la reserva de plaza solo debe nacer de una desconexión que el jugador no pidió; hay que distinguirlas por el motivo de desconexión de Lidgren.
 
 ---
 
@@ -2371,7 +2372,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
   * **Descripción:**
-    - Añadir `MaxConcurrentPlayers` (por defecto `16`, rango `1..16`), `AdmissionQueueCapacity` (por defecto `16`, rango `0..32`), `IdleKickMinutes` (por defecto `15`, `0` lo desactiva) e `IdleKickWarningMinutes` (por defecto `2`).
+    - Añadir `MaxConcurrentPlayers` (por defecto `16`, rango `1..16`), `AdmissionQueueCapacity` (por defecto `16`, rango `0..32`), `IdleKickMinutes` (por defecto `30`, `0` lo desactiva), `IdleKickWarningMinutes` (por defecto `2`) y `ReconnectGraceMinutes` (por defecto `5`, rango `0..30`, `0` lo desactiva).
     - Cambiar `ServerConfig.Validate` para que `FarmSlotCount` admita `1..16`, `32` o `64`, y para que `IdleKickWarningMinutes` sea menor que `IdleKickMinutes`.
     - Quitar de `FarmSlotModule.RemoveHostCabins` el uso de `FarmSlotCount` para `highestPlayerLimit` y `currentPlayerLimit`; comprobar qué consume `currentPlayerLimit` (`GameStateQuery`, tope de cabañas de Robin) y fijarlo al valor mínimo que lo satisface.
     - Sustituir los `?? 16` y `farmSlotCount = 16` por defecto por una constante de Core.
@@ -2388,25 +2389,29 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     - Parchear `LidgrenServer.initialize` para `MaximumConnections = MaxConcurrentPlayers + AdmissionQueueCapacity`.
     - Encolar la conexión tras `HasValidEarlyProof` y antes de enviar peones; informar de la posición con el mensaje de espera tipo 11 y actualizarla cuando cambie.
     - Atender a la conexión más antigua cuando un jugador sale; retirar de la cola las conexiones que se cierran.
-    - Evaluar la reserva de plaza al reconectar (pendiente de confirmar en ADR-0010) y dejar anotada la decisión.
+    - Reservar la plaza durante `ReconnectGraceMinutes` a quien pierde la conexión sin cerrarla él: la plaza cuenta como ocupada y el mismo dispositivo la recupera sin pasar por la cola.
+    - Distinguir la caída de red de la salida voluntaria por el motivo de desconexión de Lidgren; no reservar en salida voluntaria, expulsión ni cierre del cambio de día.
   * **Criterios de aceptación:**
     1. Con 16 en juego, el cliente 17 ve su posición en la cola y entra sin reconectar cuando sale uno.
     2. Un dispositivo no autorizado nunca ocupa plaza de espera.
     3. Con la cola llena, el cliente recibe un mensaje que lo dice.
-    4. Pruebas unitarias de orden, salida de la cola y cola llena.
+    4. Un jugador al que se le corta la red vuelve a su plaza antes de 5 minutos aunque haya cola; pasado ese tiempo, la plaza pasa al primero de la cola.
+    5. Salir al título o ser expulsado por inactividad libera la plaza al momento.
+    6. Pruebas unitarias de orden, salida de la cola, cola llena y reserva (dentro de plazo, vencida, salida voluntaria).
 
-- [ ] **TASK-2403: Expulsión por inactividad cuando hay cola (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
+- [ ] **TASK-2403: Expulsión por inactividad por encima de media ocupación (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2402.
   * **Descripción:**
     - Calcular en el host la última actividad de cada jugador combinando lo que el host observa (posición, uso de herramienta, chat) con un informe periódico del cliente para lo que el host no ve (menús, interacción).
-    - Expulsar solo si la cola no está vacía; avisar por HUD con `IdleKickWarningMinutes` de antelación.
+    - Expulsar solo si los conectados, contando al inactivo, superan `MaxConcurrentPlayers / 2`; comprobar el umbral en el momento de expulsar. Avisar por HUD con `IdleKickWarningMinutes` de antelación.
     - Cerrar la sesión como una desconexión normal, sin penalización de sueño, y dejar constancia en `HostEventLog`.
   * **Criterios de aceptación:**
-    1. Sin cola, un jugador quieto más de `IdleKickMinutes` no es expulsado.
-    2. Con cola, recibe el aviso y es expulsado si no actúa; cualquier acción reinicia el contador.
+    1. Con capacidad para 16 y 8 conectados, un jugador quieto más de 30 minutos no es expulsado.
+    2. Con 9 conectados, recibe el aviso y es expulsado si no actúa; cualquier acción reinicia el contador.
     3. Un jugador sentado recuperando energía recibe el aviso y conserva la plaza con solo moverse.
-    4. Pruebas unitarias de `IdleKickLogic`.
+    4. La expulsión por inactividad no deja plaza reservada.
+    5. Pruebas unitarias de `IdleKickLogic`, incluido el umbral con capacidad impar.
 
 - [ ] **TASK-2404: Filtrar la lista de peones del saludo (`ClientSecurityModule.cs`, `FarmhandAuthLogic.cs`)**
   * **Prioridad:** Alta
@@ -2456,7 +2461,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     - Registrar `Pelican4Ever_Bridge_4..15` en `Data/Locations` según `FarmSlotCount`, sin `AlwaysActive`.
     - Generar sus mapas con `CreateBridgeMap`, con el primer puente de cada cadena unido a `Town` por el oeste y el último cerrado por el este.
     - Extender portales, buzones, vagoneta, pre-registro al cargar (`Prefix_SaveGameLoadDataToLocations`) y descarte de puentes fuera de la cadena activa.
-    - Aplicar el desescalado seguro de ADR-0010 (punto 6).
+    - Aplicar el desescalado seguro de ADR-0010 (punto 7).
   * **Criterios de aceptación:**
     1. Un jugador reclama la residencia `17` y la `64`, entra, sale y recibe correo en su buzón.
     2. Tras reiniciar el servidor, las residencias `17..64` conservan cultivos, edificios y animales.
@@ -2479,7 +2484,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Descripción:**
     - Generar una partida de laboratorio con las 64 residencias reclamadas, con cultivos, edificios, animales y dos anexos cada una.
     - Medir en el host de referencia: duración del checkpoint, del cambio de día completo, tamaño del guardado y de la copia, memoria y tiempo de tick con 16 conectados.
-    - Contrastar con los umbrales de ADR-0010 (punto 7) y documentar el veredicto para 32 y para 64.
+    - Contrastar con los umbrales de ADR-0010 (punto 8) y documentar el veredicto para 32 y para 64.
   * **Criterios de aceptación:**
     1. Tabla de medidas para 16, 32 y 64 residencias publicada en `docs/`.
     2. `FarmSlotCount = 64` queda documentado como soportado o experimental según los umbrales.
@@ -2488,7 +2493,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Prioridad:** Media
   * **Dependencias:** TASK-2402, TASK-2403.
   * **Descripción:**
-    - Exponer en `AdminApi` y `p4e_status` los conectados, la cola (posición y tiempo de espera) y las expulsiones por inactividad.
+    - Exponer en `AdminApi` y `p4e_status` los conectados, la cola (posición y tiempo de espera), las plazas reservadas y las expulsiones por inactividad.
     - Añadir los textos de cola, cola llena, aviso y expulsión en ES/EN/ZH.
     - Documentar las claves nuevas y el procedimiento para pasar de 16 a 32 o 64 residencias.
   * **Criterios de aceptación:**
@@ -2499,9 +2504,9 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2401 a TASK-2410.
   * **Descripción:**
-    - Laboratorio con host y clientes suficientes para llenar el servidor con `MaxConcurrentPlayers` reducido (p. ej. `2`) y comprobar cola, turno y expulsión.
+    - Laboratorio con host y clientes suficientes para llenar el servidor con `MaxConcurrentPlayers` reducido (p. ej. `2`) y comprobar cola, turno, reserva tras corte de red y expulsión.
     - Recorrido completo a pie y en vagoneta de las dos cadenas del este con `FarmSlotCount = 64`.
     - Actualizar `manifest.json` y `architecture.md`.
   * **Criterios de aceptación:**
     1. `dotnet test` en verde.
-    2. Verificación en vivo documentada de cola, expulsión por inactividad, gates y residencias `17..64`.
+    2. Verificación en vivo documentada de cola, reserva de plaza, expulsión por inactividad, gates y residencias `17..64`.
