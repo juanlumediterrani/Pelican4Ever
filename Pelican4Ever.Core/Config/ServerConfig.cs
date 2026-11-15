@@ -180,6 +180,9 @@ namespace Pelican4Ever.Core.Config
 
         // ─────────────────────────── Servidor ───────────────────────────
 
+        /// <summary>Si es false, Pelican 4Ever permanece desactivado internamente en el cliente para jugar otras partidas o mods sin quitar archivos.</summary>
+        public bool Enabled { get; set; } = true;
+
         /// <summary>Si es true, el host se marca como host dedicado nativo (1.6.15+) y se oculta al jugador anfitrión.</summary>
         public bool DedicatedServerMode { get; set; } = true;
 

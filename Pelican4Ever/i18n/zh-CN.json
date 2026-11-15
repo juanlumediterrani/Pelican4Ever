@@ -407,5 +407,16 @@
   "mailbox.tenancy.accepted": "{{name}} 现已作为房客入住你的住宅。",
   "mailbox.tenancy.rejected": "已拒绝 {{name}} 的申请。",
   "mailbox.tenancy.leave_confirm": "确定要退出此住宅的合租吗？",
-  "mailbox.tenancy.left": "你已搬出该住宅。"
+  "mailbox.tenancy.left": "你已搬出该住宅。",
+  "mod_toggle.button_on": "Pelican: 开启",
+  "mod_toggle.button_off": "Pelican: 关闭",
+  "mod_toggle.tooltip_on": "Pelican 4Ever 已启用。点击可暂时禁用以游玩其他存档或模组。",
+  "mod_toggle.tooltip_off": "Pelican 4Ever 已禁用。点击重新启用。",
+  "mod_toggle.load_warning.title": "Pelican 4Ever 当前已启用",
+  "mod_toggle.load_warning.body": "你即将在启用 Pelican 4Ever 的情况下加载本地存档。如果这是原版存档或其他模组存档，请先禁用本模组，以免影响世界数据或时间系统。",
+  "mod_toggle.load_warning.disable_and_load": "禁用 Pelican 并加载",
+  "mod_toggle.load_warning.keep_and_load": "保持启用并加载",
+  "mod_toggle.server_warning.title": "Pelican 4Ever 服务器",
+  "mod_toggle.server_warning.body": "该服务器运行着 Pelican 4Ever，但你的客户端当前已禁用它。是否启用并继续连接？",
+  "mod_toggle.server_warning.enable_and_connect": "启用 Pelican 并连接"
 }
