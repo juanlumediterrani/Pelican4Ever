@@ -246,6 +246,13 @@ Programa o cancela un reinicio controlado del servidor (`TASK-804` / `TASK-1608`
 
 Ejecuta un checkpoint intradía en el hilo principal del juego (`TASK-1607`, equivalente a `p4e_checkpoint_now`). Si no hay farmhands conectados y las comprobaciones de seguridad de `CheckpointPolicy` permiten guardar, ejecuta el guardado y copia verificada síncronamente; si hay farmhands conectados, inicia el aviso y la sincronización de XP previa y devuelve `Ok: true`. Si una condición de seguridad bloquea el checkpoint (`FestivalOrEvent`, `NearRollover`, `RolloverActive`, etc.), devuelve `Ok: false` con el motivo y el `EventId` de `checkpoint.skipped`.
 
+### Campos de cola de admisión e inactividad en `GET /api/status` (v0.5)
+
+El DTO `ServerStatusDto` de `GET /api/status` incluye además:
+- `MaxConcurrentPlayers`, `AdmissionQueueCapacity`, `AdmissionQueueCount`, `ReservedSlotsCount`, `IdleKickCount`.
+- `AdmissionQueue`: lista de entradas en espera (`Position`, `IdentityPreview`, `WaitSeconds`).
+- `ReservedSlots`: plazas reservadas por caída de red (`IdentityPreview`, `RemainingSeconds`).
+
 **Respuesta `200 OK` (`HostActionResultDto`):**
 ```json
 {

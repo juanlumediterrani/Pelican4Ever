@@ -85,7 +85,7 @@ public class WorldStateAndDoorsTests
     public void DoorsCatalog_LoadsAll16PerimeterPortalsOnHostFarm()
     {
         var doors = DoorCatalogFixture.LoadDoors();
-        Assert.Equal(16, doors.Count);
+        Assert.Equal(64, doors.Count);
 
         var seenDoorIds = new HashSet<string>();
         var seenSlotIds = new HashSet<string>();
@@ -102,7 +102,7 @@ public class WorldStateAndDoorsTests
             // El buzón (poste y caja, una fila encima) queda junto al camino de la parcela, sin pisarlo
             int mbX = door.MailboxTileX!.Value;
             int mbY = door.MailboxTileY!.Value;
-            var loc = HostPlazaLayout.Find(door.LocationName, 16)!;
+            var loc = HostPlazaLayout.Find(door.LocationName, 64)!;
             var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
 
             Assert.DoesNotContain((mbX, mbY), path);

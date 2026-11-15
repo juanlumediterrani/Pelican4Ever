@@ -5,13 +5,16 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Reflection;
+using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
 using HarmonyLib;
 using Lidgren.Network;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Netcode;
 using Pelican4Ever.Core.Admin;
+using Pelican4Ever.Core.Networking;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Security;
 using Pelican4Ever.Framework;
@@ -21,6 +24,7 @@ using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Menus;
 using StardewValley.Network;
+using StardewValley.SaveSerialization;
 
 namespace Pelican4Ever.Modules
 {
@@ -67,12 +71,44 @@ namespace Pelican4Ever.Modules
 
         public ModuleSide Side => ModuleSide.Both;
 
+        /// <summary>Cola de admisión y reservas de reconexión del servidor (TASK-2402).</summary>
+        public static AdmissionLogic Admission { get; } = new();
+
+        private sealed record QueuedConnectionCallbacks(
+            GameServer GameServer,
+            string UserId,
+            Action<OutgoingMessage> SendMessage);
+
+        private static readonly Dictionary<string, QueuedConnectionCallbacks> queuedCallbacks = new(StringComparer.Ordinal);
+        private static readonly Dictionary<string, long> connectionToPlayerId = new(StringComparer.Ordinal);
+        private static readonly Dictionary<long, string> playerToConnectionId = new();
+        private static readonly Dictionary<long, DisconnectClassification> pendingPlayerDisconnectClassifications = new();
+
+        public static void MarkPlayerDisconnectClassification(long playerId, DisconnectClassification classification)
+        {
+            if (playerId == 0)
+                return;
+            pendingPlayerDisconnectClassifications[playerId] = classification;
+        }
+
+        public static void MarkAllActiveDisconnectClassification(DisconnectClassification classification)
+        {
+            foreach (long playerId in playerToConnectionId.Keys)
+            {
+                pendingPlayerDisconnectClassifications[playerId] = classification;
+            }
+        }
+
         public void Register(ModContext ctx)
         {
             context = ctx;
 
             // Inicializar o verificar identidad del cliente local
             ClientIdentity.Initialize(ctx.Helper);
+            Admission.Configure(
+                ctx.Config.MaxConcurrentPlayers,
+                ctx.Config.AdmissionQueueCapacity,
+                ctx.Config.ReconnectGraceMinutes);
 
             // Eventos de ciclo de vida y multijugador
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
@@ -100,6 +136,11 @@ namespace Pelican4Ever.Modules
             serverChallenges.Clear();
             pendingPairingSessions.Clear();
             playerRemoteIps.Clear();
+            queuedCallbacks.Clear();
+            connectionToPlayerId.Clear();
+            playerToConnectionId.Clear();
+            pendingPlayerDisconnectClassifications.Clear();
+            Admission.ClearAll();
             localClientAwaitingPairing = false;
             localPairingReopenDelayTicks = 0;
         }
@@ -114,6 +155,24 @@ namespace Pelican4Ever.Modules
 
             pendingPairingSessions.Clear();
             playerRemoteIps.Clear();
+            queuedCallbacks.Clear();
+            connectionToPlayerId.Clear();
+            playerToConnectionId.Clear();
+            pendingPlayerDisconnectClassifications.Clear();
+            Admission.ClearAll();
+            Admission.Configure(
+                context.Config.MaxConcurrentPlayers,
+                context.Config.AdmissionQueueCapacity,
+                context.Config.ReconnectGraceMinutes);
+            queuedCallbacks.Clear();
+            connectionToPlayerId.Clear();
+            playerToConnectionId.Clear();
+            pendingPlayerDisconnectClassifications.Clear();
+            Admission.ClearAll();
+            Admission.Configure(
+                context.Config.MaxConcurrentPlayers,
+                context.Config.AdmissionQueueCapacity,
+                context.Config.ReconnectGraceMinutes);
 
             LoadAndMergePairingSidecar();
             ClientPairingLogic.EnsureExistingClaimsAuthorized(context.WorldState, DateTimeOffset.UtcNow);
@@ -246,6 +305,28 @@ namespace Pelican4Ever.Modules
                     {
                         SendPairingChallengeToPlayer(session.PlayerId);
                     }
+                }
+            }
+
+            // Host: supervisar cola de admisión y reservas de reconexión cada ~1 segundo (TASK-2402)
+            if (Context.IsMainPlayer && e.IsMultipleOf(60))
+            {
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                bool removedDead = false;
+                foreach (var kv in queuedCallbacks.ToList())
+                {
+                    if (!kv.Value.GameServer.isConnectionActive(kv.Key))
+                    {
+                        queuedCallbacks.Remove(kv.Key);
+                        Admission.OnDisconnected(kv.Key, DisconnectClassification.VoluntaryExit, now);
+                        removedDead = true;
+                    }
+                }
+
+                var promoted = Admission.PromoteEligible(now);
+                if (promoted.Count > 0 || removedDead)
+                {
+                    ProcessPromotedAndNotifyQueue(promoted);
                 }
             }
         }
@@ -1297,6 +1378,18 @@ namespace Pelican4Ever.Modules
             TryPatch("LidgrenServer.sendVersionInfo", () => harmony.Patch(
                 original: AccessTools.Method(typeof(LidgrenServer), "sendVersionInfo"),
                 prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendVersionInfo))));
+            TryPatch("LidgrenServer.initialize", () => harmony.Patch(
+                original: AccessTools.Method(typeof(LidgrenServer), nameof(LidgrenServer.initialize)),
+                transpiler: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Transpile_LidgrenServer_Initialize))));
+            TryPatch("Server.onDisconnect", () => harmony.Patch(
+                original: AccessTools.Method(typeof(Server), nameof(Server.onDisconnect)),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_Server_OnDisconnect))));
+            TryPatch("LidgrenServer.kick", () => harmony.Patch(
+                original: AccessTools.Method(typeof(LidgrenServer), nameof(LidgrenServer.kick)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_LidgrenServer_Kick))));
+            TryPatch("Multiplayer.processIncomingMessage", () => harmony.Patch(
+                original: AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.processIncomingMessage)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Multiplayer_ProcessIncomingMessage))));
             TryPatch("LidgrenClient.receiveHandshake", () => harmony.Patch(
                 original: AccessTools.Method(typeof(LidgrenClient), "receiveHandshake"),
                 prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_ReceiveHandshake))));
@@ -1475,11 +1568,123 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
+        public static int GetDesiredMaximumConnections(int vanillaMax)
+        {
+            if (context == null)
+                return vanillaMax;
+            return Math.Max(1, context.Config.MaxConcurrentPlayers + context.Config.AdmissionQueueCapacity);
+        }
+
+        public static IEnumerable<CodeInstruction> Transpile_LidgrenServer_Initialize(IEnumerable<CodeInstruction> instructions)
+        {
+            var setMaxConn = AccessTools.PropertySetter(typeof(NetPeerConfiguration), nameof(NetPeerConfiguration.MaximumConnections));
+            var helper = AccessTools.Method(typeof(ClientSecurityModule), nameof(GetDesiredMaximumConnections));
+            foreach (var instr in instructions)
+            {
+                if (instr.Calls(setMaxConn))
+                {
+                    yield return new CodeInstruction(OpCodes.Call, helper);
+                }
+                yield return instr;
+            }
+        }
+
+        public static void Prefix_Multiplayer_ProcessIncomingMessage(IncomingMessage msg)
+        {
+            if (msg == null || !Context.IsMainPlayer)
+                return;
+
+            if (msg.MessageType == Multiplayer.disconnecting && msg.FarmerID != 0)
+            {
+                MarkPlayerDisconnectClassification(msg.FarmerID, DisconnectClassification.VoluntaryExit);
+            }
+        }
+
+        public static void Prefix_LidgrenServer_Kick(long disconnectee)
+        {
+            if (Context.IsMainPlayer && disconnectee != 0 && !pendingPlayerDisconnectClassifications.ContainsKey(disconnectee))
+            {
+                pendingPlayerDisconnectClassifications[disconnectee] = DisconnectClassification.AdminKick;
+            }
+        }
+
+        public static void Postfix_Server_OnDisconnect(string connectionId)
+        {
+            if (!Context.IsMainPlayer || context == null || string.IsNullOrWhiteSpace(connectionId))
+                return;
+
+            var classification = DisconnectClassification.NetworkDrop;
+            if (connectionToPlayerId.Remove(connectionId, out long playerId))
+            {
+                playerToConnectionId.Remove(playerId);
+                if (pendingPlayerDisconnectClassifications.Remove(playerId, out var explicitClass))
+                {
+                    classification = explicitClass;
+                }
+            }
+
+            queuedCallbacks.Remove(connectionId);
+            var promoted = Admission.OnDisconnected(connectionId, classification, DateTimeOffset.UtcNow);
+            if (promoted.Count > 0 || queuedCallbacks.Count > 0)
+            {
+                ProcessPromotedAndNotifyQueue(promoted);
+            }
+        }
+
+        private static string FormatQueuePositionMessage(int position, int capacity)
+        {
+            string fallback = $"Servidor lleno. Tu posición en la cola de espera: {position}/{capacity}.";
+            if (context == null)
+                return fallback;
+            var text = context.Helper.Translation.Get("admission.queue_position", new { position, capacity });
+            return text.HasValue() ? text.ToString() : fallback;
+        }
+
+        private static string GetAdmissionQueueFullMessage()
+        {
+            string fallback = "El servidor y la cola de espera están llenos. Inténtalo más tarde.";
+            if (context == null)
+                return fallback;
+            var text = context.Helper.Translation.Get("admission.queue_full");
+            return text.HasValue() ? text.ToString() : fallback;
+        }
+
+        private static void ProcessPromotedAndNotifyQueue(IReadOnlyList<QueuedConnectionInfo> promoted)
+        {
+            foreach (var item in promoted)
+            {
+                if (queuedCallbacks.Remove(item.ConnectionId, out var cb) && cb.GameServer.isConnectionActive(item.ConnectionId))
+                {
+                    cb.GameServer.sendAvailableFarmhands(cb.UserId, item.ConnectionId, cb.SendMessage);
+                }
+            }
+
+            if (context == null)
+                return;
+
+            var remaining = Admission.GetQueueSnapshot();
+            foreach (var entry in remaining)
+            {
+                if (queuedCallbacks.TryGetValue(entry.ConnectionId, out var cb) && cb.GameServer.isConnectionActive(entry.ConnectionId))
+                {
+                    cb.SendMessage(new OutgoingMessage(
+                        Multiplayer.connectionMessage,
+                        Game1.player,
+                        FormatQueuePositionMessage(entry.Position, context.Config.AdmissionQueueCapacity)));
+                }
+            }
+        }
+
         public static bool Prefix_SendAvailableFarmhands(
+            GameServer __instance,
             string userId,
-            string connectionId)
+            string connectionId,
+            Action<OutgoingMessage> sendMessage)
         {
             SyncServerTokensFromWorldState();
+
+            string verifiedFingerprint = string.Empty;
+            bool isAuthenticatedRemote = false;
 
             if (context != null && Context.IsMainPlayer && context.Config.RequirePairingWhitelist)
             {
@@ -1488,7 +1693,7 @@ namespace Pelican4Ever.Modules
 
                 if (!isLoopback)
                 {
-                    if (!HasValidEarlyProof(connectionId, remoteIp, out string verifiedFingerprint))
+                    if (!HasValidEarlyProof(connectionId, remoteIp, out verifiedFingerprint))
                     {
                         RecordBlockedAttempt(remoteIp, userId);
                         DisconnectConnectionById(connectionId, "Acceso denegado: debes contar con un cliente actualizado y dispositivo autorizado.");
@@ -1501,7 +1706,84 @@ namespace Pelican4Ever.Modules
                         DisconnectConnectionById(connectionId, failureReason);
                         return false;
                     }
+
+                    isAuthenticatedRemote = true;
                 }
+            }
+
+            // TASK-2402: Cola de admisión y reservas de reconexión
+            if (context != null && Context.IsMainPlayer)
+            {
+                string identityKey = !string.IsNullOrEmpty(verifiedFingerprint) ? verifiedFingerprint : $"conn:{connectionId}";
+                var decision = Admission.TryRequestAdmission(connectionId, identityKey, DateTimeOffset.UtcNow);
+                if (decision.Outcome == AdmissionOutcome.Rejected)
+                {
+                    DisconnectConnectionById(connectionId, GetAdmissionQueueFullMessage());
+                    return false;
+                }
+
+                if (decision.Outcome == AdmissionOutcome.Queued)
+                {
+                    queuedCallbacks[connectionId] = new QueuedConnectionCallbacks(__instance, userId, sendMessage);
+                    sendMessage(new OutgoingMessage(
+                        Multiplayer.connectionMessage,
+                        Game1.player,
+                        FormatQueuePositionMessage(decision.QueuePosition, context.Config.AdmissionQueueCapacity)));
+                    return false;
+                }
+
+                queuedCallbacks.Remove(connectionId);
+            }
+
+            // TASK-2404: Cuando el juego está disponible, filtrar la lista de peones para enviar solo
+            // el peón ligado al dispositivo o un único peón sin reclamar (nunca exponer los de otros).
+            if (isAuthenticatedRemote && context != null && __instance.isGameAvailable() && Game1.netWorldState?.Value?.farmhandData != null)
+            {
+                var multiplayer = context.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                var availableRefs = new Dictionary<long, NetRef<Farmer>>();
+                var candidates = new List<(long PlayerId, bool IsUnclaimed)>();
+                foreach (NetRef<Farmer> netRef in Game1.netWorldState.Value.farmhandData.FieldDict.Values)
+                {
+                    Farmer f = netRef.Value;
+                    if (f == null)
+                        continue;
+                    if ((!f.isActive() || multiplayer.isDisconnecting(f.UniqueMultiplayerID)) && __instance.IsFarmhandAvailable(f))
+                    {
+                        long id = f.UniqueMultiplayerID;
+                        availableRefs[id] = netRef;
+                        candidates.Add((id, string.IsNullOrWhiteSpace(f.userID.Value)));
+                    }
+                }
+
+                IReadOnlyList<long> filteredIds = FarmhandAuthLogic.FilterAvailableFarmhandIds(
+                    context.WorldState,
+                    verifiedFingerprint,
+                    candidates);
+
+                using var memoryStream = new MemoryStream();
+                using var binaryWriter = new BinaryWriter(memoryStream);
+                binaryWriter.Write(Game1.year);
+                binaryWriter.Write(Game1.seasonIndex);
+                binaryWriter.Write(Game1.dayOfMonth);
+                binaryWriter.Write((byte)filteredIds.Count);
+                foreach (long id in filteredIds)
+                {
+                    if (!availableRefs.TryGetValue(id, out NetRef<Farmer>? item))
+                        continue;
+                    try
+                    {
+                        item.Serializer = SaveSerializer.GetSerializer(typeof(Farmer));
+                        item.WriteFull(binaryWriter);
+                    }
+                    finally
+                    {
+                        item.Serializer = null;
+                    }
+                }
+
+                memoryStream.Seek(0L, SeekOrigin.Begin);
+                sendMessage(new OutgoingMessage(9, Game1.player, memoryStream.ToArray()));
+                return false;
             }
 
             return true;
@@ -1579,10 +1861,14 @@ namespace Pelican4Ever.Modules
                     }
 
                     userId = verifiedFingerprint;
+                    connectionToPlayerId[connectionId] = farmhandId;
+                    playerToConnectionId[farmhandId] = connectionId;
                     return true;
                 }
             }
 
+            connectionToPlayerId[connectionId] = farmhandId;
+            playerToConnectionId[farmhandId] = connectionId;
             return true;
         }
 

@@ -845,10 +845,14 @@ namespace Pelican4Ever.Modules
                 ? Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet()
                 : new HashSet<long>();
 
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            var queueSnapshot = ClientSecurityModule.Admission.GetQueueSnapshot();
+            var reservationSnapshot = ClientSecurityModule.Admission.GetReservationsSnapshot(nowUtc);
+
             var statusDto = new ServerStatusDto
             {
                 ServerVersion = context.Manifest.Version.ToString(),
-                RealTimeUtc = DateTime.UtcNow.ToString("o"),
+                RealTimeUtc = nowUtc.ToString("o"),
                 GameTimeOfDay = Context.IsWorldReady ? Game1.timeOfDay : 600,
                 TotalGameDays = today,
                 Season = Context.IsWorldReady && Game1.currentSeason != null ? Game1.currentSeason : "spring",
@@ -857,11 +861,37 @@ namespace Pelican4Ever.Modules
                 IsNightHold = RealTimeClockModule.IsNightHold,
                 DedicatedHost = Game1.HasDedicatedHost,
                 OnlinePlayersCount = onlineIds.Count,
+                MaxConcurrentPlayers = context.Config.MaxConcurrentPlayers,
+                AdmissionQueueCapacity = context.Config.AdmissionQueueCapacity,
+                AdmissionQueueCount = queueSnapshot.Count,
+                ReservedSlotsCount = reservationSnapshot.Count,
+                IdleKickCount = IdleKickModule.TotalIdleKicks,
                 RegisteredPlayersCount = state.Players.Count,
                 OccupiedDoorsCount = state.Doors.Count,
                 TotalDoorsCount = FarmSlotModule.RegisteredDoors.Count,
                 ActiveMarketListingsCount = state.MarketListings.Count(l => !l.IsSold)
             };
+
+            foreach (var q in queueSnapshot)
+            {
+                string preview = q.IdentityKey.Length > 12 ? q.IdentityKey[..12] + "..." : q.IdentityKey;
+                statusDto.AdmissionQueue.Add(new QueuedEntryDto
+                {
+                    Position = q.Position,
+                    IdentityPreview = preview,
+                    WaitSeconds = Math.Max(0, (int)(nowUtc - q.EnqueuedAtUtc).TotalSeconds)
+                });
+            }
+
+            foreach (var r in reservationSnapshot)
+            {
+                string preview = r.IdentityKey.Length > 12 ? r.IdentityKey[..12] + "..." : r.IdentityKey;
+                statusDto.ReservedSlots.Add(new ReservedSlotDto
+                {
+                    IdentityPreview = preview,
+                    RemainingSeconds = Math.Max(0, (int)(r.ExpiresAtUtc - nowUtc).TotalSeconds)
+                });
+            }
 
             foreach (var p in state.Players.Values)
             {

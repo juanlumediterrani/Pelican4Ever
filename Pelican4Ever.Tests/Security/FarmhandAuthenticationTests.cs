@@ -252,5 +252,51 @@ namespace Pelican4Ever.Tests.Security
             Assert.DoesNotContain("secret", farmhandUserId);
             Assert.DoesNotContain("token", farmhandUserId);
         }
+
+        [Fact]
+        public void FilterAvailableFarmhandIds_BoundDeviceGetsOnlyOwnFarmhand()
+        {
+            var state = new ServerWorldState();
+            string fp1 = new string('a', 64);
+            string fp2 = new string('b', 64);
+            state.AuthorizedDevices[fp1] = new AuthorizedDevice { Fingerprint = fp1, Alias = "P1", BoundPlayerId = 1001L, Status = DeviceStatus.Active };
+            state.AuthorizedDevices[fp2] = new AuthorizedDevice { Fingerprint = fp2, Alias = "P2", BoundPlayerId = 1002L, Status = DeviceStatus.Active };
+
+            var available = new List<(long PlayerId, bool IsUnclaimed)>
+            {
+                (1001L, false),
+                (1002L, false),
+                (1003L, true),
+                (1004L, true)
+            };
+
+            var result1 = FarmhandAuthLogic.FilterAvailableFarmhandIds(state, fp1, available);
+            Assert.Equal(new[] { 1001L }, result1);
+
+            // Si su personaje está conectado (no disponible), no recibe el de otros ni uno libre
+            var availableWithoutP1 = available.Where(x => x.PlayerId != 1001L).ToList();
+            var result1Busy = FarmhandAuthLogic.FilterAvailableFarmhandIds(state, fp1, availableWithoutP1);
+            Assert.Empty(result1Busy);
+        }
+
+        [Fact]
+        public void FilterAvailableFarmhandIds_NewDeviceGetsSingleUnclaimedFarmhand_EvenWith128Candidates()
+        {
+            var state = new ServerWorldState();
+            string fpBound = new string('a', 64);
+            string fpNew = new string('c', 64);
+            state.AuthorizedDevices[fpBound] = new AuthorizedDevice { Fingerprint = fpBound, Alias = "Bound", BoundPlayerId = 1L, Status = DeviceStatus.Active };
+            state.AuthorizedDevices[fpNew] = new AuthorizedDevice { Fingerprint = fpNew, Alias = "New", BoundPlayerId = 0L, Status = DeviceStatus.Active };
+
+            var available = new List<(long PlayerId, bool IsUnclaimed)>();
+            for (long i = 1; i <= 128; i++)
+            {
+                available.Add((i, i > 1));
+            }
+
+            var result = FarmhandAuthLogic.FilterAvailableFarmhandIds(state, fpNew, available);
+            Assert.Single(result);
+            Assert.Equal(2L, result[0]);
+        }
     }
 }

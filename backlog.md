@@ -2368,7 +2368,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 
 ---
 
-- [ ] **TASK-2401: Separar residencias, simultáneos y cola en `ServerConfig` (`ServerConfig.cs`, `config.example.json`, `FarmSlotModule.cs`)**
+- [x] **TASK-2401: Separar residencias, simultáneos y cola en `ServerConfig` (`ServerConfig.cs`, `config.example.json`, `FarmSlotModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
   * **Descripción:**
@@ -2381,7 +2381,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Con `FarmSlotCount = 64` no se crean ubicaciones `Cellar17..Cellar64` vanilla.
     3. Una partida existente con 16 residencias carga sin cambios en sus puertas, cabañas ni sótanos.
 
-- [ ] **TASK-2402: `AdmissionLogic` y cola de llegada (`Pelican4Ever.Core/Networking/AdmissionLogic.cs`, `ClientSecurityModule.cs`)**
+- [x] **TASK-2402: `AdmissionLogic` y cola de llegada (`Pelican4Ever.Core/Networking/AdmissionLogic.cs`, `ClientSecurityModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2401.
   * **Descripción:**
@@ -2399,7 +2399,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     5. Salir al título o ser expulsado por inactividad libera la plaza al momento.
     6. Pruebas unitarias de orden, salida de la cola, cola llena y reserva (dentro de plazo, vencida, salida voluntaria).
 
-- [ ] **TASK-2403: Expulsión por inactividad por encima de media ocupación (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
+- [x] **TASK-2403: Expulsión por inactividad por encima de media ocupación (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2402.
   * **Descripción:**
@@ -2413,7 +2413,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     4. La expulsión por inactividad no deja plaza reservada.
     5. Pruebas unitarias de `IdleKickLogic`, incluido el umbral con capacidad impar.
 
-- [ ] **TASK-2404: Filtrar la lista de peones del saludo (`ClientSecurityModule.cs`, `FarmhandAuthLogic.cs`)**
+- [x] **TASK-2404: Filtrar la lista de peones del saludo (`ClientSecurityModule.cs`, `FarmhandAuthLogic.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
   * **Descripción:**
@@ -2425,7 +2425,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Ningún cliente recibe datos del personaje de otro jugador.
     4. Con 128 peones en `farmhandData`, el tamaño del mensaje de saludo no crece respecto a 16.
 
-- [ ] **TASK-2405: Topología por cadenas ancladas en Core (`HostPlazaLayout.cs`, `DoorCatalogValidator.cs`, `SpatialWarpRouter.cs`, `PlazaTopologyVerifier.cs`, `MinecartPlazaLogic.cs`)**
+- [x] **TASK-2405: Topología por cadenas ancladas en Core (`HostPlazaLayout.cs`, `DoorCatalogValidator.cs`, `SpatialWarpRouter.cs`, `PlazaTopologyVerifier.cs`, `MinecartPlazaLogic.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2401.
   * **Descripción:**
@@ -2440,7 +2440,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. `PlazaTopologyVerifier.IsConnected` confirma que toda residencia es alcanzable desde `Town`.
     4. Las pruebas existentes de la plaza siguen en verde.
 
-- [ ] **TASK-2406: Gates en el borde este de `Maps/Town` (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `tools/MapRenderer`)**
+- [x] **TASK-2406: Gates en el borde este de `Maps/Town` (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `tools/MapRenderer`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2405.
   * **Descripción:**
@@ -2454,7 +2454,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Render 1:1 de ambos gates revisado visualmente, sin árboles cortados ni casillas de vacío.
     4. Ningún NPC cambia de ruta ni se queda atascado con los gates abiertos.
 
-- [ ] **TASK-2407: Generar y registrar los puentes del este (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `TownMailboxModule.cs`)**
+- [x] **TASK-2407: Generar y registrar los puentes del este (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `TownMailboxModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2405, TASK-2406.
   * **Descripción:**
@@ -2468,7 +2468,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Reducir `FarmSlotCount` con la residencia `40` reclamada arranca con `64` efectivas y lo avisa.
     4. BFS sobre los mapas generados confirma portales, retornos y pasos de los 12 puentes.
 
-- [ ] **TASK-2408: Puentes `1..3` sin `AlwaysActive` (`FarmSlotModule.cs`)**
+- [x] **TASK-2408: Puentes `1..3` sin `AlwaysActive` (`FarmSlotModule.cs`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2407.
   * **Descripción:**
@@ -2489,7 +2489,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Tabla de medidas para 16, 32 y 64 residencias publicada en `docs/`.
     2. `FarmSlotCount = 64` queda documentado como soportado o experimental según los umbrales.
 
-- [ ] **TASK-2410: Administración, i18n y documentación (`AdminApiModule.cs`, `StatusCommandModule.cs`, `i18n/*.json`, `docs/host-api.md`, `docs/despliegue/host-vps.md`)**
+- [x] **TASK-2410: Administración, i18n y documentación (`AdminApiModule.cs`, `StatusCommandModule.cs`, `i18n/*.json`, `docs/host-api.md`, `docs/despliegue/host-vps.md`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2402, TASK-2403.
   * **Descripción:**

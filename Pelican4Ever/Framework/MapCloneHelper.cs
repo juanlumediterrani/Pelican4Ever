@@ -3746,6 +3746,83 @@ namespace Pelican4Ever.Framework
             return WaterTileIndices.Contains(tile.TileIndex);
         }
 
+        /// <summary>
+        /// Talla los dos pasos al este de Maps/Town (Este-Herrería y=81..82 y Este-Museo y=92..93)
+        /// y añade los warps hacia Pelican4Ever_Bridge_4 y Pelican4Ever_Bridge_5 (ADR-0010, TASK-2406).
+        /// </summary>
+        public static void CarveTownEastGates(Map townMap)
+        {
+            if (townMap == null)
+                throw new ArgumentNullException(nameof(townMap));
+
+            Layer? backLayer = townMap.GetLayer("Back");
+            if (backLayer == null)
+                return;
+
+            int width = backLayer.LayerWidth;
+            int startX = 111;
+            if (startX >= width)
+                return;
+
+            Layer? bldLayer = townMap.GetLayer("Buildings");
+            Layer? bld2Layer = townMap.GetLayer("Buildings2");
+            Layer? frontLayer = townMap.GetLayer("Front");
+            Layer? alwaysFrontLayer = townMap.GetLayer("AlwaysFront");
+            Layer? alwaysFront2Layer = townMap.GetLayer("AlwaysFront2");
+            Layer? alwaysFront3Layer = townMap.GetLayer("AlwaysFront3");
+
+            TileSheet? grassSheet = backLayer.Tiles[109, HostPlazaLayout.TownEastBlacksmithGateFirstRow]?.TileSheet
+                ?? GetOutdoorsTileSheet(townMap)
+                ?? townMap.TileSheets.FirstOrDefault();
+
+            void CarveCorridor(int firstRow, int rowCount)
+            {
+                for (int y = firstRow; y < firstRow + rowCount; y++)
+                {
+                    if (y < 0 || y >= backLayer.LayerHeight)
+                        continue;
+
+                    for (int x = startX; x < width; x++)
+                    {
+                        if (grassSheet != null)
+                        {
+                            SetGrassTile(backLayer, grassSheet, x, y, 175);
+                        }
+                        if (bldLayer != null) bldLayer.Tiles[x, y] = null;
+                        if (bld2Layer != null) bld2Layer.Tiles[x, y] = null;
+                        if (frontLayer != null) frontLayer.Tiles[x, y] = null;
+                        if (alwaysFrontLayer != null) alwaysFrontLayer.Tiles[x, y] = null;
+                        if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                        if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
+                    }
+                }
+            }
+
+            CarveCorridor(HostPlazaLayout.TownEastBlacksmithGateFirstRow, HostPlazaLayout.TownEastBlacksmithGateRowCount);
+            CarveCorridor(HostPlazaLayout.TownEastMuseumGateFirstRow, HostPlazaLayout.TownEastMuseumGateRowCount);
+
+            string existingWarp = townMap.Properties.TryGetValue("Warp", out var wp) ? wp?.ToString() ?? string.Empty : string.Empty;
+            var additions = new List<string>();
+            void AddWarp(int x, int y, string target, int tx, int ty)
+            {
+                string entry = $"{x} {y} {target} {tx} {ty}";
+                if (!existingWarp.Contains(entry, StringComparison.OrdinalIgnoreCase))
+                    additions.Add(entry);
+            }
+
+            AddWarp(width, HostPlazaLayout.TownEastBlacksmithGateFirstRow, HostPlazaLayout.BridgeName(4), 1, 23);
+            AddWarp(width, HostPlazaLayout.TownEastBlacksmithGateFirstRow + 1, HostPlazaLayout.BridgeName(4), 1, 24);
+            AddWarp(width, HostPlazaLayout.TownEastMuseumGateFirstRow, HostPlazaLayout.BridgeName(5), 1, 23);
+            AddWarp(width, HostPlazaLayout.TownEastMuseumGateFirstRow + 1, HostPlazaLayout.BridgeName(5), 1, 24);
+
+            if (additions.Count > 0)
+            {
+                townMap.Properties["Warp"] = string.IsNullOrWhiteSpace(existingWarp)
+                    ? string.Join(" ", additions)
+                    : $"{existingWarp.TrimEnd()} {string.Join(" ", additions)}";
+            }
+        }
+
         private static void SetGrassTile(Layer backLayer, TileSheet outdoorsSheet, int x, int y, int tileIndex = TerrainTileClassifier.SunnyGrassTileIndex)
         {
             if (x >= 0 && x < backLayer.LayerWidth && y >= 0 && y < backLayer.LayerHeight)

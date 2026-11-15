@@ -40,6 +40,7 @@ namespace Pelican4Ever
                 new ClientVersionGuardModule(),
                 new RolloverLockModule(),
                 new ClientSecurityModule(),
+                new IdleKickModule(),
                 new StatusCommandModule(),
                 new DebugGiveModule(),
                 new FarmTestCommandsModule(),
