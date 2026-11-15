@@ -12,6 +12,7 @@ namespace Pelican4Ever.Core.World
     {
         // Posiciones mejoradas, espaciosas y alineadas con la Farmhouse vanilla
         public static readonly FurnitureTargetCoordinate BedPlacement = new("Bed", 9, 8, 0);
+        public static readonly FurnitureTargetCoordinate TenantBedPlacement = new("TenantBed", 7, 8, 0);
         public static readonly FurnitureTargetCoordinate DiningTablePlacement = new("Table", 5, 6, 0);
         public static readonly FurnitureTargetCoordinate DiningChairPlacement = new("Chair", 4, 6, 1);
         public static readonly FurnitureTargetCoordinate TvPlacement = new("TV", 1, 4, 0);

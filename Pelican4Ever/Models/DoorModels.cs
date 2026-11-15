@@ -44,6 +44,8 @@ namespace Pelican4Ever.Models
         public const string PairingChallenge = "PairingChallenge";
         public const string PairingSubmit = "PairingSubmit";
         public const string PairingResult = "PairingResult";
+        public const string RequestTenancyRequest = "RequestTenancyRequest";
+        public const string ManageTenantRequest = "ManageTenantRequest";
     }
 
     public class PairingChallengePayload
@@ -117,6 +119,27 @@ namespace Pelican4Ever.Models
 
         /// <summary>true añade a <see cref="FriendId"/>, false lo quita.</summary>
         public bool FriendAdd { get; set; }
+    }
+
+    public class RequestTenancyPayload
+    {
+        public string DoorId { get; set; } = string.Empty;
+        public bool Cancel { get; set; }
+    }
+
+    public enum TenantManageAction
+    {
+        Accept,
+        Reject,
+        Evict,
+        Leave
+    }
+
+    public class ManageTenantPayload
+    {
+        public string DoorId { get; set; } = string.Empty;
+        public TenantManageAction Action { get; set; }
+        public long TargetPlayerId { get; set; }
     }
 
     public class SyncDoorsPayload

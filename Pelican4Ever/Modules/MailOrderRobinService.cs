@@ -226,11 +226,11 @@ namespace Pelican4Ever.Modules
         private static string? prevUpgradeName;
         private static int prevDaysUntilUpgrade;
 
-        public static void Prefix_CarpenterMenu_ReceiveLeftClick(CarpenterMenu __instance, GameLocation ___TargetLocation, int x, int y)
+        public static bool Prefix_CarpenterMenu_ReceiveLeftClick(CarpenterMenu __instance, GameLocation ___TargetLocation, int x, int y)
         {
             upgradeCandidateBeforeClick = null;
             if (!robinMailSessionActive || !__instance.onFarm || __instance.freeze)
-                return;
+                return true;
 
             if (__instance.Action == CarpenterMenu.CarpentryAction.Upgrade && ___TargetLocation != null)
             {
@@ -238,11 +238,24 @@ namespace Pelican4Ever.Modules
                 Building? b = ___TargetLocation.getBuildingAt(tile);
                 if (b != null)
                 {
+                    bool alreadyPendingUpgrade = GetBuildingOrdersSnapshot().Any(o =>
+                        o.IsUpgrade
+                        && string.Equals(o.TargetLocationName, ___TargetLocation.NameOrUniqueName, StringComparison.OrdinalIgnoreCase)
+                        && o.TargetBuildingTileX == b.tileX.Value
+                        && o.TargetBuildingTileY == b.tileY.Value);
+                    if (alreadyPendingUpgrade)
+                    {
+                        Game1.addHUDMessage(new HUDMessage(I18n.Get("mailbox.orders.building_spot_reserved"), HUDMessage.error_type));
+                        return false;
+                    }
+
                     upgradeCandidateBeforeClick = b;
                     prevUpgradeName = b.upgradeName.Value;
                     prevDaysUntilUpgrade = b.daysUntilUpgrade.Value;
                 }
             }
+
+            return true;
         }
 
         public static void Postfix_CarpenterMenu_ReceiveLeftClick(CarpenterMenu __instance, GameLocation ___TargetLocation)

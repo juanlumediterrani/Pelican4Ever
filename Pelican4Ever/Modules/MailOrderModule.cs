@@ -203,11 +203,25 @@ namespace Pelican4Ever.Modules
                 ? (context?.WorldState.PendingAnimalOrders ?? (IReadOnlyList<PendingAnimalOrder>)Array.Empty<PendingAnimalOrder>())
                 : clientSyncedAnimalOrders;
 
+        private static bool IsSharedOrderTarget(string? targetLocationName, long playerId)
+        {
+            if (string.IsNullOrWhiteSpace(targetLocationName) || context?.WorldState == null)
+                return false;
+
+            DoorAssignment? residence = context.WorldState.FindResidenceOf(playerId);
+            if (residence == null || string.IsNullOrWhiteSpace(residence.FarmSlotId))
+                return false;
+
+            string? targetSlot = VisitorPermissionLogic.ResidenceSlotOf(targetLocationName);
+            return !string.IsNullOrWhiteSpace(targetSlot)
+                && string.Equals(targetSlot, residence.FarmSlotId, StringComparison.OrdinalIgnoreCase);
+        }
+
         public static int CountPendingOrdersFor(long playerId)
         {
             int items = GetItemOrdersSnapshot().Count(o => o.PlayerId == playerId);
-            int buildings = GetBuildingOrdersSnapshot().Count(o => o.PlayerId == playerId);
-            int animals = GetAnimalOrdersSnapshot().Count(o => o.PlayerId == playerId);
+            int buildings = GetBuildingOrdersSnapshot().Count(o => o.PlayerId == playerId || IsSharedOrderTarget(o.TargetLocationName, playerId));
+            int animals = GetAnimalOrdersSnapshot().Count(o => o.PlayerId == playerId || IsSharedOrderTarget(o.TargetLocationName, playerId));
             return items + buildings + animals;
         }
 
@@ -253,7 +267,7 @@ namespace Pelican4Ever.Modules
             {
                 DoorAssignment? assignment = context.WorldState.Doors.Values.FirstOrDefault(d =>
                     string.Equals(d.FarmSlotId, locName, StringComparison.OrdinalIgnoreCase));
-                if (assignment != null && assignment.OwnerId != myId)
+                if (assignment != null && !assignment.IsResident(myId))
                 {
                     string ownerName = ResolvePlayerName(assignment.OwnerId);
                     Game1.drawObjectDialogue(I18n.Get("mailbox.restricted", new { owner = ownerName }));
@@ -382,7 +396,7 @@ namespace Pelican4Ever.Modules
                 lines.Add(I18n.Get("mailbox.orders.pending_item_line", new { shop = shopName, count = totalUnits, date = dateText }));
             }
 
-            foreach (PendingBuildingOrder bOrder in GetBuildingOrdersSnapshot().Where(o => o.PlayerId == myId))
+            foreach (PendingBuildingOrder bOrder in GetBuildingOrdersSnapshot().Where(o => o.PlayerId == myId || IsSharedOrderTarget(o.TargetLocationName, myId)))
             {
                 string dateText = FormatGameDay(bOrder.DeliveryGameDay);
                 string label = bOrder.IsHouseUpgrade
@@ -391,7 +405,7 @@ namespace Pelican4Ever.Modules
                 lines.Add(label);
             }
 
-            foreach (PendingAnimalOrder aOrder in GetAnimalOrdersSnapshot().Where(o => o.PlayerId == myId))
+            foreach (PendingAnimalOrder aOrder in GetAnimalOrdersSnapshot().Where(o => o.PlayerId == myId || IsSharedOrderTarget(o.TargetLocationName, myId)))
             {
                 string dateText = FormatGameDay(aOrder.DeliveryGameDay);
                 lines.Add(I18n.Get("mailbox.orders.pending_animal_line", new { name = aOrder.AnimalName, type = aOrder.AnimalType, date = dateText }));

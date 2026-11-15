@@ -2219,7 +2219,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 
 ---
 
-- [ ] **TASK-2301: Evolución de `ServerWorldState` (esquema v8), `DoorAssignment` y lógica pura de permisos de co-residencia (`ServerWorldState.cs`, `VisitorPermissionLogic.cs`, `ResidenceAnnexAccessLogic.cs`)**
+- [x] **TASK-2301: Evolución de `ServerWorldState` (esquema v8), `DoorAssignment` y lógica pura de permisos de co-residencia (`ServerWorldState.cs`, `VisitorPermissionLogic.cs`, `ResidenceAnnexAccessLogic.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
   * **Descripción:**
@@ -2233,7 +2233,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. `FindResidenceOf(tenantId)` devuelve la residencia compartida y `CheckDoorClaim` rechaza que un inquilino reclame una segunda parcela mientras siga como inquilino.
     3. `VisitorPermissionLogic.CanEnter` y `CanEdit` devuelven `true` para el `TenantId` aunque `Policy == AccessPolicy.Locked` y `VisitorsCanEdit == false`.
 
-- [ ] **TASK-2302: Sincronización de red (`SyncDoors` / `ManageTenant`), `ModDataKeys.TenantId` y activación en `LocationCullingLogic` (`ModDataKeys.cs`, `DoorModels.cs`, `LocationCullingLogic.cs`, `FarmSlotModule.cs`, `VisitorGuardModule.cs`)**
+- [x] **TASK-2302: Sincronización de red (`SyncDoors` / `ManageTenant`), `ModDataKeys.TenantId` y activación en `LocationCullingLogic` (`ModDataKeys.cs`, `DoorModels.cs`, `LocationCullingLogic.cs`, `FarmSlotModule.cs`, `VisitorGuardModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2301.
   * **Descripción:**
@@ -2245,7 +2245,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Cuando el propietario está desconectado y solo el inquilino está online, la residencia y sus anexos permanecen activos en red.
     2. El cliente del inquilino recibe al instante el `ModDataKeys.TenantId` replicado en la finca y sus anexos sin bloqueos de `VisitorGuardModule`.
 
-- [ ] **TASK-2303: Desacople de `Cabin` de autenticación de red frente al hogar residencial compartido (`FarmSlotModule.cs`)**
+- [x] **TASK-2303: Desacople de `Cabin` de autenticación de red frente al hogar residencial compartido (`FarmSlotModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2301.
   * **Descripción:**
@@ -2256,7 +2256,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Dos jugadores clientes que conviven en `Pelican4Ever_Farm_01` pueden desconectarse y volver a elegir cada uno su propio personaje en la pantalla de login multijugador sin colisiones ni desaparición de ranura.
     2. `RehomeOrphanFarmhands` conserva intacta la asociación del inquilino al reiniciar el servidor o recargar día.
 
-- [ ] **TASK-2304: Menú de solicitud, aceptación y gestión de inquilino en el buzón exterior del puente/plaza (`TownMailboxLogic.cs`, `TownMailboxModule.cs`, `MailOrderModule.cs`)**
+- [x] **TASK-2304: Menú de solicitud, aceptación y gestión de inquilino en el buzón exterior del puente/plaza (`TownMailboxLogic.cs`, `TownMailboxModule.cs`, `MailOrderModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2302.
   * **Descripción:**
@@ -2270,7 +2270,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Un jugador sin residencia solicita ser inquilino desde el buzón exterior en el puente de la parcela y el propietario puede aceptarlo o rechazarlo desde ese mismo buzón exterior.
     2. Tanto propietario como inquilino acceden a sus propias cartas y pedidos por correo desde el buzón del puente y ven el aviso visual de carta solo cuando tienen correo personal sin leer.
 
-- [ ] **TASK-2305: Camas interiores, despertar diferenciado y mejoras compartidas de la casa y bodega (`ResidenceInteriorLogic.cs`, `ResidenceUpgradeLogic.cs`, `FarmSlotModule.cs`, `BedLogoutModule.cs`)**
+- [x] **TASK-2305: Camas interiores, despertar diferenciado y mejoras compartidas de la casa y bodega (`ResidenceInteriorLogic.cs`, `ResidenceUpgradeLogic.cs`, `FarmSlotModule.cs`, `BedLogoutModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2303.
   * **Descripción:**
@@ -2282,7 +2282,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Propietario e inquilino despiertan en camas distintas dentro de `Pelican4Ever_Farm_XX_Home`, y el `Return Scepter` o desmayo devuelven al inquilino a su residencia compartida.
     2. Contratar una mejora de la casa aplica el nivel resultante para ambos residentes y actualiza el acceso a `_Cellar`.
 
-- [ ] **TASK-2306: Menús y posesión compartida de construcción en Robin, Mago y pedidos por buzón (`ConstructionLocationFilter.cs`, `FarmSlotModule.cs`, `MailOrderRobinService.cs`, `MailOrderModule.cs`, `PrivateFarmCaves.cs`)**
+- [x] **TASK-2306: Menús y posesión compartida de construcción en Robin, Mago y pedidos por buzón (`ConstructionLocationFilter.cs`, `FarmSlotModule.cs`, `MailOrderRobinService.cs`, `MailOrderModule.cs`, `PrivateFarmCaves.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2302.
   * **Descripción:**
@@ -2295,7 +2295,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. En Robin y la Torre del Mago (presencial y por buzón), el inquilino ve exactamente los mismos destinos (`Pelican4Ever_Farm_XX` y sus anexos) que el propietario y puede construir, mover, mejorar, pintar y demoler edificios compartidos.
     2. Un `PendingBuildingOrder` encargado por un residente aparece en «Ver pedidos en curso» del otro y bloquea el solapamiento de huella o doble mejora sobre el mismo edificio.
 
-- [ ] **TASK-2307: Menús y posesión compartida de animales en Marnie, `AnimalPage`, buzón y adopción de mascotas (`FarmSlotModule.cs`, `MailOrderMarnieService.cs`, `ClientPetAdoptionModule.cs`)**
+- [x] **TASK-2307: Menús y posesión compartida de animales en Marnie, `AnimalPage`, buzón y adopción de mascotas (`FarmSlotModule.cs`, `MailOrderMarnieService.cs`, `ClientPetAdoptionModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2302, TASK-2306.
   * **Descripción:**
@@ -2308,7 +2308,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Dos compras simultáneas por buzón entre propietario e inquilino nunca sobrepasan el límite de plazas de un `Barn` o `Coop`.
     3. Ambos residentes pueden construir un `PetBowl` y adoptar su propia mascota en la parcela compartida.
 
-- [ ] **TASK-2308: Garantía de aislamiento de progreso individual y protocolo de expulsión, mudanza y traspaso de titularidad (`MailOrderPackageDelivery.cs`, `FarmSlotModule.cs`)**
+- [x] **TASK-2308: Garantía de aislamiento de progreso individual y protocolo de expulsión, mudanza y traspaso de titularidad (`MailOrderPackageDelivery.cs`, `FarmSlotModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2305, TASK-2306, TASK-2307.
   * **Descripción:**
@@ -2323,7 +2323,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Al expulsar a un inquilino con paquetes en camino u offline durmiendo en la residencia, el jugador aparece en el exterior al conectar y recibe sus paquetes pendientes íntegramente.
     3. Si el propietario abandona la parcela existiendo inquilino, este pasa a ser automáticamente el nuevo propietario conservando edificios y animales.
 
-- [ ] **TASK-2309: Comandos de consola, exposición en `AdminApiModule` e internacionalización ES/EN/ZH (`AdminApiModule.cs`, `ConsoleCommands.cs`, `i18n/*.json`)**
+- [x] **TASK-2309: Comandos de consola, exposición en `AdminApiModule` e internacionalización ES/EN/ZH (`AdminApiModule.cs`, `ConsoleCommands.cs`, `i18n/*.json`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2304.
   * **Descripción:**

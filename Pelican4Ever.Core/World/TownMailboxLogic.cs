@@ -10,6 +10,7 @@ namespace Pelican4Ever.Core.World
     {
         Unassigned,
         Owner,
+        Tenant,
         OtherPlayer
     }
 
@@ -49,6 +50,14 @@ namespace Pelican4Ever.Core.World
         /// </summary>
         public static MailboxAccessResult EvaluateAccess(long localPlayerId, long? ownerPlayerId, string? ownerName, int pendingLettersCount, ITranslationProvider? translations = null)
         {
+            return EvaluateAccess(localPlayerId, ownerPlayerId, tenantPlayerId: null, ownerName, pendingLettersCount, translations);
+        }
+
+        /// <summary>
+        /// Evalúa el acceso y mensaje al interactuar con el buzón según su propietario e inquilino.
+        /// </summary>
+        public static MailboxAccessResult EvaluateAccess(long localPlayerId, long? ownerPlayerId, long? tenantPlayerId, string? ownerName, int pendingLettersCount, ITranslationProvider? translations = null)
+        {
             var provider = translations ?? CoreI18n.Current;
             if (!ownerPlayerId.HasValue || ownerPlayerId.Value == 0)
             {
@@ -61,6 +70,14 @@ namespace Pelican4Ever.Core.World
                     ? provider.Get("mailbox.letters_count", new { count = pendingLettersCount })
                     : provider.Get("mailbox.empty");
                 return new MailboxAccessResult(MailboxAccessStatus.Owner, msg);
+            }
+
+            if (tenantPlayerId.HasValue && tenantPlayerId.Value != 0 && tenantPlayerId.Value == localPlayerId)
+            {
+                string msg = pendingLettersCount > 0
+                    ? provider.Get("mailbox.letters_count", new { count = pendingLettersCount })
+                    : provider.Get("mailbox.empty");
+                return new MailboxAccessResult(MailboxAccessStatus.Tenant, msg);
             }
 
             string neighbor = string.IsNullOrWhiteSpace(ownerName) ? provider.Get("common.neighbor") : ownerName;

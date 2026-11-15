@@ -60,7 +60,7 @@ namespace Pelican4Ever.Modules
             if (!e.IsMultipleOf(4) || !Context.IsPlayerFree || Game1.currentLocation is not FarmCave cave
                 || ReferenceEquals(promptedCave.Value, cave) || !cave.modData.TryGetValue(ChoiceKey, out string? choice)
                 || choice != nameof(FarmCaveChoice.None)
-                || FindResidence(cave)?.OwnerId != Game1.player.UniqueMultiplayerID)
+                || FindResidence(cave)?.IsResident(Game1.player.UniqueMultiplayerID) != true)
                 return;
 
             promptedCave.Value = cave;
@@ -100,7 +100,7 @@ namespace Pelican4Ever.Modules
             if (request.Choice is not (FarmCaveChoice.FruitBats or FarmCaveChoice.Mushrooms)
                 || string.IsNullOrEmpty(request.CaveName)
                 || Game1.getLocationFromName(request.CaveName) is not FarmCave cave
-                || FindResidence(cave) is not { } residence || residence.OwnerId != playerId)
+                || FindResidence(cave) is not { } residence || !residence.IsResident(playerId))
                 return;
 
             PlayerRecord player = context.WorldState.GetOrCreatePlayer(playerId, Game1.GetPlayer(playerId)?.Name ?? string.Empty);

@@ -48,12 +48,12 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
-        /// Indica si el jugador puede entrar: es el dueño, la residencia está abierta o, con
+        /// Indica si el jugador puede entrar: es residente (propietario o inquilino), la residencia está abierta o, con
         /// <see cref="AccessPolicy.Friends"/>, el dueño lo tiene en su lista de amigos.
         /// </summary>
         public static bool CanEnter(DoorAssignment? assignment, long playerId)
         {
-            if (assignment == null || assignment.OwnerId == 0 || assignment.OwnerId == playerId)
+            if (assignment == null || assignment.OwnerId == 0 || assignment.IsResident(playerId))
                 return true;
             return assignment.Policy switch
             {
@@ -63,12 +63,12 @@ namespace Pelican4Ever.Core.World
             };
         }
 
-        /// <summary>Indica si el jugador puede modificar la residencia: es el dueño o el dueño permite editar a los visitantes.</summary>
+        /// <summary>Indica si el jugador puede modificar la residencia: es residente (propietario o inquilino) o el dueño permite editar a los visitantes.</summary>
         public static bool CanEdit(DoorAssignment? assignment, long playerId)
         {
             return assignment == null
                 || assignment.OwnerId == 0
-                || assignment.OwnerId == playerId
+                || assignment.IsResident(playerId)
                 || assignment.VisitorsCanEdit;
         }
 

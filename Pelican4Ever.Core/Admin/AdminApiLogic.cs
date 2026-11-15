@@ -46,6 +46,9 @@ namespace Pelican4Ever.Core.Admin
         public string SlotId { get; set; } = string.Empty;
         public bool IsOccupied { get; set; }
         public string OwnerName { get; set; } = string.Empty;
+        public long? TenantId { get; set; }
+        public string TenantName { get; set; } = string.Empty;
+        public int PendingTenantRequests { get; set; }
         public string FarmType { get; set; } = string.Empty;
         public string Policy { get; set; } = string.Empty;
     }
