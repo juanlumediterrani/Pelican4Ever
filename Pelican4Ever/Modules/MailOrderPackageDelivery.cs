@@ -29,8 +29,8 @@ namespace Pelican4Ever.Modules
                 AccessTools.Method(typeof(Chest), nameof(Chest.performToolAction), new[] { typeof(Tool) }),
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_PerformToolAction)));
 
-            PatchSafe(harmony, "Chest.onExplosion",
-                AccessTools.Method(typeof(Chest), nameof(Chest.onExplosion), new[] { typeof(Farmer) }),
+            PatchSafe(harmony, "Object.onExplosion",
+                AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.onExplosion), new[] { typeof(Farmer) }),
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_OnExplosion)));
         }
 
@@ -55,9 +55,9 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
-        public static bool Prefix_Chest_OnExplosion(Chest __instance, ref bool __result)
+        public static bool Prefix_Chest_OnExplosion(StardewValley.Object __instance, ref bool __result)
         {
-            if (!IsMailPackage(__instance, out _))
+            if (__instance is not Chest chest || !IsMailPackage(chest, out _))
                 return true;
 
             __result = false;

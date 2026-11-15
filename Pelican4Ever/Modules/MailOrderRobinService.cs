@@ -165,15 +165,15 @@ namespace Pelican4Ever.Modules
             Game1.drawObjectDialogue(I18n.Get("mailbox.orders.house_upgrade_scheduled"));
         }
 
-        public static void Postfix_Building_PreventConstruction(Building __instance, GameLocation location, Vector2 tileLocation, ref string? __result)
+        public static void Postfix_Building_PreventConstruction(Building __instance, GameLocation location, Vector2 tile_location, ref string? __result)
         {
             if (__result != null || location == null || __instance == null)
                 return;
 
             if (MailPackagePlacementLogic.DoesFootprintOverlapPendingBuilding(
                 location.NameOrUniqueName,
-                (int)tileLocation.X,
-                (int)tileLocation.Y,
+                (int)tile_location.X,
+                (int)tile_location.Y,
                 __instance.tilesWide.Value,
                 __instance.tilesHigh.Value,
                 GetBuildingOrdersSnapshot()))
