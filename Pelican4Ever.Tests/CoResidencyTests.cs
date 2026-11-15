@@ -195,5 +195,65 @@ namespace Pelican4Ever.Tests
             Assert.True(tenantResult.Success);
             Assert.Equal(AnnexPurchaseRejection.NotResidenceOwner, outsiderResult.Rejection);
         }
+
+        [Fact]
+        public void TryTransferOwnershipToTenant_PromotesTenantAndUpdatesAnnexes()
+        {
+            var state = new ServerWorldState();
+            state.GetOrCreatePlayer(1001, "Owner").FarmSlotId = "Pelican4Ever_Farm_01";
+            state.GetOrCreatePlayer(2002, "Tenant").FarmSlotId = "Pelican4Ever_Farm_01";
+            state.Doors["Farm_Portal_01"] = new DoorAssignment
+            {
+                DoorId = "Farm_Portal_01",
+                FarmSlotId = "Pelican4Ever_Farm_01",
+                OwnerId = 1001,
+                TenantId = 2002
+            };
+            state.Annexes["Pelican4Ever_Annex_01_East"] = new AnnexAssignment
+            {
+                AnnexId = "Pelican4Ever_Annex_01_East",
+                ResidenceSlotId = "Pelican4Ever_Farm_01",
+                Side = AnnexSide.East,
+                OwnerId = 1001
+            };
+
+            bool transferred = state.TryTransferOwnershipToTenant("Farm_Portal_01", out long newOwnerId);
+
+            Assert.True(transferred);
+            Assert.Equal(2002, newOwnerId);
+            Assert.Equal(2002, state.Doors["Farm_Portal_01"].OwnerId);
+            Assert.Null(state.Doors["Farm_Portal_01"].TenantId);
+            Assert.Null(state.Players[1001].FarmSlotId);
+            Assert.Equal("Pelican4Ever_Farm_01", state.Players[2002].FarmSlotId);
+            Assert.Equal(2002, state.Annexes["Pelican4Ever_Annex_01_East"].OwnerId);
+        }
+
+        [Fact]
+        public void ConstructionLocationFilter_ReturnsSharedResidenceAndAnnexesForTenant()
+        {
+            var state = new ServerWorldState();
+            state.Doors["Farm_Portal_01"] = new DoorAssignment
+            {
+                DoorId = "Farm_Portal_01",
+                FarmSlotId = "Pelican4Ever_Farm_01",
+                OwnerId = 1001,
+                TenantId = 2002
+            };
+            state.Annexes["Pelican4Ever_Annex_01_East"] = new AnnexAssignment
+            {
+                AnnexId = "Pelican4Ever_Annex_01_East",
+                ResidenceSlotId = "Pelican4Ever_Farm_01",
+                Side = AnnexSide.East,
+                OwnerId = 1001
+            };
+
+            string? tenantSlot = state.ResolvePlayerResidenceSlot(2002);
+            var annexes = state.GetAnnexesForResidence(tenantSlot!);
+            var allowed = ConstructionLocationFilter.GetAllowedConstructionLocations(2002, isHost: false, tenantSlot, annexes);
+
+            Assert.Equal(2, allowed.Count);
+            Assert.Equal("Pelican4Ever_Farm_01", allowed[0].Key);
+            Assert.Equal("Pelican4Ever_Annex_01_East", allowed[1].Key);
+        }
     }
 }

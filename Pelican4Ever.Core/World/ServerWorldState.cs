@@ -193,6 +193,39 @@ namespace Pelican4Ever.Core.World
             return door != null && door.IsResident(playerId);
         }
 
+        /// <summary>
+        /// Si el propietario abandona o libera la puerta mientras hay un inquilino activo, transfiere la
+        /// titularidad al inquilino para preservar la residencia y sus edificios/animales compartidos (TASK-2308).
+        /// </summary>
+        public bool TryTransferOwnershipToTenant(string doorId, out long newOwnerId)
+        {
+            newOwnerId = 0;
+            if (string.IsNullOrWhiteSpace(doorId) || !Doors.TryGetValue(doorId, out DoorAssignment? door))
+                return false;
+
+            if (!door.TenantId.HasValue || door.TenantId.Value == 0)
+                return false;
+
+            long previousOwnerId = door.OwnerId;
+            newOwnerId = door.TenantId.Value;
+            door.OwnerId = newOwnerId;
+            door.TenantId = null;
+
+            if (Players.TryGetValue(previousOwnerId, out PlayerRecord? oldRec))
+                oldRec.FarmSlotId = null;
+
+            PlayerRecord newRec = GetOrCreatePlayer(newOwnerId, string.Empty);
+            newRec.FarmSlotId = door.FarmSlotId;
+
+            if (Annexes != null)
+            {
+                foreach (AnnexAssignment annex in GetAnnexesForResidence(door.FarmSlotId))
+                    annex.OwnerId = newOwnerId;
+            }
+
+            return true;
+        }
+
         /// <summary>Residencia en la que vive el jugador (como propietario o inquilino), o null.</summary>
         public DoorAssignment? FindResidenceOf(long playerId)
         {
