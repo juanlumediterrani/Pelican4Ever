@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using HarmonyLib;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
@@ -10,6 +11,9 @@ using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Characters;
+using StardewValley.Locations;
+using StardewValley.Quests;
 
 namespace Pelican4Ever.Modules
 {
@@ -64,6 +68,11 @@ namespace Pelican4Ever.Modules
                 ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
                 ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
                 ctx.AddCommand("p4e_rollover_now", "Fuerza la secuencia segura de guardado y rollover.", OnForceRollover);
+
+                ctx.Harmony.Patch(
+                    original: AccessTools.Method(typeof(Game1), nameof(Game1.queueWeddingsForToday)),
+                    postfix: new HarmonyMethod(typeof(DailyRolloverModule), nameof(Postfix_Game1_QueueWeddingsForToday))
+                );
             }
         }
 
@@ -80,7 +89,9 @@ namespace Pelican4Ever.Modules
             if (RolloverTiming.IsBoundaryWindow(localNow.TimeOfDay, context.Config.ParsedCalendarDayChangeTime)
                 && calendar.GetTotalDays(localNow) <= Game1.Date.TotalDays)
                 lastRolloverBoundaryDate = localNow.Date;
+            lastProcessedOfflineFarmhandDay = Game1.Date.TotalDays;
             CheckAndPlanCatchUp();
+            SanitizeStrandedSpouses();
         }
 
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
@@ -106,6 +117,7 @@ namespace Pelican4Ever.Modules
             if (!RolloverDayGuard.ShouldProcessDayStart(startedByLoad, worldState.LastRolloverGameDay, endedDay))
             {
                 context.Monitor.Log($"[DailyRolloverModule] Día {endedDay}: {(startedByLoad ? "inicio causado por carga de partida" : "ya comprometido en el save")}; se omiten penalties y counters repetidos.", LogLevel.Info);
+                SanitizeStrandedSpouses();
                 warned10 = false;
                 rollover.ResetAfterDayStarted();
                 peerCloseDeadlineUtc = DateTimeOffset.MinValue;
@@ -168,8 +180,9 @@ namespace Pelican4Ever.Modules
             worldState.LastRolloverGameDay = endedDay;
             LastRolloverOutcomeSummary = $"rested={restedCount}, penalized={penalizedCount}, untouched={untouchedCount}";
 
-            // Congelar caída de amistad por inactividad para jugadores desconectados
-            FreezeFriendshipDecayForOfflinePlayers();
+            // Reparar NPCs varados en cabañas privadas y persistir novedades nocturnas offline
+            SanitizeStrandedSpouses();
+            context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
 
             // Crear copia de seguridad rotativa del guardado
             CreateSaveBackup();
@@ -632,37 +645,290 @@ namespace Pelican4Ever.Modules
             context?.Monitor.Log($"[HUD] {message}", LogLevel.Info);
         }
 
-        private void FreezeFriendshipDecayForOfflinePlayers()
+        private static int lastProcessedOfflineFarmhandDay = -1;
+
+        public static void Postfix_Game1_QueueWeddingsForToday()
+        {
+            instance?.ProcessOfflineFarmhandsOvernight();
+        }
+
+        /// <summary>
+        /// Ejecuta en el servidor las rutinas diarias de los farmhands desconectados cuando cambia el día en
+        /// <see cref="Game1.NewDay"/>: reinicio diario de conversación/regalos, caída diaria exclusiva del
+        /// cónyuge (-20 si no se habló), mejoras de herramientas/casa, misiones temporales, divorcios,
+        /// memoria de diálogos y bodas autoritativas offline (Opción 4A).
+        /// </summary>
+        private void ProcessOfflineFarmhandsOvernight()
         {
             try
             {
-                int today = Game1.Date.TotalDays;
-                var onlineIds = Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet();
+                if (!Context.IsMainPlayer || Game1.Date.TotalDays == lastProcessedOfflineFarmhandDay)
+                    return;
 
-                foreach (var kvp in context.WorldState.Players)
+                lastProcessedOfflineFarmhandDay = Game1.Date.TotalDays;
+                var onlineIds = Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet();
+                bool canHaveWedding = Game1.canHaveWeddingOnDay(Game1.dayOfMonth, Game1.season);
+                bool worldStateDirty = false;
+
+                foreach (Farmer farmer in Game1.getAllFarmers())
                 {
-                    long uid = kvp.Key;
-                    if (!onlineIds.Contains(uid))
+                    if (farmer == null || farmer.IsMainPlayer || farmer.isUnclaimedFarmhand || onlineIds.Contains(farmer.UniqueMultiplayerID))
+                        continue;
+
+                    long uid = farmer.UniqueMultiplayerID;
+                    context.WorldState.Players.TryGetValue(uid, out PlayerRecord? record);
+
+                    // 1. Amistades diarias: solo el cónyuge/compañero pierde -20 si no se habló hoy; el resto se congela sin sumar +2.
+                    foreach (string npcName in farmer.friendshipData.Keys.ToList())
                     {
-                        Farmer? farmer = Game1.GetPlayer(uid);
-                        if (farmer != null)
+                        Friendship friendship = farmer.friendshipData[npcName];
+                        bool isSpouseOrRoommate = !string.IsNullOrEmpty(farmer.spouse)
+                            && string.Equals(npcName, farmer.spouse, StringComparison.Ordinal)
+                            && (friendship.IsMarried() || friendship.IsRoommate());
+
+                        int delta = HouseholdRolloverLogic.EvaluateDailySpouseFriendshipDelta(isSpouseOrRoommate, friendship.TalkedToToday);
+                        if (delta != 0)
                         {
-                            // En Stardew Valley, la amistad baja -2 puntos cada día que no hablas con un NPC.
-                            // Para jugadores offline, sumamos +2 a todos sus vínculos para anular la caída diaria.
-                            foreach (var friendship in farmer.friendshipData.Values)
+                            friendship.Points = Math.Max(0, friendship.Points + delta);
+                        }
+
+                        friendship.TalkedToToday = false;
+                    }
+                    farmer.updateFriendshipGifts(Game1.Date);
+
+                    // 2. Banderas diarias, herramientas y ampliación de casa (equivalente seguro de Farmer.dayupdate)
+                    farmer.hasUsedDailyRevive.Value = false;
+                    farmer.hasBeenBlessedByStatueToday = false;
+                    farmer.acceptedDailyQuest.Set(newValue: false);
+                    farmer.dancePartner.Value = null;
+                    farmer.festivalScore = 0;
+                    farmer.forceTimePass = false;
+                    farmer.timeWentToBed.Value = 0;
+                    farmer.stats.Set("blessingOfWaters", 0);
+
+                    if (farmer.daysLeftForToolUpgrade.Value > 0)
+                    {
+                        farmer.daysLeftForToolUpgrade.Value--;
+                    }
+
+                    DoorAssignment? door = context.WorldState.FindResidenceOf(uid);
+                    Cabin? home = ResolveFarmerCabin(farmer, door);
+
+                    if (farmer.daysUntilHouseUpgrade.Value > 0)
+                    {
+                        farmer.daysUntilHouseUpgrade.Value--;
+                        if (farmer.daysUntilHouseUpgrade.Value <= 0)
+                        {
+                            int nextLevel = farmer.HouseUpgradeLevel + 1;
+                            home?.moveObjectsForHouseUpgrade(nextLevel);
+                            farmer.HouseUpgradeLevel = nextLevel;
+                            farmer.daysUntilHouseUpgrade.Value = -1;
+                            home?.setMapForUpgradeLevel(nextLevel);
+                            if (nextLevel >= 3)
                             {
-                                if (friendship.Points > 0 && friendship.Points < 2500)
+                                farmer.craftingRecipes.TryAdd("Cask", 0);
+                                if (home != null && door != null && !string.IsNullOrEmpty(door.FarmSlotId))
                                 {
-                                    friendship.Points = Math.Min(2500, friendship.Points + 2);
+                                    FarmSlotModule.EnsureSlotCellar(door.FarmSlotId, home, door);
                                 }
                             }
+                            farmer.autoGenerateActiveDialogueEvent("houseUpgrade_" + nextLevel);
                         }
                     }
+
+                    farmer.questLog.RemoveWhere(quest =>
+                    {
+                        if (quest.IsTimedQuest())
+                        {
+                            quest.daysLeft.Value--;
+                            return quest.daysLeft.Value <= 0 && !quest.completed.Value;
+                        }
+                        return false;
+                    });
+
+                    AdvanceOfflineActiveDialogueEvents(farmer, home);
+
+                    // 3. Divorcio nocturno pendiente
+                    if (farmer.divorceTonight.Value)
+                    {
+                        NPC? exSpouse = farmer.getSpouse();
+                        farmer.doDivorce();
+                        if (exSpouse != null && exSpouse.getSpouse() == null)
+                        {
+                            exSpouse.PerformDivorce();
+                        }
+                        if (record != null && !string.IsNullOrEmpty(record.PendingWeddingSpouse))
+                        {
+                            record.PendingWeddingSpouse = null;
+                            worldStateDirty = true;
+                        }
+                    }
+
+                    // 4. Boda offline autoritativa (Opción 4A)
+                    if (!string.IsNullOrEmpty(farmer.spouse)
+                        && farmer.friendshipData.TryGetValue(farmer.spouse, out Friendship? spouseFriendship)
+                        && HouseholdRolloverLogic.ShouldCompleteOfflineWedding(
+                            farmer.isEngaged(),
+                            !string.IsNullOrEmpty(farmer.spouse),
+                            spouseFriendship.CountdownToWedding,
+                            canHaveWedding))
+                    {
+                        string spouseName = farmer.spouse;
+                        if (door != null && door.OwnerId == uid && !string.IsNullOrEmpty(door.FarmSlotId))
+                        {
+                            string expectedHome = $"{door.FarmSlotId}{ResidenceUpgradeLogic.CabinHomeSuffix}";
+                            if (!string.Equals(farmer.homeLocation.Value, expectedHome, StringComparison.OrdinalIgnoreCase))
+                            {
+                                farmer.homeLocation.Value = expectedHome;
+                                home = ResolveFarmerCabin(farmer, door) ?? home;
+                            }
+                        }
+
+                        spouseFriendship.Status = FriendshipStatus.Married;
+                        spouseFriendship.WeddingDate = new WorldDate(Game1.Date);
+
+                        NPC? wedSpouse = Game1.getCharacterFromName(spouseName);
+                        if (wedSpouse != null && home != null)
+                        {
+                            Game1.prepareSpouseForWedding(farmer);
+                            home.showSpouseRoom();
+                        }
+
+                        if (wedSpouse != null && !wedSpouse.isRoommate())
+                        {
+                            farmer.autoGenerateActiveDialogueEvent("married_" + spouseName);
+                            if (!farmer.autoGenerateActiveDialogueEvent("married"))
+                                farmer.autoGenerateActiveDialogueEvent("married_twice");
+
+                            if (record == null)
+                            {
+                                record = new PlayerRecord
+                                {
+                                    UniqueMultiplayerID = uid,
+                                    PlayerName = farmer.Name
+                                };
+                                context.WorldState.Players[uid] = record;
+                            }
+                            record.PendingWeddingSpouse = spouseName;
+                            worldStateDirty = true;
+                            context.Monitor.Log($"[DailyRolloverModule] Boda offline completada para {farmer.Name} con {spouseName}; ceremonia diferida al reconectar.", LogLevel.Info);
+                        }
+                        else if (wedSpouse != null)
+                        {
+                            farmer.autoGenerateActiveDialogueEvent("roommates_" + spouseName);
+                            context.Monitor.Log($"[DailyRolloverModule] Acuerdo de compañero offline completado para {farmer.Name} con {spouseName}.", LogLevel.Info);
+                        }
+                    }
+                }
+
+                if (worldStateDirty)
+                {
+                    context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
                 }
             }
             catch (Exception ex)
             {
-                context.Monitor.Log($"[DailyRolloverModule] Error al pausar amistad offline: {ex}", LogLevel.Warn);
+                context.Monitor.Log($"[DailyRolloverModule] Error al procesar rollover offline de farmhands: {ex}", LogLevel.Warn);
+            }
+        }
+
+        private Cabin? ResolveFarmerCabin(Farmer farmer, DoorAssignment? door)
+        {
+            if (door != null && door.OwnerId == farmer.UniqueMultiplayerID && !string.IsNullOrEmpty(door.FarmSlotId))
+            {
+                if (FarmSlotModule.ResolveResidenceCabin($"{door.FarmSlotId}{ResidenceUpgradeLogic.CabinHomeSuffix}", door) is Cabin slotCabin)
+                    return slotCabin;
+            }
+
+            if (!string.IsNullOrEmpty(farmer.homeLocation.Value))
+            {
+                return Game1.getLocationFromName(farmer.homeLocation.Value) as Cabin;
+            }
+
+            return null;
+        }
+
+        private static void AdvanceOfflineActiveDialogueEvents(Farmer farmer, Cabin? home)
+        {
+            foreach (string key in farmer.activeDialogueEvents.Keys.ToList())
+            {
+                if (!key.Contains("_memory_", StringComparison.Ordinal))
+                {
+                    if (!farmer.previousActiveDialogueEvents.ContainsKey(key))
+                        farmer.previousActiveDialogueEvents[key] = 0;
+                }
+
+                int remaining = farmer.activeDialogueEvents[key] - 1;
+                if (remaining < 0)
+                {
+                    if (key == "pennyRedecorating" && home?.GetSpouseBed() != null)
+                    {
+                        farmer.activeDialogueEvents[key] = 0;
+                    }
+                    else
+                    {
+                        farmer.activeDialogueEvents.Remove(key);
+                    }
+                }
+                else
+                {
+                    farmer.activeDialogueEvents[key] = remaining;
+                }
+            }
+
+            foreach (string key in farmer.previousActiveDialogueEvents.Keys.ToList())
+            {
+                int days = farmer.previousActiveDialogueEvents[key] + 1;
+                farmer.previousActiveDialogueEvents[key] = days;
+                switch (days)
+                {
+                    case 1: farmer.activeDialogueEvents[key + "_memory_oneday"] = 4; break;
+                    case 7: farmer.activeDialogueEvents[key + "_memory_oneweek"] = 4; break;
+                    case 14: farmer.activeDialogueEvents[key + "_memory_twoweeks"] = 4; break;
+                    case 28: farmer.activeDialogueEvents[key + "_memory_fourweeks"] = 4; break;
+                    case 56: farmer.activeDialogueEvents[key + "_memory_eightweeks"] = 4; break;
+                    case 104: farmer.activeDialogueEvents[key + "_memory_oneyear"] = 4; break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Repara cónyuges cuyo mapa por defecto o ubicación actual apunta a una cabaña privada (<c>_Home</c>)
+        /// tras desaparecer el dueño o perder el matrimonio sin divorcio limpio.
+        /// </summary>
+        public static void SanitizeStrandedSpouses()
+        {
+            if (!Context.IsMainPlayer)
+                return;
+
+            try
+            {
+                Utility.ForEachVillager(npc =>
+                {
+                    if (npc == null)
+                        return true;
+
+                    Farmer? liveSpouse = npc.getSpouse();
+                    bool isResidenceCabinMap = !string.IsNullOrEmpty(ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(npc.DefaultMap));
+                    bool isDefaultMissing = isResidenceCabinMap && Game1.getLocationFromName(npc.DefaultMap) == null;
+
+                    if (HouseholdRolloverLogic.IsStrandedResidenceNpc(isResidenceCabinMap, liveSpouse != null, isDefaultMissing))
+                    {
+                        context?.Monitor.Log($"[DailyRolloverModule] Reparando NPC varado '{npc.Name}' (DefaultMap={npc.DefaultMap}).", LogLevel.Warn);
+                        npc.PerformDivorce();
+                    }
+                    else if (liveSpouse == null && !string.IsNullOrEmpty(ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(npc.currentLocation?.NameOrUniqueName)))
+                    {
+                        context?.Monitor.Log($"[DailyRolloverModule] Devolviendo a su hogar a '{npc.Name}' varado en '{npc.currentLocation?.NameOrUniqueName}'.", LogLevel.Warn);
+                        npc.PerformDivorce();
+                    }
+
+                    return true;
+                });
+            }
+            catch (Exception ex)
+            {
+                context?.Monitor.Log($"[DailyRolloverModule] Error al sanear cónyuges varados: {ex}", LogLevel.Warn);
             }
         }
 

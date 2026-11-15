@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,7 +15,11 @@ using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Audio;
+using StardewValley.BellsAndWhistles;
 using StardewValley.Buildings;
+using StardewValley.Characters;
+using StardewValley.Events;
 using StardewValley.Extensions;
 using StardewValley.GameData.Locations;
 using StardewValley.GameData.Objects;
@@ -21,6 +27,7 @@ using StardewValley.Locations;
 using StardewValley.Menus;
 using StardewValley.Network;
 using StardewValley.Objects;
+using StardewValley.Pathfinding;
 using StardewValley.TerrainFeatures;
 using StardewValley.Tools;
 
@@ -35,6 +42,7 @@ namespace Pelican4Ever.Modules
         private static ModContext? context;
         private static bool welcomeNotified;
         private static bool chatCommandsRegistered;
+        private static bool deferredBirthNamingPending;
 
         /// <summary>Granja compartida de Isla Jengibre, disponible para los servicios de Robin/Marnie una vez restaurada.</summary>
         private const string SharedIslandFarmId = "IslandWest";
@@ -2545,6 +2553,8 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
+            TryRunDeferredHouseholdClientEvents();
+
             var curLoc = Game1.currentLocation;
             if (curLoc == null || !HostPlazaLayout.IsPlazaLocation(curLoc.NameOrUniqueName) || Game1.player == null || Game1.isFestival())
             {
@@ -3714,6 +3724,10 @@ namespace Pelican4Ever.Modules
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
             {
                 HandleDemolishBuildingResult(e.ReadAs<DemolishBuildingResultPayload>());
+            }
+            else if (e.Type == ModMessages.FamilyEventAction && Context.IsMainPlayer)
+            {
+                HandleFamilyEventAction(e.FromPlayerID, e.ReadAs<FamilyEventActionPayload>());
             }
             else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
@@ -5144,7 +5158,55 @@ namespace Pelican4Ever.Modules
                     postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_AnimalPage_FindAnimals))
                 );
 
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos y construcción en residencia aplicados.", LogLevel.Trace);
+                // Porche residencial propio en granjas privadas (evita (0,0) al usar edificio Farmhouse con interior Cabin).
+                PatchSafe(
+                    harmony,
+                    "Cabin.getPorchStandingSpot",
+                    AccessTools.Method(typeof(Cabin), nameof(Cabin.getPorchStandingSpot)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Cabin_GetPorchStandingSpot))
+                );
+
+                // Redirigir tareas y porche del cónyuge hacia Pelican4Ever_Farm_XX y aislar banderas estáticas por residencia.
+                PatchSafe(
+                    harmony,
+                    "NPC.marriageDuties",
+                    AccessTools.Method(typeof(NPC), nameof(NPC.marriageDuties)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_MarriageDuties)),
+                    transpiler: new HarmonyMethod(typeof(FarmSlotModule), nameof(Transpiler_NPC_MarriageDuties))
+                );
+
+                // Evitar RequireLocation("Cabin") al regresar el cónyuge desde BusStop hacia una cabaña privada _Home.
+                PatchSafe(
+                    harmony,
+                    "PathFindController.handleWarps",
+                    AccessTools.Method(typeof(PathFindController), nameof(PathFindController.handleWarps), new[] { typeof(Rectangle) }),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PathFindController_HandleWarps))
+                );
+
+                // Salida de la escena de boda hacia el porche de la residencia del jugador, no hacia la Plaza Host ("Farm").
+                PatchSafe(
+                    harmony,
+                    "Event.endBehaviors",
+                    AccessTools.Method(typeof(Event), nameof(Event.endBehaviors), new[] { typeof(string[]), typeof(GameLocation) }),
+                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Event_EndBehaviors))
+                );
+
+                // Restringir mejoras de casa (Robin), compra del Colgante de Sirena y propuestas de matrimonio al dueño.
+                PatchSafe(
+                    harmony,
+                    "GameLocation.answerDialogueAction",
+                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.answerDialogueAction), new[] { typeof(string), typeof(string[]) }),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GameLocation_AnswerDialogueAction))
+                );
+
+                PatchSafe(
+                    harmony,
+                    "NPC.tryToReceiveActiveObject",
+                    AccessTools.Method(typeof(NPC), nameof(NPC.tryToReceiveActiveObject), new[] { typeof(Farmer), typeof(bool) }),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_TryToReceiveActiveObject))
+                );
+
+                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos, construcción en residencia y matrimonio aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
             {
@@ -7838,6 +7900,610 @@ namespace Pelican4Ever.Modules
             );
 
             return false;
+        }
+
+        private static bool TryGetSpouseResidenceSlotId(NPC? spouse, out string? slotId)
+        {
+            slotId = null;
+            if (spouse == null)
+                return false;
+
+            Farmer? farmerSpouse = spouse.getSpouse();
+            if (farmerSpouse != null)
+            {
+                DoorAssignment? door = context?.WorldState.FindResidenceOf(farmerSpouse.UniqueMultiplayerID);
+                if (door != null && door.OwnerId == farmerSpouse.UniqueMultiplayerID && !string.IsNullOrEmpty(door.FarmSlotId))
+                {
+                    slotId = door.FarmSlotId;
+                    return true;
+                }
+
+                string? fromHome = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(farmerSpouse.homeLocation.Value);
+                if (!string.IsNullOrEmpty(fromHome))
+                {
+                    slotId = fromHome;
+                    return true;
+                }
+            }
+
+            string? fromDefault = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(spouse.DefaultMap);
+            if (!string.IsNullOrEmpty(fromDefault))
+            {
+                slotId = fromDefault;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static FarmHouse? ResolveFarmerHomeLocation(Farmer? farmer)
+        {
+            if (farmer == null)
+                return null;
+
+            DoorAssignment? residence = context?.WorldState.FindResidenceOf(farmer.UniqueMultiplayerID);
+            if (residence != null && residence.OwnerId == farmer.UniqueMultiplayerID && !string.IsNullOrEmpty(residence.FarmSlotId))
+            {
+                if (ResolveResidenceCabin($"{residence.FarmSlotId}{ResidenceUpgradeLogic.CabinHomeSuffix}", residence) is Cabin slotCabin)
+                    return slotCabin;
+            }
+
+            return !string.IsNullOrEmpty(farmer.homeLocation.Value)
+                ? Game1.getLocationFromName(farmer.homeLocation.Value) as FarmHouse
+                : null;
+        }
+
+        public static bool Prefix_Cabin_GetPorchStandingSpot(Cabin __instance, ref Point __result)
+        {
+            string? slotId = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(__instance.uniqueName.Value ?? __instance.NameOrUniqueName);
+            Farm? parentFarm = __instance.ParentBuilding?.GetParentLocation() as Farm;
+
+            if (string.IsNullOrEmpty(slotId)
+                && parentFarm != null
+                && parentFarm.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                slotId = parentFarm.NameOrUniqueName;
+            }
+
+            if (string.IsNullOrEmpty(slotId))
+                return true;
+
+            Farm? farm = parentFarm ?? Game1.getLocationFromName(slotId) as Farm;
+            Building? building = __instance.ParentBuilding;
+            Point entry = farm?.GetMainFarmHouseEntry() ?? new Point(64, 15);
+
+            var (px, py) = HouseholdRolloverLogic.ComputeResidencePorchSpot(
+                entry.X,
+                entry.Y,
+                building?.tileX.Value ?? -1,
+                building?.tileY.Value ?? -1,
+                building?.tilesHigh.Value ?? -1,
+                building?.isCabin ?? false);
+
+            __result = new Point(px, py);
+            return false;
+        }
+
+        public static void Prefix_NPC_MarriageDuties(NPC __instance)
+        {
+            if (TryGetSpouseResidenceSlotId(__instance, out _))
+            {
+                // Cada residencia privada evalúa tareas de cónyuge sin bloquearse entre sí por las banderas estáticas globales.
+                NPC.hasSomeoneWateredCrops = false;
+                NPC.hasSomeoneFedThePet = false;
+                NPC.hasSomeoneFedTheAnimals = false;
+                NPC.hasSomeoneRepairedTheFences = false;
+            }
+        }
+
+        public static Farm ResolveSpouseDutyFarm(NPC spouse)
+        {
+            if (TryGetSpouseResidenceSlotId(spouse, out string? slotId)
+                && !string.IsNullOrEmpty(slotId)
+                && Game1.getLocationFromName(slotId) is Farm slotFarm)
+            {
+                return slotFarm;
+            }
+
+            return Game1.getFarm();
+        }
+
+        public static void WarpSpouseToDutyFarm(NPC spouse, string targetLocationName, Point position)
+        {
+            if (string.Equals(targetLocationName, "Farm", StringComparison.OrdinalIgnoreCase)
+                && TryGetSpouseResidenceSlotId(spouse, out string? slotId)
+                && !string.IsNullOrEmpty(slotId)
+                && Game1.getLocationFromName(slotId) != null)
+            {
+                Game1.warpCharacter(spouse, slotId, position);
+                return;
+            }
+
+            Game1.warpCharacter(spouse, targetLocationName, position);
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler_NPC_MarriageDuties(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo? getFarmMethod = AccessTools.Method(typeof(Game1), nameof(Game1.getFarm), Type.EmptyTypes);
+            MethodInfo? warpCharMethod = AccessTools.Method(typeof(Game1), nameof(Game1.warpCharacter), new[] { typeof(NPC), typeof(string), typeof(Point) });
+            MethodInfo? resolveFarmHelper = AccessTools.Method(typeof(FarmSlotModule), nameof(ResolveSpouseDutyFarm));
+            MethodInfo? warpHelper = AccessTools.Method(typeof(FarmSlotModule), nameof(WarpSpouseToDutyFarm));
+
+            foreach (CodeInstruction instruction in instructions)
+            {
+                if (getFarmMethod != null && instruction.Calls(getFarmMethod) && resolveFarmHelper != null)
+                {
+                    var ldarg = new CodeInstruction(OpCodes.Ldarg_0);
+                    ldarg.MoveLabelsFrom(instruction);
+                    ldarg.MoveBlocksFrom(instruction);
+                    yield return ldarg;
+                    yield return new CodeInstruction(OpCodes.Call, resolveFarmHelper);
+                }
+                else if (warpCharMethod != null && instruction.Calls(warpCharMethod) && warpHelper != null)
+                {
+                    instruction.operand = warpHelper;
+                    yield return instruction;
+                }
+                else
+                {
+                    yield return instruction;
+                }
+            }
+        }
+
+        public static bool Prefix_PathFindController_HandleWarps(
+            PathFindController __instance,
+            Character? ___character,
+            Rectangle position)
+        {
+            if (__instance.location is not BusStop || ___character is not NPC npc || !npc.isMarried() || !npc.followSchedule)
+                return true;
+
+            Warp? warp = __instance.location.isCollidingWithWarpOrDoor(position, npc);
+            if (warp == null || warp.X > 9)
+                return true;
+
+            Farmer? spouse = npc.getSpouse();
+            if (spouse == null || string.IsNullOrEmpty(ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(spouse.homeLocation.Value)))
+                return true;
+
+            if (ResolveFarmerHomeLocation(spouse) is not FarmHouse home)
+                return true;
+
+            Point entryLocation = home.getEntryLocation();
+            if (npc.temporaryController != null && npc.controller != null)
+            {
+                npc.controller.location = home;
+            }
+
+            __instance.location = home;
+            Game1.warpCharacter(npc, home, new Vector2(entryLocation.X, entryLocation.Y));
+
+            if (__instance.location.farmers.Any() && __instance.location.doors.ContainsKey(new Point(entryLocation.X, entryLocation.Y - 1)))
+            {
+                __instance.location.playSound("doorClose", new Vector2(entryLocation.X, entryLocation.Y), null, SoundContext.NPC);
+            }
+
+            if (__instance.pathToEndPoint.Count > 0)
+            {
+                __instance.pathToEndPoint.Pop();
+            }
+
+            Point tilePoint = npc.TilePoint;
+            while (__instance.pathToEndPoint.Count > 0
+                && (Math.Abs(__instance.pathToEndPoint.Peek().X - tilePoint.X) > 1 || Math.Abs(__instance.pathToEndPoint.Peek().Y - tilePoint.Y) > 1))
+            {
+                __instance.pathToEndPoint.Pop();
+            }
+
+            return false;
+        }
+
+        public static void Postfix_Event_EndBehaviors(Event __instance, string[] args)
+        {
+            if (!string.Equals(ArgUtility.Get(args, 1), "wedding", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            Farmer? who = __instance.farmer ?? Game1.player;
+            if (who == null || context == null)
+                return;
+
+            DoorAssignment? residence = context.WorldState.FindResidenceOf(who.UniqueMultiplayerID);
+            if (residence == null || residence.OwnerId != who.UniqueMultiplayerID || string.IsNullOrEmpty(residence.FarmSlotId))
+                return;
+
+            FarmHouse? homeOfFarmer = ResolveFarmerHomeLocation(who);
+            if (homeOfFarmer == null)
+                return;
+
+            Point porch = homeOfFarmer.getPorchStandingSpot();
+            __instance.setExitLocation(residence.FarmSlotId, Math.Max(0, porch.X - 1), porch.Y);
+
+            if (Context.IsMainPlayer && who.getSpouse() is NPC spouse && Game1.getLocationFromName(residence.FarmSlotId) != null)
+            {
+                Game1.warpCharacter(spouse, residence.FarmSlotId, porch);
+                spouse.faceDirection(2);
+            }
+        }
+
+        /// <summary>
+        /// Verifica que el jugador local sea propietario (<see cref="DoorAssignment.OwnerId"/>) de su residencia
+        /// antes de ampliar la casa, comprar el Colgante de Sirena o proponer matrimonio/compañía.
+        /// </summary>
+        public static bool EnsureLocalPlayerOwnsResidenceForHouseholdAction(bool isMarriageAction)
+        {
+            Farmer? player = Game1.player;
+            if (player == null)
+                return false;
+
+            DoorAssignment? residence = context?.WorldState.FindResidenceOf(player.UniqueMultiplayerID);
+            HouseholdRestrictionReason reason = HouseholdRolloverLogic.CanUpgradeHouseOrMarry(player.UniqueMultiplayerID, residence);
+            if (reason == HouseholdRestrictionReason.None)
+                return true;
+
+            string key = (isMarriageAction, reason) switch
+            {
+                (true, HouseholdRestrictionReason.NotOwner) => "residence.marriage.owner_only",
+                (true, HouseholdRestrictionReason.NoResidence) => "residence.marriage.need_residence",
+                (false, HouseholdRestrictionReason.NotOwner) => "residence.upgrade.owner_only",
+                _ => "residence.upgrade.need_residence"
+            };
+
+            Game1.drawObjectDialogue(I18n.Get(key));
+            return false;
+        }
+
+        public static bool Prefix_GameLocation_AnswerDialogueAction(string questionAndAnswer, ref bool __result)
+        {
+            if (string.Equals(questionAndAnswer, "carpenter_Upgrade", StringComparison.Ordinal)
+                || string.Equals(questionAndAnswer, "upgrade_Yes", StringComparison.Ordinal))
+            {
+                if (!EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
+                {
+                    __result = true;
+                    return false;
+                }
+            }
+            else if (string.Equals(questionAndAnswer, "mariner_Buy", StringComparison.Ordinal))
+            {
+                if (!EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: true))
+                {
+                    __result = true;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static bool Prefix_NPC_TryToReceiveActiveObject(NPC __instance, Farmer who, bool probe, ref bool __result)
+        {
+            if (__instance.SimpleNonVillagerNPC || who == null || who != Game1.player)
+                return true;
+
+            StardewValley.Object? activeObj = who.ActiveObject;
+            if (activeObj == null || !who.friendshipData.ContainsKey(__instance.Name))
+                return true;
+
+            bool isMarriageProposal = activeObj.QualifiedItemId == "(O)460"
+                || activeObj.HasContextTag(ItemContextTagManager.SanitizeContextTag("propose_roommate_" + __instance.Name));
+
+            if (!isMarriageProposal)
+                return true;
+
+            DoorAssignment? residence = context?.WorldState.FindResidenceOf(who.UniqueMultiplayerID);
+            if (HouseholdRolloverLogic.CanUpgradeHouseOrMarry(who.UniqueMultiplayerID, residence) == HouseholdRestrictionReason.None)
+                return true;
+
+            if (!probe)
+            {
+                EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: true);
+            }
+
+            __result = true;
+            return false;
+        }
+
+        private static void TryRunDeferredHouseholdClientEvents()
+        {
+            if (context == null || Game1.player == null || deferredBirthNamingPending)
+                return;
+
+            if (pendingEvictionCheck || Game1.isWarping || Game1.globalFade || !Context.IsPlayerFree || Game1.eventUp || Game1.dialogueUp || Game1.activeClickableMenu != null)
+                return;
+
+            Farmer player = Game1.player;
+            if (Game1.currentLocation is not Cabin homeCabin
+                || string.IsNullOrEmpty(player.homeLocation.Value)
+                || !string.Equals(homeCabin.NameOrUniqueName, player.homeLocation.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!context.WorldState.Players.TryGetValue(player.UniqueMultiplayerID, out PlayerRecord? record))
+                return;
+
+            // 1. Ceremonia de boda offline pendiente (Opción 4A)
+            if (!string.IsNullOrEmpty(record.PendingWeddingSpouse) && !player.hasRoommate())
+            {
+                string spouseName = record.PendingWeddingSpouse;
+                record.PendingWeddingSpouse = null;
+                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                {
+                    Kind = FamilyEventActionKind.WeddingCeremonySeen,
+                    SpouseName = spouseName,
+                    GameDay = Game1.Date.TotalDays
+                });
+
+                if (string.Equals(player.spouse, spouseName, StringComparison.Ordinal))
+                {
+                    Game1.currentLocation.startEvent(Utility.getWeddingEvent(player));
+                }
+                return;
+            }
+
+            if (Context.IsMainPlayer || !player.isMarriedOrRoommates() || string.IsNullOrEmpty(player.spouse))
+                return;
+
+            NPC? spouseNpc = player.getSpouse();
+            Friendship? friendship = player.GetSpouseFriendship();
+            int today = Game1.Date.TotalDays;
+
+            // 2. Parto / llegada diferida del bebé
+            if (spouseNpc != null
+                && friendship != null
+                && friendship.NextBirthingDate != null
+                && friendship.DaysUntilBirthing <= 0
+                && record.LastBirthingHandledGameDay < today)
+            {
+                record.LastBirthingHandledGameDay = today;
+                StartDeferredChildBirthDialogue(player, spouseNpc, today);
+                return;
+            }
+
+            // 3. Pregunta de embarazo / adopción diferida (5 % diario determinista por día y jugador)
+            if (record.LastPregnancyPromptGameDay < today)
+            {
+                record.LastPregnancyPromptGameDay = today;
+                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                {
+                    Kind = FamilyEventActionKind.PregnancyPromptEvaluated,
+                    SpouseName = player.spouse,
+                    GameDay = today
+                });
+
+                double roll = Utility.CreateRandom(Game1.stats.DaysPlayed, Game1.uniqueIDForThisGame / 2, 470124797.0, player.UniqueMultiplayerID).NextDouble();
+                bool spouseCanGetPregnant = spouseNpc?.canGetPregnant() ?? false;
+                bool spouseWantsChildren = spouseNpc != null && GameStateQuery.CheckConditions(spouseNpc.GetData()?.SpouseWantsChildren);
+
+                if (HouseholdRolloverLogic.ShouldOfferPregnancyQuestion(
+                    isMarriedOrRoommates: true,
+                    hasSpouseNpc: spouseNpc != null,
+                    spouseCanGetPregnant: spouseCanGetPregnant,
+                    spouseWantsChildren: spouseWantsChildren,
+                    hasNextBirthingDate: friendship?.NextBirthingDate != null,
+                    currentGameDay: today,
+                    lastPromptGameDay: today - 1,
+                    randomRoll: roll))
+                {
+                    Response[] answerChoices =
+                    {
+                        new Response("Yes", Game1.content.LoadString("Strings\\Events:HaveBabyAnswer_Yes")),
+                        new Response("Not", Game1.content.LoadString("Strings\\Events:HaveBabyAnswer_No"))
+                    };
+                    string path = spouseNpc!.isAdoptionSpouse() ? "Strings\\Events:HaveBabyQuestion_Adoption" : "Strings\\Events:HaveBabyQuestion";
+                    Game1.currentLocation.createQuestionDialogue(
+                        Game1.content.LoadString(path, player.Name),
+                        answerChoices,
+                        (who, answer) =>
+                        {
+                            if (string.Equals(answer, "Yes", StringComparison.Ordinal))
+                            {
+                                WorldDate birthDate = new WorldDate(Game1.Date);
+                                birthDate.TotalDays += 14;
+                                who.GetSpouseFriendship().NextBirthingDate = birthDate;
+                                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                                {
+                                    Kind = FamilyEventActionKind.PregnancyAccepted,
+                                    SpouseName = who.spouse,
+                                    GameDay = Game1.Date.TotalDays,
+                                    NextBirthingTotalDays = birthDate.TotalDays
+                                });
+                            }
+                        },
+                        spouseNpc);
+                }
+            }
+        }
+
+        private static void StartDeferredChildBirthDialogue(Farmer player, NPC spouseNpc, int today)
+        {
+            deferredBirthNamingPending = true;
+            Random random = Utility.CreateRandom(Game1.uniqueIDForThisGame, Game1.stats.DaysPlayed);
+            bool isMale = player.getNumberOfChildren() == 0
+                ? random.NextBool()
+                : player.getChildren()[0].Gender == Gender.Female;
+
+            string message;
+            if (spouseNpc.isAdoptionSpouse())
+            {
+                message = Game1.content.LoadString("Strings\\Events:BirthMessage_Adoption", Lexicon.getGenderedChildTerm(isMale));
+            }
+            else if (spouseNpc.Gender == Gender.Male)
+            {
+                message = Game1.content.LoadString("Strings\\Events:BirthMessage_PlayerMother", Lexicon.getGenderedChildTerm(isMale));
+            }
+            else
+            {
+                message = Game1.content.LoadString("Strings\\Events:BirthMessage_SpouseMother", Lexicon.getGenderedChildTerm(isMale), spouseNpc.displayName);
+            }
+
+            Game1.drawObjectDialogue(message);
+            Game1.afterDialogues = () =>
+            {
+                Game1.activeClickableMenu = new NamingMenu(
+                    rawName => CompleteDeferredChildBirth(rawName, isMale, spouseNpc, today),
+                    Game1.content.LoadString(isMale ? "Strings\\Events:BabyNamingTitle_Male" : "Strings\\Events:BabyNamingTitle_Female"),
+                    "");
+            };
+        }
+
+        private static void CompleteDeferredChildBirth(string rawName, bool isMale, NPC spouseNpc, int today)
+        {
+            try
+            {
+                Farmer player = Game1.player;
+                FarmHouse home = ResolveFarmerHomeLocation(player) ?? Utility.getHomeOfFarmer(player);
+                double chance = (spouseNpc.hasDarkSkin() ? 0.5 : 0.0) + (player.hasDarkSkin() ? 0.5 : 0.0);
+                bool isDarkSkinned = Utility.CreateRandom(Game1.uniqueIDForThisGame, Game1.stats.DaysPlayed).NextBool(chance);
+
+                string uniqueName = string.IsNullOrWhiteSpace(rawName) ? "Baby" : rawName.Trim();
+                List<NPC> allCharacters = Utility.getAllCharacters();
+                bool duplicate;
+                do
+                {
+                    duplicate = false;
+                    if (Game1.characterData.ContainsKey(uniqueName))
+                    {
+                        uniqueName += " ";
+                        duplicate = true;
+                        continue;
+                    }
+                    foreach (NPC item in allCharacters)
+                    {
+                        if (item.Name == uniqueName)
+                        {
+                            uniqueName += " ";
+                            duplicate = true;
+                        }
+                    }
+                }
+                while (duplicate);
+
+                Child baby = new Child(uniqueName, isMale, isDarkSkinned, player)
+                {
+                    Age = 0,
+                    Position = new Vector2(16f, 4f) * 64f + new Vector2(0f, -24f)
+                };
+                home.characters.Add(baby);
+                Game1.stats.checkForFullHouseAchievement(isDirectUnlock: true);
+                Game1.playSound("smallSelect");
+                spouseNpc.daysAfterLastBirth = 5;
+                player.GetSpouseFriendship().NextBirthingDate = null;
+
+                if (player.getChildrenCount() == 2)
+                {
+                    spouseNpc.shouldSayMarriageDialogue.Value = true;
+                    spouseNpc.currentMarriageDialogue.Insert(0, new MarriageDialogueReference("Data\\ExtraDialogue", "NewChild_SecondChild" + Game1.random.Next(1, 3), true));
+                }
+                else if (spouseNpc.isAdoptionSpouse())
+                {
+                    spouseNpc.currentMarriageDialogue.Insert(0, new MarriageDialogueReference("Data\\ExtraDialogue", "NewChild_Adoption", true, rawName));
+                }
+                else
+                {
+                    spouseNpc.currentMarriageDialogue.Insert(0, new MarriageDialogueReference("Data\\ExtraDialogue", "NewChild_FirstChild", true, rawName));
+                }
+
+                string tokenizedSpouse = spouseNpc.GetTokenizedDisplayName() ?? spouseNpc.Name;
+                var multiplayer = context?.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                multiplayer?.globalChatInfoMessage(
+                    "Baby",
+                    Lexicon.capitalize(player.Name),
+                    tokenizedSpouse,
+                    Lexicon.getTokenizedGenderedChildTerm(isMale),
+                    Lexicon.getTokenizedPronoun(isMale),
+                    baby.displayName);
+
+                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                {
+                    Kind = FamilyEventActionKind.BirthingCompleted,
+                    SpouseName = spouseNpc.Name,
+                    GameDay = today
+                });
+            }
+            finally
+            {
+                deferredBirthNamingPending = false;
+                Game1.exitActiveMenu();
+            }
+        }
+
+        private static void SendFamilyEventActionToHost(FamilyEventActionPayload payload)
+        {
+            if (context == null || Game1.MasterPlayer == null)
+                return;
+
+            if (Context.IsMainPlayer)
+            {
+                HandleFamilyEventAction(Game1.player.UniqueMultiplayerID, payload);
+                return;
+            }
+
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                ModMessages.FamilyEventAction,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
+        private static void HandleFamilyEventAction(long playerId, FamilyEventActionPayload? payload)
+        {
+            if (context == null || !Context.IsMainPlayer || payload == null || playerId == 0)
+                return;
+
+            if (!context.WorldState.Players.TryGetValue(playerId, out PlayerRecord? record))
+            {
+                Farmer? farmer = Game1.GetPlayer(playerId);
+                record = new PlayerRecord
+                {
+                    UniqueMultiplayerID = playerId,
+                    PlayerName = farmer?.Name ?? string.Empty
+                };
+                context.WorldState.Players[playerId] = record;
+            }
+
+            switch (payload.Kind)
+            {
+                case FamilyEventActionKind.WeddingCeremonySeen:
+                    record.PendingWeddingSpouse = null;
+                    break;
+
+                case FamilyEventActionKind.PregnancyPromptEvaluated:
+                    record.LastPregnancyPromptGameDay = Math.Max(record.LastPregnancyPromptGameDay, payload.GameDay);
+                    break;
+
+                case FamilyEventActionKind.PregnancyAccepted:
+                    record.LastPregnancyPromptGameDay = Math.Max(record.LastPregnancyPromptGameDay, payload.GameDay);
+                    if (payload.NextBirthingTotalDays.HasValue
+                        && Game1.GetPlayer(playerId) is Farmer pregnantFarmer
+                        && !string.IsNullOrEmpty(pregnantFarmer.spouse)
+                        && pregnantFarmer.friendshipData.TryGetValue(pregnantFarmer.spouse, out Friendship? pregFriendship))
+                    {
+                        WorldDate birthDate = new WorldDate();
+                        birthDate.TotalDays = payload.NextBirthingTotalDays.Value;
+                        pregFriendship.NextBirthingDate = birthDate;
+                    }
+                    break;
+
+                case FamilyEventActionKind.BirthingCompleted:
+                    record.LastBirthingHandledGameDay = Math.Max(record.LastBirthingHandledGameDay, payload.GameDay);
+                    if (Game1.GetPlayer(playerId) is Farmer birthingFarmer
+                        && !string.IsNullOrEmpty(birthingFarmer.spouse)
+                        && birthingFarmer.friendshipData.TryGetValue(birthingFarmer.spouse, out Friendship? birthFriendship))
+                    {
+                        birthFriendship.NextBirthingDate = null;
+                    }
+                    if (!string.IsNullOrEmpty(payload.SpouseName)
+                        && Game1.getCharacterFromName(payload.SpouseName) is NPC spouseNpc)
+                    {
+                        spouseNpc.daysAfterLastBirth = 5;
+                    }
+                    break;
+            }
+
+            context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+            BroadcastDoorsSync();
         }
     }
 }

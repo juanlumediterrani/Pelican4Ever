@@ -180,6 +180,29 @@ Envía un aviso global a los jugadores conectados por chat, HUD o ambos canales,
 }
 ```
 
+### `POST /api/v1/host/chat`
+
+Inyecta un mensaje externo (por ejemplo, desde un puente de Discord o Putre) en el chat de todos los jugadores conectados sin generar bucle de eco en `HostEventLog`.
+
+**Cuerpo de petición (`HostChatRequestDto`):**
+```json
+{
+  "source": "discord",
+  "author": "Putre",
+  "channel": "discord",
+  "message": "La Taberna está abierta, humanos."
+}
+```
+
+**Respuesta `200 OK` (`HostActionResultDto`):**
+```json
+{
+  "Ok": true,
+  "Message": "Mensaje externo difundido al chat.",
+  "ExecutedOnThreadId": 1
+}
+```
+
 ### `POST /api/v1/host/rest`
 
 Registra el descanso diario del jugador anfitrión (`RestedOnGameDay` y `LastActiveGameDay`) sin llamar a `Game1.ExitToTitle()` ni desconectar la sesión (`TASK-804`).

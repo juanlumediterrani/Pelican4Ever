@@ -39,6 +39,7 @@ namespace Pelican4Ever.Core.Admin
         public const string RemoteCommand = "host.command";
         public const string RenderLeaseGranted = "host.render.lease.granted";
         public const string RenderLeaseReleased = "host.render.lease.released";
+        public const string ChatMessage = "chat.message";
     }
 
     /// <summary>

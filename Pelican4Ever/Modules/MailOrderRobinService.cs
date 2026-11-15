@@ -90,6 +90,9 @@ namespace Pelican4Ever.Modules
 
         private static void ShowMailHouseUpgradeOffer()
         {
+            if (!FarmSlotModule.EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
+                return;
+
             int level = Game1.player.HouseUpgradeLevel;
             string? offerText = level switch
             {
@@ -121,6 +124,9 @@ namespace Pelican4Ever.Modules
 
         private static void AcceptMailHouseUpgrade()
         {
+            if (!FarmSlotModule.EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
+                return;
+
             int level = Game1.player.HouseUpgradeLevel;
             int goldCost = level switch { 0 => 10000, 1 => 65000, 2 => 100000, _ => 0 };
             string? matId = level switch { 0 => "(O)388", 1 => "(O)709", _ => null };

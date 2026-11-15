@@ -11,6 +11,7 @@ using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Framework;
+using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -508,6 +509,62 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "POST /api/v1/host/chat":
+                {
+                    HostChatRequestDto? body = ReadJsonBody<HostChatRequestDto>(req);
+                    if (body == null || string.IsNullOrWhiteSpace(body.Message))
+                    {
+                        res.StatusCode = (int)HttpStatusCode.BadRequest;
+                        WriteJson(res, new { error = "El campo 'message' es obligatorio." });
+                        return;
+                    }
+
+                    MainThreadExecutionResult<bool> result = ExecuteWithThreadInfoOnGameThread(() =>
+                    {
+                        string author = string.IsNullOrWhiteSpace(body.Author) ? "Discord" : body.Author.Trim();
+                        string source = string.IsNullOrWhiteSpace(body.Source) ? "discord" : body.Source.Trim().ToLowerInvariant();
+                        string channel = string.IsNullOrWhiteSpace(body.Channel) ? "discord" : body.Channel.Trim().ToLowerInvariant();
+
+                        var payload = new ServerBroadcastPayload
+                        {
+                            Source = source,
+                            Author = author,
+                            Channel = channel,
+                            Message = body.Message.Trim(),
+                            ColorR = 114,
+                            ColorG = 137,
+                            ColorB = 218,
+                            IsCritical = false
+                        };
+
+                        if (Context.IsWorldReady)
+                        {
+                            if (context != null && Game1.IsMultiplayer)
+                            {
+                                context.Helper.Multiplayer.SendMessage(
+                                    payload,
+                                    ChatMessages.ServerBroadcast,
+                                    new[] { context.Manifest.UniqueID });
+                            }
+
+                            if (context != null && !context.Helper.ModRegistry.IsLoaded("Pelican4Ever.Chat"))
+                            {
+                                Game1.chatBox?.addMessage($"[Discord] {author}: {payload.Message}", new Color(114, 137, 218));
+                            }
+                        }
+
+                        return true;
+                    });
+
+                    WriteJson(res, new HostActionResultDto
+                    {
+                        Ok = result.Value,
+                        Message = "Mensaje externo difundido al chat.",
+                        ExecutedOnThreadId = result.ExecutedOnThreadId
+                    });
+                    break;
+                }
+
                 case "POST /api/v1/host/rest":
                 {
                     // El id se lee en el hilo del juego justo tras registrar el descanso: leído después,
@@ -701,6 +758,25 @@ namespace Pelican4Ever.Modules
             string normChannel = (channel ?? "both").Trim().ToLowerInvariant();
             if (normChannel is "chat" or "both")
             {
+                if (context != null && Game1.IsMultiplayer)
+                {
+                    bool isCritical = message.StartsWith("[Reinicio Controlado]", StringComparison.OrdinalIgnoreCase);
+                    context.Helper.Multiplayer.SendMessage(
+                        new ServerBroadcastPayload
+                        {
+                            Source = "system",
+                            Author = "Servidor",
+                            Channel = "system",
+                            Message = message,
+                            ColorR = 255,
+                            ColorG = 215,
+                            ColorB = 0,
+                            IsCritical = isCritical
+                        },
+                        ChatMessages.ServerBroadcast,
+                        new[] { context.Manifest.UniqueID });
+                }
+
                 Game1.chatBox?.addMessage(message, new Color(255, 215, 0));
             }
             if (normChannel is "hud" or "both")

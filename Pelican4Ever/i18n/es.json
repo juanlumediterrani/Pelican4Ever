@@ -418,5 +418,9 @@
   "mod_toggle.load_warning.keep_and_load": "Mantener activo y cargar",
   "mod_toggle.server_warning.title": "Servidor con Pelican 4Ever",
   "mod_toggle.server_warning.body": "Este servidor ejecuta Pelican 4Ever, pero ahora mismo lo tienes desactivado. ¿Quieres activarlo y conectarte?",
-  "mod_toggle.server_warning.enable_and_connect": "Activar Pelican y conectar"
+  "mod_toggle.server_warning.enable_and_connect": "Activar Pelican y conectar",
+  "residence.upgrade.owner_only": "Solo el propietario de la residencia puede mejorar esta casa. Los inquilinos pueden vivir aquí, o reclamar su propia puerta de residencia en Pueblo Pelícano.",
+  "residence.upgrade.need_residence": "Necesitas tener tu propia residencia reclamada en Pueblo Pelícano antes de mejorar tu casa.",
+  "residence.marriage.owner_only": "Solo el propietario de la residencia puede comprar el Colgante de Sirena o casarse aquí. Reclama primero tu propia puerta de residencia en Pueblo Pelícano.",
+  "residence.marriage.need_residence": "Necesitas tener tu propia residencia reclamada en Pueblo Pelícano antes de casarte o invitar a alguien a vivir contigo."
 }

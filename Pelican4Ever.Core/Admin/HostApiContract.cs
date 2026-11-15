@@ -201,6 +201,17 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
+    /// Petición de mensaje externo (p. ej. Discord o agente) para <c>POST /api/v1/host/chat</c>.
+    /// </summary>
+    public sealed class HostChatRequestDto
+    {
+        public string Source { get; set; } = "discord";
+        public string Author { get; set; } = string.Empty;
+        public string Channel { get; set; } = "discord";
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Petición de reinicio controlado para <c>POST /api/v1/host/restart</c> (TASK-804 / TASK-1608).
     /// </summary>
     public sealed class HostRestartRequestDto
@@ -314,6 +325,7 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/festival/start",    MutatesGameState: true,  "Inicia la siguiente tanda del evento principal con los jugadores apuntados (/evento empezar)."),
             new("POST", "/api/v1/host/festival/ceremony", MutatesGameState: true,  "Inicia la ceremonia comunitaria en vivo (TASK-702) con los vecinos presentes en el recinto."),
             new("POST", "/api/v1/host/announce",          MutatesGameState: true,  "Envía un aviso global por chat y/o en pantalla (HUD) a los jugadores."),
+            new("POST", "/api/v1/host/chat",              MutatesGameState: true,  "Inyecta un mensaje externo (p. ej. Discord) en el chat de todos los jugadores conectados."),
             new("POST", "/api/v1/host/rest",              MutatesGameState: true,  "Registra el descanso diario del anfitrión sin desconectar la sesión (TASK-804)."),
             new("POST", "/api/v1/host/restart",           MutatesGameState: true,  "Programa o cancela un reinicio controlado del servidor con preaviso (TASK-804)."),
             new("POST", "/api/v1/host/checkpoint",        MutatesGameState: true,  "Ejecuta un checkpoint intradía en el hilo del juego y devuelve su resultado (TASK-1607)."),

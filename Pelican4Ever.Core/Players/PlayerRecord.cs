@@ -109,6 +109,15 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Registro del ciclo de adopción de mascota de ranura (Épica 20).</summary>
         public Pelican4Ever.Core.Pets.PetAdoptionRecord PetAdoption { get; set; } = new();
 
+        /// <summary>Nombre del cónyuge cuya ceremonia de boda quedó completada offline y pendiente de reproducirse al reconectar (Opción 4A).</summary>
+        public string? PendingWeddingSpouse { get; set; }
+
+        /// <summary>Último día de juego en que se evaluó o mostró el diálogo nocturno de embarazo para este jugador.</summary>
+        public int LastPregnancyPromptGameDay { get; set; } = -1;
+
+        /// <summary>Último día de juego en que se procesó el nacimiento de un hijo pendiente.</summary>
+        public int LastBirthingHandledGameDay { get; set; } = -1;
+
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;
 

@@ -46,6 +46,7 @@ namespace Pelican4Ever.Models
         public const string PairingResult = "PairingResult";
         public const string RequestTenancyRequest = "RequestTenancyRequest";
         public const string ManageTenantRequest = "ManageTenantRequest";
+        public const string FamilyEventAction = "FamilyEventAction";
     }
 
     public class PairingChallengePayload
@@ -140,6 +141,22 @@ namespace Pelican4Ever.Models
         public string DoorId { get; set; } = string.Empty;
         public TenantManageAction Action { get; set; }
         public long TargetPlayerId { get; set; }
+    }
+
+    public enum FamilyEventActionKind
+    {
+        WeddingCeremonySeen,
+        PregnancyPromptEvaluated,
+        PregnancyAccepted,
+        BirthingCompleted
+    }
+
+    public class FamilyEventActionPayload
+    {
+        public FamilyEventActionKind Kind { get; set; }
+        public string? SpouseName { get; set; }
+        public int GameDay { get; set; }
+        public int? NextBirthingTotalDays { get; set; }
     }
 
     public class SyncDoorsPayload

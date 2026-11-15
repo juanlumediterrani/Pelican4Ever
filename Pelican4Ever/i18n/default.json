@@ -418,5 +418,9 @@
   "mod_toggle.load_warning.keep_and_load": "Keep Enabled & Load",
   "mod_toggle.server_warning.title": "Pelican 4Ever Server",
   "mod_toggle.server_warning.body": "This server runs Pelican 4Ever, which is currently disabled on your client. Do you want to enable it and connect?",
-  "mod_toggle.server_warning.enable_and_connect": "Enable Pelican & Connect"
+  "mod_toggle.server_warning.enable_and_connect": "Enable Pelican & Connect",
+  "residence.upgrade.owner_only": "Only the residence owner can upgrade this house. Tenants can live here, or claim their own residence door in Pelican Town.",
+  "residence.upgrade.need_residence": "You need your own claimed residence in Pelican Town before upgrading your house.",
+  "residence.marriage.owner_only": "Only the residence owner can buy the Mermaid's Pendant or get married here. Claim your own residence door in Pelican Town first.",
+  "residence.marriage.need_residence": "You need your own claimed residence in Pelican Town before getting married or inviting a roommate."
 }

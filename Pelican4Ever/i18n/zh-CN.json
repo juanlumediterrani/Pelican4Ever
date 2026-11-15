@@ -418,5 +418,9 @@
   "mod_toggle.load_warning.keep_and_load": "保持启用并加载",
   "mod_toggle.server_warning.title": "Pelican 4Ever 服务器",
   "mod_toggle.server_warning.body": "该服务器运行着 Pelican 4Ever，但你的客户端当前已禁用它。是否启用并继续连接？",
-  "mod_toggle.server_warning.enable_and_connect": "启用 Pelican 并连接"
+  "mod_toggle.server_warning.enable_and_connect": "启用 Pelican 并连接",
+  "residence.upgrade.owner_only": "只有该住所的所有者才能升级这栋房屋。租户可以在此居住，或在鹈鹕镇认领属于自己的住所门。",
+  "residence.upgrade.need_residence": "在升级房屋之前，你需要先在鹈鹕镇认领一处属于自己的住所。",
+  "residence.marriage.owner_only": "只有该住所的所有者才能购买美人鱼吊坠或在这里结婚。请先在鹈鹕镇认领属于自己的住所门。",
+  "residence.marriage.need_residence": "在结婚或邀请室友同住之前，你需要先在鹈鹕镇认领一处属于自己的住所。"
 }
