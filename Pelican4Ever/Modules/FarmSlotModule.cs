@@ -5206,6 +5206,35 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_TryToReceiveActiveObject))
                 );
 
+                // En farmhands con residencia privada (_Home), Client.setUpGame() invoca Stats.checkForAchievements()
+                // antes de recibir/cargar Pelican4Ever_Farm_XX_Home, lanzando KeyNotFoundException y abortando el spawn.
+                PatchSafe(
+                    harmony,
+                    "Stats.checkForAchievements",
+                    AccessTools.Method(typeof(Stats), nameof(Stats.checkForAchievements)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Stats_CheckForAchievements))
+                );
+
+                // En clientes durante la boda diferida, Dialogue.ReplacePlayerEnteredStrings puede invocar
+                // Game1.RequireLocation(homeLocation) antes de que Pelican4Ever_Farm_XX_Home esté cargada.
+                var replaceStringsMethod = AccessTools.Method(typeof(Dialogue), nameof(Dialogue.ReplacePlayerEnteredStrings), new[] { typeof(string) });
+                if (replaceStringsMethod != null)
+                {
+                    harmony.Patch(
+                        original: replaceStringsMethod,
+                        finalizer: new HarmonyMethod(typeof(FarmSlotModule), nameof(Finalizer_Dialogue_ReplacePlayerEnteredStrings))
+                    );
+                }
+
+                // En bodas diferidas de un farmhand, WaitForOtherPlayers("weddingEnd...") queda bloqueado en 1/2
+                // porque el host dedicado no participa en la escena.
+                PatchSafe(
+                    harmony,
+                    "Event.DefaultCommands.WaitForOtherPlayers",
+                    AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.WaitForOtherPlayers)),
+                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Event_WaitForOtherPlayers))
+                );
+
                 context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos, construcción en residencia y matrimonio aplicados.", LogLevel.Trace);
             }
             catch (Exception ex)
@@ -8113,16 +8142,39 @@ namespace Pelican4Ever.Modules
                 return;
 
             FarmHouse? homeOfFarmer = ResolveFarmerHomeLocation(who);
-            if (homeOfFarmer == null)
-                return;
+            Point porch;
+            if (homeOfFarmer != null)
+            {
+                porch = homeOfFarmer.getPorchStandingSpot();
+            }
+            else
+            {
+                Farm? targetFarm = Game1.getLocationFromName(residence.FarmSlotId) as Farm;
+                Point entry = targetFarm?.GetMainFarmHouseEntry() ?? new Point(64, 15);
+                var (px, py) = HouseholdRolloverLogic.ComputeResidencePorchSpot(entry.X, entry.Y, -1, -1, -1, false);
+                porch = new Point(px, py);
+            }
 
-            Point porch = homeOfFarmer.getPorchStandingSpot();
             __instance.setExitLocation(residence.FarmSlotId, Math.Max(0, porch.X - 1), porch.Y);
 
             if (Context.IsMainPlayer && who.getSpouse() is NPC spouse && Game1.getLocationFromName(residence.FarmSlotId) != null)
             {
                 Game1.warpCharacter(spouse, residence.FarmSlotId, porch);
                 spouse.faceDirection(2);
+            }
+
+            // En Pelican 4Ever la boda diferida se reproduce solo en el cliente del jugador que reconecta;
+            // el host dedicado (y otros jugadores conectados) no asisten a la escena, por lo que ReadyCheckDialog("wedding")
+            // quedaría esperando indefinidamente ("Waiting for other players..."). Confirmamos la salida local al instante.
+            if (Game1.activeClickableMenu is ReadyCheckDialog readyCheck
+                && string.Equals(readyCheck.checkName, "wedding", StringComparison.OrdinalIgnoreCase))
+            {
+                if (AccessTools.Field(typeof(ReadyCheckDialog), "onConfirm")?.GetValue(readyCheck) is ConfirmationDialog.behavior confirm)
+                {
+                    Game1.netReady.SetLocalReady("wedding", ready: false);
+                    Game1.exitActiveMenu();
+                    confirm(who);
+                }
             }
         }
 
@@ -8504,6 +8556,70 @@ namespace Pelican4Ever.Modules
 
             context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
             BroadcastDoorsSync();
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Stats.checkForAchievements"/> falle con <see cref="KeyNotFoundException"/> durante
+        /// <c>Client.setUpGame()</c> cuando la cabaña privada <c>Pelican4Ever_Farm_XX_Home</c> aún no está cargada en el cliente.
+        /// </summary>
+        public static bool Prefix_Stats_CheckForAchievements()
+        {
+            if (Context.IsMainPlayer)
+                return true;
+
+            string? homeName = Game1.player?.homeLocation?.Value;
+            if (!string.IsNullOrEmpty(homeName)
+                && homeName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && Game1.getLocationFromName(homeName) == null
+                && Game1.getLocationFromName(homeName, isStructure: true) == null)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Dialogue.ReplacePlayerEnteredStrings"/> aborte diálogos en el cliente
+        /// si la cabaña privada <c>Pelican4Ever_Farm_XX_Home</c> aún no está cargada (por ejemplo, al cerrar la boda diferida).
+        /// </summary>
+        public static Exception? Finalizer_Dialogue_ReplacePlayerEnteredStrings(Exception? __exception, string str, ref string __result)
+        {
+            if (__exception is KeyNotFoundException
+                && !Context.IsMainPlayer
+                && !string.IsNullOrEmpty(Game1.player?.homeLocation?.Value)
+                && Game1.player.homeLocation.Value.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                __result = str ?? string.Empty;
+                return null;
+            }
+
+            return __exception;
+        }
+
+        /// <summary>
+        /// Evita que la boda diferida de un farmhand quede bloqueada en <c>Waiting for other players... (1/2)</c>
+        /// cuando <see cref="Event.DefaultCommands.WaitForOtherPlayers"/> espera al host dedicado en <c>weddingEnd*</c>.
+        /// </summary>
+        public static bool Prefix_Event_WaitForOtherPlayers(Event @event, string[] args)
+        {
+            if (Context.IsMainPlayer)
+                return true;
+
+            if (args != null
+                && args.Length > 1
+                && args[1].StartsWith("weddingEnd", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Game1.activeClickableMenu is ReadyCheckDialog)
+                {
+                    Game1.activeClickableMenu = null;
+                }
+                @event.CurrentCommand++;
+                context?.Monitor.Log($"[FarmSlotModule] Saltando WaitForOtherPlayers('{args[1]}') en boda diferida de cliente.", LogLevel.Debug);
+                return false;
+            }
+
+            return true;
         }
     }
 }
