@@ -3,7 +3,7 @@
 * **Estado:** Propuesto
 * **Fecha:** 2026-11-15
 * **Versión objetivo:** 0.5 (rama `feat/v0.5-residence-scaling`)
-* **Amplía:** [ADR-0003](0003-declarative-farm-slots.md) y [ADR-0005](0005-host-plaza-and-bridge-maps.md). **Prepara:** ADR-0011 (concurrencia ampliada, versión 0.6).
+* **Amplía:** [ADR-0003](0003-declarative-farm-slots.md) y [ADR-0005](0005-host-plaza-and-bridge-maps.md). **Prepara:** [ADR-0011](0011-extended-concurrency-interest-management.md).
 
 ## Contexto
 

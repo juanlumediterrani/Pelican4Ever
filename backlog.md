@@ -2510,3 +2510,154 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet test` en verde.
     2. Verificación en vivo documentada de cola, reserva de plaza, expulsión por inactividad, gates y residencias `17..64`.
+
+---
+
+### Épica 25 (v0.6): Concurrencia Ampliada — Gestión de Interés y Aforo por Mapa (rama `feat/v0.6-extended-concurrency`)
+> **Objetivo:** Superar los 16 jugadores simultáneos (hasta 64) haciendo que el tráfico dependa de quién comparte mapa y no del total de conectados. Aforo de 16 en todo mapa salvo `Town`, la Plaza Central y los puentes, donde se intenta un tope mayor y se restringe según lo que se mida. Rasgo opcional (`ExtendedConcurrency`, apagado por defecto) porque encarece los requisitos del host. Decisiones en [ADR-0011](docs/adr/0011-extended-concurrency-interest-management.md). **Requiere la Épica 24.**
+
+#### 25.0 Reglas de Producto y Puntos de Conflicto del Motor (Stardew Valley 1.6.15)
+
+1. **Medir antes de diseñar el detalle:** las tareas 2501 a 2503 no cambian el comportamiento del servidor y condicionan el resto.
+2. **Rasgo apagado = 0.5:** con `ExtendedConcurrency = false` no se aplica ningún parche de esta épica.
+3. **Ningún delta se descarta** para un receptor que conserva el objeto; solo se retrasa, se agrupa o se sustituye por una resincronización completa.
+4. **Puntos de conflicto anticipados:**
+   - **Conflicto 1 — Reenvío a todos:** `GameServer.rebroadcastClientMessage` reenvía los tipos de `isClientBroadcastType` (entre ellos `0` y `6`) a todos los clientes: 240 flujos con 16 jugadores, 4032 con 64.
+   - **Conflicto 2 — Residencias activas para todos:** `Multiplayer.broadcastLocationMessage` y el envío al conectar de `checkFarmhandRequest` tratan cada residencia con residente conectado como activa para todos los clientes (unas 450 ubicaciones con 64 conectados).
+   - **Conflicto 3 — Deltas incrementales:** saltarse un delta desincroniza la copia del receptor.
+   - **Conflicto 4 — Coste cuadrático dentro del mapa:** persiste en `Town` y los puentes cuando superan los 16 ocupantes.
+   - **Conflicto 5 — Traslado denegado:** el cliente inicia el fundido antes de que el host responda al mensaje tipo `5`.
+   - **Conflicto 6 — Host de un solo hilo:** actualiza en cada tick toda ubicación activa.
+   - **Conflicto 7 — Supuestos de pocos jugadores:** festivales, minijuegos, «todos listos», checkpoints (`CloneInto` por jugador) y cierre ordenado del cambio de día.
+   - **Conflicto 8 — Banco de pruebas:** hacen falta decenas de clientes reales; cada uno es una instancia completa del juego.
+
+---
+
+- [ ] **TASK-2501: Telemetría de red y de tick en el host (`Pelican4Ever.Core/Admin`, `AdminApiModule.cs`, módulo nuevo `NetTelemetryModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:**
+    - Contar en el host mensajes y bytes enviados por tipo de mensaje y por receptor, en ventanas de 10 s.
+    - Medir la duración del tick (mediana y percentil 95), el número de ubicaciones activas y la ocupación por mapa.
+    - Exponerlo en `AdminApi` y en un comando de consola; sin coste apreciable cuando nadie lo consulta.
+    - Registrar la línea base con 16 jugadores en el servidor actual.
+  * **Criterios de aceptación:**
+    1. Tabla de línea base (bytes/s por tipo, tick p95, ubicaciones activas) con 2, 8 y 16 jugadores.
+    2. La telemetría no cambia el comportamiento del servidor ni añade más de un 1 % al tick.
+
+- [ ] **TASK-2502: Banco de carga con clientes sin render (`scripts/`, módulo de pruebas `LoadBotModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2501.
+  * **Descripción:**
+    - Script que lanza *n* clientes con `HeadlessRendering`, cada uno con su identidad de dispositivo de laboratorio, contra un host local.
+    - Módulo de cliente, activo solo con `EnableTestCommands`, que mueve al personaje por un guion: pasear por `Town`, cruzar puentes, entrar y salir de su residencia, usar herramientas.
+    - Medir cuántos clientes caben en la máquina de pruebas y documentar el límite.
+  * **Criterios de aceptación:**
+    1. Un comando levanta 16 clientes que se mueven sin intervención durante 30 minutos.
+    2. Documentado el máximo de clientes por máquina y cómo repartir la carga entre varias.
+
+- [ ] **TASK-2503: Spike — entrega diferida de deltas de jugadores lejanos y viabilidad de los parches**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2501, TASK-2502.
+  * **Descripción:**
+    - Comprobar en el ensamblado de SMAPI que no sustituye `Multiplayer.broadcastLocationMessage` y que admite un parche sobre `GameServer.rebroadcastClientMessage`.
+    - Prototipar los candidatos A (lotes en orden), B (delta por receptor) y C (estado compacto + resincronización) de ADR-0011 y medir el ahorro y la corrección de cada uno con el banco de carga.
+    - Documentar qué ocurre hoy cuando una residencia pasa a activa para clientes ya conectados.
+  * **Criterios de aceptación:**
+    1. Candidato elegido, con medidas, anotado en ADR-0011 como hallazgo.
+    2. Prueba de 30 minutos sin copias desincronizadas con el candidato elegido.
+    3. Si ninguno es correcto, queda documentado y la épica se replantea antes de seguir.
+
+- [ ] **TASK-2504: Configuración del rasgo (`ServerConfig.cs`, `config.example.json`, `ModToggleModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Épica 24 (TASK-2401).
+  * **Descripción:**
+    - Añadir `ExtendedConcurrency` (`false`), `DefaultLocationCapacity` (`16`) y `LocationCapacityOverrides` (`{}`).
+    - Validar `MaxConcurrentPlayers` en `1..16` con el rasgo apagado y `1..64` encendido.
+    - Registrar los módulos de esta épica solo con el rasgo encendido.
+  * **Criterios de aceptación:**
+    1. Con el rasgo apagado, `MaxConcurrentPlayers = 32` es un error de validación.
+    2. Con el rasgo apagado no hay ningún parche de la Épica 25 aplicado (comprobado en el registro de parches).
+
+- [ ] **TASK-2505: Aforo por mapa (`Pelican4Ever.Core/Networking/LocationCapacityLogic.cs`, `AdmissionLogic.cs`, módulo nuevo `LocationCapacityModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2504, Épica 24 (TASK-2402).
+  * **Descripción:**
+    - Implementar en Core la clasificación de mapas (alta capacidad o aforo por defecto), los ajustes por nombre y las exenciones de ADR-0011 (residente, traslado forzado, administración).
+    - Aplicar la decisión en el host al atender el mensaje tipo `5`.
+    - Replicar la ocupación de los mapas con aforo a los clientes y comprobarla antes de iniciar el traslado.
+    - Resolver la cancelación limpia en el cliente cuando el host deniega pese a la comprobación previa.
+  * **Criterios de aceptación:**
+    1. El jugador 17 no entra en una residencia ajena con 16 dentro y recibe un mensaje con la ocupación.
+    2. El residente entra siempre en su residencia.
+    3. Un desmayo o el cambio de día nunca dejan a un jugador sin destino por aforo.
+    4. Un traslado denegado no deja al cliente en pantalla negra.
+    5. Pruebas unitarias de clasificación, ajustes y exenciones.
+
+- [ ] **TASK-2506: Residencias activas por receptor (`LocationCullingLogic.cs`, `FarmSlotModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2503, TASK-2504.
+  * **Descripción:**
+    - Añadir `LocationCullingLogic.ShouldSendTo` y aplicarlo en `Multiplayer.broadcastLocationMessage` y en el envío de ubicaciones al conectar.
+    - Reenviar la ubicación completa a quien entra en una residencia que no tenía.
+    - Mantener en el residente la instancia sincronizada que necesitan los menús de Robin y Marnie (`RetainSyncedOwnPrivateLocation`).
+  * **Criterios de aceptación:**
+    1. Un cliente recibe al conectar solo sus residencias y las ubicaciones comunes.
+    2. Un visitante ve el estado correcto al entrar en una residencia ajena y al volver a entrar más tarde.
+    3. Construcción, animales y pedidos por buzón siguen funcionando para propietario e inquilino.
+    4. Pruebas unitarias de `ShouldSendTo`.
+
+- [ ] **TASK-2507: Reenvío de mensajes de cliente por ubicación (módulo nuevo `InterestRelayModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2503, TASK-2506.
+  * **Descripción:**
+    - Sustituir el reenvío a todos por la tabla de receptores de ADR-0011 para los tipos `0` y `6`.
+    - Implementar la entrega diferida con el candidato elegido en el spike (como máximo cada 30 ticks).
+    - Dejar sin cambios el estado del mundo, el equipo y el chat.
+  * **Criterios de aceptación:**
+    1. Con 32 clientes repartidos en mapas distintos, los bytes/s del tipo `0` bajan respecto al reenvío vanilla en la proporción medida en el spike.
+    2. Al coincidir dos jugadores en un mapa, cada uno ve al otro con apariencia, objeto en mano y animación correctos.
+    3. Prueba de 30 minutos con el banco de carga sin copias desincronizadas.
+
+- [ ] **TASK-2508: Mapas concurridos y clasificación de mapas problemáticos (`LocationCapacityLogic.cs`, `VisitorGuardModule.cs`)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2505, TASK-2507.
+  * **Descripción:**
+    - Implementar la escalera de ADR-0011 para mapas de alta capacidad con más de 16 ocupantes: frecuencia a 6 ticks, restricción de acciones y aforo por ajuste.
+    - Medir `Town`, la Plaza Central y los puentes con 24, 32 y 48 ocupantes y fijar hasta qué peldaño hace falta llegar en cada uno.
+    - Revisar minas, Caverna Calavera, interiores con tienda y festivales; documentar cuáles se quedan en 16.
+  * **Criterios de aceptación:**
+    1. Tabla de ocupación medida por mapa con el peldaño aplicado y el aforo resultante.
+    2. La restricción de acciones avisa al jugador en vez de fallar en silencio.
+
+- [ ] **TASK-2509: Auditoría de supuestos de pocos jugadores (`FestivalMinigameModule.cs`, `FestivalParticipationModule.cs`, `CheckpointModule.cs`, `DailyRolloverModule.cs`, `ChatChannelModule.cs`)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2502.
+  * **Descripción:**
+    - Probar con más de 16 conectados: festivales y sus minijuegos, comprobaciones de «todos listos», duración del checkpoint con clonado de cada jugador vivo, cierre ordenado del cambio de día, listas de jugadores en la interfaz y en `AdminApi`.
+    - Corregir lo que falle o dejarlo anotado con su aforo.
+  * **Criterios de aceptación:**
+    1. Informe con cada subsistema probado, su resultado y la corrección o la limitación aplicada.
+    2. Un checkpoint con 32 conectados termina dentro de `CheckpointMaxDurationMs` o queda documentado el ajuste.
+
+- [ ] **TASK-2510: Escalones 24, 32, 48 y 64 y requisitos del host (`docs/despliegue/host-vps.md`, `docs/host-api.md`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2505 a TASK-2509.
+  * **Descripción:**
+    - Ejecutar el banco de carga en cada escalón y contrastar con los umbrales de ADR-0011 (tick p95 ≤ 16 ms, sin cola de envío creciente en 30 minutos).
+    - Publicar CPU, memoria y subida necesarias por escalón y el máximo soportado.
+  * **Criterios de aceptación:**
+    1. Cada escalón queda marcado como soportado, experimental o no alcanzado, con sus medidas.
+    2. La guía de despliegue explica cómo activar el rasgo y qué máquina necesita cada escalón.
+
+- [ ] **TASK-2511: Internacionalización, verificación en vivo y bump a `0.6.0`**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2501 a TASK-2510.
+  * **Descripción:**
+    - Textos de aforo y de acciones restringidas en ES/EN/ZH.
+    - Verificación en vivo con jugadores reales en el mayor escalón soportado.
+    - Actualizar `manifest.json` y `architecture.md`.
+  * **Criterios de aceptación:**
+    1. `dotnet test` en verde.
+    2. Con `ExtendedConcurrency = false`, la suite de verificación de la 0.5 pasa sin cambios.
+    3. Sesión en vivo documentada con más de 16 jugadores.
