@@ -255,8 +255,8 @@ namespace Pelican4Ever.Framework
             Layer alwaysFrontLayer,
             TileSheet outdoorsSheet)
         {
-            // Sendero central de tierra en x = 26..27 continuo desde ly = 0 hasta ly = 5:
-            for (int ly = 0; ly <= 5; ly++)
+            // Sendero central de tierra en x = 26..27 continuo desde ly = 0 hasta conectar con el claro en ly = 6:
+            for (int ly = 0; ly <= 6; ly++)
             {
                 for (int lx = 26; lx <= 27; lx++)
                 {
@@ -297,29 +297,14 @@ namespace Pelican4Ever.Framework
             hedgeR_bot.Properties["Passable"] = "F";
             backLayer.Tiles[29, 4] = hedgeR_bot;
 
-            // Dosel superior continuo en AlwaysFront:
-            alwaysFrontLayer.Tiles[26, 0] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
-            alwaysFrontLayer.Tiles[27, 0] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 971);
-            alwaysFrontLayer.Tiles[26, 1] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 942);
-            alwaysFrontLayer.Tiles[27, 1] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 943);
-            alwaysFrontLayer.Tiles[26, 2] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 967);
-            alwaysFrontLayer.Tiles[27, 2] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 968);
-            for (int ly = 3; ly <= 5; ly++)
+            // Despejar copas sobre el sendero de entrada (lx = 25..28, ly = 0..6) sin cortes verticales:
+            for (int ly = 0; ly <= 6; ly++)
             {
-                alwaysFrontLayer.Tiles[26, ly] = null;
-                alwaysFrontLayer.Tiles[27, ly] = null;
-                alwaysFrontLayer.Tiles[25, ly] = null;
-                alwaysFrontLayer.Tiles[28, ly] = null;
+                for (int lx = 25; lx <= 28; lx++)
+                {
+                    alwaysFrontLayer.Tiles[lx, ly] = null;
+                }
             }
-
-            // Flanqueo de copas en AlwaysFront:
-            for (int ly = 0; ly <= 1; ly++)
-            {
-                alwaysFrontLayer.Tiles[25, ly] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (ly == 0) ? 995 : 1020);
-                alwaysFrontLayer.Tiles[28, ly] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, (ly == 0) ? 994 : 1019);
-            }
-            alwaysFrontLayer.Tiles[25, 2] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 1045);
-            alwaysFrontLayer.Tiles[28, 2] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 1044);
 
             // Postes rústicos de valla flanqueando el acceso:
             var postL = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 386);
@@ -334,7 +319,7 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Abre la entrada Oeste de la Variante Este (lx = 0..4, ly = 14..15) conectando orgánicamente con el claro.
+        /// Abre la entrada Oeste de la Variante Este (lx = 0..3, ly = 14..15) conectando orgánicamente con el claro.
         /// </summary>
         public static void OpenWestEntrance(
             Layer backLayer,
@@ -343,7 +328,7 @@ namespace Pelican4Ever.Framework
             Layer alwaysFrontLayer,
             TileSheet outdoorsSheet)
         {
-            // Conservar camino vertical de tierra en lx = 0:
+            // Conservar camino vertical de tierra en lx = 0..2 y remate derecho limpio en lx = 3:
             for (int ly = 14; ly <= 15; ly++)
             {
                 var r0 = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 227);
@@ -351,7 +336,7 @@ namespace Pelican4Ever.Framework
                 r0.Properties.Remove("Passable");
                 backLayer.Tiles[0, ly] = r0;
 
-                for (int lx = 1; lx <= 4; lx++)
+                for (int lx = 1; lx <= 2; lx++)
                 {
                     var d = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.DirtPlainTileIndex);
                     d.Properties["Type"] = "Dirt";
@@ -359,15 +344,26 @@ namespace Pelican4Ever.Framework
                     backLayer.Tiles[lx, ly] = d;
                     alwaysFrontLayer.Tiles[lx, ly] = null;
                 }
+
+                var edgeR = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 228);
+                edgeR.Properties["Type"] = "Dirt";
+                edgeR.Properties.Remove("Passable");
+                backLayer.Tiles[3, ly] = edgeR;
+                alwaysFrontLayer.Tiles[3, ly] = null;
+
                 for (int lx = 0; lx <= 4; lx++)
                 {
                     bldLayer.Tiles[lx, ly] = null;
                     frontLayer.Tiles[lx, ly] = null;
+                    alwaysFrontLayer.Tiles[lx, ly] = null;
                 }
+                var g4 = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, TerrainTileClassifier.SunnyGrassTileIndex);
+                g4.Properties.Remove("Passable");
+                backLayer.Tiles[4, ly] = g4;
             }
 
             // Bordes de tierra superior e inferior:
-            for (int lx = 1; lx <= 4; lx++)
+            for (int lx = 1; lx <= 3; lx++)
             {
                 var edgeT = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, 201);
                 edgeT.Properties["Type"] = "Dirt";
@@ -380,14 +376,12 @@ namespace Pelican4Ever.Framework
                 backLayer.Tiles[lx, 16] = edgeB;
             }
 
-            // Dosel continuo en túnel sobre lx = 0..2:
+            // Despejar dosel sobre el sendero de entrada oeste (lx = 0..2, ly = 14..15) para que sea visible y abierto:
             for (int lx = 0; lx <= 2; lx++)
             {
-                alwaysFrontLayer.Tiles[lx, 14] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
-                alwaysFrontLayer.Tiles[lx, 15] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 946);
+                alwaysFrontLayer.Tiles[lx, 14] = null;
+                alwaysFrontLayer.Tiles[lx, 15] = null;
             }
-            alwaysFrontLayer.Tiles[3, 14] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 944);
-            alwaysFrontLayer.Tiles[3, 15] = new StaticTile(alwaysFrontLayer, outdoorsSheet, BlendMode.Alpha, 969);
 
             // Postes rústicos de entrada al claro en x = 3:
             var postTop = new StaticTile(bldLayer, outdoorsSheet, BlendMode.Alpha, 386);

@@ -978,6 +978,196 @@ namespace Pelican4Ever.Framework
             }
         }
 
+        private static void ClearRectToDirt(
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            int x0,
+            int y0,
+            int x1,
+            int y1)
+        {
+            for (int x = x0; x <= x1; x++)
+            {
+                for (int y = y0; y <= y1; y++)
+                {
+                    if (x < 0 || x >= backLayer.LayerWidth || y < 0 || y >= backLayer.LayerHeight)
+                        continue;
+                    bldLayer.Tiles[x, y] = null;
+                    frontLayer.Tiles[x, y] = null;
+                    alwaysFrontLayer.Tiles[x, y] = null;
+                    SetDirtTile(backLayer, outdoorsSheet, x, y, TerrainTileClassifier.DirtPlainTileIndex);
+                    backLayer.Tiles[x, y]?.Properties.Remove("Passable");
+                    backLayer.Tiles[x, y]?.Properties.Remove("Water");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Estampa el estanque pequeño canónico 6×6 de Maps/Farm (sx=70..75, sy=28..33)
+        /// en la posición (dstX, dstY), conservando orillas y propiedades de agua vanilla.
+        /// </summary>
+        private static void StampVanillaSmallPond(
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            int dstX,
+            int dstY)
+        {
+            int[,] backPattern =
+            {
+                { 1243, 1244, 1244, 1244, 1245, 564 },
+                { 1268, 1269, 1269, 1269, 1270, 1245 },
+                { 1246, 1299, 1246, 1272, 1267, 1270 },
+                { 1246, 1322, 1246, 1246, 1246, 1249 },
+                { 1246, 1249, 1271, 1271, 1271, 1271 },
+                { 587,  1271, 1248, 1299, 1271, 226 }
+            };
+
+            int[,] bldPattern =
+            {
+                { 183, 184, 211, 184, 185, -1 },
+                { 208, 1293, 209, 209, 284, 185 },
+                { 233, -1, -1, -1, -1, 210 },
+                { 233, -1, -1, -1, -1, 235 },
+                { 258, 308, -1, 1293, 309, 260 },
+                { -1, 258, 259, 259, 260, -1 }
+            };
+
+            for (int dy = 0; dy < 6; dy++)
+            {
+                for (int dx = 0; dx < 6; dx++)
+                {
+                    int x = dstX + dx;
+                    int y = dstY + dy;
+                    if (x < 0 || x >= backLayer.LayerWidth || y < 0 || y >= backLayer.LayerHeight)
+                        continue;
+
+                    frontLayer.Tiles[x, y] = null;
+                    alwaysFrontLayer.Tiles[x, y] = null;
+
+                    int bIdx = backPattern[dy, dx];
+                    var bt = new StaticTile(backLayer, outdoorsSheet, BlendMode.Alpha, bIdx);
+                    bool isWater = bIdx != 564 && bIdx != 587 && bIdx != 226;
+                    if (isWater)
+                    {
+                        bt.Properties["Water"] = "T";
+                    }
+                    else
+                    {
+                        bt.Properties["Type"] = "Dirt";
+                    }
+                    backLayer.Tiles[x, y] = bt;
+
+                    int bldIdx = bldPattern[dy, dx];
+                    if (bldIdx >= 0)
+                    {
+                        SetTileIfValid(bldLayer, outdoorsSheet, x, y, bldIdx);
+                        SetPassableIfValid(bldLayer, x, y, false);
+                    }
+                    else
+                    {
+                        bldLayer.Tiles[x, y] = null;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Aplica el seto forestal sur canónico verde (filas 28..31) entre [startX..endX],
+        /// usando arbustos verdes vanilla (13/14, 38/39) sobre talud y bosque oscuro (326/351/355/380).
+        /// </summary>
+        private static void ApplyVanillaSouthForestHedge(
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            int startX,
+            int endX,
+            bool setGrassBackOnRow28 = false)
+        {
+            for (int x = startX; x <= endX; x++)
+            {
+                if (x < 0 || x >= backLayer.LayerWidth)
+                    continue;
+
+                bool isEven = (x % 2 == 0);
+                bool bushLeft = x == 1 || x == 6 || x == 12 || x == 17 || x == 23 || x == 28 || x == 34;
+                bool bushRight = x == 2 || x == 7 || x == 13 || x == 18 || x == 24 || x == 29 || x == 35;
+                bool hasBush = bushLeft || bushRight;
+
+                if (setGrassBackOnRow28)
+                    SetGrassTile(backLayer, outdoorsSheet, x, 28, TerrainTileClassifier.SunnyGrassTileIndex);
+                bldLayer.Tiles[x, 28] = null;
+                SetTileIfValid(frontLayer, outdoorsSheet, x, 28, isEven ? 413 : 414);
+                alwaysFrontLayer.Tiles[x, 28] = null;
+
+                SetTileIfValid(backLayer, outdoorsSheet, x, 29, 326);
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 29, 326);
+                SetPassableIfValid(bldLayer, x, 29, false);
+                SetTileIfValid(frontLayer, outdoorsSheet, x, 29, hasBush ? (bushLeft ? 13 : 14) : 326);
+                alwaysFrontLayer.Tiles[x, 29] = null;
+
+                SetTileIfValid(backLayer, outdoorsSheet, x, 30, 351);
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 30, hasBush ? (bushLeft ? 38 : 39) : 355);
+                SetPassableIfValid(bldLayer, x, 30, false);
+                frontLayer.Tiles[x, 30] = null;
+                alwaysFrontLayer.Tiles[x, 30] = null;
+
+                SetTileIfValid(backLayer, outdoorsSheet, x, 31, 355);
+                SetPassableIfValid(backLayer, x, 31, false);
+                SetTileIfValid(bldLayer, outdoorsSheet, x, 31, 380);
+                SetPassableIfValid(bldLayer, x, 31, false);
+                frontLayer.Tiles[x, 31] = null;
+                alwaysFrontLayer.Tiles[x, 31] = null;
+            }
+        }
+
+        /// <summary>
+        /// Aplica una valla vertical limpia en fenceX y franja boscosa sólida en (fenceX+1..width-1).
+        /// </summary>
+        private static void ApplyCleanEastFenceAndForest(
+            Layer backLayer,
+            Layer bldLayer,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            TileSheet outdoorsSheet,
+            int startY,
+            int endY,
+            int fenceX = 38)
+        {
+            for (int ly = startY; ly <= endY; ly++)
+            {
+                if (ly < 0 || ly >= backLayer.LayerHeight)
+                    continue;
+
+                SetGrassTile(backLayer, outdoorsSheet, fenceX, ly, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetPassableIfValid(backLayer, fenceX, ly, false);
+                int fenceTile = ly == startY ? 386 : (ly == endY ? 436 : 411);
+                SetTileIfValid(bldLayer, outdoorsSheet, fenceX, ly, fenceTile);
+                SetPassableIfValid(bldLayer, fenceX, ly, false);
+                frontLayer.Tiles[fenceX, ly] = null;
+                alwaysFrontLayer.Tiles[fenceX, ly] = null;
+                if (ly > 0)
+                    SetTileIfValid(frontLayer, outdoorsSheet, fenceX, ly - 1, 361);
+
+                for (int fx = fenceX + 1; fx < backLayer.LayerWidth; fx++)
+                {
+                    SetGrassTile(backLayer, outdoorsSheet, fx, ly, 150);
+                    SetPassableIfValid(backLayer, fx, ly, false);
+                    SetTileIfValid(bldLayer, outdoorsSheet, fx, ly, 16);
+                    SetPassableIfValid(bldLayer, fx, ly, false);
+                    frontLayer.Tiles[fx, ly] = null;
+                    alwaysFrontLayer.Tiles[fx, ly] = null;
+                }
+            }
+        }
+
         /// <summary>
         /// Compone la miniatura canónica 40×32 de Beach / Island Farm (V10 aprobado) centrada en (29, 0),
         /// capturando el desfiladero norte de montaña con camino festoneado (lx=11..12, ly=0..3),
@@ -1181,22 +1371,11 @@ namespace Pelican4Ever.Framework
             SetTileIfValid(backLayer, islandSheet, 38, 9, 268);
             SetTileIfValid(backLayer, islandSheet, 39, 9, 197);
 
-            // Filas 10..31: Franja boscosa continua en tierra firme hasta el límite sur:
-            for (int ly = 10; ly < height; ly++)
-            {
-                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 294 : 319);
-                SetPassableIfValid(bldLayer, 38, ly, false);
-                frontLayer.Tiles[38, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 994 : 1019);
-
-                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 295 : 320);
-                SetPassableIfValid(bldLayer, 39, ly, false);
-                frontLayer.Tiles[39, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 1019 : 1020);
-            }
+            // Filas 10..28: Transición de playa a valla y bosque limpio hasta el seto sur:
+            ApplyCleanEastFenceAndForest(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 10, 28, 38);
 
             // -------------------------------------------------------------
-            // Borde Sur y Portón de Entrada: Seto boscoso sobre pasto isleño
+            // Borde Sur y Portón de Entrada: Seto boscoso canónico vanilla
             // -------------------------------------------------------------
             // Fila 28: Festón arena-a-pasto en columnas lx=0..37:
             for (int lx = 0; lx <= 37; lx++)
@@ -1204,31 +1383,10 @@ namespace Pelican4Ever.Framework
                 SetTileIfValid(backLayer, islandSheet, lx, 28, (lx % 2 == 0) ? 36 : 37);
             }
 
-            // Filas 29..31: Seto denso de robles sobre pasto isleño en lx=0..37:
-            for (int lx = 0; lx <= 37; lx++)
-            {
-                SetTileIfValid(backLayer, islandSheet, lx, 29, 608);
-                backLayer.Tiles[lx, 29].Properties["Type"] = "Grass";
-                SetTileIfValid(backLayer, islandSheet, lx, 30, 608);
-                backLayer.Tiles[lx, 30].Properties["Type"] = "Grass";
-                SetTileIfValid(backLayer, islandSheet, lx, 31, 608);
-                backLayer.Tiles[lx, 31].Properties["Type"] = "Grass";
-
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
-                SetPassableIfValid(bldLayer, lx, 29, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
-                SetPassableIfValid(bldLayer, lx, 30, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
-                SetPassableIfValid(bldLayer, lx, 31, false);
-
-                frontLayer.Tiles[lx, 29] = null;
-                frontLayer.Tiles[lx, 30] = null;
-                frontLayer.Tiles[lx, 31] = null;
-
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
-            }
+            // Filas 28..31: Seto denso canónico vanilla en lx=0..39:
+            ApplyVanillaSouthForestHedge(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 0, width - 1, setGrassBackOnRow28: false);
+            SetGrassTile(backLayer, outdoorsSheet, 38, 28, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetGrassTile(backLayer, outdoorsSheet, 39, 28, TerrainTileClassifier.SunnyGrassTileIndex);
 
             // Entrada Sur en lx=11..12 (alineada con el paso norte y la granja):
             if (side == AnnexSide.North) // Entrada activa Sur (el jugador camina hacia el Norte)
@@ -1334,7 +1492,9 @@ namespace Pelican4Ever.Framework
                 SetTileIfValid(bldLayer, outdoorsSheet, 24, 1, 385);
                 SetPassableIfValid(bldLayer, 24, 1, false);
 
-                // Barrera sólida en fila 0:
+                // Barrera sólida en fila 0 y prado cerrado detrás del portón:
+                SetGrassTile(backLayer, outdoorsSheet, 23, 0, TerrainTileClassifier.SunnyGrassTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, 24, 0, TerrainTileClassifier.SunnyGrassTileIndex);
                 SetTileIfValid(bldLayer, outdoorsSheet, 23, 0, 16);
                 SetPassableIfValid(bldLayer, 23, 0, false);
                 SetTileIfValid(bldLayer, outdoorsSheet, 24, 0, 16);
@@ -1444,8 +1604,8 @@ namespace Pelican4Ever.Framework
 
             // 4. BORDE ESTE (lx=37..39):
             // ly=0..11: Risco de montaña natural (100% auténtico vanilla).
-            // ly=12..31: Límite boscoso denso de robles de 2 casillas extendiéndose desde el pie del risco hasta el bosque sur:
-            for (int ly = 12; ly < height; ly++)
+            // ly=12..28: Valla limpia en lx=38 y bosque sólido en lx=39 hasta el seto sur:
+            for (int ly = 12; ly <= 28; ly++)
             {
                 // Buffer de vereda de hierba en lx=37 si hay tierra de cultivo:
                 int? bkIdx = backLayer.Tiles[37, ly]?.TileIndex;
@@ -1454,46 +1614,11 @@ namespace Pelican4Ever.Framework
                     SetTileIfValid(backLayer, outdoorsSheet, 36, ly, 228);
                     SetGrassTile(backLayer, outdoorsSheet, 37, ly, 175);
                 }
-
-                // Columna 38: Línea interior del bosque
-                SetGrassTile(backLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 175 : 150);
-                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 294 : 319);
-                SetPassableIfValid(bldLayer, 38, ly, false);
-                frontLayer.Tiles[38, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 994 : 1019);
-
-                // Columna 39: Línea exterior del bosque
-                SetGrassTile(backLayer, outdoorsSheet, 39, ly, 150);
-                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 295 : 320);
-                SetPassableIfValid(bldLayer, 39, ly, false);
-                frontLayer.Tiles[39, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 1019 : 1020);
             }
+            ApplyCleanEastFenceAndForest(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 12, 28, 38);
 
             // 5. BORDE Y ENTRADA SUR (ly=28..31):
-            // Fila 28: Vereda de hierba natural.
-            // Filas 29..31: Seto denso de robles canónico de 3 filas en lx=0..37:
-            for (int lx = 0; lx < 38; lx++)
-            {
-                SetGrassTile(backLayer, outdoorsSheet, lx, 29, 175);
-                SetGrassTile(backLayer, outdoorsSheet, lx, 30, 175);
-                SetGrassTile(backLayer, outdoorsSheet, lx, 31, 175);
-
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
-                SetPassableIfValid(bldLayer, lx, 29, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
-                SetPassableIfValid(bldLayer, lx, 30, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
-                SetPassableIfValid(bldLayer, lx, 31, false);
-
-                frontLayer.Tiles[lx, 29] = null;
-                frontLayer.Tiles[lx, 30] = null;
-                frontLayer.Tiles[lx, 31] = null;
-
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
-            }
+            ApplyVanillaSouthForestHedge(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 0, width - 1, setGrassBackOnRow28: true);
 
             // Mecánica de entrada Sur en lx=23..24 (alineada con el paso a Backwoods):
             if (side == AnnexSide.North) // Entrar desde el Sur hacia el Norte
@@ -1716,6 +1841,11 @@ namespace Pelican4Ever.Framework
                 }
                 SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 2, 6, 12);
                 SetDirtTile(backLayer, outdoorsSheet, 1, 4, 200);
+                // Limpiar resto de valla horizontal en (0, 5..7) debajo de la entrada oeste:
+                frontLayer.Tiles[0, 5] = null;
+                frontLayer.Tiles[0, 6] = null;
+                bldLayer.Tiles[0, 6] = null;
+                bldLayer.Tiles[0, 7] = null;
                 SetDirtTile(backLayer, outdoorsSheet, 1, 7, 228);
 
                 SetTileIfValid(bldLayer, outdoorsSheet, 0, 7, 383);
@@ -1780,11 +1910,12 @@ namespace Pelican4Ever.Framework
                 frontLayer.Tiles[38, ly] = null;
                 alwaysFrontLayer.Tiles[38, ly] = null;
 
-                SetGrassTile(backLayer, outdoorsSheet, 39, ly, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, 39, ly, 150);
+                SetPassableIfValid(backLayer, 39, ly, false);
                 SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, 16);
                 SetPassableIfValid(bldLayer, 39, ly, false);
                 frontLayer.Tiles[39, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, 1020);
+                alwaysFrontLayer.Tiles[39, ly] = null;
             }
 
             SetGrassTile(backLayer, outdoorsSheet, 38, 10, TerrainTileClassifier.SunnyGrassTileIndex);
@@ -1818,11 +1949,12 @@ namespace Pelican4Ever.Framework
                 frontLayer.Tiles[38, ly] = null;
                 alwaysFrontLayer.Tiles[38, ly] = null;
 
-                SetGrassTile(backLayer, outdoorsSheet, 39, ly, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+                SetGrassTile(backLayer, outdoorsSheet, 39, ly, 150);
+                SetPassableIfValid(backLayer, 39, ly, false);
                 SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, 16);
                 SetPassableIfValid(bldLayer, 39, ly, false);
                 frontLayer.Tiles[39, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, 1020);
+                alwaysFrontLayer.Tiles[39, ly] = null;
             }
 
             SetGrassTile(backLayer, outdoorsSheet, 38, 27, TerrainTileClassifier.SunnyGrassTileIndex);
@@ -1832,54 +1964,30 @@ namespace Pelican4Ever.Framework
             frontLayer.Tiles[38, 27] = null;
             alwaysFrontLayer.Tiles[38, 27] = null;
 
-            SetGrassTile(backLayer, outdoorsSheet, 39, 27, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+            SetGrassTile(backLayer, outdoorsSheet, 39, 27, 150);
+            SetPassableIfValid(backLayer, 39, 27, false);
             SetTileIfValid(bldLayer, outdoorsSheet, 39, 27, 16);
             SetPassableIfValid(bldLayer, 39, 27, false);
-            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 27, 1020);
+            alwaysFrontLayer.Tiles[39, 27] = null;
 
-            SetGrassTile(backLayer, outdoorsSheet, 39, 28, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+            SetGrassTile(backLayer, outdoorsSheet, 39, 28, 150);
+            SetPassableIfValid(backLayer, 39, 28, false);
             SetTileIfValid(bldLayer, outdoorsSheet, 39, 28, 16);
             SetPassableIfValid(bldLayer, 39, 28, false);
-            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 28, 1020);
+            alwaysFrontLayer.Tiles[39, 28] = null;
 
             SetDirtTile(backLayer, outdoorsSheet, 36, 27, 253);
             SetGrassTile(backLayer, outdoorsSheet, 36, 28, TerrainTileClassifier.SunnyGrassTileIndex);
             SetGrassTile(backLayer, outdoorsSheet, 37, 27, TerrainTileClassifier.SunnyGrassTileIndex);
             SetGrassTile(backLayer, outdoorsSheet, 37, 28, TerrainTileClassifier.SunnyGrassTileIndex);
 
-            // 5. BORDE Y ENTRADA SUR:
-            SetTileIfValid(bldLayer, outdoorsSheet, 16, 28, 542);
-            SetPassableIfValid(bldLayer, 16, 28, false);
-            SetGrassTile(backLayer, outdoorsSheet, 16, 28, 537);
-
-            for (int lx = 0; lx < width; lx++)
+            // 5. BORDE Y ENTRADA SUR (seto canónico vanilla sin patrones rotos ni restos de risco):
+            ApplyVanillaSouthForestHedge(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 0, width - 1, setGrassBackOnRow28: false);
+            for (int lx = 14; lx <= 27; lx++)
             {
-                if (lx == 25) continue; // Acantilado natural
-
-                SetGrassTile(backLayer, outdoorsSheet, lx, 28, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
-                if (lx != 16) bldLayer.Tiles[lx, 28] = null;
                 frontLayer.Tiles[lx, 28] = null;
-                alwaysFrontLayer.Tiles[lx, 28] = null;
-
-                SetGrassTile(backLayer, outdoorsSheet, lx, 29, TerrainTileClassifier.SunnyGrassTileIndex);
-                SetGrassTile(backLayer, outdoorsSheet, lx, 30, TerrainTileClassifier.SunnyGrassTileIndex);
-                SetGrassTile(backLayer, outdoorsSheet, lx, 31, TerrainTileClassifier.SunnyGrassTileIndex);
-
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
-                SetPassableIfValid(bldLayer, lx, 29, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
-                SetPassableIfValid(bldLayer, lx, 30, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
-                SetPassableIfValid(bldLayer, lx, 31, false);
-
-                frontLayer.Tiles[lx, 29] = null;
-                frontLayer.Tiles[lx, 30] = null;
-                frontLayer.Tiles[lx, 31] = null;
-
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
             }
+            SetDirtTile(backLayer, outdoorsSheet, 25, 27, TerrainTileClassifier.DirtPlainTileIndex);
 
             if (side == AnnexSide.North)
             {
@@ -1917,20 +2025,6 @@ namespace Pelican4Ever.Framework
                 // Borde Sur cerrado con autotiling canónico (Back: 251):
                 for (int lx = 10; lx <= 15; lx++)
                     SetDirtTile(backLayer, outdoorsSheet, lx, 27, 251);
-
-                for (int lx = 13; lx <= 14; lx++)
-                {
-                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
-                    SetPassableIfValid(bldLayer, lx, 29, false);
-                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
-                    SetPassableIfValid(bldLayer, lx, 30, false);
-                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
-                    SetPassableIfValid(bldLayer, lx, 31, false);
-
-                    SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
-                    SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
-                    SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
-                }
             }
 
             // 6. SECTOR SURESTE (PASTO AUTÉNTICO):
@@ -2104,7 +2198,7 @@ namespace Pelican4Ever.Framework
                     36, 37, 38, 39,
                     40, 41,
                     42, 43, 44, 45,
-                    14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25
+                    18, 19, 20, 21, 22, 23, 24, 25, 22, 23, 24, 25
                 }
                 : new int[]
                 {
@@ -2131,10 +2225,11 @@ namespace Pelican4Ever.Framework
             SetPassableIfValid(bldLayer, 36, 5, false);
             SetTileIfValid(bldLayer, outdoorsSheet, 36, 6, 519);
             SetPassableIfValid(bldLayer, 36, 6, false);
+            SetDirtTile(backLayer, outdoorsSheet, 36, 7, 228);
             SetTileIfValid(bldLayer, outdoorsSheet, 36, 7, 544);
             SetPassableIfValid(bldLayer, 36, 7, false);
 
-            SetTileIfValid(backLayer, outdoorsSheet, 36, 8, 612);
+            SetDirtTile(backLayer, outdoorsSheet, 36, 8, 228);
             bldLayer.Tiles[36, 8] = null;
             frontLayer.Tiles[36, 8] = null;
 
@@ -2383,13 +2478,17 @@ namespace Pelican4Ever.Framework
             SetTileIfValid(bldLayer, outdoorsSheet, 37, 7, 386);
             SetPassableIfValid(bldLayer, 37, 7, false);
 
-            SetTileIfValid(backLayer, outdoorsSheet, 36, 7, 612);
-            bldLayer.Tiles[36, 7] = null;
+            SetDirtTile(backLayer, outdoorsSheet, 36, 7);
+            SetTileIfValid(bldLayer, outdoorsSheet, 36, 7, 544);
+            SetPassableIfValid(bldLayer, 36, 7, false);
             frontLayer.Tiles[36, 7] = null;
 
-            SetTileIfValid(backLayer, outdoorsSheet, 36, 8, 612);
-            bldLayer.Tiles[36, 8] = null;
-            frontLayer.Tiles[36, 8] = null;
+            for (int ly = 8; ly <= 28; ly++)
+            {
+                SetDirtTile(backLayer, outdoorsSheet, 36, ly);
+                bldLayer.Tiles[36, ly] = null;
+                frontLayer.Tiles[36, ly] = null;
+            }
 
             // Costura continua del seto sureste en (34, 29): 325 -> 326
             SetTileIfValid(backLayer, outdoorsSheet, 34, 29, 326);
@@ -2456,6 +2555,11 @@ namespace Pelican4Ever.Framework
                     SetTileIfValid(alwaysFrontLayer, outdoorsSheet, x, 31, isEven ? 93 : 94);
                 }
             }
+
+            // 5. Reducir el lago grande del cuadrante inferior derecho a un estanque pequeño canónico (6x6)
+            // para dejar más espacio construible manteniendo la apariencia 100% vanilla.
+            ClearRectToDirt(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 18, 16, 32, 26);
+            StampVanillaSmallPond(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 25, 18);
         }
 
         /// <summary>
@@ -2487,21 +2591,7 @@ namespace Pelican4Ever.Framework
                 }
             }
 
-            // 1. Eliminar el puente horizontal muerto del Este (x = 35..38, y = 15..17) y cerrar los acantilados
-            SetWaterTile(backLayer, outdoorsSheet, 35, 16, 1246);
-            SetTileIfValid(bldLayer, outdoorsSheet, 35, 16, 237);
-            SetPassableIfValid(bldLayer, 35, 16, false);
-            for (int x = 36; x <= 37; x++)
-            {
-                for (int y = 15; y <= 17; y++)
-                {
-                    SetWaterTile(backLayer, outdoorsSheet, x, y, 1246);
-                    bldLayer.Tiles[x, y] = null;
-                }
-            }
-            SetWaterTile(backLayer, outdoorsSheet, 38, 16, 1246);
-            SetTileIfValid(bldLayer, outdoorsSheet, 38, 16, 235);
-            SetPassableIfValid(bldLayer, 38, 16, false);
+            // 1. Mantener el puente horizontal vanilla del Este (x = 35..38, y = 15..17) para conservar orillas intactas
 
             // 2. Eliminar el puente de tablón inferior del Oeste (x = 0..2, y = 17..19) y cerrar la orilla en x = 2
             SetWaterTile(backLayer, outdoorsSheet, 2, 18, 1246);
@@ -3027,7 +3117,7 @@ namespace Pelican4Ever.Framework
                 CopySourceCellToTarget(source, target, 5, ly, 5, 33 + ly);
             }
 
-            int[] bushXs = { 7, 11, 18, 22, 26, 30, 34 };
+            int[] bushXs = { 7, 13, 21, 29 };
             foreach (int bx in bushXs)
             {
                 if (bx + 1 <= 36)
@@ -3046,12 +3136,12 @@ namespace Pelican4Ever.Framework
                 SetGrassTile(backLayer, outdoorsSheet, lx, 2, TerrainTileClassifier.SunnyGrassTileIndex);
                 SetPassableIfValid(backLayer, lx, 2, false);
                 bldLayer.Tiles[lx, 2] = null;
-                SetTileIfValid(frontLayer, outdoorsSheet, lx, 2, (lx == 36) ? 360 : 359);
+                SetTileIfValid(frontLayer, outdoorsSheet, lx, 2, 359);
                 alwaysFrontLayer.Tiles[lx, 2] = null;
 
                 int row3Back = (lx == 27) ? 657 : ((lx <= 30) ? 175 : ((lx == 31) ? 344 : 401));
                 SetTileIfValid(backLayer, outdoorsSheet, lx, 3, row3Back);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 3, (lx == 36) ? 385 : 384);
+                SetTileIfValid(bldLayer, outdoorsSheet, lx, 3, 384);
                 SetPassableIfValid(bldLayer, lx, 3, false);
                 frontLayer.Tiles[lx, 3] = null;
                 alwaysFrontLayer.Tiles[lx, 3] = null;
@@ -3083,6 +3173,17 @@ namespace Pelican4Ever.Framework
             SetPassableIfValid(bldLayer, 37, 1, false);
             SetTileIfValid(bldLayer, outdoorsSheet, 38, 1, 39);
             SetPassableIfValid(bldLayer, 38, 1, false);
+
+            // Conectar esquina NE de valla horizontal (ly=2..3) con valla vertical en (37, 3..4):
+            SetGrassTile(backLayer, outdoorsSheet, 37, 2, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetPassableIfValid(backLayer, 37, 2, false);
+            bldLayer.Tiles[37, 2] = null;
+            SetTileIfValid(frontLayer, outdoorsSheet, 37, 2, 360);
+            SetTileIfValid(backLayer, outdoorsSheet, 37, 3, 351);
+            SetPassableIfValid(backLayer, 37, 3, false);
+            SetTileIfValid(bldLayer, outdoorsSheet, 37, 3, 385);
+            SetPassableIfValid(bldLayer, 37, 3, false);
+            SetTileIfValid(frontLayer, outdoorsSheet, 37, 3, 361);
 
             // 4. Apertura única de entrada según el lado activo (0 salidas muertas):
             if (side == AnnexSide.North)
@@ -3261,13 +3362,18 @@ namespace Pelican4Ever.Framework
             }
             else
             {
-                // Variantes Norte y Este: Cerrar el paso de montaña con acantilado de roca marrón sólida
-                for (int ly = 0; ly <= 3; ly++)
+                // Variantes Norte y Este: Cerrar el paso de montaña con bosque uniforme (150 + 16) sin árboles partidos
+                for (int lx = 15; lx <= 18; lx++)
                 {
-                    SetTileIfValid(bldLayer, outdoorsSheet, 16, ly, 16);
-                    SetPassableIfValid(bldLayer, 16, ly, false);
-                    SetTileIfValid(bldLayer, outdoorsSheet, 17, ly, 16);
-                    SetPassableIfValid(bldLayer, 17, ly, false);
+                    for (int ly = 0; ly <= 3; ly++)
+                    {
+                        SetGrassTile(backLayer, outdoorsSheet, lx, ly, 150);
+                        SetPassableIfValid(backLayer, lx, ly, false);
+                        SetTileIfValid(bldLayer, outdoorsSheet, lx, ly, 16);
+                        SetPassableIfValid(bldLayer, lx, ly, false);
+                        frontLayer.Tiles[lx, ly] = null;
+                        alwaysFrontLayer.Tiles[lx, ly] = null;
+                    }
                 }
                 SetTileIfValid(bldLayer, outdoorsSheet, 16, 4, 468);
                 SetPassableIfValid(bldLayer, 16, 4, false);
@@ -3316,10 +3422,11 @@ namespace Pelican4Ever.Framework
             for (int ly = 8; ly <= 12; ly++)
             {
                 SetGrassTile(backLayer, outdoorsSheet, 0, ly, TerrainTileClassifier.SunnyGrassTileIndex);
-                SetDirtTile(backLayer, outdoorsSheet, 1, ly, 201);
-                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                SetDirtTile(backLayer, outdoorsSheet, 1, ly, 225);
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, (ly == 8) ? 386 : 411);
                 SetPassableIfValid(bldLayer, 0, ly, false);
-                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly, 361);
+                frontLayer.Tiles[0, ly] = null;
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
             }
 
             // ly=13..15: Entrada Oeste (side == AnnexSide.East)
@@ -3327,9 +3434,9 @@ namespace Pelican4Ever.Framework
             {
                 SetGrassTile(backLayer, outdoorsSheet, 0, 13, TerrainTileClassifier.SunnyGrassTileIndex);
                 SetDirtTile(backLayer, outdoorsSheet, 1, 13, 228);
-                SetTileIfValid(bldLayer, outdoorsSheet, 0, 13, 383);
+                SetTileIfValid(bldLayer, outdoorsSheet, 0, 13, 436);
                 SetPassableIfValid(bldLayer, 0, 13, false);
-                SetTileIfValid(frontLayer, outdoorsSheet, 0, 12, 358);
+                SetTileIfValid(frontLayer, outdoorsSheet, 0, 12, 361);
                 frontLayer.Tiles[0, 13] = null;
 
                 for (int lx = 0; lx <= 2; lx++)
@@ -3349,10 +3456,11 @@ namespace Pelican4Ever.Framework
                 for (int ly = 13; ly <= 15; ly++)
                 {
                     SetGrassTile(backLayer, outdoorsSheet, 0, ly, TerrainTileClassifier.SunnyGrassTileIndex);
-                    SetDirtTile(backLayer, outdoorsSheet, 1, ly, 201);
-                    SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, 386);
+                    SetDirtTile(backLayer, outdoorsSheet, 1, ly, 225);
+                    SetTileIfValid(bldLayer, outdoorsSheet, 0, ly, (ly == 15) ? 436 : 411);
                     SetPassableIfValid(bldLayer, 0, ly, false);
-                    SetTileIfValid(frontLayer, outdoorsSheet, 0, ly, 361);
+                    frontLayer.Tiles[0, ly] = null;
+                    SetTileIfValid(frontLayer, outdoorsSheet, 0, ly - 1, 361);
                 }
             }
 
@@ -3390,51 +3498,22 @@ namespace Pelican4Ever.Framework
                 SetGrassTile(backLayer, outdoorsSheet, lx, 28, TerrainTileClassifier.SunnyGrassTileIndex);
             }
 
-            // 4. Seto y franja sur (ly=28..31):
-            for (int lx = 0; lx < width; lx++)
+            // 4. Seto y franja sur (ly=28..31) con seto canónico vanilla:
+            for (int lx = 5; lx <= 36; lx++)
             {
-                if (lx >= 5 && lx <= 36)
+                for (int ly = 26; ly <= 27; ly++)
                 {
-                    for (int ly = 26; ly <= 27; ly++)
+                    bldLayer.Tiles[lx, ly] = null;
+                    frontLayer.Tiles[lx, ly] = null;
+                    alwaysFrontLayer.Tiles[lx, ly] = null;
+                    int? bIdx = backLayer.Tiles[lx, ly]?.TileIndex;
+                    if (!bIdx.HasValue || bIdx.Value >= 1200 || backLayer.Tiles[lx, ly]?.TileSheet != outdoorsSheet)
                     {
-                        bldLayer.Tiles[lx, ly] = null;
-                        frontLayer.Tiles[lx, ly] = null;
-                        alwaysFrontLayer.Tiles[lx, ly] = null;
-                        int? bIdx = backLayer.Tiles[lx, ly]?.TileIndex;
-                        if (!bIdx.HasValue || bIdx.Value >= 1200 || backLayer.Tiles[lx, ly]?.TileSheet != outdoorsSheet)
-                        {
-                            SetDirtTile(backLayer, outdoorsSheet, lx, ly, TerrainTileClassifier.DirtPlainTileIndex);
-                        }
+                        SetDirtTile(backLayer, outdoorsSheet, lx, ly, TerrainTileClassifier.DirtPlainTileIndex);
                     }
                 }
-
-                SetGrassTile(backLayer, outdoorsSheet, lx, 28, (lx % 2 == 0) ? TerrainTileClassifier.SunnyGrassTileIndex : TerrainTileClassifier.SunnyGrassSoftTileIndex);
-                if (lx >= 2)
-                {
-                    bldLayer.Tiles[lx, 28] = null;
-                    frontLayer.Tiles[lx, 28] = null;
-                    alwaysFrontLayer.Tiles[lx, 28] = null;
-                }
-
-                SetGrassTile(backLayer, outdoorsSheet, lx, 29, TerrainTileClassifier.SunnyGrassTileIndex);
-                SetGrassTile(backLayer, outdoorsSheet, lx, 30, TerrainTileClassifier.SunnyGrassTileIndex);
-                SetGrassTile(backLayer, outdoorsSheet, lx, 31, TerrainTileClassifier.SunnyGrassTileIndex);
-
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 294 : 295);
-                SetPassableIfValid(bldLayer, lx, 29, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 319 : 320);
-                SetPassableIfValid(bldLayer, lx, 30, false);
-                SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 344 : 345);
-                SetPassableIfValid(bldLayer, lx, 31, false);
-
-                frontLayer.Tiles[lx, 29] = null;
-                frontLayer.Tiles[lx, 30] = null;
-                frontLayer.Tiles[lx, 31] = null;
-
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 29, (lx % 2 == 0) ? 994 : 1019);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 30, (lx % 2 == 0) ? 1019 : 1020);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, lx, 31, (lx % 2 == 0) ? 1044 : 1045);
             }
+            ApplyVanillaSouthForestHedge(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 0, width - 1, setGrassBackOnRow28: true);
 
             // Entrada Sur en lx=16..17 (side == AnnexSide.North):
             if (side == AnnexSide.North)
@@ -3459,84 +3538,55 @@ namespace Pelican4Ever.Framework
                 SetPassableIfValid(bldLayer, 18, 29, false);
                 SetTileIfValid(frontLayer, outdoorsSheet, 18, 28, 358);
             }
-            else
-            {
-                for (int lx = 16; lx <= 17; lx++)
-                {
-                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 29, (lx == 16) ? 294 : 295);
-                    SetPassableIfValid(bldLayer, lx, 29, false);
-                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 30, (lx == 16) ? 319 : 320);
-                    SetPassableIfValid(bldLayer, lx, 30, false);
-                    SetTileIfValid(bldLayer, outdoorsSheet, lx, 31, (lx == 16) ? 344 : 345);
-                    SetPassableIfValid(bldLayer, lx, 31, false);
-                }
-            }
 
             // 5. Límite Este y esquinas NE / SE (lx=36..39):
-            for (int ly = 8; ly <= 31; ly++)
+            for (int ly = 8; ly <= 28; ly++)
             {
                 frontLayer.Tiles[37, ly] = null;
                 frontLayer.Tiles[38, ly] = null;
                 frontLayer.Tiles[39, ly] = null;
             }
 
-            // Esquina NE: unión entre raíl horizontal y valla vertical
-            SetTileIfValid(bldLayer, outdoorsSheet, 37, 8, 384);
-            SetPassableIfValid(bldLayer, 37, 8, false);
-            SetTileIfValid(frontLayer, outdoorsSheet, 37, 7, 359);
+            // Esquina NE limpia: eliminar postes flotantes y comenzar valla vertical en (38, 9)
+            bldLayer.Tiles[37, 8] = null;
+            frontLayer.Tiles[37, 7] = null;
+            bldLayer.Tiles[38, 8] = null;
+            frontLayer.Tiles[38, 7] = null;
+            SetGrassTile(backLayer, outdoorsSheet, 37, 8, TerrainTileClassifier.SunnyGrassTileIndex);
+            SetGrassTile(backLayer, outdoorsSheet, 38, 8, TerrainTileClassifier.SunnyGrassTileIndex);
 
-            SetTileIfValid(bldLayer, outdoorsSheet, 38, 8, 385);
-            SetPassableIfValid(bldLayer, 38, 8, false);
-            SetTileIfValid(frontLayer, outdoorsSheet, 38, 7, 360);
-
+            SetGrassTile(backLayer, outdoorsSheet, 39, 7, 150);
+            SetGrassTile(backLayer, outdoorsSheet, 39, 8, 150);
             SetTileIfValid(bldLayer, outdoorsSheet, 39, 7, 16);
             SetPassableIfValid(bldLayer, 39, 7, false);
             SetTileIfValid(bldLayer, outdoorsSheet, 39, 8, 16);
             SetPassableIfValid(bldLayer, 39, 8, false);
-            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 38, 7, 994);
-            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 7, 995);
+            alwaysFrontLayer.Tiles[38, 7] = null;
+            alwaysFrontLayer.Tiles[39, 7] = null;
 
-            // Valla vertical en columna 38 (ly=9..27):
             for (int ly = 9; ly <= 26; ly++)
             {
-                SetDirtTile(backLayer, outdoorsSheet, 36, ly, (ly % 2 == 0) ? 153 : 226);
+                SetDirtTile(backLayer, outdoorsSheet, 36, ly, 228);
                 SetGrassTile(backLayer, outdoorsSheet, 37, ly, TerrainTileClassifier.SunnyGrassTileIndex);
                 bldLayer.Tiles[37, ly] = null;
-
-                SetGrassTile(backLayer, outdoorsSheet, 38, ly, TerrainTileClassifier.SunnyGrassTileIndex);
-                SetTileIfValid(bldLayer, outdoorsSheet, 38, ly, 386);
-                SetPassableIfValid(bldLayer, 38, ly, false);
-                frontLayer.Tiles[38, ly] = null;
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 38, ly, (ly % 2 == 0) ? 994 : 1019);
-
-                SetGrassTile(backLayer, outdoorsSheet, 39, ly, TerrainTileClassifier.SunnyGrassSoftTileIndex);
-                SetTileIfValid(bldLayer, outdoorsSheet, 39, ly, 16);
-                SetPassableIfValid(bldLayer, 39, ly, false);
-                SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, ly, (ly % 2 == 0) ? 995 : 1020);
             }
-
-            // Poste terminal en (38, 27):
-            SetGrassTile(backLayer, outdoorsSheet, 38, 27, TerrainTileClassifier.SunnyGrassTileIndex);
-            SetTileIfValid(bldLayer, outdoorsSheet, 38, 27, 383);
-            SetPassableIfValid(bldLayer, 38, 27, false);
-            SetTileIfValid(frontLayer, outdoorsSheet, 38, 26, 358);
-
-            // Seto exterior continuo en columna 39 hasta conectar con el seto sur:
-            SetGrassTile(backLayer, outdoorsSheet, 39, 27, TerrainTileClassifier.SunnyGrassSoftTileIndex);
-            SetTileIfValid(bldLayer, outdoorsSheet, 39, 27, 16);
-            SetPassableIfValid(bldLayer, 39, 27, false);
-            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 27, 1020);
-
-            SetGrassTile(backLayer, outdoorsSheet, 39, 28, TerrainTileClassifier.SunnyGrassSoftTileIndex);
+            ApplyCleanEastFenceAndForest(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 9, 27, 38);
+            SetGrassTile(backLayer, outdoorsSheet, 39, 28, 150);
+            SetPassableIfValid(backLayer, 39, 28, false);
             SetTileIfValid(bldLayer, outdoorsSheet, 39, 28, 16);
             SetPassableIfValid(bldLayer, 39, 28, false);
-            SetTileIfValid(alwaysFrontLayer, outdoorsSheet, 39, 28, 1020);
+            alwaysFrontLayer.Tiles[39, 28] = null;
 
             // Ribete canónico de esquina redondeada en SE:
             SetDirtTile(backLayer, outdoorsSheet, 36, 27, 228);
             SetGrassTile(backLayer, outdoorsSheet, 36, 28, TerrainTileClassifier.SunnyGrassTileIndex);
             SetGrassTile(backLayer, outdoorsSheet, 37, 27, TerrainTileClassifier.SunnyGrassTileIndex);
             SetGrassTile(backLayer, outdoorsSheet, 37, 28, TerrainTileClassifier.SunnyGrassTileIndex);
+
+            // 6. Reducir el lago grande del cuadrante este a un estanque pequeño canónico (6x6)
+            // para dejar mucho más espacio construible manteniendo la estética vanilla.
+            ClearRectToDirt(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 15, 9, 33, 25);
+            StampVanillaSmallPond(backLayer, bldLayer, frontLayer, alwaysFrontLayer, outdoorsSheet, 23, 14);
         }
 
         public static void GetEntranceOpeningAndCorridor(
