@@ -19,17 +19,22 @@
   </ItemGroup>
 
 
+  <Import Project="..\..\local.props" Condition="Exists('..\..\local.props')" />
+  <PropertyGroup>
+    <GamePath Condition="'$(GamePath)' == ''">/home/dr4co/.local/share/Steam/steamapps/common/Stardew Valley</GamePath>
+  </PropertyGroup>
+
   <ItemGroup>
     <Reference Include="Stardew Valley">
-      <HintPath>/home/dr4co/.local/share/Steam/steamapps/common/Stardew Valley/Stardew Valley.dll</HintPath>
+      <HintPath>$(GamePath)/Stardew Valley.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="xTile">
-      <HintPath>/home/dr4co/.local/share/Steam/steamapps/common/Stardew Valley/xTile.dll</HintPath>
+      <HintPath>$(GamePath)/xTile.dll</HintPath>
       <Private>True</Private>
     </Reference>
     <Reference Include="MonoGame.Framework">
-      <HintPath>/home/dr4co/.local/share/Steam/steamapps/common/Stardew Valley/MonoGame.Framework.dll</HintPath>
+      <HintPath>$(GamePath)/MonoGame.Framework.dll</HintPath>
       <Private>True</Private>
     </Reference>
   </ItemGroup>
