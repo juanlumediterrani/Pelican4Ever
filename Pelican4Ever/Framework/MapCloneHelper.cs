@@ -357,6 +357,16 @@ namespace Pelican4Ever.Framework
                 }
             }
 
+            // 7c. Limpiar remates Front/AlwaysFront huérfanos sobre las columnas de borde de los
+            // pasos activos (copas recortadas por el Crop de BusStop ensucian el corredor).
+            if (outdoorsSheet != null)
+            {
+                if (bridgeLoc.West is { } westPassage)
+                    ClearPassageEdgeCanopies(width, bridgeLoc, westPassage.FirstRow, westPassage.RowCount, leftMost: true, frontLayer, alwaysFrontLayer, alwaysFront2Layer, alwaysFront3Layer);
+                if (bridgeLoc.East is { } eastPassage)
+                    ClearPassageEdgeCanopies(width, bridgeLoc, eastPassage.FirstRow, eastPassage.RowCount, leftMost: false, frontLayer, alwaysFrontLayer, alwaysFront2Layer, alwaysFront3Layer);
+            }
+
             // 8. Escribir map.Properties["Warp"] con los pasos declarativos (TASK-1202 / TASK-1401)
             string passageWarps = PlazaTopologyVerifier.BuildPassageWarpString(bridgeLoc);
             if (!string.IsNullOrEmpty(passageWarps))
@@ -376,6 +386,40 @@ namespace Pelican4Ever.Framework
             ClearBlockingAndWaterProperties(backLayer.Tiles[MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY]);
 
             return target;
+        }
+
+
+        /// <summary>
+        /// Limpia las copas/remates de Front y AlwaysFront sin base en las columnas de borde de
+        /// un paso activo del puente (objetos multi-casilla recortados por el Crop de BusStop).
+        /// </summary>
+        private static void ClearPassageEdgeCanopies(
+            int width,
+            PlazaLocation bridgeLoc,
+            int firstRow,
+            int rowCount,
+            bool leftMost,
+            Layer frontLayer,
+            Layer alwaysFrontLayer,
+            Layer? alwaysFront2Layer,
+            Layer? alwaysFront3Layer)
+        {
+            int col0 = leftMost ? 0 : width - 2;
+            int col1 = leftMost ? 1 : width - 1;
+
+            for (int x = col0; x <= col1; x++)
+            {
+                for (int y = firstRow - 1; y < firstRow + rowCount + 1; y++)
+                {
+                    if (y < 0 || y >= bridgeLoc.Height)
+                        continue;
+
+                    frontLayer.Tiles[x, y] = null;
+                    alwaysFrontLayer.Tiles[x, y] = null;
+                    if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, y] = null;
+                    if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, y] = null;
+                }
+            }
         }
 
         /// <summary>
@@ -502,6 +546,49 @@ namespace Pelican4Ever.Framework
             SetTileIfValid(bldLayer, outdoorsSheet, 2, 26, VerticalMultiTileClassifier.FenceMidBaseTileIndex);
             SetTileIfValid(frontLayer, outdoorsSheet, 2, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
             SetTileIfValid(frontLayer, outdoorsSheet, 32, 25, VerticalMultiTileClassifier.FenceMidTopTileIndex);
+
+            // 6. Copas huérfanas en la fila 0 del borde norte: cualquier remate de Front/AlwaysFront
+            // sin base en Buildings[x, 1] es un fragmento truncado por el recorte (se dibuja con su
+            // mitad superior fuera del mapa). Se elimina para dejar el borde limpio.
+            for (int x = 0; x <= 34; x++)
+            {
+                if (bldLayer.Tiles[x, 1] != null)
+                    continue;
+
+                bool orphanFront = frontLayer.Tiles[x, 0] != null || alwaysFrontLayer.Tiles[x, 0] != null
+                    || (alwaysFront2Layer != null) || (alwaysFront3Layer != null);
+                if (!orphanFront)
+                    continue;
+
+                frontLayer.Tiles[x, 0] = null;
+                alwaysFrontLayer.Tiles[x, 0] = null;
+                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, 0] = null;
+                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, 0] = null;
+            }
+
+            // 7. Bases truncadas en la fila 0 del borde norte (troncos/coronas cuya fila superior
+            // quedaría fuera del mapa y se dibujan cortadas): se sustituyen por arbusto completo
+            // 351 no transitable y se limpian los restos superpuestos de Front/AlwaysFront. Los
+            // portales norte (x = 8..9 y 25..26) deben quedar COMPLETAMENTE abiertos: sin ninguna
+            // base ni have del recorte en fila 0, para que los warps a las plazas funcionen y se vean limpios.
+            bool IsNorthPortalColumn(int x) => x is 8 or 9 or 25 or 26;
+            foreach (int x in new[] { 8, 9, 24, 25, 26, 27, 29, 30, 31, 32 })
+            {
+                if (IsNorthPortalColumn(x))
+                {
+                    bldLayer.Tiles[x, 0] = null;
+                }
+                else
+                {
+                    SetTileIfValid(bldLayer, outdoorsSheet, x, 0, 351);
+                    SetPassableIfValid(bldLayer, x, 0, false);
+                }
+
+                frontLayer.Tiles[x, 0] = null;
+                alwaysFrontLayer.Tiles[x, 0] = null;
+                if (alwaysFront2Layer != null) alwaysFront2Layer.Tiles[x, 0] = null;
+                if (alwaysFront3Layer != null) alwaysFront3Layer.Tiles[x, 0] = null;
+            }
         }
 
         /// <summary>
@@ -3633,6 +3720,7 @@ namespace Pelican4Ever.Framework
                 }
             }
         }
+
 
         private static bool HasWaterProperty(Tile tile)
         {
