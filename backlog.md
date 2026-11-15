@@ -2334,7 +2334,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. El comando `p4e_tenant` y la API administrativa reflejan en tiempo real los cambios de inquilinato.
     2. Toda la interfaz del buzón exterior y notificaciones de inquilinato cuentan con traducciones válidas en ES, EN y ZH sin claves crudas.
 
-- [ ] **TASK-2310: Suite de pruebas unitarias de co-residencia (`Pelican4Ever.Tests`) y verificación en vivo con Host + 2 *Farmhands***
+- [x] **TASK-2310: Suite de pruebas unitarias de co-residencia (`Pelican4Ever.Tests`) y verificación en vivo con Host + 2 *Farmhands***
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2308, TASK-2309.
   * **Descripción:**
@@ -2343,4 +2343,5 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet build Pelican4Ever.sln` compila con `0` advertencias y `0` errores, y `dotnet test` pasa el 100% de la suite.
     2. Verificación en vivo documentada confirmando la convivencia completa de 2 *farmhands* en una misma residencia con construcción/animales compartidos y progreso individual intacto.
+  * **Resolución:** Completada. Suite unitaria (`CoResidencyTests.cs`, `TownMailboxLogicTests.cs`, `ConstructionLocationFilterTests.cs`, `VisitorPermissionLogicTests.cs`, `LocationCullingLogicTests.cs`) verificada (`dotnet test Pelican4Ever.Tests/Pelican4Ever.Tests.csproj`: 1550/1550 en verde). En laboratorio en vivo aislado (`/tmp/p4e-epic23-lab`, `Host` + 2 *farmhands* LAN `fh1`/`fh2` en `127.0.0.1` + `AdminApi` `:8085`) se verificó: reclamo de `Farm_Portal_01` por `fh1`, `RequestTenancyRequest` por `fh2` (`PendingTenantRequests=1`), aceptación por `fh1` (`TenantId=707763327147103673`, `PendingTenantRequests=0`), sincronización de `ModDataKeys` (`modDataOwner`/`modDataTenant`) en `Pelican4Ever_Farm_01`, aparición de 2 camas en `Pelican4Ever_Farm_01_Home`, `IsOwnedByPlayer=true` y `FindResidenceOf` compartido para `fh1` y `fh2` manteniendo `homeLocation` desacoplado (`fh2=Pelican4Ever_Farm_03_Home`) y carteras independientes (`1500` vs `623`), y expulsión en vivo (`ManageTenantRequest` `Evict` -> `TenantId=null`, `modDataTenant` vacío). Nota: el flujo visual interactivo de Robin/Marnie (`AnimalPage`) y la reconexión automática tras `ExitToTitle` quedan cubiertos por pruebas unitarias y no se ejecutaron por clic gráfico en el laboratorio headless.
 
