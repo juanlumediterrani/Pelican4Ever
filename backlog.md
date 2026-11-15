@@ -2046,3 +2046,152 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     4. Pruebas unitarias del reparto por categoría.
 
 > **Cierre de desarrollo y laboratorio:** `TASK-2101`–`TASK-2106` cerradas; la tarea de calibración y prueba en partida con varios jugadores (`TASK-2107`) se ha trasladado a [test-users-tasks.md](test-users-tasks.md).
+
+---
+
+### Épica 22 (v0.3.1): Pedidos a Tiendas desde el Buzón y Entregas Diferidas a Mediodía (rama `feat/mailbox-shop-orders`)
+> **Objetivo:** No dejar fuera a los jugadores nocturnos en el reloj 1:1 de *Pelican 4Ever*, permitiéndoles realizar pedidos 24/7 a las tiendas del valle desde su buzón de correo (tanto el exterior del portal en Plaza/Puentes como el interior de su residencia). Al pedir se muestra el menú normal de cada comercio y se cobra en el acto (oro, materiales, trueques o herramienta base), pero la entrega se pospone al mediodía (`12:00` / `1200`) de la siguiente jornada en forma de **paquete físico en el exterior de su residencia** (que solo su propietario puede abrir cuando quiera) o de **andamios de construcción / llegada de animales**.
+
+#### 22.0 Reglas de Producto y Hallazgos del Motor (Stardew Valley 1.6.15)
+
+1. **Disponibilidad 24/7 y corte horario en el amanecer (`06:00 AM`):**
+   - El catálogo del buzón ignora los horarios de cierre comercial y días festivos/semanales de los NPCs.
+   - **Regla de día de entrega (`DeliveryGameDay`):** El rollover ocurre a las `02:00 AM` y el amanecer a las `06:00 AM` (`DayStartTime`). Todo pedido realizado entre las `06:00 AM` y las `01:59 AM` (antes del rollover del día $D$) se programa para `DeliveryGameDay = D + 1` a las `1200`. Si un jugador trasnochador realiza el pedido en la madrugada post-rollover (`02:00 AM – 05:59 AM`, donde `Game1.Date.TotalDays` ya ha avanzado a $D + 1$ pero aún no ha amanecido), se programa para `DeliveryGameDay = D + 1` (es decir, el `currentGameDay` en curso), recibiéndolo a las `12:00` de esa misma mañana.
+   - **Trampa del motor en `NightHold` (`02:00–06:00 AM`):** Entre las `02:00 AM` y las `06:00 AM` del propio `DeliveryGameDay`, `RealTimeClockModule` mantiene `Game1.timeOfDay = 2550` (`IsNightHold = true`). La condición de entrega **nunca** debe evaluar simplemente `Game1.timeOfDay >= 1200`, sino exigir `currentGameDay > DeliveryGameDay` o bien `currentGameDay == DeliveryGameDay && !IsNightHold && Game1.timeOfDay >= 1200`.
+2. **Catálogo progresivo de tiendas:**
+   - **5 comercios base:** Pierre (`SeedShop`), Robin (`Carpenter` + construcción/mejoras), Clint (`Blacksmith` + mejora de herramientas + procesado de geodas), Marnie (`AnimalShop` + compra de animales) y Willy (`FishShop`, tras `spring_2_1` / día $\ge 2$).
+   - **Comercios adicionales según progreso:** Saloon de Gus (`Saloon`), Clínica de Harvey (`Hospital`), Gremio de Aventureros de Marlon (`AdventureShop`, requiere `guildMember` o `deepestMineLevel >= 5`), Oasis de Sandy (`Oasis`, requiere autobús reparado `ccVault` / `JojaVault`), Tienda Sombría de Krobus (`ShadowShop`, requiere `hasRustyKey`) y Enano (`Dwarf`, requiere `canUnderstandDwarves`).
+3. **Ubicación y propiedad exclusiva de los paquetes (`Chest` con `giftbox = true`):**
+   - A las `12:00` (`1200`) de `DeliveryGameDay`, los pedidos de objetos se materializan como paquetes (`Chest` con `giftbox.Value = true`, `playerChest.Value = false` y `giftboxIndex` según el comercio) en las casillas libres junto al buzón/porche exterior de la residencia privada del jugador (`Pelican4Ever_Farm_01..16`, o junto al buzón principal de `Farm` para el Host), sin bloquear la puerta de la casa ni el buzón.
+   - **Apertura exclusiva por el propietario (`OwnerId`) y riesgos de `Chest.dumpContents` vanilla:** En `Stardew Valley.dll`, `Chest.dumpContents()` solo comprueba propiedad si `giftboxIsStarterGift && location is FarmHouse`, concede por error experiencia de habilidad 5 (`gainExperience(5, 25 + CurrentMineLevel)`) y destruye la caja soltando objetos al suelo si el inventario está lleno. Además, `VisitorGuardModule` permite abrir cofres a visitantes si `VisitorsCanEdit = true`. Por tanto, los paquetes de correo llevan `modData["Pelican4Ever/MailPackageOwnerId"]` y un flujo de apertura propio que bloquea a cualquier jugador distinto de `OwnerId` (incluso con `VisitorsCanEdit`), impide que herramientas o bombas los destruyan y transfiere únicamente los objetos que quepan en el inventario (conservando el paquete si aún quedan objetos dentro).
+
+---
+
+- [x] **TASK-2201: Dominio puro de pedidos por correo, planificación horaria `06:00 AM` y catálogo de tiendas (`Pelican4Ever.Core/Economy/MailOrderLogic.cs`)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** Ninguna.
+  * **Descripción:** Implementar en `Pelican4Ever.Core/Economy` los modelos de datos y reglas puras de los pedidos diferidos sin dependencias de SMAPI/Stardew:
+    - Modelos serializables en `ServerWorldState` (migración de esquema `v6 → v7`):
+      - `PendingMailItemOrder`: `OrderId`, `PlayerId`, `ShopId`, `CreatedAtGameDay`, `DeliveryGameDay`, `DeliveryTimeOfDay` (`1200`) y lista de líneas `MailOrderItemLine` (`QualifiedItemId`, `Stack`, `Quality`, `PricePaid`).
+      - `PendingBuildingOrder`: `OrderId`, `PlayerId`, `Builder` (`"Robin"`), `TargetLocationName`, `BuildingType`, `TileX`, `TileY`, `TilesWide`, `TilesHigh`, `SkinId`, `IsUpgrade`, `TargetBuildingTileX`, `TargetBuildingTileY`, `IsHouseUpgrade`, `CreatedAtGameDay`, `DeliveryGameDay`.
+      - `PendingAnimalOrder`: `OrderId`, `PlayerId`, `TargetLocationName`, `BuildingTileX`, `BuildingTileY`, `AnimalType`, `AnimalName`, `AnimalEntityId`, `PricePaid`, `CreatedAtGameDay`, `DeliveryGameDay`.
+    - `MailOrderScheduleLogic`: cálculo determinista de `ComputeDeliveryGameDay(currentGameDay, localTimeOfDay, rolloverTime, dayStartTime)` y evaluación `IsReadyToDeliver(...)` inmune al `timeOfDay = 2550` de `NightHold` entre las `02:00` y las `06:00`.
+    - `MailOrderCatalogLogic`: resolución pura de las tiendas visibles para un jugador según sus flags de progreso (`hasRustyKey`, `canUnderstandDwarves`, `guildMember`, `deepestMineLevel`, `ccVault`/`JojaVault`, `spring_2_1`).
+    - `MailPackagePlacementLogic`: búsqueda determinista en espiral de la primera casilla libre junto al buzón/porche de la residencia que no pise la puerta de la casa, el buzón, caminos bloqueados, edificios ni warps.
+  * **Criterios de aceptación:**
+    1. Un pedido hecho a las `23:30` o a la `01:30` del día $D$ recibe `DeliveryGameDay = D + 1`; uno hecho a las `03:30` (tras el rollover de las `02:00`, ya en día $D + 1$ pero antes de las `06:00`) recibe también `DeliveryGameDay = D + 1`.
+    2. `IsReadyToDeliver` devuelve `false` a las `03:00 AM` de `DeliveryGameDay` aunque `Game1.timeOfDay` valga `2550`, y devuelve `true` a partir de las `12:00` del mediodía (`1200`) de `DeliveryGameDay` y en cualquier día posterior.
+    3. `MailOrderCatalogLogic` devuelve las 5 tiendas base y filtra correctamente Marlon, Sandy, Krobus y el Enano según el progreso.
+    4. Migración `ServerWorldState` v6 → v7 cubierta con pruebas unitarias en `Pelican4Ever.Tests`.
+
+- [x] **TASK-2202: Menú de pedidos en buzones exteriores (Plaza/Puentes) e interiores (Residencia y Granja Host) (`TownMailboxModule.cs`, `MailOrderModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2201.
+  * **Descripción:**
+    - En `TownMailboxModule.HandleMailboxInteraction` (buzones junto a portales en la Granja Host y Puentes), añadir para el propietario la opción `MailOrder` («Pedidos por catálogo (Tiendas)»), mostrando entre paréntesis el número de pedidos en camino si los hay.
+    - Interceptar la acción de mapa `"Mailbox"` (`GameLocation.performAction`) tanto en las residencias privadas (`Pelican4Ever_Farm_01..16`) como en la Granja Host (`Farm`):
+      - Si quien interactúa en una residencia privada no es su propietario (`OwnerId`), bloquear la acción con el mensaje `mailbox.restricted` (corrigiendo de paso que `GameLocation.performAction("Mailbox")` en vanilla solo comprueba `getBuildingAt`, que es nulo en la casilla del buzón).
+      - Si es el propietario (o el Host en el buzón principal de `Farm`), abrir el diálogo de buzón con: `Leer correo (N)`, `Pedidos por catálogo (Tiendas)`, `Consultar pedidos en camino (M)` y `Salir`.
+    - Al elegir `Pedidos por catálogo`, mostrar el selector paginado de tiendas desbloqueadas (`ShowPagedResponses`) y, para Robin, Clint y Marnie, el submenú con sus servicios de mostrador.
+  * **Criterios de aceptación:**
+    1. El propietario puede acceder al catálogo de tiendas tanto desde el buzón exterior de su portal como desde el buzón interior de su residencia (y el Host desde el buzón de `Farm`).
+    2. Un visitante en una residencia ajena no puede leer el correo ni abrir el catálogo de pedidos desde el buzón interior ni exterior.
+    3. La opción de consultar pedidos en camino detalla qué paquetes, animales o construcciones llegarán y en qué fecha/hora (`12:00`).
+
+- [x] **TASK-2203: Compra de objetos en `ShopMenu` con cobro en el acto y desvío al paquete diferido (`MailOrderModule.cs`)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2201, TASK-2202.
+  * **Descripción:**
+    - Abrir las tiendas de objetos con `Utility.TryOpenShopMenu(shopId, ownerName)` bajo una sesión activa de pedido por buzón (`MailOrderSession`).
+    - En clientes donde la ubicación interior del tendero no esté cargada (`Game1.getCharacterFromName(ownerName) == null`), hidratar `shopMenu.portraitTexture` desde `Portraits\<ownerName>` para que el menú luzca idéntico al presencial.
+    - Interceptar la compra en `ShopMenu` (`onPurchase` / postfix en `tryToPurchaseItem`):
+      - El cobro de moneda (`ShopMenu.chargePlayer`), el consumo de objetos de trueque (`ConsumeTradeItem`) y la reducción de stock sincronizado (`HandleSynchedItemPurchase`) se ejecutan **en el momento de la compra**.
+      - Las recetas (`item.IsRecipe`) y mejoras inmediatas de cuenta (`actionWhenPurchased` salvo herramientas de Clint) se aprenden/aplican al instante.
+      - Los objetos físicos adquiridos (`heldItem`) se capturan antes de pasar al cursor o al inventario del jugador (`heldItem = null`), agrupándose en un `PendingMailItemOrder` en el Host (vía `PlaceMailItemOrderRequest` en clientes) para `DeliveryGameDay` a las `1200` y mostrando notificación HUD de envío programado.
+  * **Criterios de aceptación:**
+    1. Comprar semillas, cebos, minerales, muebles o árboles frutales desde el buzón descuenta el oro (y objetos de trueque) al instante, pero no entrega el objeto en el inventario inmediato.
+    2. El jugador puede comprar múltiples lotes seguidos en el mismo `ShopMenu` sin que el cursor quede ocupado por `heldItem` ni se exija espacio libre en su mochila actual.
+    3. En un cliente que no ha visitado `SeedShop` ni `FishShop`, el `ShopMenu` muestra el retrato y diálogo del tendero sin errores.
+
+- [x] **TASK-2204: Materialización de paquetes a las `12:00` en la residencia y apertura exclusiva por el propietario (`MailPackageDelivery.cs`, `VisitorGuardModule.cs`)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2201, TASK-2203.
+  * **Descripción:**
+    - En el Host (`OneSecondUpdateTicked` y al iniciar/cargar día si hay pedidos de días anteriores ya vencidos), evaluar `MailOrderScheduleLogic.IsReadyToDeliver` sobre `ServerWorldState.PendingMailItemOrders`.
+    - Para cada pedido listo: resolver la residencia del propietario (`Pelican4Ever_Farm_XX`, o `Farm` para el Host), hallar la primera casilla libre junto al buzón con `MailPackagePlacementLogic.FindFreePackageTile`, e instanciar un `Chest` con `giftbox.Value = true`, `playerChest.Value = false`, `giftboxIndex.Value` según la tienda, los `Items` del pedido y las claves `modData`: `Pelican4Ever/MailPackage = "1"`, `Pelican4Ever/MailPackageOwnerId = "<PlayerId>"`, `Pelican4Ever/MailPackageOrderId = "<OrderId>"`.
+    - **Protección y apertura exclusiva (`Prefix_Chest_CheckForAction` / `Prefix_Chest_PerformToolAction`):**
+      - Si el `Chest` tiene `Pelican4Ever/MailPackage == "1"`, bloquear cualquier intento de rotura con herramientas o bombas (`performToolAction`, `onExplosion`).
+      - Al interactuar (`checkForAction`), verificar `who.UniqueMultiplayerID == packageOwnerId` **antes** de `VisitorGuardModule` (de modo que ni siquiera un visitante con `VisitorsCanEdit = true` pueda abrirlo). Si no es el dueño, mostrar mensaje de paquete privado y cancelar.
+      - Si es el dueño, ejecutar la apertura limpia (o solicitarla al Host desde el cliente con `ClaimMailPackageRequest`): reproducir sonido `"Ship"` + `"woodWhack"` y el `TemporaryAnimatedSprite` de `LooseSprites\Giftbox`, entregar al inventario del propietario cada `Item` que quepa (ejecutando `actionWhenClaimed()` si es una herramienta `GenericTool`), evitar la ganancia espuria de XP de `Chest.dumpContents()`, y retirar el objeto de `location.objects` cuando quede vacío (si el inventario se llena a mitad, conservar el paquete con los artículos restantes e informar por HUD).
+  * **Criterios de aceptación:**
+    1. A las `12:00` (`1200`) de `DeliveryGameDay`, el paquete aparece junto al buzón exterior de la residencia del comprador sin bloquear la puerta de la casa ni el buzón.
+    2. Un visitante (incluso con permisos de edición `VisitorsCanEdit = true` en esa residencia) no puede abrir ni destruir el paquete de otro jugador.
+    3. El propietario puede abrir el paquete cualquier día y a cualquier hora; si su inventario está lleno, no se pierde ningún objeto en el suelo.
+
+- [x] **TASK-2205: Robin por buzón — Construcción y mejora de edificios con andamios diferidos a las `12:00` y mejoras de casa (`MailOrderRobinService.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2201, TASK-2202.
+  * **Descripción:**
+    - **Construcción de edificios (`CarpenterMenu` en modo buzón):**
+      - Abrir el selector de ubicación de `FarmSlotModule` (residencia, anexos adquiridos e Isla Jengibre) y lanzar `CarpenterMenu("Robin", targetLocation)` marcado como sesión de buzón.
+      - Al pulsar para colocar un edificio (`tryToBuild`): validar que la huella esté libre y no solape otro `PendingBuildingOrder`, cobrar el oro y los materiales en el acto (`ConsumeResources()`), registrar `PendingBuildingOrder` en el Host para `DeliveryGameDay` a las `1200` y retirar la instancia inmediata para que **los andamios no aparezcan hasta el día siguiente a las `12:00`**.
+      - Parchear `Building.isThereAnythingtoPreventConstruction` / `GameLocation.isBuildable` para que las casillas reservadas por un `PendingBuildingOrder` no puedan ocuparse por otro pedido antes de las `12:00`.
+      - A las `12:00` de `DeliveryGameDay`, el Host materializa el edificio en `TargetLocation` con sus **andamios de construcción** (`daysOfConstructionLeft.Value = Math.Max(Blueprint.BuildDays, 1)` y `MarkUnderConstruction`), despejando maleza/objetos superficiales de la huella y, si es un `Pet Bowl`, registrando entonces la compra en `ClientPetAdoptionModule`.
+    - **Mejora de edificios (`CarpentryAction.Upgrade`) y Mejora de casa (`houseUpgradeOffer` / `houseUpgradeAccept`):**
+      - Al mejorar un edificio existente por buzón: cobrar oro y materiales en el acto, registrar `PendingBuildingOrder (IsUpgrade = true)` y activar los andamios de mejora (`upgradeName` + `daysUntilUpgrade`) al día siguiente a las `12:00`.
+      - Al encargar mejora de casa/cabaña desde el buzón: cobrar oro y madera/madera noble en el acto sin depender de que el NPC `Robin` esté cargado en la ubicación local del cliente, y activar `daysUntilHouseUpgrade` en la entrega.
+  * **Criterios de aceptación:**
+    1. Encargar un edificio a Robin desde el buzón descuenta oro y materiales al momento, deja el terreno sin andamios durante la noche y hace aparecer los andamios de construcción al día siguiente a las `12:00`.
+    2. No se pueden solapar dos pedidos de construcción pendientes sobre las mismas casillas antes de que aparezcan los andamios.
+    3. Un cliente puede encargar mejoras de edificios y de su casa desde el buzón sin errores de cámara ni de NPC ausente.
+
+- [x] **TASK-2206: Marnie por buzón — Compra de animales con entrega diferida a las `12:00` y retorno seguro al buzón (`MailOrderMarnieService.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2201, TASK-2202.
+  * **Descripción:**
+    - Al elegir «Comprar animales» desde el buzón, abrir el selector de destino (`FarmSlotModule.Prefix_ShowAnimalShopMenu`) y lanzar `PurchaseAnimalsMenu` en modo pedido por correo, guardando la ubicación y casilla de origen del jugador (`OriginLocationName`, `OriginTile`).
+    - **Corrección del warp de retorno vanilla:** En `Stardew Valley.dll`, `PurchaseAnimalsMenu.setUpForReturnToShopMenu()` y `setUpForReturnAfterPurchasingAnimal()` hacen `Game1.getLocationRequest("AnimalShop")` fijo, y `marnieAnimalPurchaseMessage()` invoca `Game1.getCharacterFromName("Marnie")`. Parchear ambos métodos cuando el menú se abrió desde el buzón para que devuelvan al jugador a `OriginLocationName` y muestren el diálogo de confirmación de entrega para el día siguiente a las `12:00`.
+    - **Cupo efectivo y entrega diferida:**
+      - Al comprobar si un `AnimalHouse` está lleno en `PurchaseAnimalsMenu`, sumar los `PendingAnimalOrders` en tránsito hacia ese edificio (`animalsThatLiveHere.Count + pendingInTransit >= maxOccupants`) para impedir comprar más animales de los que caben.
+      - En `PurchaseAnimalsMenu.textBoxEnter`: cobrar `priceOfAnimal` en el acto, interceptar `adoptAnimal` para que el animal no aparezca de inmediato, y registrar `PendingAnimalOrder` en el Host.
+      - A las `12:00` de `DeliveryGameDay`, el Host instancia el `FarmAnimal` con el nombre y tipo elegidos y ejecuta `animalHouse.adoptAnimal(animal)` (con reembolso seguro si el edificio hubiera sido demolido antes de las `12:00`).
+  * **Criterios de aceptación:**
+    1. Al comprar un animal o cancelar desde el buzón, el jugador regresa junto a su buzón (nunca es teletransportado al interior de `"AnimalShop"`).
+    2. El oro se descuenta al confirmar el nombre del animal, el cupo del corral/establo queda reservado en el acto y el animal aparece dentro de su edificio al día siguiente a las `12:00`.
+
+- [x] **TASK-2207: Clint por buzón — Mejora de herramientas (devolución en paquete) y procesado de geodas por correo (`MailOrderClintService.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2203, TASK-2204.
+  * **Descripción:**
+    - **Mejora de herramientas (`ShopId == "ClintUpgrade"`):**
+      - Permitir abrir `"ClintUpgrade"` desde el buzón siempre que `toolBeingUpgraded.Value == null`.
+      - En `Tool.actionWhenPurchased("ClintUpgrade")`, sustituir `Game1.DrawDialogue(Game1.getCharacterFromName("Clint"), ...)` cuando Clint no está en la ubicación actual por un mensaje de confirmación de pedido, cobrando el oro + 5 lingotes y retirando la herramienta base en el acto.
+      - Cuando `daysLeftForToolUpgrade.Value <= 0` y `toolBeingUpgraded.Value != null`, a partir de las `12:00` del mediodía empaquetar automáticamente la herramienta mejorada en un **paquete exclusivo del propietario** junto al buzón de su residencia y limpiar `toolBeingUpgraded.Value = null`, de modo que el jugador nocturno pueda recoger su herramienta mejorada (o activar `actionWhenClaimed()` en mejoras del cubo de basura) sin acudir a la herrería entre las `09:00` y las `16:00`.
+    - **Procesado de geodas por correo (`GeodeMenu`):**
+      - Al abrir `GeodeMenu` desde el buzón, permitir encargar la rotura de geodas y cajas misteriosas aunque el inventario local esté lleno (ya que el contenido no entra al inventario inmediato), cobrando `25g` por unidad en el acto.
+      - Al generar `geodeTreasure` (`Utility.getTreasureFromGeode`, respetando `goldenCoconutMutex` e incrementando `GeodesCracked` / `MysteryBoxesOpened`), interceptar la entrega al inventario local y añadir el objeto resultante al `PendingMailItemOrder` de Clint para su entrega en paquete al día siguiente a las `12:00`.
+  * **Criterios de aceptación:**
+    1. Un jugador nocturno puede enviar una herramienta a mejorar desde el buzón y, tras completarse los días de forja, recibirla a las `12:00` en un paquete junto al buzón de su residencia sin visitar la herrería.
+    2. Procesar geodas desde el buzón cobra `25g` por geoda en el momento y entrega los minerales/artefactos dentro del paquete de Clint al día siguiente a las `12:00`.
+
+- [x] **TASK-2208: Persistencia en Checkpoints, internacionalización (ES/EN/ZH), comandos de diagnóstico y bump a `0.3.1`**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2204..TASK-2207.
+  * **Descripción:**
+    - Verificar que `CheckpointModule` y `PersistenceModule` guardan y restauran íntegramente `PendingMailItemOrders`, `PendingBuildingOrders`, `PendingAnimalOrders` y los paquetes `Chest (giftbox = true)` ya materializados en las residencias.
+    - Añadir todas las claves de traducción (`mailbox.menu.shop_orders`, `mailbox.orders.*`, nombres de servicios, avisos de paquete privado y confirmaciones de envío) en `i18n/es.json`, `i18n/en.json`, `i18n/zh.json` y `FallbackTranslationProvider.cs`.
+    - Registrar el comando de consola/diagnóstico `p4e_mail_orders` (lista pedidos pendientes por jugador y permite `p4e_mail_orders deliver_now` en laboratorio) y actualizar `Pelican4Ever/manifest.json` a `"Version": "0.3.1"` al cerrar la épica.
+  * **Criterios de aceptación:**
+    1. Un pedido realizado antes de un checkpoint intradía o de un rollover sobrevive tras recargar la partida.
+    2. Todas las cadenas de interfaz disponen de traducción en español, inglés y chino sin claves crudas.
+    3. `p4e_mail_orders` muestra el estado de todos los pedidos pendientes y permite forzar su materialización en pruebas.
+
+- [ ] **TASK-2209: Suite de pruebas unitarias (`Pelican4Ever.Tests`) y verificación en vivo Host + Farmhand**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2201..TASK-2208.
+  * **Descripción:**
+    - Añadir `MailOrderLogicTests.cs` en `Pelican4Ever.Tests` cubriendo: cálculo de `DeliveryGameDay` en horario diurno, nocturno pre-rollover (`23:00`, `01:30`) y madrugada post-rollover (`02:30`, `05:50`); bloqueo de `IsReadyToDeliver` durante `NightHold` (`02:00–06:00`) con `timeOfDay = 2550`; catálogo progresivo de tiendas; colocación de paquetes sin bloquear puerta ni buzón; reserva de huella de andamios; cupo efectivo de animales en tránsito; y validación de apertura exclusiva por `OwnerId`.
+    - Ejecutar verificación en vivo con Host y Farmhand comprobando pedido nocturno de objetos, construcción diferida de Robin, compra de animal de Marnie, mejora/geodas de Clint, materialización a las `12:00` y bloqueo de apertura de paquetes a visitantes.
+  * **Criterios de aceptación:**
+    1. `dotnet build Pelican4Ever.sln` compila con `0` advertencias y `0` errores, y `dotnet test` pasa el 100% de la suite.
+    2. Verificación en vivo documentada con Host y Farmhand confirmando que solo el propietario puede abrir sus paquetes y que los andamios/paquetes aparecen puntualmente a las `12:00`.

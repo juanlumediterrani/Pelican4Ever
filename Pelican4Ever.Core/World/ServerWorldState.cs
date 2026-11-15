@@ -105,7 +105,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 6;
+        public const int CurrentSchemaVersion = 7;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -150,6 +150,15 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Metadatos del último checkpoint intradía persistido en esta partida (TASK-1606).</summary>
         public CheckpointMetadata? LastCheckpoint { get; set; }
+
+        /// <summary>Pedidos de objetos por buzón pendientes de materializarse a mediodía (TASK-2201).</summary>
+        public List<PendingMailItemOrder> PendingMailItemOrders { get; set; } = new();
+
+        /// <summary>Pedidos de construcción/mejora por buzón pendientes de iniciar andamios a mediodía (TASK-2201).</summary>
+        public List<PendingBuildingOrder> PendingBuildingOrders { get; set; } = new();
+
+        /// <summary>Pedidos de compra de animales por buzón pendientes de llegar a mediodía (TASK-2201).</summary>
+        public List<PendingAnimalOrder> PendingAnimalOrders { get; set; } = new();
 
         /// <summary>Devuelve el registro del jugador, creándolo si no existe.</summary>
         public PlayerRecord GetOrCreatePlayer(long uniqueMultiplayerId, string name)
@@ -360,6 +369,34 @@ namespace Pelican4Ever.Core.World
                 if (LastCheckpoint != null && LastCheckpoint.GameDay < 0)
                     LastCheckpoint = null;
                 SchemaVersion = 6;
+                changed = true;
+            }
+
+            // v6 → v7: pedidos diferidos por buzón (TASK-2201).
+            if (SchemaVersion < 7)
+            {
+                PendingMailItemOrders ??= new List<PendingMailItemOrder>();
+                PendingBuildingOrders ??= new List<PendingBuildingOrder>();
+                PendingAnimalOrders ??= new List<PendingAnimalOrder>();
+                SchemaVersion = 7;
+                changed = true;
+            }
+
+            if (PendingMailItemOrders == null)
+            {
+                PendingMailItemOrders = new List<PendingMailItemOrder>();
+                changed = true;
+            }
+
+            if (PendingBuildingOrders == null)
+            {
+                PendingBuildingOrders = new List<PendingBuildingOrder>();
+                changed = true;
+            }
+
+            if (PendingAnimalOrders == null)
+            {
+                PendingAnimalOrders = new List<PendingAnimalOrder>();
                 changed = true;
             }
 

@@ -192,12 +192,17 @@ namespace Pelican4Ever.Modules
 
             if (eval.Status == MailboxAccessStatus.Owner)
             {
+                int pendingCount = MailOrderModule.CountPendingOrdersFor(Game1.player.UniqueMultiplayerID);
                 Response[] choices = new[]
                 {
                     new Response("Enter", I18n.Get("mailbox.menu.enter")),
                     new Response("Mailbox", Game1.mailbox.Count > 0
                         ? I18n.Get("mailbox.menu.check_mail", new { count = Game1.mailbox.Count })
                         : I18n.Get("mailbox.menu.check_mail_empty")),
+                    new Response("ShopOrders", pendingCount > 0
+                        ? I18n.Get("mailbox.menu.shop_orders_pending", new { count = pendingCount })
+                        : I18n.Get("mailbox.menu.shop_orders")),
+                    new Response("PendingStatus", I18n.Get("mailbox.menu.view_pending", new { count = pendingCount })),
                     new Response("Policy", I18n.Get("mailbox.menu.policy", new { status = VisitorPermissionLogic.Describe(assignment?.Policy ?? AccessPolicy.Locked, assignment?.VisitorsCanEdit ?? false) })),
                     new Response("Cancel", I18n.Get("dialog.cancel"))
                 };
@@ -214,6 +219,14 @@ namespace Pelican4Ever.Modules
                         else if (whichAnswer == "Mailbox")
                         {
                             Game1.currentLocation.mailbox();
+                        }
+                        else if (whichAnswer == "ShopOrders")
+                        {
+                            MailOrderModule.OpenShopCatalogMenu();
+                        }
+                        else if (whichAnswer == "PendingStatus")
+                        {
+                            MailOrderModule.ShowPendingOrdersDialog();
                         }
                         else if (whichAnswer == "Policy")
                         {
