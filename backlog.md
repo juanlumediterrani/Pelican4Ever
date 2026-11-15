@@ -2195,3 +2195,152 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet build Pelican4Ever.sln` compila con `0` advertencias y `0` errores, y `dotnet test` pasa el 100% de la suite.
     2. Verificación en vivo documentada con Host y Farmhand confirmando que solo el propietario puede abrir sus paquetes y que los andamios/paquetes aparecen puntualmente a las `12:00`.
+
+---
+
+### Épica 23 (v0.3.2): Co-Residencia e Inquilinos en Parcelas Privadas (rama `feat/shared-residence-tenants`)
+> **Objetivo:** Permitir que dos jugadores clientes (*farmhands*) convivan en una misma residencia privada (`Pelican4Ever_Farm_01..16`) bajo los roles de **Propietario (`OwnerId`)** e **Inquilino (`TenantId`)** (máximo 1 inquilino por residencia, 2 residentes en total). La solicitud, aceptación y gestión del inquilinato se realizan desde el **buzón exterior en la puerta de la residencia** (ubicado fuera del mapa residencial, en su puente `Pelican4Ever_Bridge_1..3` o en la Plaza Central `Farm`, gestionado por `TownMailboxModule`). Los **menús y posesión de construcción** (Robin y Mago, presencial y por buzón) y **animales** (Marnie, pestaña `AnimalPage`, establos/corrales y mascotas) son **compartidos** entre ambos residentes, manteniendo todo el **resto de progreso estrictamente individual** (`useSeparateWallets = true`, `Shipping Bin` personal, correo `Game1.mailbox`, paquetes postales `Pelican4Ever/MailPackageOwnerId`, mejoras de herramientas, experiencia/niveles, saciedad/energía/sueño, progreso en minas, recetas y amistades).
+
+#### 23.0 Reglas de Producto y Puntos de Conflicto del Motor (Stardew Valley 1.6.15)
+
+1. **Roles en la parcela y exclusividad residencial:**
+   - Cada puerta/parcela residencial admite un único titular (**Propietario**, `OwnerId`) y hasta un máximo de **1 Inquilino** (`TenantId`).
+   - Un jugador solo puede figurar como residente (`OwnerId` o `TenantId`) en una única residencia simultáneamente: un inquilino activo no puede reclamar otra puerta ni postularse en otra mientras no abandone su inquilinato, y un propietario no puede ser inquilino en otra parcela sin liberar antes la suya.
+   - El Propietario conserva el control exclusivo sobre la aceptación/expulsión del inquilino, la política de privacidad (`AccessPolicy`, `VisitorsCanEdit`, `Friends`) y la liberación de la parcela; el Inquilino goza de acceso y edición incondicionales dentro de la residencia y sus anexos (`_Home`, `_Cellar`, `_Greenhouse`, `_Cave`, `Pelican4Ever_Annex_XX_*`) y dispone de opción para abandonar voluntariamente el inquilinato.
+2. **Puntos de conflicto anticipados y mitigaciones arquitectónicas:**
+   - **Conflicto 1 — Restricción 1:1 de `Cabin.farmhandReference` y selección de personaje al conectar (`GameServer.sendAvailableFarmhands`):** En Stardew Valley 1.6, cada *farmhand* aparece en el selector multijugador al iniciar sesión porque está referenciado por exactamente **un** edificio `Cabin` (`cabin.OwnerId == farmer.UniqueMultiplayerID`). Si dos jugadores compartiesen la misma instancia `Cabin` (`Pelican4Ever_Farm_XX_Home`), `AssignFarmhand` sobrescribiría al titular y `RehomeOrphanFarmhands` reubicaría al otro jugador. **Solución:** desacoplar el `Cabin` técnico de autenticación de red (`farmer.homeLocation`, asignado a una cabina de respaldo en un pool del Host para que los 16+ slots de login permanezcan independientes) del hogar residencial efectivo (`ResidenceSlotId` / `Pelican4Ever_Farm_XX_Home`), actualizando `RehomeOrphanFarmhands` para no considerar huérfano a ningún `TenantId` activo.
+   - **Conflicto 2 — Camas interiores (`ResidenceInteriorLogic`) y mejoras compartidas de la casa (`HouseUpgradeLevel` / `_Cellar`):** El layout base (`Pelican4Ever_Farm_XX_Home`) solo coloca una cama en `(9, 8)` y la mejora vanilla de Robin depende de `farmer.daysUntilHouseUpgrade` del dueño del `Cabin`. **Solución:** garantizar dos plazas de cama en `Pelican4Ever_Farm_XX_Home` con puntos de despertar diferenciados en `Prefix_ApplyWakeUpPosition` para Propietario e Inquilino, y sincronizar el nivel de mejora y el acceso a `_Cellar` sobre la estructura compartida de `Pelican4Ever_Farm_XX_Home` evitando dobles encargos simultáneos.
+   - **Conflicto 3 — Culling de red (`LocationCullingLogic.ShouldKeepActive`):** Si el Propietario está desconectado y solo el Inquilino está conectado, las ubicaciones de la residencia deben permanecer activas. **Solución:** evaluar `ShouldKeepActive` con ambos IDs (`OwnerId` o `TenantId`).
+   - **Conflicto 4 — Concurrencia en menús de Construcción y Animales (presencial y por buzón):** Ambos residentes pueden abrir Robin, el Mago o Marnie simultáneamente o encargar entregas diferidas a las `12:00`. **Solución:** sincronizar `PendingBuildingOrder` y `PendingAnimalOrder` de la residencia compartida a ambos residentes en `MailOrderModule.BroadcastOrdersSync`, impedir dos `PendingBuildingOrder` con `IsUpgrade == true` sobre el mismo edificio, y aplicar validación atómica en el Host para huella y `Postfix_AnimalHouse_IsFull` (`animalsThatLiveHere.Count + pendingInTransit`).
+   - **Conflicto 5 — Adopción de mascotas (`ClientPetAdoptionModule`):** `ResolveSlotOwnerId` asume actualmente un único `OwnerId` por parcela. **Solución:** permitir que cada residente (`OwnerId` o `TenantId`) pueda poseer su propio `PetBowl` asignado en la finca compartida y adoptar su mascota en Marnie.
+   - **Conflicto 6 — Cueva privada (`_Cave`), Invernadero (`_Greenhouse`) y Anexos (`AnnexPurchaseLogic`):** Extender las comprobaciones de `ModDataKeys.OwnerId` / `IsOwnedByPlayer` a `IsResident` para que ambos residentes compartan la cueva, el invernadero y la construcción/gestión de animales en todos los anexos de `ResidenceSlotId`.
+   - **Conflicto 7 — Aislamiento de paquetes postales y protocolo de expulsión/mudanza segura:** Los cofres de pedido (`Pelican4Ever/MailPackageOwnerId`) continúan bloqueados exclusivamente para su comprador `order.PlayerId` antes de `VisitorGuardModule`. Si un inquilino es expulsado o abandona la residencia (online u offline), se le evacua al puente exterior si la puerta es `Locked`, se limpia su `LastSleepLocation` residencial para evitar que despierte encerrado y se redirigen sus `PendingMailItemOrder` pendientes para que ningún objeto o herramienta quede atrapado.
+   - **Conflicto 8 — Liberación de parcela por el Propietario con inquilino activo:** Al liberar voluntariamente la residencia existiendo un `TenantId` activo, traspasar automáticamente la titularidad (`OwnerId = TenantId; TenantId = null`) para preservar la finca, edificios y animales compartidos del co-residente.
+
+---
+
+- [ ] **TASK-2301: Evolución de `ServerWorldState` (esquema v8), `DoorAssignment` y lógica pura de permisos de co-residencia (`ServerWorldState.cs`, `VisitorPermissionLogic.cs`, `ResidenceAnnexAccessLogic.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:**
+    - Elevar `ServerWorldState.CurrentSchemaVersion` de `7` a `8` y migrar limpiamente estados anteriores manteniendo `TenantId = null`.
+    - Añadir `long? TenantId` y `HashSet<long> PendingTenantRequests` a `DoorAssignment`.
+    - Añadir el helper puro `IsResident(DoorAssignment, long playerId)` (`OwnerId == playerId || (TenantId.HasValue && TenantId.Value == playerId)`) y actualizar `FindResidenceOf` y `ResolvePlayerResidenceSlot` para resolver tanto por `OwnerId` como por `TenantId`.
+    - Actualizar `CheckDoorClaim` y `NormalizeDoorAssignments` para impedir doble residencia (propietario e inquilino a la vez o inquilino en más de una puerta) y purgar solicitudes pendientes en otras puertas cuando un jugador adquiere residencia o inquilinato.
+    - Actualizar `VisitorPermissionLogic.CanEnter`, `VisitorPermissionLogic.CanEdit` y `ResidenceAnnexAccessLogic` para otorgar acceso y edición incondicionales al `TenantId` activo con independencia de `AccessPolicy` y `VisitorsCanEdit`.
+  * **Criterios de aceptación:**
+    1. Estados serializados en `SchemaVersion <= 7` cargan en `SchemaVersion = 8` sin pérdida de puertas ni anexos.
+    2. `FindResidenceOf(tenantId)` devuelve la residencia compartida y `CheckDoorClaim` rechaza que un inquilino reclame una segunda parcela mientras siga como inquilino.
+    3. `VisitorPermissionLogic.CanEnter` y `CanEdit` devuelven `true` para el `TenantId` aunque `Policy == AccessPolicy.Locked` y `VisitorsCanEdit == false`.
+
+- [ ] **TASK-2302: Sincronización de red (`SyncDoors` / `ManageTenant`), `ModDataKeys.TenantId` y activación en `LocationCullingLogic` (`ModDataKeys.cs`, `DoorModels.cs`, `LocationCullingLogic.cs`, `FarmSlotModule.cs`, `VisitorGuardModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2301.
+  * **Descripción:**
+    - Añadir `ModDataKeys.TenantId = "Pelican4Ever.TenantId"` y propagarlo junto con `ModDataKeys.OwnerId` en `Pelican4Ever_Farm_XX`, `_Cave`, `_Greenhouse`, `_Cellar` y `Pelican4Ever_Annex_XX_*`.
+    - Definir en `DoorModels.cs` / `ModMessages` los payloads de red `RequestTenancyPayload` (aspirante → Host: solicitar o cancelar solicitud) y `ManageTenantPayload` (propietario/inquilino → Host: `Accept`, `Reject`, `Evict`, `Leave`), replicando la lista de inquilinos y solicitudes en `SyncDoors`.
+    - Actualizar `LocationCullingLogic.ShouldKeepActive` y sus invocaciones para mantener activas las ubicaciones de la residencia si está conectado el Propietario **o** el Inquilino.
+    - Asegurar que `VisitorGuardModule.IsRestricted` considere residente al `TenantId` en la finca base, interiores y anexos.
+  * **Criterios de aceptación:**
+    1. Cuando el propietario está desconectado y solo el inquilino está online, la residencia y sus anexos permanecen activos en red.
+    2. El cliente del inquilino recibe al instante el `ModDataKeys.TenantId` replicado en la finca y sus anexos sin bloqueos de `VisitorGuardModule`.
+
+- [ ] **TASK-2303: Desacople de `Cabin` de autenticación de red frente al hogar residencial compartido (`FarmSlotModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2301.
+  * **Descripción:**
+    - Mantener una referencia `Cabin.farmhandReference` exclusiva en servidor para cada jugador cliente (mediante un pool técnico de cabinas de sesión en el Host o cabinas de respaldo fuera del uso residencial), evitando sobreescribir `Pelican4Ever_Farm_XX_Home` cuando dos jugadores comparten parcela.
+    - Redirigir lógicamente la residencia de destino del inquilino en `FarmSlotModule` hacia la casa compartida `Pelican4Ever_Farm_XX_Home` del propietario sin alterar su ranura de autenticación en `GameServer.sendAvailableFarmhands`.
+    - Actualizar `RehomeOrphanFarmhands` para que reconozca a todo `TenantId` activo en `WorldState.Doors` y nunca lo trate como jugador sin hogar ni lo mueva a otra puerta.
+  * **Criterios de aceptación:**
+    1. Dos jugadores clientes que conviven en `Pelican4Ever_Farm_01` pueden desconectarse y volver a elegir cada uno su propio personaje en la pantalla de login multijugador sin colisiones ni desaparición de ranura.
+    2. `RehomeOrphanFarmhands` conserva intacta la asociación del inquilino al reiniciar el servidor o recargar día.
+
+- [ ] **TASK-2304: Menú de solicitud, aceptación y gestión de inquilino en el buzón exterior del puente/plaza (`TownMailboxLogic.cs`, `TownMailboxModule.cs`, `MailOrderModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2302.
+  * **Descripción:**
+    - Ampliar `MailboxAccessStatus` en `TownMailboxLogic.cs` con el estado `Tenant` y actualizar `EvaluateAccess` para aceptar `long? tenantPlayerId`.
+    - En el buzón exterior del puente/plaza (`TownMailboxModule.HandleMailboxInteraction`):
+      - **Jugador externo sin residencia (`OtherPlayer` sin puerta ni inquilinato):** si la parcela no tiene inquilino, mostrar opción «Solicitar vivir como inquilino» (o «Cancelar solicitud» si ya la envió), además de «Visitar» si la política de puerta lo permite.
+      - **Propietario (`Owner`):** añadir la entrada «Inquilino...» mostrando contador de solicitudes pendientes, con submenú para aceptar/rechazar aspirantes de `PendingTenantRequests`, invitar directamente a un jugador conectado sin residencia, o expulsar/finalizar al inquilino actual previa confirmación.
+      - **Inquilino (`Tenant`):** mostrar menú operativo de residente (`Entrar`, `Leer correo`, `Pedidos por catálogo`, `Ver pedidos en curso`) más la opción «Dejar de ser inquilino (Mudarse)» con confirmación, manteniendo `Privacidad` exclusiva del Propietario.
+    - Actualizar `GetMailboxIndicatorPosition` / `OnRenderedWorld` en el puente y `Prefix_GameLocation_Mailbox` en el interior para que tanto propietario como inquilino vean el icono flotante de correo pendiente y lean únicamente su propio `Game1.mailbox`.
+  * **Criterios de aceptación:**
+    1. Un jugador sin residencia solicita ser inquilino desde el buzón exterior en el puente de la parcela y el propietario puede aceptarlo o rechazarlo desde ese mismo buzón exterior.
+    2. Tanto propietario como inquilino acceden a sus propias cartas y pedidos por correo desde el buzón del puente y ven el aviso visual de carta solo cuando tienen correo personal sin leer.
+
+- [ ] **TASK-2305: Camas interiores, despertar diferenciado y mejoras compartidas de la casa y bodega (`ResidenceInteriorLogic.cs`, `ResidenceUpgradeLogic.cs`, `FarmSlotModule.cs`, `BedLogoutModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2303.
+  * **Descripción:**
+    - Actualizar `ResidenceInteriorLogic` para proveer una segunda plaza de cama válida en `Pelican4Ever_Farm_XX_Home` al existir co-residencia, sin bloquear muebles ni paso interior.
+    - Actualizar `Prefix_ApplyWakeUpPosition`, `WarpToHome`, `Return Scepter`, `Warp Totem: Farm` y retorno por desmayo (`02:00 AM`) para llevar y despertar al Inquilino dentro de `Pelican4Ever_Farm_XX_Home` en su propia cama asignada, diferenciada de la del Propietario.
+    - Coordinar con `BedLogoutModule` el descanso/desconexión simultánea o independiente de ambos residentes en el mismo interior.
+    - Compartir el estado de mejora de la casa (`Pelican4Ever_Farm_XX_Home`) y bodega (`_Cellar`) de modo que cualquiera de los dos residentes pueda contratar la mejora en Robin y ambos reflejen el nuevo nivel interior sin dobles encargos simultáneos.
+  * **Criterios de aceptación:**
+    1. Propietario e inquilino despiertan en camas distintas dentro de `Pelican4Ever_Farm_XX_Home`, y el `Return Scepter` o desmayo devuelven al inquilino a su residencia compartida.
+    2. Contratar una mejora de la casa aplica el nivel resultante para ambos residentes y actualiza el acceso a `_Cellar`.
+
+- [ ] **TASK-2306: Menús y posesión compartida de construcción en Robin, Mago y pedidos por buzón (`ConstructionLocationFilter.cs`, `FarmSlotModule.cs`, `MailOrderRobinService.cs`, `MailOrderModule.cs`, `PrivateFarmCaves.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2302.
+  * **Descripción:**
+    - Actualizar `ConstructionLocationFilter.GetAllowedConstructionLocations` y `FarmSlotModule.GetFarmServiceDestinations` / `Prefix_ShowConstructOptions` para que devuelvan la residencia compartida y todos sus anexos tanto al `OwnerId` como al `TenantId`.
+    - Actualizar `FarmSlotModule.IsOwnedByPlayer(GameLocation, long playerId)` (y `CanClientManageLocation`, `Postfix_HasPermissionToBuild`, `Postfix_HasPermissionToMove`, pintura y `HandleDemolishBuildingRequest`) para tratar a ambos co-residentes como titulares de construcción.
+    - Sincronizar en `MailOrderModule.BroadcastOrdersSync` y `ShowPendingOrdersDialog` todos los `PendingBuildingOrder` cuyo `TargetLocationName` pertenezca a la residencia compartida o sus anexos hacia ambos residentes.
+    - Bloquear en `MailOrderRobinService` que un residente encargue por buzón una mejora (`IsUpgrade == true`) o construcción solapada sobre un edificio o casilla que ya tenga un `PendingBuildingOrder` activo del co-residente.
+    - Extender acceso/reparación/elección de cueva (`PrivateFarmCaves`), invernadero (`ResidenceUpgradeLogic`) y validación compartida de edificios en anexos a ambos residentes.
+  * **Criterios de aceptación:**
+    1. En Robin y la Torre del Mago (presencial y por buzón), el inquilino ve exactamente los mismos destinos (`Pelican4Ever_Farm_XX` y sus anexos) que el propietario y puede construir, mover, mejorar, pintar y demoler edificios compartidos.
+    2. Un `PendingBuildingOrder` encargado por un residente aparece en «Ver pedidos en curso» del otro y bloquea el solapamiento de huella o doble mejora sobre el mismo edificio.
+
+- [ ] **TASK-2307: Menús y posesión compartida de animales en Marnie, `AnimalPage`, buzón y adopción de mascotas (`FarmSlotModule.cs`, `MailOrderMarnieService.cs`, `ClientPetAdoptionModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2302, TASK-2306.
+  * **Descripción:**
+    - Habilitar `Prefix_ShowAnimalShopMenu` y `MailOrderMarnieService` para que ambos co-residentes puedan comprar animales hacia cualquier establo o corral (`AnimalHouse`) de la residencia compartida y sus anexos.
+    - Sincronizar `PendingAnimalOrder` de la residencia compartida a ambos residentes en `BroadcastOrdersSync`, garantizando que `Postfix_AnimalHouse_IsFull` sume los animales en tránsito de ambos jugadores frente al `animalLimit`.
+    - Verificar `Postfix_AnimalPage_FindAnimals` (`IsAnimalOwnedByLocalPlayer`) para que todos los animales de la residencia compartida aparezcan en la pestaña `AnimalPage` de ambos jugadores, con capacidad compartida de cuidarlos, mudarlos entre edificios y venderlos.
+    - Actualizar `ClientPetAdoptionModule` (`ResolveSlotOwnerId` / asignación de `PetBowl`) para que tanto el propietario como el inquilino puedan disponer de un `PetBowl` propio y adoptar su mascota en la finca compartida.
+  * **Criterios de aceptación:**
+    1. Todos los animales de granja de la parcela aparecen en el menú `AnimalPage` tanto del propietario como del inquilino, y cualquiera de los dos puede comprar nuevos animales en Marnie (presencial o por buzón).
+    2. Dos compras simultáneas por buzón entre propietario e inquilino nunca sobrepasan el límite de plazas de un `Barn` o `Coop`.
+    3. Ambos residentes pueden construir un `PetBowl` y adoptar su propia mascota en la parcela compartida.
+
+- [ ] **TASK-2308: Garantía de aislamiento de progreso individual y protocolo de expulsión, mudanza y traspaso de titularidad (`MailOrderPackageDelivery.cs`, `FarmSlotModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2305, TASK-2306, TASK-2307.
+  * **Descripción:**
+    - Verificar mediante pruebas y guardas que economía (`useSeparateWallets = true`, `personalShippingBin`), cartas de `Game1.mailbox`, paquetes postales de objetos/herramientas (`Pelican4Ever/MailPackageOwnerId` en `MailOrderPackageDelivery`), XP/habilidades, saciedad, energía, minas, recetas y amistades permanecen estrictamente aislados por jugador.
+    - Implementar el protocolo seguro de **fin de inquilinato** (por expulsión del propietario o abandono voluntario del inquilino):
+      - Si el ex-inquilino está online dentro de la finca/anexos y `AccessPolicy == Locked`, evacuarlo suavemente al puente exterior.
+      - Si está offline, limpiar su `LastSleepLocation` residencial para evitar que despierte dentro de una parcela cerrada.
+      - Redirigir cualquier `PendingMailItemOrder` pendiente del ex-inquilino para entregarlo en su nueva residencia o en un punto seguro de acceso público al conectar, sin pérdida de objetos ni herramientas mejoradas.
+    - Implementar **traspaso automático de titularidad** si el Propietario libera la residencia mientras tiene un `TenantId` activo (`OwnerId = TenantId; TenantId = null`).
+  * **Criterios de aceptación:**
+    1. El propietario no puede abrir los paquetes de correo (`MailOrderPackageDelivery`) del inquilino ni viceversa, y las compras/envíos afectan únicamente a la cartera individual de cada jugador.
+    2. Al expulsar a un inquilino con paquetes en camino u offline durmiendo en la residencia, el jugador aparece en el exterior al conectar y recibe sus paquetes pendientes íntegramente.
+    3. Si el propietario abandona la parcela existiendo inquilino, este pasa a ser automáticamente el nuevo propietario conservando edificios y animales.
+
+- [ ] **TASK-2309: Comandos de consola, exposición en `AdminApiModule` e internacionalización ES/EN/ZH (`AdminApiModule.cs`, `ConsoleCommands.cs`, `i18n/*.json`)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2304.
+  * **Descripción:**
+    - Registrar comando de consola `p4e_tenant <status|set|clear|accept|evict> <doorId> [playerId]` para administración y diagnóstico en servidor dedicado.
+    - Exponer `tenantId`, `tenantName` y `pendingTenantRequests` en las respuestas de estado de puertas de `AdminApiModule`.
+    - Añadir todas las claves de traducción (`mailbox.menu.tenancy`, `mailbox.tenant.*`, solicitudes, aceptaciones, rechazos, expulsión y abandono) en `i18n/es.json`, `i18n/en.json`, `i18n/zh.json` y `FallbackTranslationProvider.cs`.
+  * **Criterios de aceptación:**
+    1. El comando `p4e_tenant` y la API administrativa reflejan en tiempo real los cambios de inquilinato.
+    2. Toda la interfaz del buzón exterior y notificaciones de inquilinato cuentan con traducciones válidas en ES, EN y ZH sin claves crudas.
+
+- [ ] **TASK-2310: Suite de pruebas unitarias de co-residencia (`Pelican4Ever.Tests`) y verificación en vivo con Host + 2 *Farmhands***
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2308, TASK-2309.
+  * **Descripción:**
+    - Añadir `CoResidencyTests.cs` en `Pelican4Ever.Tests` y ampliar `TownMailboxLogicTests.cs`, `ConstructionLocationFilterTests.cs`, `VisitorPermissionLogicTests.cs` y `LocationCullingLogicTests.cs` cubriendo: migración v7 → v8, prevención de doble residencia, estados del buzón exterior (`Owner`, `Tenant`, `OtherPlayer`), paridad de construcción y animales compartidos, culling activo con solo el inquilino conectado y traspaso de propiedad.
+    - Ejecutar verificación en vivo en servidor dedicado con Host + 2 clientes (*farmhands* A y B): solicitud y aceptación desde el buzón del puente, construcción compartida en Robin (presencial y buzón), compra/venta de animales compartidos en Marnie (`AnimalPage`), aislamiento de carteras/`ShippingBin`/correo/paquetes, reconexión tras expulsión y guardado en checkpoints.
+  * **Criterios de aceptación:**
+    1. `dotnet build Pelican4Ever.sln` compila con `0` advertencias y `0` errores, y `dotnet test` pasa el 100% de la suite.
+    2. Verificación en vivo documentada confirmando la convivencia completa de 2 *farmhands* en una misma residencia con construcción/animales compartidos y progreso individual intacto.
+
