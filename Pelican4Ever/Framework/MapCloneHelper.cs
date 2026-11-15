@@ -1966,43 +1966,6 @@ namespace Pelican4Ever.Framework
                 if (y > maxY) maxY = y;
             }
 
-            // Umbral en tierra sólida (587) o arena para la playa: aveso sin transparencias
-            // del tilesheet de piedra, y coherente con un corredor también de tierra.
-            int doorBackTile = styleHint == AnnexEntranceStyle.SandShorePath ? 1269 : 587;
-            string doorBackType = "Dirt";
-
-            if (corridorHasWater)
-            {
-                // Entrada sobre agua: el umbral completo se convierte en puente de madera
-                // (tablones + vigas transitables) y NO se colocan vallas, que quedarían flotando
-                // sobre el agua. Barandilla visible solo en la viga exterior del borde.
-                foreach (var (ox, oy) in openingBorderTiles)
-                {
-                    var plank = new StaticTile(backLayer, mainSheet, BlendMode.Alpha, 1244);
-                    plank.Properties["Type"] = "Wood";
-                    backLayer.Tiles[ox, oy] = plank;
-
-                    // Las vigas son sprites 16×32 anclados por su borde inferior: en el borde
-                    // NORTE (fila 0) se instalarían con la mitad superior fuera del mapa y
-                    // quedarían cortadas; se instalan en la fila contigua interior.
-                    int beamY = oy == 0 ? oy + 1 : oy;
-                    int beamX = ox;
-
-                    int bIndex = (beamX % 2 == 0) ? 184 : 211;
-                    var beam = new StaticTile(bldLayer, mainSheet, BlendMode.Alpha, bIndex);
-                    beam.Properties["Passable"] = "T";
-                    bldLayer.Tiles[beamX, beamY] = beam;
-
-                    frontLayer.Tiles[ox, oy] = null;
-                    if (oy == 0 && oy + 1 < height)
-                    {
-                        frontLayer.Tiles[ox, oy + 1] = null;
-                    }
-                }
-
-                return;
-            }
-
             switch (side)
             {
                 case AnnexSide.North:
