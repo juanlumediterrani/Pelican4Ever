@@ -55,11 +55,31 @@ namespace Pelican4Ever.Tests
 
         [Theory]
         [InlineData(0.0, true)]
+        [InlineData(0.24, true)]
+        [InlineData(0.25, false)]
+        [InlineData(0.50, false)]
+        public void ShouldSpawnRealTimeBubble_TwentyFivePercentProbability(double roll, bool expected)
+        {
+            Assert.Equal(expected, NightHoldWorldLogic.ShouldSpawnRealTimeBubble(roll));
+        }
+
+        [Theory]
+        [InlineData(0.0, true)]
         [InlineData(0.49, true)]
         [InlineData(0.50, false)]
         public void ShouldSpawnOrePan_FiftyPercentProbability(double roll, bool expected)
         {
             Assert.Equal(expected, NightHoldWorldLogic.ShouldSpawnOrePan(roll));
+        }
+
+        [Theory]
+        [InlineData(0.0, true)]
+        [InlineData(0.14, true)]
+        [InlineData(0.15, false)]
+        [InlineData(0.50, false)]
+        public void ShouldSpawnRealTimeOrePan_FifteenPercentProbability(double roll, bool expected)
+        {
+            Assert.Equal(expected, NightHoldWorldLogic.ShouldSpawnRealTimeOrePan(roll));
         }
 
         [Theory]

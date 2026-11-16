@@ -31,6 +31,9 @@ namespace Pelican4Ever.Modules
         /// <summary>Ticks de 10 min procesados sobre máquinas durante la Madrugada en curso (GAP-17).</summary>
         public static int NightHoldTicksSimulated { get; set; } = 0;
 
+        /// <summary>Último tick de madrugada visto en un cliente remoto para disparar fauna ambiental local.</summary>
+        private static int clientNightHoldTick = -1;
+
         /// <summary>Primera sincronización tras cargar la partida: el reloj salta de 0600 a la hora real.</summary>
         private static bool startupSyncPending;
 
@@ -63,6 +66,7 @@ namespace Pelican4Ever.Modules
             {
                 startupSyncPending = villagerCatchUpPending = false;
                 ManualTimeOffset = TimeSpan.Zero;
+                clientNightHoldTick = -1;
             };
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
@@ -355,14 +359,15 @@ namespace Pelican4Ever.Modules
         private void OnDayStarted(object? sender, DayStartedEventArgs e)
         {
             NightHoldTicksSimulated = 0;
+            clientNightHoldTick = -1;
             NightHoldWorldSimulator.ResetForNewDay();
             if (Context.IsMainPlayer)
             {
                 Game1.realMilliSecondsPerGameTenMinutes = 600_000;
 
-                // El cambio de fecha ocurre a las 02:00, dentro de la madrugada congelada. Game1.NewDay ya procesó
-                // las máquinas hasta la mañana (CalculateMinutesUntilMorning), así que los ticks de madrugada que
-                // corresponden a la hora real actual se dan por simulados: sin esto, 02:00-06:00 se procesaría dos veces.
+                // El cambio de fecha ocurre a las 02:00 dentro de NightHold. Sincronizamos NightHoldTicksSimulated
+                // al tramo ya transcurrido desde 01:50 para no re-simular 01:50-02:00; los tramos de 02:10 a 05:50
+                // se procesan 1:1 en tiempo real (sin salto masivo en NewDay gracias a Prefix_PassTimeForObjects).
                 if (context != null)
                 {
                     var cfg = context.Config;
@@ -393,10 +398,30 @@ namespace Pelican4Ever.Modules
             var cfg = context.Config;
             DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
             ClockReading reading = GameClock.Read(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+            bool wasNightHold = IsNightHold;
             IsNightHold = reading.IsNightHold;
 
-            if (!Context.IsMainPlayer)
+            // No alterar el reloj ni simular ticks mientras Game1._newDayAfterFade() está en curso
+            if (Game1.newDay)
                 return;
+
+            if (!Context.IsMainPlayer)
+            {
+                if (reading.IsNightHold)
+                {
+                    int clientTick = GameClock.NightHoldTicksElapsed(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
+                    if (clientNightHoldTick >= 0 && clientTick > clientNightHoldTick)
+                    {
+                        NightHoldWorldSimulator.TryAddClientCritters(Game1.currentLocation);
+                    }
+                    clientNightHoldTick = clientTick;
+                }
+                else
+                {
+                    clientNightHoldTick = -1;
+                }
+                return;
+            }
 
             // Sincronizar gameTimeInterval para iluminación ambiental (ms dentro del slot actual de 10 min)
             Game1.gameTimeInterval = reading.MillisecondsIntoSlot;
@@ -459,6 +484,10 @@ namespace Pelican4Ever.Modules
                 // Si la hora del juego quedó por delante (ej. retroceso manual con /time -X o DST), sincronizar hacia atrás
                 // y devolver a los aldeanos a donde estarían a esa hora
                 JumpClockTo(reading.TimeOfDay);
+                if (wasNightHold)
+                {
+                    NightHoldWorldSimulator.SyncBubblesOnNightHoldExit();
+                }
             }
             else if (ticksNeeded > 0)
             {
@@ -500,6 +529,17 @@ namespace Pelican4Ever.Modules
                     original: AccessTools.Method(typeof(Utility), nameof(Utility.CalculateMinutesUntilMorning), new[] { typeof(int), typeof(int) }),
                     postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_CalculateMinutesUntilMorning))
                 );
+
+                // Evitar doble procesamiento de máquinas a las 02:00 cuando Game1._newDayAfterFade salta hasta las 06:00
+                // mientras NightHold seguirá simulando 02:00-06:00 en tiempo real 1:1
+                var passTimeMethod = AccessTools.Method(typeof(GameLocation), nameof(GameLocation.passTimeForObjects), new[] { typeof(int) });
+                if (passTimeMethod != null)
+                {
+                    harmony.Patch(
+                        original: passTimeMethod,
+                        prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_PassTimeForObjects))
+                    );
+                }
 
                 // Parche en DayTimeMoneyBox.draw para mostrar la hora real más allá de 01:50 y evitar que se pinte en rojo o vibre
                 harmony.Patch(
@@ -581,6 +621,13 @@ namespace Pelican4Ever.Modules
                     }
                 }
             }
+        }
+
+        public static bool Prefix_PassTimeForObjects(int timeElapsed)
+        {
+            // Durante el rollover de las 02:00 en NightHold, PassTimeForNightHold(10) simulará 02:00-06:00
+            // en tiempo real 1:1; omitimos el salto masivo de Game1._newDayAfterFade() para no duplicarlo.
+            return !(Game1.newDay && Context.IsMainPlayer && IsNightHold && timeElapsed > 10);
         }
 
         public static void Postfix_CalculateMinutesUntilMorning(int daysElapsed, ref int __result)
