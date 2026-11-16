@@ -35,5 +35,29 @@ namespace Pelican4Ever.Core.Players
                 _ => (0, 0)
             };
         }
+
+        /// <summary>
+        /// Resuelve el desplazamiento de herramienta considerando tanto la skin nativa (<c>Pelican4Ever.AgentSkin</c>)
+        /// como el cuerpo legado de Fashion Sense (<c>FashionSense.CustomBody.Id</c>).
+        /// </summary>
+        public static (int X, int Y) GetForPlayer(string? agentSkinId, string? fashionSenseBodyId, int facingDirection)
+        {
+            if (string.Equals(agentSkinId, AgentBodyPreset.Dr4coSkinId, System.StringComparison.OrdinalIgnoreCase))
+            {
+                return facingDirection switch
+                {
+                    0 => (0, 12),
+                    1 => (-4, 12),
+                    2 => (0, 12),
+                    3 => (4, 12),
+                    _ => (0, 0)
+                };
+            }
+
+            if (string.Equals(agentSkinId, AgentBodyPreset.PutreSkinId, System.StringComparison.OrdinalIgnoreCase))
+                return (0, 0);
+
+            return Get(fashionSenseBodyId, facingDirection);
+        }
     }
 }

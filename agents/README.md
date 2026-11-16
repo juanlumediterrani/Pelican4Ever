@@ -27,22 +27,29 @@ El boceto original de la hoja SiD se conserva como `Dr4co.FashionSense/source/dr
   solo para cargar y seleccionar este pack cosmético. Pelican 4Ever no depende
 de Fashion Sense y funciona igual si el framework o este pack no están instalados.
 
-### Selección sin el espejo (servidor dedicado / automatizado)
+### Selección directa integrada en Pelican 4Ever (sin necesidad de Fashion Sense)
 
-Pelican 4Ever trae un comando para el host que lo hace todo (cuerpo y capas
-`None`), en la consola de SMAPI o en el chat de una partida multijugador:
+`Pelican4Ever` incluye las hojas completas de 126 cuadros (`144×672`) de **Putre** y **Dr4co**
+en `Pelican4Ever/assets/skins/` y las renderiza de forma nativa sobre `FarmerRenderer.draw`
+(sin depender de Fashion Sense ni packs externos).
+
+El host (y **solo** el host, tanto en consola SMAPI como con `/` en el chat) puede enlazar a
+cualquier jugador —incluido el propio host si se omite el jugador— con su skin:
 
 ```
-p4e_dr4co_sprite              # pone el cuerpo de Dr4co al host
+p4e_skin putre                # enlaza la skin de Putre al host
+p4e_skin dr4co Pepe           # enlaza la skin de Dr4co al jugador Pepe (nombre o id)
+p4e_skin off Pepe             # restaura la apariencia vanilla de Pepe
+```
+
+Los comandos clásicos también activan estas skins nativas completas:
+
+```
+p4e_dr4co_sprite              # pone la skin de Dr4co al host
 p4e_dr4co_sprite off          # vuelve al granjero normal
-p4e_dr4co_sprite on Pepe      # a otro jugador conectado (nombre o id)
-```
+p4e_dr4co_sprite on Pepe      # a otro jugador (nombre o id)
 
-El pack de Putre (`Putre.Stardew.FashionSenseBody`, en `agents/`) se activa igual, con su
-propio comando:
-
-```
-p4e_putre_sprite              # pone el cuerpo de Putre al host
+p4e_putre_sprite              # pone la skin de Putre al host
 p4e_putre_sprite off
 p4e_putre_sprite on Pepe
 ```

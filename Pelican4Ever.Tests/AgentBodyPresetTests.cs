@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using Pelican4Ever.Core.Players;
 using Xunit;
@@ -129,6 +130,55 @@ namespace Pelican4Ever.Tests
                 using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
                 Assert.Equal(parts[2], doc.RootElement.GetProperty("Name").GetString());
             }
+        }
+
+        [Theory]
+        [InlineData("putre", "putre")]
+        [InlineData("  Putre ", "putre")]
+        [InlineData("DR4CO", "dr4co")]
+        [InlineData("off", "")]
+        [InlineData("vanilla", "")]
+        [InlineData("clear", "")]
+        [InlineData("unknown", null)]
+        [InlineData("", null)]
+        [InlineData(null, null)]
+        public void ParseSkinId_NormalizesValidSkinsAndOffKeywords(string? raw, string? expected)
+        {
+            Assert.Equal(expected, AgentBodyPreset.ParseSkinId(raw));
+        }
+
+        [Fact]
+        public void BundledNativeSkinSheets_ExistAndHave126FrameGeometry()
+        {
+            string modRoot = Path.Combine(FindRepoRoot(), "Pelican4Ever");
+            foreach (string skin in AgentBodyPreset.AvailableAgentSkins)
+            {
+                var paths = AgentBodyPreset.GetSkinAssetPaths(skin);
+                Assert.NotNull(paths);
+                foreach (string relPath in new[] { paths!.Value.NormalAsset, paths.Value.CarryAsset })
+                {
+                    string fullPath = Path.Combine(modRoot, relPath);
+                    Assert.True(File.Exists(fullPath), $"Falta el asset de skin {fullPath}");
+                    byte[] png = File.ReadAllBytes(fullPath);
+                    Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, png[..8]);
+                    int w = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(16, 4));
+                    int h = BinaryPrimitives.ReadInt32BigEndian(png.AsSpan(20, 4));
+                    Assert.Equal(144, w);
+                    Assert.Equal(672, h);
+                }
+            }
+        }
+
+        [Fact]
+        public void GetFrameSourceRect_And_OriginOffsets_AreSymmetricForPutreAndCompensateFlipForDr4co()
+        {
+            Assert.Equal((0, 0, 24, 32), AgentBodyPreset.GetFrameSourceRect(0));
+            Assert.Equal((120, 640, 24, 32), AgentBodyPreset.GetFrameSourceRect(125));
+
+            Assert.Equal((4f, 0f), AgentBodyPreset.GetDrawOriginOffset("putre", flip: false));
+            Assert.Equal((4f, 0f), AgentBodyPreset.GetDrawOriginOffset("putre", flip: true));
+            Assert.Equal((2f, -2f), AgentBodyPreset.GetDrawOriginOffset("dr4co", flip: false));
+            Assert.Equal((6f, -2f), AgentBodyPreset.GetDrawOriginOffset("dr4co", flip: true));
         }
 
         private static string FindRepoRoot()

@@ -47,6 +47,15 @@ namespace Pelican4Ever.Tests
             Assert.Equal(AgentToolOffset.Dr4coBodyId, expected);
         }
 
+        [Fact]
+        public void GetForPlayer_HandlesNativeSkinsAndLegacyFashionSense()
+        {
+            Assert.Equal((0, 0), AgentToolOffset.GetForPlayer("putre", null, 2));
+            Assert.Equal((-4, 12), AgentToolOffset.GetForPlayer("dr4co", null, 1));
+            Assert.Equal((4, 12), AgentToolOffset.GetForPlayer("dr4co", null, 3));
+            Assert.Equal((-8, 16), AgentToolOffset.GetForPlayer(null, AgentToolOffset.Dr4coBodyId, 1));
+        }
+
         private static string FindRepoRoot()
         {
             for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
