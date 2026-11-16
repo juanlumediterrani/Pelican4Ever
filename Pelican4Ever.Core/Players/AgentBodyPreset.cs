@@ -13,6 +13,22 @@ namespace Pelican4Ever.Core.Players
         /// <summary>UniqueID del pack <c>agents/Dr4co.FashionSense</c>.</summary>
         public const string Dr4coPackId = "Dr4co.Stardew.FashionSenseBody";
 
+        /// <summary>Clave de <c>Farmer.modData</c> para la skin nativa completa de 126 cuadros de Pelican 4Ever.</summary>
+        public const string AgentSkinModDataKey = "Pelican4Ever.AgentSkin";
+
+        /// <summary>Identificador canónico de la skin de Putre.</summary>
+        public const string PutreSkinId = "putre";
+
+        /// <summary>Identificador canónico de la skin de Dr4co.</summary>
+        public const string Dr4coSkinId = "dr4co";
+
+        /// <summary>Skins nativas disponibles incluidas en <c>Pelican4Ever/assets/skins/</c>.</summary>
+        public static IReadOnlyList<string> AvailableAgentSkins { get; } = new[]
+        {
+            PutreSkinId,
+            Dr4coSkinId,
+        };
+
         /// <summary>
         /// Claves de modData de Fashion Sense que se deben limpiar al aplicar o volver a una apariencia vanilla pura.
         /// </summary>
@@ -108,6 +124,56 @@ namespace Pelican4Ever.Core.Players
                 "off" or "no" or "0" or "false" => false,
                 _ => null
             };
+        }
+
+        /// <summary>
+        /// Normaliza el identificador de skin nativa (<c>"putre"</c>, <c>"dr4co"</c> o <c>""</c> para quitarla).
+        /// Devuelve <c>null</c> si el argumento no corresponde a ninguna skin conocida ni a desactivar.
+        /// </summary>
+        public static string? ParseSkinId(string? arg)
+        {
+            if (string.IsNullOrWhiteSpace(arg))
+                return null;
+
+            return arg.Trim().ToLowerInvariant() switch
+            {
+                "putre" => PutreSkinId,
+                "dr4co" => Dr4coSkinId,
+                "off" or "none" or "vanilla" or "clear" or "reset" or "quitar" or "no" or "0" or "false" => string.Empty,
+                _ => null
+            };
+        }
+
+        /// <summary>Rutas relativas dentro del mod para la hoja normal y la hoja carry (144x672, 126 cuadros).</summary>
+        public static (string NormalAsset, string CarryAsset)? GetSkinAssetPaths(string? skinId)
+        {
+            return skinId?.Trim().ToLowerInvariant() switch
+            {
+                PutreSkinId => ("assets/skins/putre_sheet.png", "assets/skins/putre_carry_sheet.png"),
+                Dr4coSkinId => ("assets/skins/dr4co_sheet.png", "assets/skins/dr4co_carry_sheet.png"),
+                _ => null
+            };
+        }
+
+        /// <summary>
+        /// Desplazamiento de origen (en píxeles de arte 1x) para centrar una celda de 24x32 sobre
+        /// el marco vanilla de 16x32 respetando pies y espejado horizontal.
+        /// </summary>
+        public static (float OriginXOffset, float OriginYOffset) GetDrawOriginOffset(string? skinId, bool flip)
+        {
+            return skinId?.Trim().ToLowerInvariant() switch
+            {
+                PutreSkinId => (4f, 0f),
+                Dr4coSkinId => (flip ? 6f : 2f, -2f),
+                _ => (0f, 0f)
+            };
+        }
+
+        /// <summary>Recorte de 24x32 en la hoja de 6x21 cuadros (144x672) para un índice de cuadro 0..125.</summary>
+        public static (int X, int Y, int Width, int Height) GetFrameSourceRect(int frame)
+        {
+            int clamped = frame < 0 ? 0 : (frame >= 126 ? 125 : frame);
+            return ((clamped % 6) * 24, (clamped / 6) * 32, 24, 32);
         }
     }
 }
