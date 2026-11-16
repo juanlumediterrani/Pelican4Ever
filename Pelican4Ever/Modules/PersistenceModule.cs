@@ -68,6 +68,7 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
+                EconomyModule.PrepareFoodBuffsForSave(context);
                 context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
                 context.Monitor.Log($"ServerWorldState guardado en la partida maestra ({reason}).", LogLevel.Trace);
                 return true;

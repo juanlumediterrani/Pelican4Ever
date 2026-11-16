@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
@@ -42,15 +43,33 @@ namespace Pelican4Ever.Modules
 
         /// <summary>Mensaje cliente → host con el estado de consumo (Saciedad y contadores diarios) del jugador local.</summary>
         public const string MsgSatietyReport = "SatietyReport";
+        /// <summary>Mensajes para persistir y restaurar buffs de comida activos tras desconexión/reconexión.</summary>
+        public const string MsgFoodBuffsRequest = "FoodBuffsRequest";
+        public const string MsgFoodBuffsSnapshot = "FoodBuffsSnapshot";
+        public const string MsgFoodBuffsReport = "FoodBuffsReport";
         private const string MsgPriceRulesRequest = "PriceRulesRequest";
         private const string MsgPriceRulesResponse = "PriceRulesResponse";
         private static PriceRules? syncedPriceRules;
+
+        private static bool foodBuffsRestored;
+        private static bool hasLocalFoodBuffChanges;
+        private static bool isApplyingFoodBuffContext;
+        private static bool isRestoringFoodBuffs;
+        private static bool isInDayUpdate;
+        private static int buffApplyNestDepth;
+        private static int buffClearNestDepth;
 
         /// <summary>
         /// En un farmhand, true en cuanto el jugador ha comido o descansado en el Spa en esta sesión: a partir de ahí su copia
         /// local es la más reciente y la sincronización de residencias del host no debe pisarla (ver <see cref="FarmSlotModule"/>).
         /// </summary>
         public static bool HasLocalConsumptionChanges { get; private set; }
+
+        /// <summary>
+        /// En un farmhand, true una vez recibido el snapshot de buffs de comida o tras haber modificado buffs localmente,
+        /// para evitar que <c>SyncDoorsState</c> sobrescriba la copia local.
+        /// </summary>
+        public static bool HasLocalFoodBuffState => foodBuffsRestored || hasLocalFoodBuffChanges;
 
         public string Name => "Economy";
 
@@ -61,10 +80,18 @@ namespace Pelican4Ever.Modules
             context = ctx;
 
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) =>
             {
                 HasLocalConsumptionChanges = false;
+                foodBuffsRestored = false;
+                hasLocalFoodBuffChanges = false;
+                isApplyingFoodBuffContext = false;
+                isRestoringFoodBuffs = false;
+                isInDayUpdate = false;
+                buffApplyNestDepth = 0;
+                buffClearNestDepth = 0;
                 syncedPriceRules = null;
                 spaStillSeconds = 0;
                 spaRegenCarry = 0;
@@ -78,14 +105,49 @@ namespace Pelican4Ever.Modules
 
         private static void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
-            if (Context.IsMainPlayer) syncedPriceRules = CurrentPriceRules();
-            else RequestPriceRules();
+            if (Context.IsMainPlayer)
+            {
+                syncedPriceRules = CurrentPriceRules();
+                if (context != null && Game1.player != null)
+                {
+                    DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+                    var record = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+                    int restored = RestoreFoodBuffsToLocalPlayer(record, nowUtc);
+                    foodBuffsRestored = true;
+                    if (restored > 0)
+                        context.Monitor.Log($"[EconomyModule] Restaurados {restored} buff(s) de comida para el anfitrión.", LogLevel.Info);
+                }
+            }
+            else
+            {
+                foodBuffsRestored = false;
+                hasLocalFoodBuffChanges = false;
+                RequestPriceRules();
+                RequestFoodBuffs();
+            }
+        }
+
+        private static void OnDayStarted(object? sender, DayStartedEventArgs e)
+        {
+            if (!Context.IsWorldReady || context == null || Game1.player == null || !foodBuffsRestored)
+                return;
+
+            var record = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+            int restored = RestoreFoodBuffsToLocalPlayer(record, DateTimeOffset.UtcNow);
+            if (restored > 0)
+                context.Monitor.Log($"[EconomyModule] Mantenidos {restored} buff(s) de comida vigentes tras el cambio de día.", LogLevel.Trace);
         }
 
         private static void RequestPriceRules()
         {
             if (context != null && Game1.MasterPlayer != null)
                 context.Helper.Multiplayer.SendMessage(string.Empty, MsgPriceRulesRequest, new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
+        private static void RequestFoodBuffs()
+        {
+            if (context != null && !Context.IsMainPlayer && Game1.MasterPlayer != null)
+                context.Helper.Multiplayer.SendMessage(string.Empty, MsgFoodBuffsRequest, new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
         }
 
         private static PriceRules CurrentPriceRules() => new()
@@ -104,6 +166,9 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer && syncedPriceRules == null)
                 RequestPriceRules();
 
+            if (!Context.IsMainPlayer && !foodBuffsRestored)
+                RequestFoodBuffs();
+
             ModContext modCtx = context;
 
             DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
@@ -112,6 +177,9 @@ namespace Pelican4Ever.Modules
             var playerRecord = modCtx.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
             playerRecord.EnsureDailyCounters(Game1.Date.TotalDays);
             playerRecord.UpdateSatietyDecay(nowUtc, Game1.player.MaxStamina, modCtx.Config.DailySatietyFraction, modCtx.Config.SatietyDrainHours);
+
+            if (foodBuffsRestored && ReconcileActiveFoodBuffTimers(playerRecord, nowUtc) && !Context.IsMainPlayer)
+                ReportFoodBuffsToHost(playerRecord, nowUtc);
 
             // 1. Spa: quedarse quieto en el agua (Spa o piscina) activa una vez al día el buff de recuperación pasiva
             if (Game1.player.swimming.Value && Game1.player.timerSinceLastMovement > 700)
@@ -342,12 +410,28 @@ namespace Pelican4Ever.Modules
         {
             try
             {
-                // Parche en Farmer.doneEating para aplicar SatietyBudget
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farmer), nameof(Farmer.doneEating)),
-                    prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DoneEating)),
-                    postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_DoneEating))
-                );
+                // Parche en Farmer.doneEating para aplicar SatietyBudget y detectar buffs procedentes de comida/bebida
+                MethodInfo? doneEatingMethod = AccessTools.Method(typeof(Farmer), nameof(Farmer.doneEating), Type.EmptyTypes);
+                if (doneEatingMethod != null)
+                {
+                    harmony.Patch(
+                        original: doneEatingMethod,
+                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DoneEating)),
+                        postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_DoneEating)),
+                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_DoneEating))
+                    );
+                }
+
+                // Parche en Farmer.dayupdate para distinguir el cambio de día de un desmayo/muerte al limpiar buffs
+                MethodInfo? dayUpdateMethod = AccessTools.Method(typeof(Farmer), nameof(Farmer.dayupdate), new[] { typeof(int) });
+                if (dayUpdateMethod != null)
+                {
+                    harmony.Patch(
+                        original: dayUpdateMethod,
+                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_FarmerDayUpdate)),
+                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_FarmerDayUpdate))
+                    );
+                }
 
                 // Parche en Farmer.Update para bloquear la regeneración ilimitada nativa de la piscina
                 harmony.Patch(
@@ -383,11 +467,36 @@ namespace Pelican4Ever.Modules
                     prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DailyLuck))
                 );
 
-                // Parche en BuffManager.Apply para escalar la duración de buffs de comida y bebida al tiempo 1:1 (GAP-11)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Apply)),
-                    prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerApply))
-                );
+                // Parche en BuffManager.Apply/Remove/Clear para escalar duración 1:1 (GAP-11) y persistir buffs de comida tras reconexión
+                MethodInfo? buffApplyMethod = AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Apply), new[] { typeof(Buff) });
+                if (buffApplyMethod != null)
+                {
+                    harmony.Patch(
+                        original: buffApplyMethod,
+                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerApply)),
+                        postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_BuffManagerApply)),
+                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_BuffManagerApply))
+                    );
+                }
+
+                MethodInfo? buffRemoveMethod = AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Remove), new[] { typeof(string) });
+                if (buffRemoveMethod != null)
+                {
+                    harmony.Patch(
+                        original: buffRemoveMethod,
+                        postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_BuffManagerRemove))
+                    );
+                }
+
+                MethodInfo? buffClearMethod = AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Clear), Type.EmptyTypes);
+                if (buffClearMethod != null)
+                {
+                    harmony.Patch(
+                        original: buffClearMethod,
+                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerClear)),
+                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_BuffManagerClear))
+                    );
+                }
 
                 context?.Monitor.Log("[EconomyModule] Parches Harmony de economía y minas aplicados.", LogLevel.Trace);
             }
@@ -427,7 +536,27 @@ namespace Pelican4Ever.Modules
             {
                 preEatStamina = __instance.Stamina;
                 preEatFoodItem = __instance.itemToEat as StardewValley.Object;
+                isApplyingFoodBuffContext = true;
             }
+        }
+
+        public static void Finalizer_DoneEating(Farmer __instance)
+        {
+            if (__instance == Game1.player)
+                isApplyingFoodBuffContext = false;
+        }
+
+        public static void Prefix_FarmerDayUpdate(Farmer __instance, out bool __state)
+        {
+            __state = __instance == Game1.player;
+            if (__state)
+                isInDayUpdate = true;
+        }
+
+        public static void Finalizer_FarmerDayUpdate(bool __state)
+        {
+            if (__state)
+                isInDayUpdate = false;
         }
 
         public static void Postfix_DoneEating(Farmer __instance)
@@ -572,6 +701,19 @@ namespace Pelican4Ever.Modules
                 new[] { Game1.MasterPlayer.UniqueMultiplayerID });
         }
 
+        private static void ReportFoodBuffsToHost(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (context == null || Context.IsMainPlayer || Game1.MasterPlayer == null)
+                return;
+
+            hasLocalFoodBuffChanges = true;
+            context.Helper.Multiplayer.SendMessage(
+                record.ToFoodBuffsPayload(nowUtc),
+                MsgFoodBuffsReport,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
         private static void OnModMessageReceived(object? sender, ModMessageReceivedEventArgs e)
         {
             if (context == null || e.FromModID != context.Manifest.UniqueID)
@@ -592,6 +734,55 @@ namespace Pelican4Ever.Modules
                     && float.IsFinite(received.Fish) && received.Fish > 0
                     && float.IsFinite(received.Mineral) && received.Mineral > 0)
                     syncedPriceRules = received;
+                return;
+            }
+
+            if (Context.IsMainPlayer && e.Type == MsgFoodBuffsRequest)
+            {
+                Farmer? requester = Game1.GetPlayer(e.FromPlayerID);
+                if (requester == null)
+                    return;
+
+                var requesterRecord = context.WorldState.GetOrCreatePlayer(e.FromPlayerID, requester.Name);
+                FoodBuffsPayload snapshot = requesterRecord.ToFoodBuffsPayload(DateTimeOffset.UtcNow);
+                context.Helper.Multiplayer.SendMessage(snapshot, MsgFoodBuffsSnapshot, new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
+                return;
+            }
+
+            if (!Context.IsMainPlayer && e.Type == MsgFoodBuffsSnapshot && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID && !foodBuffsRestored)
+            {
+                if (!Context.IsWorldReady || Game1.player == null)
+                    return;
+
+                FoodBuffsPayload? snapshot = e.ReadAs<FoodBuffsPayload>();
+                DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+                bool hadLocalBeforeSnapshot = hasLocalFoodBuffChanges;
+
+                var localRecord = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+                localRecord.ApplyFoodBuffsSnapshot(snapshot, nowUtc);
+                foodBuffsRestored = true;
+
+                int restored = RestoreFoodBuffsToLocalPlayer(localRecord, nowUtc);
+                if (hadLocalBeforeSnapshot)
+                {
+                    SyncTrackedFoodBuffsFromApplied(localRecord, nowUtc);
+                    ReportFoodBuffsToHost(localRecord, nowUtc);
+                }
+
+                if (restored > 0)
+                    context.Monitor.Log($"[EconomyModule] Restaurados {restored} buff(s) de comida tras reconexión.", LogLevel.Info);
+                return;
+            }
+
+            if (Context.IsMainPlayer && e.Type == MsgFoodBuffsReport)
+            {
+                Farmer? senderFarmer = Game1.GetPlayer(e.FromPlayerID);
+                FoodBuffsPayload? reportPayload = e.ReadAs<FoodBuffsPayload>();
+                if (senderFarmer == null)
+                    return;
+
+                var senderRecord = context.WorldState.GetOrCreatePlayer(e.FromPlayerID, senderFarmer.Name);
+                senderRecord.ApplyFoodBuffsReport(reportPayload, DateTimeOffset.UtcNow, IsDisallowedBuffIdOnHost);
                 return;
             }
 
@@ -681,8 +872,15 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
-        public static void Prefix_BuffManagerApply(Buff buff)
+        public static void Prefix_BuffManagerApply(BuffManager __instance, Buff buff, out bool __state)
         {
+            __state = false;
+            if (__instance != null && __instance.IsLocallyControlled())
+            {
+                buffApplyNestDepth++;
+                __state = true;
+            }
+
             if (buff == null || buff.millisecondsDuration <= 0 || buff.millisecondsDuration == -2)
                 return;
 
@@ -692,8 +890,396 @@ namespace Pelican4Ever.Modules
             if (IsCombatDebuff(buff))
                 return;
 
-            buff.millisecondsDuration = (int)Math.Round(buff.millisecondsDuration * BuffTimeScaleFactor);
+            double scaled = Math.Round(buff.millisecondsDuration * BuffTimeScaleFactor);
+            buff.millisecondsDuration = (int)Math.Clamp(scaled, 1, int.MaxValue);
+            buff.totalMillisecondsDuration = Math.Max(buff.totalMillisecondsDuration, buff.millisecondsDuration);
             ScaledBuffs.Add(buff, true);
+        }
+
+        public static void Postfix_BuffManagerApply(BuffManager __instance, Buff buff)
+        {
+            if (context == null || !context.IsModEnabled || !Context.IsWorldReady || Game1.player == null || Game1.exitToTitle || isRestoringFoodBuffs)
+                return;
+
+            if (__instance == null || !__instance.IsLocallyControlled())
+                return;
+
+            if (buff == null || string.IsNullOrWhiteSpace(buff.id))
+                return;
+
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            var record = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+
+            if (IsDebuffForPersistence(buff) || buff.millisecondsDuration <= 0 || buff.millisecondsDuration == -2)
+            {
+                if (record.RemoveFoodBuff(buff.id))
+                    ReportFoodBuffsToHost(record, nowUtc);
+                return;
+            }
+
+            bool isFoodOrDrink = isApplyingFoodBuffContext || buff.id is "food" or "drink";
+            if (!isFoodOrDrink || !__instance.AppliedBuffs.ContainsKey(buff.id))
+                return;
+
+            PersistedFoodBuff persisted = SnapshotFromBuff(buff, nowUtc);
+            record.UpsertFoodBuff(persisted, nowUtc);
+            ReportFoodBuffsToHost(record, nowUtc);
+        }
+
+        public static void Finalizer_BuffManagerApply(bool __state)
+        {
+            if (__state)
+                buffApplyNestDepth = Math.Max(0, buffApplyNestDepth - 1);
+        }
+
+        public static void Postfix_BuffManagerRemove(BuffManager __instance, string id)
+        {
+            if (context == null || !context.IsModEnabled || !Context.IsWorldReady || Game1.player == null || Game1.exitToTitle
+                || isRestoringFoodBuffs || isInDayUpdate || buffApplyNestDepth > 0)
+                return;
+
+            if (__instance == null || !__instance.IsLocallyControlled() || string.IsNullOrWhiteSpace(id))
+                return;
+
+            var record = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+            if (record.RemoveFoodBuff(id) && buffClearNestDepth == 0)
+                ReportFoodBuffsToHost(record, DateTimeOffset.UtcNow);
+        }
+
+        public static void Prefix_BuffManagerClear(BuffManager __instance, out bool __state)
+        {
+            __state = false;
+            if (context != null && context.IsModEnabled && Context.IsWorldReady && Game1.player != null && !Game1.exitToTitle
+                && !isRestoringFoodBuffs && !isInDayUpdate && __instance != null && __instance.IsLocallyControlled())
+            {
+                buffClearNestDepth++;
+                __state = true;
+            }
+        }
+
+        public static void Finalizer_BuffManagerClear(bool __state)
+        {
+            if (!__state)
+                return;
+
+            buffClearNestDepth = Math.Max(0, buffClearNestDepth - 1);
+            if (buffClearNestDepth == 0 && context != null && Game1.player != null)
+            {
+                var record = context.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+                if (record.ClearFoodBuffs())
+                    ReportFoodBuffsToHost(record, DateTimeOffset.UtcNow);
+            }
+        }
+
+        /// <summary>
+        /// Sincroniza los buffs de comida del anfitrión y purga los caducados de todos los jugadores antes de guardar en disco.
+        /// </summary>
+        public static void PrepareFoodBuffsForSave(ModContext? modCtx)
+        {
+            if (modCtx == null || !Context.IsMainPlayer)
+                return;
+
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            if (Context.IsWorldReady && Game1.player != null)
+            {
+                var hostRecord = modCtx.WorldState.GetOrCreatePlayer(Game1.player.UniqueMultiplayerID, Game1.player.Name);
+                SyncTrackedFoodBuffsFromApplied(hostRecord, nowUtc);
+            }
+
+            foreach (PlayerRecord player in modCtx.WorldState.Players.Values)
+            {
+                player?.PruneExpiredFoodBuffs(nowUtc);
+            }
+        }
+
+        private static bool ReconcileActiveFoodBuffTimers(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (Game1.player?.buffs == null || record.ActiveFoodBuffs == null || record.ActiveFoodBuffs.Count == 0)
+                return false;
+
+            bool changed = false;
+            for (int i = record.ActiveFoodBuffs.Count - 1; i >= 0; i--)
+            {
+                PersistedFoodBuff persisted = record.ActiveFoodBuffs[i];
+                if (persisted == null)
+                {
+                    record.ActiveFoodBuffs.RemoveAt(i);
+                    changed = true;
+                    continue;
+                }
+
+                if (Game1.player.buffs.AppliedBuffs.TryGetValue(persisted.Id, out Buff? activeBuff)
+                    && activeBuff != null
+                    && activeBuff.millisecondsDuration > 0)
+                {
+                    DateTimeOffset expectedExpiresAtUtc = nowUtc + TimeSpan.FromMilliseconds(activeBuff.millisecondsDuration);
+                    if (Math.Abs((expectedExpiresAtUtc - persisted.ExpiresAtUtc).TotalSeconds) >= 15.0)
+                    {
+                        persisted.ExpiresAtUtc = expectedExpiresAtUtc;
+                        changed = true;
+                    }
+                }
+                else if (persisted.ExpiresAtUtc <= nowUtc)
+                {
+                    record.ActiveFoodBuffs.RemoveAt(i);
+                    changed = true;
+                }
+            }
+
+            return changed;
+        }
+
+        private static void SyncTrackedFoodBuffsFromApplied(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (Game1.player?.buffs == null)
+                return;
+
+            var trackedIds = new HashSet<string>(StringComparer.Ordinal) { "food", "drink" };
+            if (record.ActiveFoodBuffs != null)
+            {
+                foreach (PersistedFoodBuff existing in record.ActiveFoodBuffs)
+                {
+                    if (!string.IsNullOrWhiteSpace(existing?.Id))
+                        trackedIds.Add(existing.Id);
+                }
+            }
+
+            foreach (string id in trackedIds)
+            {
+                if (Game1.player.buffs.AppliedBuffs.TryGetValue(id, out Buff? activeBuff)
+                    && activeBuff != null
+                    && activeBuff.millisecondsDuration > 0
+                    && activeBuff.millisecondsDuration != -2
+                    && !IsDebuffForPersistence(activeBuff))
+                {
+                    record.UpsertFoodBuff(SnapshotFromBuff(activeBuff, nowUtc), nowUtc);
+                }
+                else
+                {
+                    record.RemoveFoodBuff(id);
+                }
+            }
+
+            record.PruneExpiredFoodBuffs(nowUtc);
+        }
+
+        private static int RestoreFoodBuffsToLocalPlayer(PlayerRecord record, DateTimeOffset nowUtc)
+        {
+            if (Game1.player?.buffs == null || record.ActiveFoodBuffs == null)
+                return 0;
+
+            record.PruneExpiredFoodBuffs(nowUtc);
+            if (record.ActiveFoodBuffs.Count == 0)
+                return 0;
+
+            int restoredCount = 0;
+            isRestoringFoodBuffs = true;
+            try
+            {
+                foreach (PersistedFoodBuff saved in record.ActiveFoodBuffs.ToList())
+                {
+                    if (saved == null || FoodBuffPersistenceLogic.IsDisallowedBuffId(saved.Id))
+                        continue;
+
+                    int remainingMs = saved.RemainingMilliseconds(nowUtc);
+                    if (remainingMs <= 0)
+                        continue;
+
+                    if (Game1.player.buffs.AppliedBuffs.ContainsKey(saved.Id))
+                        continue;
+
+                    Buff? buff = CreateBuffFromPersisted(saved, remainingMs);
+                    if (buff == null)
+                        continue;
+
+                    ScaledBuffs.Add(buff, true);
+                    Game1.player.buffs.Apply(buff);
+                    restoredCount++;
+                }
+            }
+            finally
+            {
+                isRestoringFoodBuffs = false;
+            }
+
+            return restoredCount;
+        }
+
+        private static PersistedFoodBuff SnapshotFromBuff(Buff buff, DateTimeOffset nowUtc)
+        {
+            string? iconTextureName = null;
+            if (buff.iconTexture != null)
+            {
+                if (ReferenceEquals(buff.iconTexture, Game1.buffsIcons))
+                    iconTextureName = "TileSheets\\BuffsIcons";
+                else if (!string.IsNullOrWhiteSpace(buff.iconTexture.Name))
+                    iconTextureName = buff.iconTexture.Name;
+            }
+
+            int durationMs = FoodBuffPersistenceLogic.ClampRemainingMs(buff.millisecondsDuration);
+            return new PersistedFoodBuff
+            {
+                Id = buff.id,
+                Source = buff.source,
+                DisplaySource = buff.displaySource,
+                DisplayName = buff.displayName,
+                Description = buff.description,
+                IconTextureName = iconTextureName,
+                IconSheetIndex = buff.iconSheetIndex,
+                GlowR = buff.glow.R,
+                GlowG = buff.glow.G,
+                GlowB = buff.glow.B,
+                GlowA = buff.glow.A,
+                TotalDurationMs = Math.Max(buff.totalMillisecondsDuration, durationMs),
+                ExpiresAtUtc = nowUtc + TimeSpan.FromMilliseconds(durationMs),
+                Visible = buff.visible,
+                Effects = new FoodBuffEffectsSnapshot
+                {
+                    CombatLevel = buff.effects.CombatLevel.Value,
+                    FarmingLevel = buff.effects.FarmingLevel.Value,
+                    FishingLevel = buff.effects.FishingLevel.Value,
+                    MiningLevel = buff.effects.MiningLevel.Value,
+                    LuckLevel = buff.effects.LuckLevel.Value,
+                    ForagingLevel = buff.effects.ForagingLevel.Value,
+                    MaxStamina = buff.effects.MaxStamina.Value,
+                    MagneticRadius = buff.effects.MagneticRadius.Value,
+                    Speed = buff.effects.Speed.Value,
+                    Defense = buff.effects.Defense.Value,
+                    Attack = buff.effects.Attack.Value,
+                    Immunity = buff.effects.Immunity.Value,
+                    AttackMultiplier = buff.effects.AttackMultiplier.Value,
+                    KnockbackMultiplier = buff.effects.KnockbackMultiplier.Value,
+                    WeaponSpeedMultiplier = buff.effects.WeaponSpeedMultiplier.Value,
+                    CriticalChanceMultiplier = buff.effects.CriticalChanceMultiplier.Value,
+                    CriticalPowerMultiplier = buff.effects.CriticalPowerMultiplier.Value,
+                    WeaponPrecisionMultiplier = buff.effects.WeaponPrecisionMultiplier.Value
+                },
+                CustomFields = buff.customFields != null && buff.customFields.Count > 0
+                    ? new Dictionary<string, string>(buff.customFields, StringComparer.Ordinal)
+                    : null
+            };
+        }
+
+        private static Buff? CreateBuffFromPersisted(PersistedFoodBuff saved, int remainingMs)
+        {
+            if (string.IsNullOrWhiteSpace(saved.Id) || remainingMs <= 0)
+                return null;
+
+            Texture2D? iconTexture = null;
+            int iconSheetIndex = saved.IconSheetIndex;
+            if (!string.IsNullOrWhiteSpace(saved.IconTextureName))
+            {
+                if (string.Equals(saved.IconTextureName, "TileSheets\\BuffsIcons", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(saved.IconTextureName, "TileSheets/BuffsIcons", StringComparison.OrdinalIgnoreCase))
+                {
+                    iconTexture = Game1.buffsIcons;
+                }
+                else
+                {
+                    try
+                    {
+                        iconTexture = Game1.content.Load<Texture2D>(saved.IconTextureName);
+                    }
+                    catch (Exception ex)
+                    {
+                        context?.Monitor.Log($"[EconomyModule] No se pudo cargar icono '{saved.IconTextureName}' para buff '{saved.Id}': {ex.Message}", LogLevel.Trace);
+                        iconTexture = null;
+                        iconSheetIndex = -1;
+                    }
+                }
+            }
+
+            var buff = new Buff(
+                id: saved.Id,
+                source: saved.Source,
+                displaySource: saved.DisplaySource,
+                duration: remainingMs,
+                iconTexture: iconTexture,
+                iconSheetIndex: iconSheetIndex,
+                effects: null,
+                isDebuff: false,
+                displayName: saved.DisplayName,
+                description: saved.Description);
+
+            buff.actionsOnApply = null;
+            buff.millisecondsDuration = remainingMs;
+            buff.totalMillisecondsDuration = Math.Max(remainingMs, saved.TotalDurationMs);
+            buff.visible = saved.Visible;
+            buff.glow = new Color(saved.GlowR, saved.GlowG, saved.GlowB, saved.GlowA);
+
+            if (string.IsNullOrWhiteSpace(saved.IconTextureName) && saved.IconSheetIndex < 0)
+            {
+                buff.iconTexture = null;
+                buff.iconSheetIndex = -1;
+            }
+
+            buff.effects.Clear();
+            if (saved.Effects != null)
+            {
+                FoodBuffEffectsSnapshot fx = saved.Effects.CloneSanitized();
+                buff.effects.CombatLevel.Value = fx.CombatLevel;
+                buff.effects.FarmingLevel.Value = fx.FarmingLevel;
+                buff.effects.FishingLevel.Value = fx.FishingLevel;
+                buff.effects.MiningLevel.Value = fx.MiningLevel;
+                buff.effects.LuckLevel.Value = fx.LuckLevel;
+                buff.effects.ForagingLevel.Value = fx.ForagingLevel;
+                buff.effects.MaxStamina.Value = fx.MaxStamina;
+                buff.effects.MagneticRadius.Value = fx.MagneticRadius;
+                buff.effects.Speed.Value = fx.Speed;
+                buff.effects.Defense.Value = fx.Defense;
+                buff.effects.Attack.Value = fx.Attack;
+                buff.effects.Immunity.Value = fx.Immunity;
+                buff.effects.AttackMultiplier.Value = fx.AttackMultiplier;
+                buff.effects.KnockbackMultiplier.Value = fx.KnockbackMultiplier;
+                buff.effects.WeaponSpeedMultiplier.Value = fx.WeaponSpeedMultiplier;
+                buff.effects.CriticalChanceMultiplier.Value = fx.CriticalChanceMultiplier;
+                buff.effects.CriticalPowerMultiplier.Value = fx.CriticalPowerMultiplier;
+                buff.effects.WeaponPrecisionMultiplier.Value = fx.WeaponPrecisionMultiplier;
+            }
+
+            if (saved.CustomFields != null)
+            {
+                foreach (var kvp in saved.CustomFields)
+                    buff.customFields[kvp.Key] = kvp.Value;
+            }
+
+            return buff;
+        }
+
+        private static bool IsDisallowedBuffIdOnHost(string id)
+        {
+            if (FoodBuffPersistenceLogic.IsDisallowedBuffId(id))
+                return true;
+
+            try
+            {
+                if (Game1.content != null && DataLoader.Buffs(Game1.content).TryGetValue(id, out var data) && data.IsDebuff)
+                    return true;
+            }
+            catch
+            {
+                // Si el contenido aún no está disponible, basta la validación pura del Core.
+            }
+
+            return false;
+        }
+
+        private static bool IsDebuffForPersistence(Buff buff)
+        {
+            if (IsCombatDebuff(buff) || FoodBuffPersistenceLogic.IsDisallowedBuffId(buff.id))
+                return true;
+
+            try
+            {
+                if (Game1.content != null && DataLoader.Buffs(Game1.content).TryGetValue(buff.id, out var data) && data.IsDebuff)
+                    return true;
+            }
+            catch
+            {
+                // Ignorar si no se puede consultar Data/Buffs.
+            }
+
+            return false;
         }
 
         private static bool IsCombatDebuff(Buff buff)
