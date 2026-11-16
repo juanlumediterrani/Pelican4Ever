@@ -521,16 +521,19 @@ namespace Pelican4Ever.Modules
 
                     MainThreadExecutionResult<bool> result = ExecuteWithThreadInfoOnGameThread(() =>
                     {
-                        string author = string.IsNullOrWhiteSpace(body.Author) ? "Discord" : body.Author.Trim();
+                        string author = SanitizeExternalChatText(body.Author, "Discord");
                         string source = string.IsNullOrWhiteSpace(body.Source) ? "discord" : body.Source.Trim().ToLowerInvariant();
                         string channel = string.IsNullOrWhiteSpace(body.Channel) ? "discord" : body.Channel.Trim().ToLowerInvariant();
+                        string message = SanitizeExternalChatText(body.Message, string.Empty);
+                        if (string.IsNullOrEmpty(message))
+                            return false;
 
                         var payload = new ServerBroadcastPayload
                         {
                             Source = source,
                             Author = author,
                             Channel = channel,
-                            Message = body.Message.Trim(),
+                            Message = message,
                             ColorR = 114,
                             ColorG = 137,
                             ColorB = 218,
@@ -544,13 +547,10 @@ namespace Pelican4Ever.Modules
                                 context.Helper.Multiplayer.SendMessage(
                                     payload,
                                     ChatMessages.ServerBroadcast,
-                                    new[] { context.Manifest.UniqueID });
+                                    new[] { context.Manifest.UniqueID, "Pelican4Ever.Chat" });
                             }
 
-                            if (context != null && !context.Helper.ModRegistry.IsLoaded("Pelican4Ever.Chat"))
-                            {
-                                Game1.chatBox?.addMessage($"[Discord] {author}: {payload.Message}", new Color(114, 137, 218));
-                            }
+                            Game1.chatBox?.addMessage($"[Discord] {author}: {payload.Message}", new Color(114, 137, 218));
                         }
 
                         return true;
@@ -559,7 +559,7 @@ namespace Pelican4Ever.Modules
                     WriteJson(res, new HostActionResultDto
                     {
                         Ok = result.Value,
-                        Message = "Mensaje externo difundido al chat.",
+                        Message = result.Value ? "Mensaje externo difundido al chat." : "Mensaje externo vacío tras sanitizar.",
                         ExecutedOnThreadId = result.ExecutedOnThreadId
                     });
                     break;
@@ -774,7 +774,7 @@ namespace Pelican4Ever.Modules
                             IsCritical = isCritical
                         },
                         ChatMessages.ServerBroadcast,
-                        new[] { context.Manifest.UniqueID });
+                        new[] { context.Manifest.UniqueID, "Pelican4Ever.Chat" });
                 }
 
                 Game1.chatBox?.addMessage(message, new Color(255, 215, 0));
@@ -783,6 +783,31 @@ namespace Pelican4Ever.Modules
             {
                 Game1.addHUDMessage(new HUDMessage(message, HUDMessage.newQuest_type));
             }
+        }
+
+        private static string SanitizeExternalChatText(string? raw, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return fallback;
+
+            var sb = new StringBuilder(raw.Length);
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char c = raw[i];
+                if (char.IsSurrogate(c))
+                    continue;
+                if (c is '\r' or '\n' or '\t')
+                {
+                    sb.Append(' ');
+                    continue;
+                }
+                if (char.IsControl(c))
+                    continue;
+                sb.Append(c switch { '[' => '(', ']' => ')', _ => c });
+            }
+
+            string cleaned = sb.ToString().Trim();
+            return string.IsNullOrEmpty(cleaned) ? fallback : cleaned;
         }
 
         private static HostClockDto BuildHostClockDto()
