@@ -117,9 +117,15 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 8;
+        public const int CurrentSchemaVersion = 9;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
+        /// <summary>
+        /// Versión aplicada de la migración de estado de eventos <c>/H</c> (v0.4.9).
+        /// Permanece en 0 hasta que <c>HostEventRelayModule</c> repara el estado en vivo de la partida.
+        /// </summary>
+        public int HostEventMigrationVersion { get; set; }
 
         /// <summary>Registros de jugadores (clave: UniqueMultiplayerID). Fuente única de la verdad del estado del jugador.</summary>
         public Dictionary<long, PlayerRecord> Players { get; set; } = new();
@@ -472,6 +478,13 @@ namespace Pelican4Ever.Core.World
                         door.TenantId = null;
                 }
                 SchemaVersion = 8;
+                changed = true;
+            }
+
+            // v8 → v9: seguimiento de migración de eventos /H bloqueados (v0.4.9).
+            if (SchemaVersion < 9)
+            {
+                SchemaVersion = 9;
                 changed = true;
             }
 
