@@ -52,6 +52,7 @@ namespace Pelican4Ever.Core.Localization
             ["mailbox.orders.catalog_prompt"] = "¿A qué tienda quieres hacer un pedido por correo? (Llega el próximo mediodía a las 12:00)",
             ["mailbox.orders.shop_unavailable"] = "Esta tienda no está disponible en tu progreso actual.",
             ["mailbox.orders.item_queued"] = "Pedido confirmado: {{item}} x{{count}} llegará a tu granja a las 12:00.",
+            ["mailbox.orders.cannot_sell"] = "No puedes vender objetos desde los pedidos del buzón. Usa el cajón de envíos (buzón de entrega de objetos de la granja) como en el modo vanilla.",
             ["mailbox.orders.none_pending"] = "No tienes pedidos pendientes de entrega.",
             ["mailbox.orders.pending_item_line"] = "• {{shop}}: {{count}} artículo(s) — entrega: {{date}} (12:00)",
             ["mailbox.orders.pending_building_line"] = "• Obra de Robin ({{building}}) — inicio: {{date}} (12:00)",

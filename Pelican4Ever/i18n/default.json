@@ -134,6 +134,7 @@
   "mailbox.orders.catalog_prompt": "Which shop would you like to order from by mail? (Arrives next noon at 12:00 PM)",
   "mailbox.orders.shop_unavailable": "This shop is not available at your current progression.",
   "mailbox.orders.item_queued": "Order confirmed: {{item}} x{{count}} will arrive at your farm at 12:00 PM.",
+  "mailbox.orders.cannot_sell": "You cannot sell items from mail orders. Use the Shipping Bin (farm item delivery box) on your farm as in vanilla mode.",
   "mailbox.orders.none_pending": "You have no pending mail orders.",
   "mailbox.orders.pending_item_line": "• {{shop}}: {{count}} item(s) — delivery: {{date}} (12:00 PM)",
   "mailbox.orders.pending_building_line": "• Robin's construction ({{building}}) — starts: {{date}} (12:00 PM)",

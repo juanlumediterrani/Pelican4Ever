@@ -535,6 +535,18 @@ namespace Pelican4Ever.Core.World
                 changed = true;
             }
 
+            if (Players != null)
+            {
+                foreach (PlayerRecord player in Players.Values)
+                {
+                    if (player != null && player.ActiveFoodBuffs == null)
+                    {
+                        player.ActiveFoodBuffs = new List<PersistedFoodBuff>();
+                        changed = true;
+                    }
+                }
+            }
+
             return changed;
         }
     }

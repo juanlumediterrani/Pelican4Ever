@@ -101,7 +101,11 @@ namespace Pelican4Ever.Modules
             {
                 clintUpgradeMailSessionActive = false;
                 Game1.drawObjectDialogue(I18n.Get("mailbox.orders.shop_unavailable"));
+                return;
             }
+
+            if (Game1.activeClickableMenu is ShopMenu shopMenu)
+                ConfigureMailOrderShopMenu(shopMenu);
         }
 
         public static bool Prefix_Tool_ActionWhenPurchased(Tool __instance, string shopId, ref bool __result)

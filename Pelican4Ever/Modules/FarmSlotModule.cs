@@ -3769,6 +3769,13 @@ namespace Pelican4Ever.Modules
                             kvp.Value.CopyConsumptionFrom(local);
                         }
 
+                        if (kvp.Key == localId
+                            && EconomyModule.HasLocalFoodBuffState
+                            && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? localFoodBuffRecord))
+                        {
+                            kvp.Value.CopyFoodBuffsFrom(localFoodBuffRecord);
+                        }
+
                         if (kvp.Key == localId && SkillExperienceModule.HasLocalState
                             && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? localSkillRecord))
                             kvp.Value.SkillExperience = localSkillRecord.SkillExperience;

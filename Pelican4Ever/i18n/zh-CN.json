@@ -134,6 +134,7 @@
   "mailbox.orders.catalog_prompt": "你想向哪家商店邮购？（次日中午 12:00 送达）",
   "mailbox.orders.shop_unavailable": "以你当前的进度暂无法使用这家商店。",
   "mailbox.orders.item_queued": "订单已确认：{{item}} x{{count}} 将于 12:00 送达你的农场。",
+  "mailbox.orders.cannot_sell": "无法通过邮购订单出售物品。请按照原版方式使用农场的出货箱（农场物品投递箱）。",
   "mailbox.orders.none_pending": "你目前没有待送达的邮购订单。",
   "mailbox.orders.pending_item_line": "• {{shop}}：{{count}} 件物品 — 送达：{{date}}（12:00）",
   "mailbox.orders.pending_building_line": "• 罗宾工程（{{building}}）— 开工：{{date}}（12:00）",
