@@ -31,6 +31,12 @@ namespace Pelican4Ever.Core.Security
 
         /// <summary>Invitaciones de emparejamiento activas pendientes de aprobación.</summary>
         public List<PairingInvite> PairingInvites { get; set; } = new();
+
+        /// <summary>Tickets de admisión temporal abiertos por Putre.</summary>
+        public List<PutreAdmissionTicket> PutreTickets { get; set; } = new();
+
+        /// <summary>Lista negra persistente.</summary>
+        public List<BlacklistEntry> Blacklist { get; set; } = new();
     }
 
     /// <summary>
@@ -59,6 +65,8 @@ namespace Pelican4Ever.Core.Security
             state.PendingEnrollments ??= new Dictionary<string, DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
             state.AuthorizedClients ??= new Dictionary<string, AuthorizedClient>(StringComparer.Ordinal);
             state.PairingInvites ??= new List<PairingInvite>();
+            state.PutreTickets ??= new List<PutreAdmissionTicket>();
+            state.Blacklist ??= new List<BlacklistEntry>();
 
             var sidecar = new PairingSidecarFile
             {
@@ -66,7 +74,9 @@ namespace Pelican4Ever.Core.Security
                 AuthorizedDevices = new Dictionary<string, AuthorizedDevice>(state.AuthorizedDevices, StringComparer.OrdinalIgnoreCase),
                 PendingEnrollments = new Dictionary<string, DeviceEnrollmentRequest>(state.PendingEnrollments, StringComparer.OrdinalIgnoreCase),
                 AuthorizedClients = new Dictionary<string, AuthorizedClient>(state.AuthorizedClients, StringComparer.Ordinal),
-                PairingInvites = new List<PairingInvite>(state.PairingInvites)
+                PairingInvites = new List<PairingInvite>(state.PairingInvites),
+                PutreTickets = new List<PutreAdmissionTicket>(state.PutreTickets),
+                Blacklist = new List<BlacklistEntry>(state.Blacklist)
             };
 
             string json = JsonSerializer.Serialize(sidecar, new JsonSerializerOptions { WriteIndented = true });
@@ -187,6 +197,38 @@ namespace Pelican4Ever.Core.Security
                         if (!exists)
                         {
                             state.PairingInvites.Add(invite);
+                        }
+                    }
+                }
+
+                state.PutreTickets ??= new List<PutreAdmissionTicket>();
+                if (sidecar.PutreTickets != null)
+                {
+                    DateTimeOffset now = DateTimeOffset.UtcNow;
+                    foreach (PutreAdmissionTicket ticket in sidecar.PutreTickets)
+                    {
+                        if (ticket == null || ticket.IsExpired(now))
+                            continue;
+                        if (!state.PutreTickets.Any(t => string.Equals(t.DiscordUserId, ticket.DiscordUserId, StringComparison.Ordinal)))
+                        {
+                            state.PutreTickets.Add(ticket);
+                        }
+                    }
+                }
+
+                state.Blacklist ??= new List<BlacklistEntry>();
+                if (sidecar.Blacklist != null)
+                {
+                    foreach (BlacklistEntry bl in sidecar.Blacklist)
+                    {
+                        if (bl == null)
+                            continue;
+                        bool exists = state.Blacklist.Any(b =>
+                            (!string.IsNullOrEmpty(bl.Fingerprint) && string.Equals(b.Fingerprint, bl.Fingerprint, StringComparison.OrdinalIgnoreCase)) ||
+                            (!string.IsNullOrEmpty(bl.DiscordUserId) && string.Equals(b.DiscordUserId, bl.DiscordUserId, StringComparison.Ordinal)));
+                        if (!exists)
+                        {
+                            state.Blacklist.Add(bl);
                         }
                     }
                 }

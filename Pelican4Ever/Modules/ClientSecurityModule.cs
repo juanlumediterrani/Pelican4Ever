@@ -54,6 +54,7 @@ namespace Pelican4Ever.Modules
         private static readonly Dictionary<long, string> playerRemoteIps = new();
         private static readonly List<RecentConnectionAttempt> recentConnectionAttempts = new();
         private static readonly Dictionary<string, DateTimeOffset> lastBlockedLogByIp = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly List<UnpairedHandshakeObservation> recentUnpairedObservations = new();
 
         // Estado en el cliente cuando el servidor exige introducir el código de pairing al entrar por primera vez
         private static bool localClientAwaitingPairing;
@@ -91,6 +92,13 @@ namespace Pelican4Ever.Modules
             ctx.AddCommand("p4e_migrate_player", "Migra explícitamente un peón existente al nuevo dispositivo con respaldo verificable: p4e_migrate_player <huella_o_alias> <peon_o_nombre>", OnConsoleMigratePlayer);
             ctx.AddCommand("p4e_pair_reject", "Rechaza o cancela una solicitud de alta pendiente: p4e_pair_reject <huella_o_alias>", OnConsolePairReject);
             ctx.AddCommand("p4e_pair_revoke", "Revoca una invitación pendiente o un dispositivo emparejado: p4e_pair_revoke <usuario_o_ip_o_id>", OnConsolePairRevoke);
+            ctx.AddCommand("p4e_probation_status", "Lista solicitudes Putre, dispositivos en observación (máx. 2 cupos) y lista negra.", OnConsoleProbationStatus);
+            ctx.AddCommand("p4e_probation_ticket", "Abre un ticket de admisión Putre temporal (30 min): p4e_probation_ticket <discord_id> <alias>", OnConsoleProbationTicket);
+            ctx.AddCommand("p4e_probation_approve", "Aprueba una huella observada para un ticket Putre: p4e_probation_approve <discord_id> <huella>", OnConsoleProbationApprove);
+            ctx.AddCommand("p4e_probation_graduate", "Gradúa un dispositivo en observación y libera el cupo de Putre: p4e_probation_graduate <huella_o_alias_o_discord>", OnConsoleProbationGraduate);
+            ctx.AddCommand("p4e_probation_cancel", "Cancela un ticket Putre pendiente y libera el cupo: p4e_probation_cancel <discord_id_o_alias>", OnConsoleProbationCancel);
+            ctx.AddCommand("p4e_probation_blacklist", "Añade permanentemente a lista negra, revoca acceso y expulsa: p4e_probation_blacklist <objetivo> <motivo...>", OnConsoleProbationBlacklist);
+            ctx.AddCommand("p4e_blacklist_remove", "Retira una entrada de la lista negra (solo propietario): p4e_blacklist_remove <huella_o_alias_o_discord>", OnConsoleBlacklistRemove);
 
             ApplyHarmonyPatches(ctx.Harmony);
         }
@@ -100,6 +108,7 @@ namespace Pelican4Ever.Modules
             serverChallenges.Clear();
             pendingPairingSessions.Clear();
             playerRemoteIps.Clear();
+            recentUnpairedObservations.Clear();
             localClientAwaitingPairing = false;
             localPairingReopenDelayTicks = 0;
         }
@@ -114,6 +123,7 @@ namespace Pelican4Ever.Modules
 
             pendingPairingSessions.Clear();
             playerRemoteIps.Clear();
+            recentUnpairedObservations.Clear();
 
             LoadAndMergePairingSidecar();
             ClientPairingLogic.EnsureExistingClaimsAuthorized(context.WorldState, DateTimeOffset.UtcNow);
@@ -986,6 +996,376 @@ namespace Pelican4Ever.Modules
             context.Monitor.Log(summary, LogLevel.Info);
         }
 
+        private static void FailCommand(string message)
+        {
+            context?.Monitor.Log(message, LogLevel.Warn);
+            if (RemoteCommandOutput.IsCapturing)
+                throw new InvalidOperationException(message);
+        }
+
+        private static void RecordUnpairedObservation(string fingerprint, byte[] pubKeySpki, string remoteIp, DateTimeOffset nowUtc)
+        {
+            recentUnpairedObservations.RemoveAll(o =>
+                o == null ||
+                (nowUtc - o.ObservedAtUtc) > ProbationAndBlacklistLogic.UnpairedObservationTtl ||
+                string.Equals(o.Fingerprint, fingerprint, StringComparison.OrdinalIgnoreCase));
+
+            recentUnpairedObservations.Add(new UnpairedHandshakeObservation
+            {
+                Fingerprint = fingerprint,
+                PublicKeyBase64 = Convert.ToBase64String(pubKeySpki),
+                RemoteIp = remoteIp,
+                ObservedAtUtc = nowUtc
+            });
+
+            while (recentUnpairedObservations.Count > ProbationAndBlacklistLogic.MaxRecentUnpairedObservations)
+                recentUnpairedObservations.RemoveAt(0);
+        }
+
+        private static List<UnpairedHandshakeObservation> GetRecentUnpairedObservationsSnapshot(DateTimeOffset nowUtc)
+        {
+            recentUnpairedObservations.RemoveAll(o =>
+                o == null || (nowUtc - o.ObservedAtUtc) > ProbationAndBlacklistLogic.UnpairedObservationTtl);
+            return recentUnpairedObservations.ToList();
+        }
+
+        private static void EvictBlacklistedPlayers(string? fingerprint, IEnumerable<long> affectedPlayerIds)
+        {
+            HashSet<long> targetIds = new(affectedPlayerIds ?? Array.Empty<long>());
+
+            if (Game1.netWorldState?.Value?.farmhandData != null)
+            {
+                var fhData = Game1.netWorldState.Value.farmhandData;
+                foreach (long fhId in fhData.Keys.ToList())
+                {
+                    if (!fhData.TryGetValue(fhId, out Farmer? fh) || fh == null)
+                        continue;
+
+                    bool matchesId = targetIds.Contains(fhId);
+                    bool matchesFp = !string.IsNullOrEmpty(fingerprint) &&
+                        string.Equals(fh.userID.Value, fingerprint, StringComparison.OrdinalIgnoreCase);
+
+                    if (matchesId || matchesFp)
+                    {
+                        fh.userID.Value = string.Empty;
+                        targetIds.Add(fhId);
+                    }
+                }
+            }
+
+            foreach (long playerId in targetIds)
+                pendingPairingSessions.Remove(playerId);
+
+            foreach (Farmer online in Game1.getOnlineFarmers())
+            {
+                if (online.UniqueMultiplayerID == Game1.player?.UniqueMultiplayerID)
+                    continue;
+
+                bool matchesOnline = targetIds.Contains(online.UniqueMultiplayerID) ||
+                    (!string.IsNullOrEmpty(fingerprint) &&
+                     string.Equals(online.userID.Value, fingerprint, StringComparison.OrdinalIgnoreCase));
+
+                if (matchesOnline)
+                    Game1.server?.kick(online.UniqueMultiplayerID);
+            }
+        }
+
+        private void OnConsoleProbationStatus(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            ProbationAndBlacklistLogic.PurgeExpiredTickets(context.WorldState, now);
+            int used = ProbationAndBlacklistLogic.CountPutreActiveSlots(context.WorldState, now);
+            int max = ProbationAndBlacklistLogic.MaxConcurrentPutreSlots;
+
+            context.Monitor.Log($"Estado Putre — Cupos en uso: {used}/{max} (libres: {Math.Max(0, max - used)}).", LogLevel.Info);
+
+            var tickets = context.WorldState.PutreTickets ?? new List<PutreAdmissionTicket>();
+            context.Monitor.Log($"Tickets pendientes ({tickets.Count}):", LogLevel.Info);
+            foreach (var t in tickets)
+            {
+                context.Monitor.Log($"  - {t.Alias} (Discord {t.DiscordUserId}), expira {t.ExpiresAtUtc:yyyy-MM-ddTHH:mm:ssZ}", LogLevel.Info);
+            }
+
+            var observing = (context.WorldState.AuthorizedDevices?.Values ?? Enumerable.Empty<AuthorizedDevice>())
+                .Where(d => d != null && string.Equals(d.InvitedBy, "putre", StringComparison.OrdinalIgnoreCase) && d.ProbationStage == ProbationStage.Observing)
+                .OrderBy(d => d.CreatedAtUtc)
+                .ToList();
+            context.Monitor.Log($"Dispositivos en observación ({observing.Count}):", LogLevel.Info);
+            foreach (var d in observing)
+            {
+                string shortFp = d.Fingerprint.Length >= 12 ? d.Fingerprint[..12] : d.Fingerprint;
+                context.Monitor.Log($"  - {d.Alias} (huella {shortFp}, Discord {d.DiscordUserId}, peón {d.BoundPlayerId}, alta {d.CreatedAtUtc:yyyy-MM-ddTHH:mm:ssZ})", LogLevel.Info);
+            }
+
+            var bl = context.WorldState.Blacklist ?? new List<BlacklistEntry>();
+            context.Monitor.Log($"Lista negra ({bl.Count}):", LogLevel.Info);
+            foreach (var b in bl)
+            {
+                string shortFp = b.Fingerprint.Length >= 12 ? b.Fingerprint[..12] : b.Fingerprint;
+                context.Monitor.Log($"  - {b.Alias} (huella {shortFp}, Discord {b.DiscordUserId}, por {b.BlacklistedBy}): {b.Reason}", LogLevel.Info);
+            }
+        }
+
+        private void OnConsoleProbationTicket(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            if (args.Length < 2)
+            {
+                FailCommand("Uso: p4e_probation_ticket <discord_id> <alias>");
+                return;
+            }
+
+            if (!ProbationAndBlacklistLogic.OpenTicket(
+                    context.WorldState,
+                    args[0],
+                    args[1],
+                    DateTimeOffset.UtcNow,
+                    out _,
+                    out string message))
+            {
+                FailCommand(message);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "ProbationTicket");
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsoleProbationApprove(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            if (args.Length < 2)
+            {
+                FailCommand("Uso: p4e_probation_approve <discord_id> <huella>");
+                return;
+            }
+
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            var observations = GetRecentUnpairedObservationsSnapshot(now);
+            if (!ProbationAndBlacklistLogic.ApproveTicketDevice(
+                    context.WorldState,
+                    args[0],
+                    args[1],
+                    observations,
+                    now,
+                    out AuthorizedDevice? device,
+                    out string message))
+            {
+                FailCommand(message);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "ProbationApprove");
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerPaired,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = device?.Alias,
+                    ["fingerprint"] = device?.Fingerprint,
+                    ["discordUserId"] = device?.DiscordUserId,
+                    ["invitedBy"] = device?.InvitedBy,
+                    ["probationStage"] = device?.ProbationStage.ToString()
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsoleProbationGraduate(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            if (args.Length < 1)
+            {
+                FailCommand("Uso: p4e_probation_graduate <huella_o_alias_o_discord>");
+                return;
+            }
+
+            string target = string.Join(" ", args).Trim();
+            if (!ProbationAndBlacklistLogic.GraduateDevice(
+                    context.WorldState,
+                    target,
+                    DateTimeOffset.UtcNow,
+                    out AuthorizedDevice? device,
+                    out string message))
+            {
+                FailCommand(message);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "ProbationGraduate");
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerProbationGraduated,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = device?.Alias,
+                    ["fingerprint"] = device?.Fingerprint,
+                    ["discordUserId"] = device?.DiscordUserId,
+                    ["boundPlayerId"] = device?.BoundPlayerId
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsoleProbationCancel(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            if (args.Length < 1)
+            {
+                FailCommand("Uso: p4e_probation_cancel <discord_id_o_alias>");
+                return;
+            }
+
+            string target = string.Join(" ", args).Trim();
+            if (!ProbationAndBlacklistLogic.CancelTicket(context.WorldState, target, out string message))
+            {
+                FailCommand(message);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "ProbationCancel");
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsoleProbationBlacklist(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            if (args.Length < 2)
+            {
+                FailCommand("Uso: p4e_probation_blacklist <objetivo> <motivo...>");
+                return;
+            }
+
+            string target = args[0];
+            string reason = string.Join(" ", args.Skip(1)).Trim();
+            if (!ProbationAndBlacklistLogic.AddToBlacklist(
+                    context.WorldState,
+                    target,
+                    reason,
+                    "putre",
+                    DateTimeOffset.UtcNow,
+                    out BlacklistEntry? entry,
+                    out List<long> affectedIds,
+                    out string message))
+            {
+                FailCommand(message);
+                return;
+            }
+
+            EvictBlacklistedPlayers(entry?.Fingerprint, affectedIds);
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "ProbationBlacklist");
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerBlacklisted,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = entry?.Alias,
+                    ["fingerprint"] = entry?.Fingerprint,
+                    ["discordUserId"] = entry?.DiscordUserId,
+                    ["reason"] = entry?.Reason,
+                    ["blacklistedBy"] = entry?.BlacklistedBy,
+                    ["affectedPlayers"] = affectedIds.Count
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
+        private void OnConsoleBlacklistRemove(string command, string[] args)
+        {
+            if (context == null || !Context.IsMainPlayer)
+            {
+                FailCommand("Este comando solo está disponible en el servidor anfitrión.");
+                return;
+            }
+
+            if (args.Length < 1)
+            {
+                FailCommand("Uso: p4e_blacklist_remove <huella_o_alias_o_discord>");
+                return;
+            }
+
+            string target = string.Join(" ", args).Trim();
+            if (!ProbationAndBlacklistLogic.RemoveFromBlacklist(
+                    context.WorldState,
+                    target,
+                    out BlacklistEntry? removed,
+                    out string message))
+            {
+                FailCommand(message);
+                return;
+            }
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, "BlacklistRemove");
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerBlacklistRemoved,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = removed?.Alias,
+                    ["fingerprint"] = removed?.Fingerprint,
+                    ["discordUserId"] = removed?.DiscordUserId
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
         // ─────────────────────────── Resolución de IP e Inspección Lidgren ───────────────────────────
 
         private static string ResolveRemoteIpByConnectionId(string? connectionId)
@@ -1055,6 +1435,11 @@ namespace Pelican4Ever.Modules
                             continue;
                         if (verifiedConnections.TryGetValue(connection, out VerifiedConnection? verified))
                         {
+                            if (ProbationAndBlacklistLogic.IsBlacklisted(context.WorldState, verified.Fingerprint, null, out _))
+                            {
+                                DisconnectConnectionById(connectionId, "Access permanently denied (blacklisted). Only the server owner can revoke it.");
+                                return false;
+                            }
                             verifiedToken = verified.Fingerprint;
                             return true;
                         }
@@ -1085,8 +1470,16 @@ namespace Pelican4Ever.Modules
                             return false;
                         }
 
+                        string fpShortLog = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
+                        if (ProbationAndBlacklistLogic.IsBlacklisted(context.WorldState, fingerprint, null, out BlacklistEntry? blEntry))
+                        {
+                            context.Monitor.Log($"[ClientSecurity] Dispositivo bloqueado por lista negra ({fpShortLog}...) desde IP {remoteIp}: {blEntry?.Reason}", LogLevel.Warn);
+                            DisconnectConnectionById(connectionId, "Access permanently denied (blacklisted). Only the server owner can revoke it.");
+                            return false;
+                        }
+
                         // Comprobar si la huella digital está autorizada en la lista blanca del servidor
-                        bool isAuthorized = ServerDeviceRegistry.IsDeviceAuthorized(context.WorldState, fingerprint, out _);
+                        bool isAuthorized = ServerDeviceRegistry.IsDeviceAuthorized(context.WorldState, fingerprint, out AuthorizedDevice? matchedDevice);
 
                         isAuthorized |= context.WorldState.AuthorizedClients != null &&
                             context.WorldState.AuthorizedClients.Values.Any(c =>
@@ -1141,9 +1534,27 @@ namespace Pelican4Ever.Modules
                                 return false;
                             }
 
+                            DateTimeOffset obsNow = DateTimeOffset.UtcNow;
+                            RecordUnpairedObservation(fingerprint, pubKeySpki, remoteIp, obsNow);
+                            ProbationAndBlacklistLogic.PurgeExpiredTickets(context.WorldState, obsNow);
+                            if ((context.WorldState.PutreTickets?.Count ?? 0) > 0)
+                            {
+                                context.Monitor.Log($"[ClientSecurity] Dispositivo con solicitud Putre observada: huella {fpShort}... desde IP {remoteIp}.", LogLevel.Info);
+                                DisconnectConnectionById(connectionId, $"Active admission request. Your fingerprint is: {fpShort} — Paste it in Discord (#pelican-gate).");
+                                return false;
+                            }
+
                             context.Monitor.Log($"[ClientSecurity] Dispositivo válido con huella {fpShort}... pero no autorizado ni con invitación activa.", LogLevel.Info);
                             DisconnectConnectionById(connectionId, "Servidor protegido por lista blanca. Solicita una invitación al propietario en Discord.");
                             return false;
+                        }
+
+                        if (matchedDevice != null)
+                        {
+                            matchedDevice.LastSeenUtc = DateTimeOffset.UtcNow;
+                            string normIp = ClientPairingLogic.NormalizeIp(remoteIp);
+                            if (!string.IsNullOrEmpty(normIp))
+                                matchedDevice.LastSeenIp = normIp;
                         }
 
                         verifiedToken = fingerprint;

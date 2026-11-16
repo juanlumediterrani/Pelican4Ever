@@ -72,6 +72,7 @@ namespace Pelican4Ever
                 new FestivalAccessModule(),
                 new FestivalParticipationModule(),
                 new AgentCosmeticsModule(),
+                new ProbationTelemetryModule(),
                 new AdminApiModule(),
                 new AutoHostModule(),
                 new HeadlessRenderModule(),

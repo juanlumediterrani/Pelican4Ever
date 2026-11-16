@@ -112,6 +112,9 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Registro del ciclo de adopción de mascota de ranura (Épica 20).</summary>
         public Pelican4Ever.Core.Pets.PetAdoptionRecord PetAdoption { get; set; } = new();
 
+        /// <summary>Métricas conductuales y de red recopiladas en el host para observación de Putre.</summary>
+        public Pelican4Ever.Core.Security.PlayerBehaviorMetrics Behavior { get; set; } = new();
+
         /// <summary>Nombre del cónyuge cuya ceremonia de boda quedó completada offline y pendiente de reproducirse al reconectar (Opción 4A).</summary>
         public string? PendingWeddingSpouse { get; set; }
 

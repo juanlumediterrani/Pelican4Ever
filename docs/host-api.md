@@ -420,6 +420,10 @@ También: comando de consola `p4e_render [status] | <minutos> | off` (solicitant
 }
 ```
 
+### `GET /api/v1/host/probation`
+
+Devuelve el estado del protocolo de admisión de Putre (`MaxSlots` = 2, `UsedSlots`, `AvailableSlots`), tickets abiertos, dispositivos en observación conductual con sus métricas (tiempo conectado, bloqueos de `VisitorGuard`, chat, economía y rollovers) y la lista negra permanente (`Blacklist`).
+
 ---
 
 ## 3. Rutas clásicas `/api/`

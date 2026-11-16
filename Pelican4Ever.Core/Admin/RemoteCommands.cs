@@ -67,6 +67,13 @@ namespace Pelican4Ever.Core.Admin
             new("p4e_forage_wave", RemoteCommandRisk.Sensitive, 0, 0, "p4e_forage_wave"),
             new("p4e_festival_move", RemoteCommandRisk.Sensitive, 3, 3, "p4e_festival_move <spring|summer|fall|winter> <díaActual> <díaNuevo>", CheckFestivalMove),
             new("p4e_time", RemoteCommandRisk.Sensitive, 1, 2, "p4e_time <+X|-X|reset|set HH:mm>", CheckTime),
+            new("p4e_probation_status", RemoteCommandRisk.Read, 0, 0, "p4e_probation_status"),
+            new("p4e_probation_ticket", RemoteCommandRisk.Safe, 2, 2, "p4e_probation_ticket <discord_id> <alias>"),
+            new("p4e_probation_approve", RemoteCommandRisk.Safe, 2, 2, "p4e_probation_approve <discord_id> <huella>"),
+            new("p4e_probation_graduate", RemoteCommandRisk.Safe, 1, 1, "p4e_probation_graduate <objetivo>"),
+            new("p4e_probation_cancel", RemoteCommandRisk.Safe, 1, 1, "p4e_probation_cancel <discord_id_o_alias>"),
+            new("p4e_probation_blacklist", RemoteCommandRisk.Safe, 2, 16, "p4e_probation_blacklist <objetivo> <motivo...>"),
+            new("p4e_blacklist_remove", RemoteCommandRisk.Sensitive, 1, 1, "p4e_blacklist_remove <huella_o_discord_o_alias>"),
         };
 
         public static RemoteCommandSpec? Find(string? name) =>

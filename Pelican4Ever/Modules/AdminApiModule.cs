@@ -8,7 +8,9 @@ using System.Text.Json;
 using System.Threading;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Admin;
+using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.Security;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
@@ -437,6 +439,13 @@ namespace Pelican4Ever.Modules
                 case "GET /api/v1/host/festival":
                 {
                     HostFestivalDto dto = ExecuteOnGameThread(FestivalParticipationModule.GetHostFestivalSnapshot);
+                    WriteJson(res, dto);
+                    break;
+                }
+
+                case "GET /api/v1/host/probation":
+                {
+                    HostProbationResponseDto dto = ExecuteOnGameThread(BuildHostProbationDto);
                     WriteJson(res, dto);
                     break;
                 }
@@ -913,6 +922,134 @@ namespace Pelican4Ever.Modules
                     IsClaimed = PlayerAuthLogic.IsClaimed(p),
                     OwnerTokenMasked = PlayerAuthLogic.MaskToken(p.OwnerToken)
                 });
+            }
+
+            return response;
+        }
+
+        private static HostProbationResponseDto BuildHostProbationDto()
+        {
+            var state = context!.WorldState;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            ProbationAndBlacklistLogic.PurgeExpiredTickets(state, now);
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            var onlineById = Context.IsWorldReady
+                ? Game1.getOnlineFarmers().ToDictionary(f => f.UniqueMultiplayerID)
+                : new Dictionary<long, Farmer>();
+
+            int used = ProbationAndBlacklistLogic.CountPutreActiveSlots(state, now);
+            var response = new HostProbationResponseDto
+            {
+                MaxSlots = ProbationAndBlacklistLogic.MaxConcurrentPutreSlots,
+                UsedSlots = used,
+                AvailableSlots = Math.Max(0, ProbationAndBlacklistLogic.MaxConcurrentPutreSlots - used),
+                CurrentGameDay = today
+            };
+
+            if (state.PutreTickets != null)
+            {
+                foreach (PutreAdmissionTicket t in state.PutreTickets.OrderBy(x => x.CreatedAtUtc))
+                {
+                    if (t == null)
+                        continue;
+
+                    response.Tickets.Add(new HostProbationTicketDto
+                    {
+                        DiscordUserId = t.DiscordUserId,
+                        Alias = t.Alias,
+                        CreatedAtUtc = t.CreatedAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                        ExpiresAtUtc = t.ExpiresAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    });
+                }
+            }
+
+            if (state.AuthorizedDevices != null)
+            {
+                foreach (AuthorizedDevice d in state.AuthorizedDevices.Values
+                    .Where(d => d != null &&
+                        (string.Equals(d.InvitedBy, "putre", StringComparison.OrdinalIgnoreCase) ||
+                         d.ProbationStage != ProbationStage.None))
+                    .OrderBy(d => d.CreatedAtUtc))
+                {
+                    PlayerRecord? rec = null;
+                    if (d.BoundPlayerId > 0)
+                        state.Players.TryGetValue(d.BoundPlayerId, out rec);
+                    rec ??= state.Players.Values.FirstOrDefault(p =>
+                        string.Equals(p.OwnerToken, d.Fingerprint, StringComparison.OrdinalIgnoreCase));
+
+                    long playerId = rec?.UniqueMultiplayerID ?? d.BoundPlayerId;
+                    onlineById.TryGetValue(playerId, out Farmer? onlineFarmer);
+                    bool isOnline = onlineFarmer != null;
+                    bool hasResidence = playerId > 0 && state.FindResidenceOf(playerId) != null;
+
+                    int goldToday = 0;
+                    if (rec?.GoldLedger?.Days != null && rec.GoldLedger.Days.TryGetValue(today, out DailyGoldEntry? gold) && gold != null)
+                    {
+                        long totalGold = gold.ClientIndividual + gold.HostIndividual + gold.ClientShared + gold.HostShared;
+                        goldToday = (int)Math.Clamp(totalGold, 0, int.MaxValue);
+                    }
+
+                    int xpToday = 0;
+                    if (rec?.SkillExperience?.GameDay == today && rec.SkillExperience.Skills != null)
+                    {
+                        long sumXp = rec.SkillExperience.Skills.Values.Where(s => s != null).Sum(s => Math.Max(0L, s!.GrantedXpToday));
+                        xpToday = (int)Math.Clamp(sumXp, 0, int.MaxValue);
+                    }
+
+                    long onlineSec = (rec?.Behavior?.TotalOnlineSeconds ?? 0) +
+                        (isOnline && playerId > 0 ? ProbationTelemetryModule.GetLiveSessionSeconds(playerId, now) : 0);
+
+                    string shortFp = d.Fingerprint.Length >= 12 ? d.Fingerprint[..12] : d.Fingerprint;
+                    response.Devices.Add(new HostProbationDeviceDto
+                    {
+                        Fingerprint = d.Fingerprint,
+                        ShortFingerprint = shortFp,
+                        Alias = d.Alias,
+                        DiscordUserId = d.DiscordUserId,
+                        Status = d.Status.ToString(),
+                        ProbationStage = d.ProbationStage.ToString(),
+                        InvitedBy = d.InvitedBy,
+                        ApprovedAtUtc = d.CreatedAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                        BoundPlayerId = playerId,
+                        PlayerName = rec?.PlayerName ?? d.Alias,
+                        IsOnline = isOnline,
+                        LocationName = isOnline ? (onlineFarmer?.currentLocation?.NameOrUniqueName ?? string.Empty) : string.Empty,
+                        HasResidence = hasResidence,
+                        TotalOnlineSeconds = onlineSec,
+                        ConnectCount = rec?.Behavior?.ConnectCount ?? 0,
+                        VisitorDeniedCount = rec?.Behavior?.VisitorDeniedCount ?? 0,
+                        LastVisitorDeniedSummary = rec?.Behavior?.LastVisitorDeniedSummary ?? string.Empty,
+                        ChatMessageCount = rec?.Behavior?.ChatMessageCount ?? 0,
+                        ChatFloodHits = rec?.Behavior?.ChatFloodHits ?? 0,
+                        ChatTagInjectionHits = rec?.Behavior?.ChatTagInjectionHits ?? 0,
+                        GoldEarnedToday = goldToday,
+                        TotalXpToday = xpToday,
+                        RolloversPassed = rec?.Behavior?.RolloversPassed ?? 0,
+                        RolloversPenalized = rec?.Behavior?.RolloversPenalized ?? 0
+                    });
+                }
+            }
+
+            if (state.Blacklist != null)
+            {
+                foreach (BlacklistEntry b in state.Blacklist.OrderByDescending(x => x.BlacklistedAtUtc))
+                {
+                    if (b == null)
+                        continue;
+
+                    string shortFp = b.Fingerprint.Length >= 12 ? b.Fingerprint[..12] : b.Fingerprint;
+                    response.Blacklist.Add(new HostBlacklistEntryDto
+                    {
+                        Fingerprint = b.Fingerprint,
+                        ShortFingerprint = shortFp,
+                        DiscordUserId = b.DiscordUserId,
+                        Alias = b.Alias,
+                        Reason = b.Reason,
+                        BlacklistedBy = b.BlacklistedBy,
+                        BlacklistedAtUtc = b.BlacklistedAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    });
+                }
             }
 
             return response;

@@ -154,6 +154,12 @@ namespace Pelican4Ever.Core.World
         /// <summary>Invitaciones de emparejamiento pendientes (con IP autorizada, código de un solo uso y caducidad de 3 días).</summary>
         public List<PairingInvite> PairingInvites { get; set; } = new();
 
+        /// <summary>Tickets abiertos por Putre en Discord para admisión por huella sin exponer IP (máximo 2 concurrentes).</summary>
+        public List<Pelican4Ever.Core.Security.PutreAdmissionTicket> PutreTickets { get; set; } = new();
+
+        /// <summary>Lista negra permanente de dispositivos y cuentas de Discord; solo el propietario puede retirarla.</summary>
+        public List<Pelican4Ever.Core.Security.BlacklistEntry> Blacklist { get; set; } = new();
+
         /// <summary>Último día de juego cerrado por un Rollover (TotalDays), o -1.</summary>
         public int LastRolloverGameDay { get; set; } = -1;
 

@@ -294,6 +294,68 @@ namespace Pelican4Ever.Core.Admin
         public long? EventId { get; set; }
     }
 
+    /// <summary>Ticket activo en el protocolo de admisión de Putre.</summary>
+    public sealed class HostProbationTicketDto
+    {
+        public string DiscordUserId { get; set; } = string.Empty;
+        public string Alias { get; set; } = string.Empty;
+        public string CreatedAtUtc { get; set; } = string.Empty;
+        public string ExpiresAtUtc { get; set; } = string.Empty;
+    }
+
+    /// <summary>Estado conductual y de observación de un jugador admitido por Putre.</summary>
+    public sealed class HostProbationDeviceDto
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+        public string ShortFingerprint { get; set; } = string.Empty;
+        public string Alias { get; set; } = string.Empty;
+        public string DiscordUserId { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string ProbationStage { get; set; } = string.Empty;
+        public string InvitedBy { get; set; } = string.Empty;
+        public string ApprovedAtUtc { get; set; } = string.Empty;
+        public long BoundPlayerId { get; set; }
+        public string PlayerName { get; set; } = string.Empty;
+        public bool IsOnline { get; set; }
+        public string LocationName { get; set; } = string.Empty;
+        public bool HasResidence { get; set; }
+        public long TotalOnlineSeconds { get; set; }
+        public int ConnectCount { get; set; }
+        public int VisitorDeniedCount { get; set; }
+        public string LastVisitorDeniedSummary { get; set; } = string.Empty;
+        public int ChatMessageCount { get; set; }
+        public int ChatFloodHits { get; set; }
+        public int ChatTagInjectionHits { get; set; }
+        public int GoldEarnedToday { get; set; }
+        public int TotalXpToday { get; set; }
+        public int RolloversPassed { get; set; }
+        public int RolloversPenalized { get; set; }
+    }
+
+    /// <summary>Entrada en lista negra devuelta por <c>GET /api/v1/host/probation</c>.</summary>
+    public sealed class HostBlacklistEntryDto
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+        public string ShortFingerprint { get; set; } = string.Empty;
+        public string DiscordUserId { get; set; } = string.Empty;
+        public string Alias { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public string BlacklistedBy { get; set; } = string.Empty;
+        public string BlacklistedAtUtc { get; set; } = string.Empty;
+    }
+
+    /// <summary>Resumen de admisión, observación y lista negra para <c>GET /api/v1/host/probation</c>.</summary>
+    public sealed class HostProbationResponseDto
+    {
+        public int MaxSlots { get; set; } = 2;
+        public int UsedSlots { get; set; }
+        public int AvailableSlots { get; set; }
+        public int CurrentGameDay { get; set; }
+        public List<HostProbationTicketDto> Tickets { get; set; } = new();
+        public List<HostProbationDeviceDto> Devices { get; set; } = new();
+        public List<HostBlacklistEntryDto> Blacklist { get; set; } = new();
+    }
+
     /// <summary>
     /// Respuesta estándar de acciones de <c>/api/v1/host/*</c>.
     /// </summary>
@@ -333,7 +395,8 @@ namespace Pelican4Ever.Core.Admin
             new("GET",  "/api/v1/host/commands",          MutatesGameState: false, "Lista cerrada de comandos de consola de Pelican que se pueden ejecutar a distancia, con su riesgo."),
             new("POST", "/api/v1/host/command",           MutatesGameState: true,  "Ejecuta un comando de consola de la lista de permitidos y devuelve lo que escribe en el registro."),
             new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
-            new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico).")
+            new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico)."),
+            new("GET",  "/api/v1/host/probation",         MutatesGameState: false, "Cupo de admisión de Putre (2 máximo), tickets, jugadores en observación conductual y lista negra.")
         };
 
         /// <summary>

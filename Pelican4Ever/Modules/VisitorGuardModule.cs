@@ -80,12 +80,34 @@ namespace Pelican4Ever.Modules
             return !VisitorPermissionLogic.CanEdit(assignment, Game1.player.UniqueMultiplayerID);
         }
 
+        private static int lastAlertSentTick = -1000;
+
         private static bool Deny()
         {
             if (Game1.ticks - lastMessageTick > 120)
             {
                 lastMessageTick = Game1.ticks;
                 Game1.addHUDMessage(new HUDMessage(DeniedMessage, HUDMessage.error_type));
+            }
+            if (!Context.IsMainPlayer && context != null && Context.IsWorldReady && Game1.MasterPlayer != null && Game1.ticks - lastAlertSentTick > 120)
+            {
+                lastAlertSentTick = Game1.ticks;
+                try
+                {
+                    context.Helper.Multiplayer.SendMessage(
+                        new VisitorDeniedAlertMessage
+                        {
+                            LocationName = Game1.currentLocation?.NameOrUniqueName ?? "desconocida",
+                            Summary = "Intento de acción restringida en ubicación protegida"
+                        },
+                        ProbationTelemetryModule.VisitorDeniedMessageType,
+                        new[] { context.Manifest.UniqueID },
+                        new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+                }
+                catch
+                {
+                    // No interrumpir el flujo de guardia si falla la telemetría
+                }
             }
             return false;
         }

@@ -141,6 +141,12 @@ namespace Pelican4Ever.Modules
                 RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline, isEarlyRiser);
                 SleepPolicy.Commit(record, outcome);
 
+                record.Behavior ??= new Pelican4Ever.Core.Security.PlayerBehaviorMetrics();
+                if (outcome == RolloverOutcome.Rested)
+                    record.Behavior.RolloversPassed++;
+                else if (outcome == RolloverOutcome.Penalized)
+                    record.Behavior.RolloversPenalized++;
+
                 switch (outcome)
                 {
                     case RolloverOutcome.Rested:
