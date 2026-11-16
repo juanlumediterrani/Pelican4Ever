@@ -60,6 +60,7 @@ namespace Pelican4Ever
                 new EconomyModule(),
                 new FurnaceUnlockModule(),
                 new RecipeFallbackModule(),
+                new HostEventRelayModule(),
                 new SkillExperienceModule(),
                 new SkullCavernDescentModule(),
                 new MineLadderModule(),
