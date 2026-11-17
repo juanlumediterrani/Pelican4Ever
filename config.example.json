@@ -66,6 +66,11 @@
     "Pelican4Ever.NITVCompat"
   ],
   "FarmSlotCount": 16,
+  "MaxConcurrentPlayers": 16,
+  "AdmissionQueueCapacity": 16,
+  "ReconnectGraceMinutes": 5,
+  "IdleKickMinutes": 30,
+  "IdleKickWarningMinutes": 2,
   "MaxAnnexesPerResidence": 2,
   "FirstAnnexPriceMultiplier": 0.4,
   "SecondAnnexPriceMultiplier": 1.0,

@@ -19,10 +19,10 @@ namespace Pelican4Ever.Tests
             Directory.CreateDirectory(ArtifactScratchDir);
 
             var doors = DoorCatalogFixture.LoadDoors();
-            Assert.Equal(16, doors.Count);
+            Assert.Equal(64, doors.Count);
 
             // Validar geometría completa de la plaza
-            ValidatePlazaGeometry(doors, 16);
+            ValidatePlazaGeometry(doors, 64);
 
             var mapDiagrams = new StringBuilder();
             mapDiagrams.AppendLine("# Inspección Gráfica de Mapas y Conexiones Espaciales");

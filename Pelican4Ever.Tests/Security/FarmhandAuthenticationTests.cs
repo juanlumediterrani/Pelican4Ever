@@ -252,5 +252,98 @@ namespace Pelican4Ever.Tests.Security
             Assert.DoesNotContain("secret", farmhandUserId);
             Assert.DoesNotContain("token", farmhandUserId);
         }
+
+        [Fact]
+        public void FilterAvailableFarmhandIds_BoundDeviceGetsOnlyOwnFarmhand()
+        {
+            var state = new ServerWorldState();
+            string fp1 = new string('a', 64);
+            string fp2 = new string('b', 64);
+            state.AuthorizedDevices[fp1] = new AuthorizedDevice { Fingerprint = fp1, Alias = "P1", BoundPlayerId = 1001L, Status = DeviceStatus.Active };
+            state.AuthorizedDevices[fp2] = new AuthorizedDevice { Fingerprint = fp2, Alias = "P2", BoundPlayerId = 1002L, Status = DeviceStatus.Active };
+
+            var available = new List<(long PlayerId, bool IsUnclaimed)>
+            {
+                (1001L, false),
+                (1002L, false),
+                (1003L, true),
+                (1004L, true)
+            };
+
+            var result1 = FarmhandAuthLogic.FilterAvailableFarmhandIds(state, fp1, available);
+            Assert.Equal(new[] { 1001L }, result1);
+
+            // Si su personaje está conectado (no disponible), no recibe el de otros ni uno libre
+            var availableWithoutP1 = available.Where(x => x.PlayerId != 1001L).ToList();
+            var result1Busy = FarmhandAuthLogic.FilterAvailableFarmhandIds(state, fp1, availableWithoutP1);
+            Assert.Empty(result1Busy);
+        }
+
+        [Fact]
+        public void FilterAvailableFarmhandIds_NewDeviceGetsSingleUnclaimedFarmhand_EvenWith128Candidates()
+        {
+            var state = new ServerWorldState();
+            string fpBound = new string('a', 64);
+            string fpNew = new string('c', 64);
+            state.AuthorizedDevices[fpBound] = new AuthorizedDevice { Fingerprint = fpBound, Alias = "Bound", BoundPlayerId = 1L, Status = DeviceStatus.Active };
+            state.AuthorizedDevices[fpNew] = new AuthorizedDevice { Fingerprint = fpNew, Alias = "New", BoundPlayerId = 0L, Status = DeviceStatus.Active };
+
+            var available = new List<(long PlayerId, bool IsUnclaimed)>();
+            for (long i = 1; i <= 128; i++)
+            {
+                available.Add((i, i > 1));
+            }
+
+            var result = FarmhandAuthLogic.FilterAvailableFarmhandIds(state, fpNew, available);
+            Assert.Single(result);
+            Assert.Equal(2L, result[0]);
+        }
+
+        [Fact]
+        public void FilterAvailableFarmhandIds_OpenMode_MatchesBoundPlayerByOwnerTokenOrUserId_AndSkipsReservedUnclaimed()
+        {
+            var state = new ServerWorldState();
+            string fpBound = new string('d', 64);
+            string fpByUserId = new string('e', 64);
+            string fpNew = new string('f', 64);
+
+            state.Players[1001L] = new PlayerRecord
+            {
+                UniqueMultiplayerID = 1001L,
+                PlayerName = "BoundPlayer",
+                OwnerToken = fpBound
+            };
+
+            var available = new List<(long PlayerId, bool IsUnclaimed)>
+            {
+                (1001L, false),
+                (1002L, false),
+                (1003L, true),
+                (1004L, true)
+            };
+            var farmhandUserIds = new Dictionary<long, string?>
+            {
+                [1001L] = fpBound,
+                [1002L] = fpByUserId,
+                [1003L] = string.Empty,
+                [1004L] = string.Empty
+            };
+
+            // Dispositivo no listado en AuthorizedDevices: en modo abierto recupera su peón vía Players.OwnerToken
+            var boundResult = FarmhandAuthLogic.FilterAvailableFarmhandIds(
+                state, fpBound, available, requireWhitelist: false, farmhandUserIds: farmhandUserIds);
+            Assert.Equal(new[] { 1001L }, boundResult);
+
+            // Dispositivo reconocido solo por farmhand.userID en modo abierto
+            var userIdResult = FarmhandAuthLogic.FilterAvailableFarmhandIds(
+                state, fpByUserId, available, requireWhitelist: false, farmhandUserIds: farmhandUserIds);
+            Assert.Equal(new[] { 1002L }, userIdResult);
+
+            // Nuevo dispositivo sin peón recibe un único hueco sin reclamar evitando ofertas concurrentes ya emitidas
+            var reserved = new HashSet<long> { 1003L };
+            var newResult = FarmhandAuthLogic.FilterAvailableFarmhandIds(
+                state, fpNew, available, requireWhitelist: false, farmhandUserIds: farmhandUserIds, reservedUnclaimedIds: reserved);
+            Assert.Equal(new[] { 1004L }, newResult);
+        }
     }
 }

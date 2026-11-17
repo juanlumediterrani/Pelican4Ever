@@ -136,4 +136,57 @@ public class ServerConfigTests
         var invalidTtl = new ServerConfig { PairingInviteTtlHours = 0 };
         Assert.Contains(invalidTtl.Validate(), e => e.Contains(nameof(ServerConfig.PairingInviteTtlHours)));
     }
+
+    [Theory]
+    [InlineData(1, true)]
+    [InlineData(16, true)]
+    [InlineData(32, true)]
+    [InlineData(64, true)]
+    [InlineData(0, false)]
+    [InlineData(17, false)]
+    [InlineData(20, false)]
+    [InlineData(48, false)]
+    [InlineData(128, false)]
+    public void FarmSlotCount_Allows1To16Or32Or64(int count, bool expectedValid)
+    {
+        var config = new ServerConfig { FarmSlotCount = count };
+        var errors = config.Validate();
+        if (expectedValid)
+            Assert.DoesNotContain(errors, e => e.Contains(nameof(ServerConfig.FarmSlotCount)));
+        else
+            Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.FarmSlotCount)));
+    }
+
+    [Fact]
+    public void ResidenceScalingAndAdmissionDefaults_AreValid()
+    {
+        var config = new ServerConfig();
+        Assert.Equal(16, config.MaxConcurrentPlayers);
+        Assert.Equal(16, config.AdmissionQueueCapacity);
+        Assert.Equal(5, config.ReconnectGraceMinutes);
+        Assert.Equal(30, config.IdleKickMinutes);
+        Assert.Equal(2, config.IdleKickWarningMinutes);
+        Assert.Empty(config.Validate());
+    }
+
+    [Fact]
+    public void AdmissionAndIdleKickBounds_AreValidated()
+    {
+        var invalid = new ServerConfig
+        {
+            MaxConcurrentPlayers = 17,
+            AdmissionQueueCapacity = 33,
+            ReconnectGraceMinutes = 31,
+            IdleKickMinutes = 10,
+            IdleKickWarningMinutes = 10
+        };
+        var errors = invalid.Validate();
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.MaxConcurrentPlayers)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.AdmissionQueueCapacity)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.ReconnectGraceMinutes)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.IdleKickWarningMinutes)));
+
+        var idleDisabled = new ServerConfig { IdleKickMinutes = 0, IdleKickWarningMinutes = 2 };
+        Assert.Empty(idleDisabled.Validate());
+    }
 }

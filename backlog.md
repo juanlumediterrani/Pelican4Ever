@@ -2453,3 +2453,169 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Estado:** *Parcial — instrumentación del mod (`LoadInstrumentationLogic`, `LoadMetricsTracker`, métricas en `checkpoint.created` / `backup.created` y comando `p4e_load_metrics` cubiertos por `OperationalResilienceTests`) implementada; queda pendiente el arnés lanzador de 4–16 *farmhands* sintéticos concurrentes y su ejecución en [`LIVE-2503`](live-agent-tests-backlog.md) / `PUTRE-401`.*
 
 
+---
+
+### Épica 24 (v0.5): Residencias Escalables 16/32/64, Cola de Admisión y Gates al Este de Pelican Town (rama `feat/v0.5-residence-scaling`)
+> **Objetivo:** Alojar 16, 32 o 64 residencias en un mismo mundo manteniendo **16 jugadores simultáneos**, que entran por orden de llegada con cola, reserva de plaza de 5 minutos tras una caída de red y expulsión por inactividad a los 30 minutos cuando el servidor supera la mitad de su capacidad. Las residencias `17..64` se alcanzan por dos gates nuevos en el borde este de `Town` (a la altura de la casa de Clint y del museo) que abren cadenas de mapas puente. Se activa desde la configuración del servidor y requiere reinicio. Decisiones en [ADR-0010](docs/adr/0010-scalable-residences-admission-queue.md).
+
+#### 24.0 Reglas de Producto y Puntos de Conflicto del Motor (Stardew Valley 1.6.15)
+
+1. **Tres magnitudes separadas:** residencias (`FarmSlotCount`: `1..16`, `32` o `64`), simultáneos (`MaxConcurrentPlayers`, `1..16`) y plazas de espera (`AdmissionQueueCapacity`, `0..32`).
+2. **Las 16 residencias base no se tocan:** Granja Host y puentes `1..3` conservan nombres, portales y casillas. Con `FarmSlotCount ≤ 16`, `Maps/Town` queda como en vanilla.
+3. **Asignación fija de residencias a puentes:** el puente `N ≥ 4` aloja `4N + 1 .. 4N + 4`; pares en la cadena de la herrería, impares en la del museo. Pasar de 32 a 64 no mueve a nadie.
+4. **Puntos de conflicto anticipados:**
+   - **Conflicto 1 — Tope de conexiones de Lidgren:** `LidgrenServer.initialize` fija `MaximumConnections = playerLimit * 2` (16). El jugador 17 no conecta y no puede recibir su posición en la cola.
+   - **Conflicto 2 — Lista de peones en el saludo:** `GameServer.sendAvailableFarmhands` serializa completos todos los peones disponibles (hasta 128 con co-residencia) y `Prefix_SendAvailableFarmhands` no la filtra.
+   - **Conflicto 3 — `FarmSlotCount` eleva `highestPlayerLimit`:** con 64 se crearían 63 `Cellar{i}` vanilla sin uso.
+   - **Conflicto 4 — Topología de cadena única:** `HostPlazaLayout.Chain`, `MaxBridges = 3`, `AllBridgeNames`, `doors.json` (16 entradas) y los valores `?? 16` repartidos por `FarmSlotModule`.
+   - **Conflicto 5 — Puentes siempre activos:** 15 puentes con `AlwaysActive = true` se enviarían completos a cada cliente al conectar y el host los actualizaría en cada tick.
+   - **Conflicto 6 — Coste del host con 64 residencias:** unas 450 ubicaciones en el cambio de día, el guardado, la copia de seguridad y los checkpoints.
+   - **Conflicto 7 — Inactividad legítima:** el descanso sentado de «Bien comido» y el buff del spa exigen estar quieto.
+   - **Conflicto 8 — Caída de red frente a salida voluntaria:** la reserva de plaza solo debe nacer de una desconexión que el jugador no pidió; hay que distinguirlas por el motivo de desconexión de Lidgren.
+
+---
+
+- [x] **TASK-2401: Separar residencias, simultáneos y cola en `ServerConfig` (`ServerConfig.cs`, `config.example.json`, `FarmSlotModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:**
+    - Añadir `MaxConcurrentPlayers` (por defecto `16`, rango `1..16`), `AdmissionQueueCapacity` (por defecto `16`, rango `0..32`), `IdleKickMinutes` (por defecto `30`, `0` lo desactiva), `IdleKickWarningMinutes` (por defecto `2`) y `ReconnectGraceMinutes` (por defecto `5`, rango `0..30`, `0` lo desactiva).
+    - Cambiar `ServerConfig.Validate` para que `FarmSlotCount` admita `1..16`, `32` o `64`, y para que `IdleKickWarningMinutes` sea menor que `IdleKickMinutes`.
+    - Quitar de `FarmSlotModule.RemoveHostCabins` el uso de `FarmSlotCount` para `highestPlayerLimit` y `currentPlayerLimit`; comprobar qué consume `currentPlayerLimit` (`GameStateQuery`, tope de cabañas de Robin) y fijarlo al valor mínimo que lo satisface.
+    - Sustituir los `?? 16` y `farmSlotCount = 16` por defecto por una constante de Core.
+  * **Criterios de aceptación:**
+    1. `Validate` rechaza `FarmSlotCount = 20` y acepta `16`, `32` y `64`.
+    2. Con `FarmSlotCount = 64` no se crean ubicaciones `Cellar17..Cellar64` vanilla.
+    3. Una partida existente con 16 residencias carga sin cambios en sus puertas, cabañas ni sótanos.
+
+- [x] **TASK-2402: `AdmissionLogic` y cola de llegada (`Pelican4Ever.Core/Networking/AdmissionLogic.cs`, `ClientSecurityModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2401.
+  * **Descripción:**
+    - Implementar en Core `AdmissionLogic` con resultado *admitido*, *en cola (posición n)* o *rechazado (motivo)*, sin dependencias del juego.
+    - Parchear `LidgrenServer.initialize` para `MaximumConnections = MaxConcurrentPlayers + AdmissionQueueCapacity`.
+    - Encolar la conexión tras `HasValidEarlyProof` y antes de enviar peones; informar de la posición con el mensaje de espera tipo 11 y actualizarla cuando cambie.
+    - Atender a la conexión más antigua cuando un jugador sale; retirar de la cola las conexiones que se cierran.
+    - Reservar la plaza durante `ReconnectGraceMinutes` a quien pierde la conexión sin cerrarla él: la plaza cuenta como ocupada y el mismo dispositivo la recupera sin pasar por la cola.
+    - Distinguir la caída de red de la salida voluntaria por el motivo de desconexión de Lidgren; no reservar en salida voluntaria, expulsión ni cierre del cambio de día.
+  * **Criterios de aceptación:**
+    1. Con 16 en juego, el cliente 17 ve su posición en la cola y entra sin reconectar cuando sale uno.
+    2. Un dispositivo no autorizado nunca ocupa plaza de espera.
+    3. Con la cola llena, el cliente recibe un mensaje que lo dice.
+    4. Un jugador al que se le corta la red vuelve a su plaza antes de 5 minutos aunque haya cola; pasado ese tiempo, la plaza pasa al primero de la cola.
+    5. Salir al título o ser expulsado por inactividad libera la plaza al momento.
+    6. Pruebas unitarias de orden, salida de la cola, cola llena y reserva (dentro de plazo, vencida, salida voluntaria).
+
+- [x] **TASK-2403: Expulsión por inactividad por encima de media ocupación (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2402.
+  * **Descripción:**
+    - Calcular en el host la última actividad de cada jugador combinando lo que el host observa (posición, uso de herramienta, chat) con un informe periódico del cliente para lo que el host no ve (menús, interacción).
+    - Expulsar solo si los conectados, contando al inactivo, superan `MaxConcurrentPlayers / 2`; comprobar el umbral en el momento de expulsar. Avisar por HUD con `IdleKickWarningMinutes` de antelación.
+    - Cerrar la sesión como una desconexión normal, sin penalización de sueño, y dejar constancia en `HostEventLog`.
+  * **Criterios de aceptación:**
+    1. Con capacidad para 16 y 8 conectados, un jugador quieto más de 30 minutos no es expulsado.
+    2. Con 9 conectados, recibe el aviso y es expulsado si no actúa; cualquier acción reinicia el contador.
+    3. Un jugador sentado recuperando energía recibe el aviso y conserva la plaza con solo moverse.
+    4. La expulsión por inactividad no deja plaza reservada.
+    5. Pruebas unitarias de `IdleKickLogic`, incluido el umbral con capacidad impar.
+
+- [x] **TASK-2404: Filtrar la lista de peones del saludo (`ClientSecurityModule.cs`, `FarmhandAuthLogic.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Descripción:**
+    - En `Prefix_SendAvailableFarmhands`, construir la lista con el peón ligado a la huella verificada o, si no tiene, con un único peón sin reclamar.
+    - Mantener el comportamiento actual para conexiones de bucle local y con `RequirePairingWhitelist = false`.
+  * **Criterios de aceptación:**
+    1. Un dispositivo con personaje recibe exactamente un peón, el suyo.
+    2. Un dispositivo nuevo recibe exactamente un peón sin reclamar.
+    3. Ningún cliente recibe datos del personaje de otro jugador.
+    4. Con 128 peones en `farmhandData`, el tamaño del mensaje de saludo no crece respecto a 16.
+
+- [x] **TASK-2405: Topología por cadenas ancladas en Core (`HostPlazaLayout.cs`, `DoorCatalogValidator.cs`, `SpatialWarpRouter.cs`, `PlazaTopologyVerifier.cs`, `MinecartPlazaLogic.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2401.
+  * **Descripción:**
+    - Sustituir la cadena única por un conjunto de cadenas con ancla (Oeste, Este-Herrería, Este-Museo) y elevar `MaxBridges` a `15`.
+    - Fijar la asignación puente → residencias (`4N + 1 .. 4N + 4`) y la paridad de cadena.
+    - Hacer que `IsPlazaLocation`, `Find` y `BridgeCount` trabajen sobre el conjunto; añadir `Town` como ancla sin tratarlo como ubicación de la plaza para las mecánicas de portales.
+    - Ampliar `doors.json` (o generarlo) para los puentes `4..15` y validar las 64 entradas.
+    - Extender `MinecartPlazaLogic` a los puentes del este.
+  * **Criterios de aceptación:**
+    1. Con `16`, `Chain` devuelve exactamente lo mismo que hoy.
+    2. Con `32` hay puentes `4..7`; con `64`, `4..15`; ninguna residencia cambia de puente entre ambos.
+    3. `PlazaTopologyVerifier.IsConnected` confirma que toda residencia es alcanzable desde `Town`.
+    4. Las pruebas existentes de la plaza siguen en verde.
+
+- [x] **TASK-2406: Gates en el borde este de `Maps/Town` (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `tools/MapRenderer`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2405.
+  * **Descripción:**
+    - Elegir con `MapStudio` las casillas de los dos gates sobre `Maps/Town.xnb` real (derecha de la casa de Clint y del museo) y anotarlas en ADR-0010 como hallazgo empírico.
+    - Editar `Maps/Town` en `AssetRequested` solo si `FarmSlotCount > 16`: tallar el paso, limpiar capas `Buildings`/`Front`/`AlwaysFront` que lo obstruyan y escribir los warps en la propiedad `Warp`.
+    - Comprobar las variantes estacionales del mapa y que la edición convive con los mods de contenido exigidos (`RequiredClientMods`).
+    - Verificar el comportamiento durante los festivales y la ruta de los NPC (`WarpPathfindingCache`).
+  * **Criterios de aceptación:**
+    1. Con `FarmSlotCount ≤ 16`, `Maps/Town` es idéntico al de vanilla.
+    2. Con `32` o `64`, BFS confirma el recorrido desde la plaza del pueblo hasta cada gate.
+    3. Render 1:1 de ambos gates revisado visualmente, sin árboles cortados ni casillas de vacío.
+    4. Ningún NPC cambia de ruta ni se queda atascado con los gates abiertos.
+
+- [x] **TASK-2407: Generar y registrar los puentes del este (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `TownMailboxModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2405, TASK-2406.
+  * **Descripción:**
+    - Registrar `Pelican4Ever_Bridge_4..15` en `Data/Locations` según `FarmSlotCount`, sin `AlwaysActive`.
+    - Generar sus mapas con `CreateBridgeMap`, con el primer puente de cada cadena unido a `Town` por el oeste y el último cerrado por el este.
+    - Extender portales, buzones, vagoneta, pre-registro al cargar (`Prefix_SaveGameLoadDataToLocations`) y descarte de puentes fuera de la cadena activa.
+    - Aplicar el desescalado seguro de ADR-0010 (punto 7).
+  * **Criterios de aceptación:**
+    1. Un jugador reclama la residencia `17` y la `64`, entra, sale y recibe correo en su buzón.
+    2. Tras reiniciar el servidor, las residencias `17..64` conservan cultivos, edificios y animales.
+    3. Reducir `FarmSlotCount` con la residencia `40` reclamada arranca con `64` efectivas y lo avisa.
+    4. BFS sobre los mapas generados confirma portales, retornos y pasos de los 12 puentes.
+
+- [x] **TASK-2408: Puentes `1..3` sin `AlwaysActive` (`FarmSlotModule.cs`)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2407.
+  * **Descripción:**
+    - Auditar el código que lee o escribe el estado de un puente desde fuera de él (buzones, portales, catálogo `/residencias`, vagoneta).
+    - Si no hay dependencias, registrar los puentes `1..3` sin `AlwaysActive`; si las hay, documentarlas y dejar la migración para la Épica 25.
+  * **Criterios de aceptación:**
+    1. Resultado de la auditoría anotado en esta tarea.
+    2. Si se migra: un cliente fuera de los puentes no recibe sus ubicaciones al conectar y todo lo verificado en la Épica 10 sigue funcionando.
+
+- [x] **TASK-2409: Medición del host con 32 y 64 residencias pobladas (`scripts/`, `docs/`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2407.
+  * **Descripción:**
+    - Generar una partida de laboratorio con las 64 residencias reclamadas, con cultivos, edificios, animales y dos anexos cada una.
+    - Medir en el host de referencia: duración del checkpoint, del cambio de día completo, tamaño del guardado y de la copia, memoria y tiempo de tick con 16 conectados.
+    - Contrastar con los umbrales de ADR-0010 (punto 8) y documentar el veredicto para 32 y para 64.
+  * **Criterios de aceptación:**
+    1. Tabla de medidas para 16, 32 y 64 residencias publicada en `docs/`.
+    2. `FarmSlotCount = 64` queda documentado como soportado o experimental según los umbrales.
+  * **Resolución:** Medición ejecutada sobre la VM AWS de referencia (`i-053e53c1536f541fd`, `Pelican4Ever_999999999`) con `scripts/measure_v05_residences.py` y `p4e_farm_populate` para 16, 32 y 64 residencias pobladas y hasta 16 clientes remotos simultáneos (`17` conectados); resultados y veredicto (`32` máximo operativo bajo `MemoryMax=4G`, `64` experimental al alcanzar `VmHWM = 4.937.216 kB` y `8.916 ms` de checkpoint) publicados en `docs/v0.5-residence-scaling-verification-2026-11-17.md` y `docs/adr/0010-scalable-residences-admission-queue.md`.
+
+- [x] **TASK-2410: Administración, i18n y documentación (`AdminApiModule.cs`, `StatusCommandModule.cs`, `i18n/*.json`, `docs/host-api.md`, `docs/despliegue/host-vps.md`)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2402, TASK-2403.
+  * **Descripción:**
+    - Exponer en `AdminApi` y `p4e_status` los conectados, la cola (posición y tiempo de espera), las plazas reservadas y las expulsiones por inactividad.
+    - Añadir los textos de cola, cola llena, aviso y expulsión en ES/EN/ZH.
+    - Documentar las claves nuevas y el procedimiento para pasar de 16 a 32 o 64 residencias.
+  * **Criterios de aceptación:**
+    1. `GET` de estado devuelve conectados, capacidad y cola.
+    2. Ningún texto nuevo aparece sin traducir en los tres idiomas.
+
+- [x] **TASK-2411: Verificación en vivo y bump a `0.5.0`**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2401 a TASK-2410.
+  * **Descripción:**
+    - Laboratorio con host y clientes suficientes para llenar el servidor con `MaxConcurrentPlayers` reducido (p. ej. `2`) y comprobar cola, turno, reserva tras corte de red y expulsión.
+    - Recorrido completo a pie y en vagoneta de las dos cadenas del este con `FarmSlotCount = 64`.
+    - Actualizar `manifest.json` y `architecture.md`.
+  * **Criterios de aceptación:**
+    1. `dotnet test` en verde.
+    2. Verificación en vivo documentada de cola, reserva de plaza, expulsión por inactividad, gates y residencias `17..64`.
+  * **Resolución:** Verificación completa en vivo (`4A.1..4A.7` y `4B` con 4/8/12/16 clientes remotos concurrentes sobre 64 residencias pobladas) documentada en `docs/v0.5-residence-scaling-verification-2026-11-17.md`; corregidos el tope de puertas de `FarmSlotModule.LoadDoors`, timeouts de `AdminApiModule`, filtrado de saludo en modo abierto/loopback (`FarmhandAuthLogic` / `ClientSecurityModule`), codificación y timeout de mensajes de cola y bombeo de `FarmhandMenu` sin foco (`Specialized.UnvalidatedUpdateTicked`); `manifest.json` en `0.5.0`, `architecture.md` actualizado y `dotnet test` (`1753/1753`) en verde.

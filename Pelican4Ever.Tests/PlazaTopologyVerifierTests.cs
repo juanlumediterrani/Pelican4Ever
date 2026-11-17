@@ -74,11 +74,11 @@ namespace Pelican4Ever.Tests
         public void GetInteriorClearanceTiles_Returns12TilesWithinBoundsForAllDoors()
         {
             var doors = DoorCatalogFixture.LoadDoors();
-            Assert.Equal(16, doors.Count);
+            Assert.Equal(64, doors.Count);
 
             foreach (var door in doors)
             {
-                var loc = HostPlazaLayout.Find(door.LocationName, 16);
+                var loc = HostPlazaLayout.Find(door.LocationName, 64);
                 Assert.NotNull(loc);
 
                 var tiles = PlazaTopologyVerifier.GetInteriorClearanceTiles(door.Edge, door.TownTileX, door.TownTileY, loc!);
@@ -353,7 +353,7 @@ namespace Pelican4Ever.Tests
             // La residencia privada Pelican4Ever_Farm_XX tiene su propia cama independiente
             var doors = DoorCatalogFixture.LoadDoors();
             var bridgeDoors = doors.Where(d => d.LocationName.StartsWith(HostPlazaLayout.BridgePrefix));
-            Assert.Equal(12, bridgeDoors.Count());
+            Assert.Equal(60, bridgeDoors.Count());
             foreach (var d in bridgeDoors)
             {
                 Assert.StartsWith("Pelican4Ever_Farm_", d.DefaultSlotId);

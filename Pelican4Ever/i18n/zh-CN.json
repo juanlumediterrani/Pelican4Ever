@@ -8,9 +8,7 @@
   "dialog.understood": "明白了",
   "furnace_unlock.learned": "你学会了制作熔炉！",
   "recipe_fallback.learned": "你学会了制作{{recipe}}。",
-
   "plaza.welcome": "欢迎来到中央广场！走到广场上空闲的传送门，或穿过西侧的通道前往桥梁（也可以输入 /residencias），就能建立你的农场。",
-
   "residence.claim.need_pairing": "请先输入配对码，才能认领居所。",
   "residence.claim.already_owner": "你已经拥有一处居所（{{description}}）。每位农场主只能拥有一块地皮。",
   "residence.claim.confirm_question": "要在这块地皮上建立农场吗？\n所选模板：{{farmType}}。",
@@ -19,30 +17,25 @@
   "residence.claim.success": "居所认领成功！模板：{{farmType}}。",
   "residence.claim.cancelled": "已取消建立；居所仍然空置。",
   "residence.claim.failed": "无法建立这处居所。",
-
   "residence.door.enter": "进入我的农场",
   "residence.door.policy_option": "更改访问权限（当前：{{status}}）",
   "residence.door.visit": "拜访 {{owner}} 的农场",
   "residence.door.info": "{{owner}} 的居所。类型：{{type}}。访问：{{access}}。",
-
   "residence.policy.locked": "已锁定：仅限本人",
   "residence.policy.friends": "仅限好友",
   "residence.policy.public": "对所有访客开放",
   "residence.policy.toggle_edit": "访客可编辑：{{state}}（点击更改）",
   "residence.policy.manage_friends": "管理好友",
   "residence.policy.updated": "访问权限已更新：{{status}}",
-
   "residence.friends.remove": "移除 {{name}}",
   "residence.friends.add": "添加 {{name}}",
   "residence.friends.updated_added": "{{name}} 已加入你的好友列表。",
   "residence.friends.updated_removed": "{{name}} 已从你的好友列表中移除。",
-
   "residence.permission.closed": "已关闭",
   "residence.permission.friends_only": "仅限好友",
   "residence.permission.open": "开放",
   "residence.permission.visitors_can_edit": "{{access}}，访客可编辑",
   "residence.permission.visitors_view_only": "{{access}}，访客仅可查看",
-
   "annex.acquired": "附属地已到手：{{name}}！这个出口现已开放。",
   "annex.owner_only": "此通道已关闭。只有居所主人才能在这里购买扩建。",
   "annex.owner_only_short": "此入口已关闭。只有主人才能购买附属地扩建。",
@@ -56,11 +49,9 @@
   "annex.tier_second": "第二处附属地",
   "annex.dialog_prompt": "{{side}}侧出口：可用于农场扩建的空地 [{{tier}}]。\n要买下一处私人附属地吗？",
   "annex.dialog_confirm": "确认以 {{price}}g 为{{side}}侧出口购买 '{{name}}'？",
-
   "side.north": "北",
   "side.east": "东",
   "side.south": "南",
-
   "residence.claim.choose_farm_type": "{{description}}。\n这处居所目前空置。你想建立哪种类型的农场？",
   "residence.claim.confirm_full": "你即将建立这处居所（{{farmType}}）并进入。\n确认吗？如果选择否，将不会认领也不会建造。",
   "residence.owner_menu_prompt": "你在 {{location}} 的居所。（类型：{{type}}）",
@@ -69,7 +60,6 @@
   "residence.policy.hud_edit_disabled": "访客现在只能参观。",
   "residence.friends.no_friends": "你的好友列表还是空的。添加一位在线玩家：",
   "residence.friends.has_friends": "你的居所好友（{{count}}）。设为「仅限好友」时，只有他们才能进入。",
-
   "greenhouse.owner_only": "这处居所的温室已经破败。只有它的主人才能修复。",
   "greenhouse.need_materials": "你的资源不足。你需要 {{gold}}g、{{wood}} 木材、{{stone}} 石块和 {{bars}} 根金条。",
   "greenhouse.repaired": "温室已成功修复！现在你全年都能种植作物。",
@@ -79,7 +69,6 @@
   "greenhouse.choice_joja": "雇用施工队（{{gold}}g）",
   "greenhouse.choice_leave": "暂时搁置（或先完成社区中心食品室）",
   "greenhouse.prompt_repair": "你居所的温室已经破败。要修好它吗？",
-
   "carpenter.location_access_failed_host": "无法访问地点 '{{location}}'。请重试。",
   "carpenter.location_not_synced_client": "你的居所还没同步。请先访问一次，再来找我。",
   "carpenter.no_blueprints": "目前 '{{location}}' 没有可以建造的建筑。",
@@ -88,7 +77,6 @@
   "carpenter.cant_demolish_pet_bowl": "不能拆除这个宠物碗：它已与{{pet}}绑定。",
   "carpenter.unknown_pet": "一只宠物",
   "carpenter.island_shared": "姜岛（共享）",
-
   "residence.friends_only_deny_visit": "只有 {{owner}} 的好友才能进入。",
   "residence.door_locked": "门锁着。",
   "residence.parcel_friends_only": "这块地皮只对主人的好友开放。",
@@ -97,7 +85,6 @@
   "annex.private_locked": "这处附属地是私人的，已上锁。",
   "residence.no_permission_modify": "你没有修改这座农场的权限。",
   "residence.chest_private": "这个箱子是私人物品。",
-
   "farm_template.Standard": "标准农场（经典均衡）",
   "farm_template.Foraging": "森林农场（采集与木材）",
   "farm_template.Fishing": "河畔农场（钓鱼与岛屿）",
@@ -106,7 +93,6 @@
   "farm_template.FourCorners": "四角农场（分区布局）",
   "farm_template.Ranching": "草原农场（畜牧与蓝色嚼劲草）",
   "farm_template.Beach": "海滩农场（沙地与海岸采集）",
-
   "annex_template.Standard": "标准农田",
   "annex_template.Fishing": "河湾",
   "annex_template.Foraging": "林间地带",
@@ -115,7 +101,6 @@
   "annex_template.FourCorners": "混合地块",
   "annex_template.Ranching": "蓝草甸",
   "annex_template.Beach": "热带海岸",
-
   "mailbox.menu.enter": "🏠 进入我的农场",
   "mailbox.menu.check_mail": "📬 查看邮件（{{count}} 封未读）",
   "mailbox.menu.check_mail_empty": "📬 查看邮件（没有邮件）",
@@ -179,7 +164,6 @@
   "mailbox.orders.shop.krobus": "🌑 科罗布斯的商店",
   "mailbox.orders.shop.dwarf": "💎 矮人的商店",
   "visitor.denied": "主人不允许访客修改这处居所。",
-
   "catalog.header": "=== 广场居所 ===",
   "catalog.none_free": "已占用 {{occupied}} 处，没有空闲居所。",
   "catalog.prompt_walk": "已占用 {{occupied}} 处，空闲 {{free}} 处。走到广场上开放的传送门即可建立你的居所。",
@@ -189,7 +173,6 @@
   "catalog.summary_count": "已占用 {{occupied}} 处，空闲 {{free}} 处。",
   "catalog.none_occupied": "目前还没有居所被占用。",
   "catalog.registered_doors": "已登记的居所（{{count}} 处可选）：",
-
   "economy.spa_relaxed": "放松：在 {{duration}} 内恢复 {{points}} 点精力和体力。",
   "economy.spa_already_used": "你今天已经泡过澡了。",
   "economy.mining_shift_renewed": "采矿班次已刷新：矿脉重新出现了。",
@@ -207,7 +190,6 @@
   "economy.passive_regen_exhausted": "今日的被动休息已耗尽：你必须今晚睡觉来恢复精力。",
   "economy.sitting_regen": "长椅上休息：+{{gained}} 精力（今日剩余 {{remaining}}）。",
   "economy.sitting_regen_exhausted": "今日的长椅休息已耗尽：你必须今晚睡觉来恢复精力。",
-
   "market.board_title": "鹈鹕镇社区市场公告板：",
   "market.available_listings": "社区市场在售商品：",
   "market.buy_question": "要花 {{price}}g 从 {{seller}} 手中买下 {{item}}（x{{stack}}）吗？",
@@ -239,7 +221,6 @@
   "market.purchase_success": "你以 {{price}}g 买下了 {{item}}（x{{stack}}）。",
   "market.not_the_seller": "只有原卖家才能撤回该挂牌。",
   "market.withdrawn_success": "你已从市场撤回 {{item}}（x{{stack}}）。",
-
   "festival.no_scores": "今天的节日还没有记录任何分数。",
   "festival.leaderboard_header": "=== {{date}} 排行榜 ===",
   "festival.ceremony_warning_15m": "[节日通知] {{ceremony}} 仪式将在 15 分钟后（21:00）在海滩开始。",
@@ -275,12 +256,10 @@
   "festival.rank_1": "1. [第一名]",
   "festival.rank_2": "2. [第二名]",
   "festival.rank_3": "3. [第三名]",
-
   "chat.local_help": "向本地附近频道发送消息（/l 或 /local <消息>）",
   "chat.global_help": "向全局频道发送消息（/g 或 /global <消息>）",
   "chat.local_usage": "用法：/l <消息> 或 /local <消息>",
   "chat.global_usage": "用法：/g <消息> 或 /global <消息>",
-
   "clock.command_help": "调整游戏内的服务器时间（/time 或 /hora <+X|-X|reset|set HH:mm>）",
   "clock.status_usage": "[时钟] 当前偏移：{{offset}} 小时。游戏时间：{{time}}。用法：/time <+X|-X|reset|set HH:mm>",
   "clock.reset": "[时钟] 已重置为真实时间。游戏时间：{{time}}。",
@@ -289,18 +268,14 @@
   "clock.adjusted_minutes": "[时钟] 已调整 {{sign}}{{minutes}} 分钟。新时间：{{time}}（总偏移：{{offset}} 小时）。",
   "clock.adjusted_hours": "[时钟] 已调整 {{sign}}{{hours}} 小时。新时间：{{time}}（总偏移：{{offset}} 小时）。",
   "clock.invalid_format": "[时钟] 格式无效。有效示例：/time +2、/time -1、/time +30m、/time reset、/time set 14:00",
-
   "bed_logout.offline_rest": "离线休息：恢复 +{{gained}} 精力。",
   "bed_logout.host_agent_active": "休息已记录。主机代理模式已启用：服务器保持在线。",
   "bed_logout.disconnecting": "休息已记录。正在安全断开连接...",
-
   "rollover.warning_10min": "提示：10 分钟后农场将被保存，连接将关闭以进行日切。",
   "rollover.closing_server": "保存已确认。服务器将关闭此连接以切换日期。",
   "rollover.disconnecting": "保存已确认。正在断开连接以进行日切。",
-
   "checkpoint.saving_soon": "世界将在几秒后保存…",
   "checkpoint.restored_notice": "已恢复到 {{time}} 的检查点。",
-
   "security.verifying_code": "正在验证配对码...",
   "security.pairing_code_prompt": "配对码（Pelican 4Ever）：",
   "security.pairing_code_prompt_alias": "{{alias}} 的配对码：",
@@ -312,10 +287,8 @@
   "security.pairing_exhausted": "配对尝试次数已用尽。正在断开连接...",
   "security.pairing_ip_mismatch": "该配对码已绑定到另一个 IP 地址。",
   "security.pairing_success": "设备已成功配对，别名为 '{{alias}}'！",
-
   "marnie.need_destination": "你必须先认领一处居所或修复姜岛的房子，才能购买动物。",
   "marnie.location_not_synced": "农场还没同步。请几秒后重试。",
-
   "marnie.pet_letter.title": "一只小动物需要新家",
   "marnie.pet_letter.body": "亲爱的 {{player}}：^^我注意到你最近在居所外面放了一个宠物碗。巧的是，最近我的牧场附近跑进了一只无家可归的小动物。^^我很快就会带它去你的农场看看。请你准备好爱心哦！^^   -玛妮",
   "marnie.pet_event.intro": "你好，{{player}}！看看我把谁带来了。我在牧场附近发现了这只小流浪，看到你在外面摆了水碗，就立刻想到了你。",
@@ -325,9 +298,7 @@
   "marnie.pet_event.naming_title": "给你的新{{petType}}取个名字：",
   "marnie.pet_event.accepted": "太好了！要好好照顾 {{petName}}，也别忘了每天给它添水。回头见！",
   "marnie.pet_event.declined": "我理解……别担心，我会给它另找一个好归宿。祝你今天愉快！",
-
   "side.west": "西",
-
   "badge.claim_slot": "[E / 点击或走近] 认领农场地块",
   "badge.my_slot": "🏠 我的地块（走近进入）",
   "badge.neighbor_slot": "🏠 {{owner}} 的地块",
@@ -335,20 +306,17 @@
   "badge.annex_return": "🏠 返回居所（走近离开）",
   "badge.annex_purchase": "[E / 点击或走近] 购买附属地",
   "badge.annex_unavailable": "🚫 无法扩建",
-
   "annex.rejection.insufficient_funds": "你的金币不足以购买这处附属地。",
   "annex.rejection.not_residence_owner": "只有居所主人才能购买附属地。",
   "annex.rejection.already_exists": "这个入口已经有一处附属地了。",
   "annex.rejection.side_not_free": "这个出口不支持附属地。",
   "annex.rejection.max_reached": "你已达到这处居所的附属地数量上限。",
   "annex.rejection.default": "无法购买附属地。",
-
   "cave.dialog_prompt": "你想怎么布置自己的私人洞穴？",
   "cave.choice_mushrooms": "蘑菇",
   "cave.choice_bats": "水果蝙蝠",
   "cave.selected_mushrooms": "你的洞穴已经布置好蘑菇箱。",
   "cave.selected_bats": "你的洞穴已经布置好，可以吸引水果蝙蝠。",
-
   "location.host_farm": "主机农场",
   "location.host_farm_named": "{{name}} 的农场",
   "location.bridge": "{{number}} 号桥梁",
@@ -358,7 +326,6 @@
   "location.cellar_slot": "{{slot}} 号地块地窖",
   "location.greenhouse_slot": "{{slot}} 号地块温室",
   "location.annex_slot": "附属地 {{side}}（{{type}}）",
-
   "farm_template.Standard.name": "标准农场",
   "farm_template.Foraging.name": "森林农场",
   "farm_template.Fishing.name": "河畔农场",
@@ -367,7 +334,6 @@
   "farm_template.FourCorners.name": "四角农场",
   "farm_template.Ranching.name": "草原农场",
   "farm_template.Beach.name": "海滩农场",
-
   "door.Farm_Portal_01.description": "地块 01（主机农场 - 西北）",
   "door.Farm_Portal_02.description": "地块 02（主机农场 - 东北）",
   "door.Farm_Portal_03.description": "地块 03（主机农场 - 西南）",
@@ -384,7 +350,6 @@
   "door.Farm_Portal_14.description": "地块 14（3 号桥梁 - 北侧右）",
   "door.Farm_Portal_15.description": "地块 15（3 号桥梁 - 南侧左）",
   "door.Farm_Portal_16.description": "地块 16（3 号桥梁 - 南侧右）",
-
   "mailbox.menu.tenancy": "合租房客...",
   "mailbox.menu.tenancy_active": "房客：{{tenant}}",
   "mailbox.menu.tenancy_requests": "合租房客（{{count}} 条申请）",
@@ -423,5 +388,8 @@
   "residence.upgrade.owner_only": "只有该住所的所有者才能升级这栋房屋。租户可以在此居住，或在鹈鹕镇认领属于自己的住所门。",
   "residence.upgrade.need_residence": "在升级房屋之前，你需要先在鹈鹕镇认领一处属于自己的住所。",
   "residence.marriage.owner_only": "只有该住所的所有者才能购买美人鱼吊坠或在这里结婚。请先在鹈鹕镇认领属于自己的住所门。",
-  "residence.marriage.need_residence": "在结婚或邀请室友同住之前，你需要先在鹈鹕镇认领一处属于自己的住所。"
+  "residence.marriage.need_residence": "在结婚或邀请室友同住之前，你需要先在鹈鹕镇认领一处属于自己的住所。",
+  "admission.queue_position": "服务器已满。您的排队位置：{{position}}/{{capacity}}。",
+  "admission.queue_full": "服务器和等待队列均已满，请稍后再试。",
+  "idle.warning_hud": "挂机警告：如果您继续保持不活跃，将在 {{minutes}} 分钟后被断开连接。"
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
@@ -150,6 +151,108 @@ namespace Pelican4Ever.Core.Security
             // 4. Reclamo de ranura libre permitido
             message = "Ranura libre asignada a tu dispositivo.";
             return SlotSelectionResult.AllowedClaimedNew;
+        }
+
+        /// <summary>
+        /// Filtra la lista de peones disponibles para el saludo inicial (TASK-2404):
+        /// - Si el dispositivo ya tiene un peón ligado, devuelve únicamente ese peón (si está disponible).
+        /// - Si el dispositivo aún no tiene peón ligado, devuelve únicamente un peón sin reclamar.
+        /// Nunca expone los personajes de otros jugadores.
+        /// </summary>
+        public static IReadOnlyList<long> FilterAvailableFarmhandIds(
+            ServerWorldState state,
+            string? verifiedFingerprint,
+            IReadOnlyList<(long PlayerId, bool IsUnclaimed)> availableFarmhands,
+            bool requireWhitelist = true,
+            IReadOnlyDictionary<long, string?>? farmhandUserIds = null,
+            ISet<long>? reservedUnclaimedIds = null)
+        {
+            if (state == null || availableFarmhands == null || availableFarmhands.Count == 0)
+                return Array.Empty<long>();
+
+            string cleanFp = verifiedFingerprint?.Trim() ?? string.Empty;
+            AuthorizedDevice? callerDevice = null;
+
+            if (requireWhitelist)
+            {
+                if (string.IsNullOrEmpty(cleanFp))
+                    return Array.Empty<long>();
+
+                if (!ServerDeviceRegistry.IsDeviceAuthorized(state, cleanFp, out callerDevice) || callerDevice == null)
+                    return Array.Empty<long>();
+            }
+            else if (!string.IsNullOrEmpty(cleanFp))
+            {
+                ServerDeviceRegistry.IsDeviceAuthorized(state, cleanFp, out callerDevice);
+            }
+
+            long boundPlayerId = callerDevice?.BoundPlayerId ?? 0;
+            if (boundPlayerId == 0 && !string.IsNullOrEmpty(cleanFp) && state.Players != null)
+            {
+                foreach (var kv in state.Players)
+                {
+                    if (!string.IsNullOrWhiteSpace(kv.Value?.OwnerToken) &&
+                        string.Equals(kv.Value.OwnerToken.Trim(), cleanFp, StringComparison.OrdinalIgnoreCase))
+                    {
+                        boundPlayerId = kv.Key;
+                        break;
+                    }
+                }
+            }
+
+            if (boundPlayerId == 0 && !requireWhitelist && !string.IsNullOrEmpty(cleanFp) && farmhandUserIds != null)
+            {
+                foreach (var kv in farmhandUserIds)
+                {
+                    if (!string.IsNullOrWhiteSpace(kv.Value) &&
+                        string.Equals(kv.Value.Trim(), cleanFp, StringComparison.OrdinalIgnoreCase))
+                    {
+                        boundPlayerId = kv.Key;
+                        break;
+                    }
+                }
+            }
+
+            if (boundPlayerId != 0)
+            {
+                for (int i = 0; i < availableFarmhands.Count; i++)
+                {
+                    if (availableFarmhands[i].PlayerId == boundPlayerId)
+                        return new[] { boundPlayerId };
+                }
+
+                // El personaje ligado no está disponible (p. ej. ya conectado); nunca exponer otro.
+                return Array.Empty<long>();
+            }
+
+            // Dispositivo nuevo sin personaje: devolver un único peón sin reclamar, evitando colisiones concurrentes.
+            long? fallbackUnclaimed = null;
+            for (int i = 0; i < availableFarmhands.Count; i++)
+            {
+                var candidate = availableFarmhands[i];
+                if (!candidate.IsUnclaimed)
+                    continue;
+
+                if (ServerDeviceRegistry.GetDeviceByPlayerId(state, candidate.PlayerId) != null)
+                    continue;
+
+                if (state.Players != null &&
+                    state.Players.TryGetValue(candidate.PlayerId, out PlayerRecord? rec) &&
+                    !string.IsNullOrWhiteSpace(rec?.OwnerToken))
+                {
+                    continue;
+                }
+
+                if (reservedUnclaimedIds != null && reservedUnclaimedIds.Contains(candidate.PlayerId))
+                {
+                    fallbackUnclaimed ??= candidate.PlayerId;
+                    continue;
+                }
+
+                return new[] { candidate.PlayerId };
+            }
+
+            return fallbackUnclaimed.HasValue ? new[] { fallbackUnclaimed.Value } : Array.Empty<long>();
         }
     }
 }

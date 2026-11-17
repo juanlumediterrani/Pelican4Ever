@@ -15,6 +15,7 @@ por otro ADR. La tabla es el índice; el detalle está en cada fichero.
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | Rebalanceo para el 1:1: curva diaria de experiencia, pesca más lenta, menos escaleras y coste de energía en la Caverna Calavera | Propuesto | 2026-11-14 |
 | [0009](0009-annex-vanilla-composition.md) | Generación de anexos con el flujo «Mapas Puente» (`MapStudio` + recorte canónico + clasificadores verificados) | Aceptado | 2026-11-08 |
 | [0010](0010-fail-closed-health-and-backup-contract.md) · [EN](0010-fail-closed-health-and-backup-contract.en.md) · [中文](0010-fail-closed-health-and-backup-contract.zh-CN.md) | Arranque *fail-closed*, salud del host (`/health` + watchdog) y contrato de copias con Putre | Propuesto | 2026-11-16 |
+| [0010 (v0.5)](0010-scalable-residences-admission-queue.md) | Residencias escalables (16/32/64) con 16 simultáneos, cola de admisión, expulsión por inactividad y gates al este de `Town` | Aceptado (`64` experimental) | 2026-11-15 |
 
 ## Cómo leerlos
 

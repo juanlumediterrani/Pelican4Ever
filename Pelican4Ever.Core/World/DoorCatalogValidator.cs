@@ -16,7 +16,7 @@ namespace Pelican4Ever.Core.World
 
     public static class DoorCatalogValidator
     {
-        public static IReadOnlyList<string> ValidateOne(DoorSpec door, int farmSlotCount = 16)
+        public static IReadOnlyList<string> ValidateOne(DoorSpec door, int farmSlotCount = HostPlazaLayout.BaseFarmSlotCount)
         {
             var errors = new List<string>();
 
@@ -71,7 +71,7 @@ namespace Pelican4Ever.Core.World
             return errors;
         }
 
-        public static IReadOnlyList<string> Validate(IEnumerable<DoorSpec> doors, int farmSlotCount = 16)
+        public static IReadOnlyList<string> Validate(IEnumerable<DoorSpec> doors, int farmSlotCount = HostPlazaLayout.BaseFarmSlotCount)
         {
             var errors = new List<string>();
             var seenDoorIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

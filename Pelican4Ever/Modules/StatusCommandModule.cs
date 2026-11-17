@@ -82,6 +82,31 @@ namespace Pelican4Ever.Modules
                 return;
 
             var state = context.WorldState;
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            var queueSnapshot = ClientSecurityModule.Admission.GetQueueSnapshot();
+            var reservations = ClientSecurityModule.Admission.GetReservationsSnapshot(nowUtc);
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0;
+            int onlineClients = Game1.getOnlineFarmers().Count(f => f != null && f.UniqueMultiplayerID != hostId);
+
+            log.Log($"Conectados (clientes): {onlineClients}/{config.MaxConcurrentPlayers} | Cola: {queueSnapshot.Count}/{config.AdmissionQueueCapacity} | Reservas: {reservations.Count} | Expulsiones por inactividad: {IdleKickModule.TotalIdleKicks}", LogLevel.Info);
+            if (queueSnapshot.Count > 0)
+            {
+                foreach (var q in queueSnapshot)
+                {
+                    string preview = q.IdentityKey.Length > 12 ? q.IdentityKey[..12] + "..." : q.IdentityKey;
+                    int waitSec = Math.Max(0, (int)(nowUtc - q.EnqueuedAtUtc).TotalSeconds);
+                    log.Log($"  [Cola #{q.Position}] {preview} (espera: {waitSec}s)", LogLevel.Info);
+                }
+            }
+            if (reservations.Count > 0)
+            {
+                foreach (var r in reservations)
+                {
+                    string preview = r.IdentityKey.Length > 12 ? r.IdentityKey[..12] + "..." : r.IdentityKey;
+                    int remSec = Math.Max(0, (int)(r.ExpiresAtUtc - nowUtc).TotalSeconds);
+                    log.Log($"  [Reserva] {preview} (restan: {remSec}s)", LogLevel.Info);
+                }
+            }
             log.Log($"Jugadores registrados: {state.Players.Count} | Puertas asignadas: {state.Doors.Count}/{FarmSlotModule.RegisteredDoors.Count}", LogLevel.Info);
             int today = Game1.Date.TotalDays;
             foreach (PlayerRecord player in state.Players.Values)

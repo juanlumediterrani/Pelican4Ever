@@ -18,12 +18,32 @@ namespace Pelican4Ever.Core.Admin
         public bool IsNightHold { get; set; }
         public bool DedicatedHost { get; set; }
         public int OnlinePlayersCount { get; set; }
+        public int MaxConcurrentPlayers { get; set; }
+        public int AdmissionQueueCapacity { get; set; }
+        public int AdmissionQueueCount { get; set; }
+        public int ReservedSlotsCount { get; set; }
+        public int IdleKickCount { get; set; }
         public int RegisteredPlayersCount { get; set; }
         public int OccupiedDoorsCount { get; set; }
         public int TotalDoorsCount { get; set; }
         public int ActiveMarketListingsCount { get; set; }
+        public List<QueuedEntryDto> AdmissionQueue { get; set; } = new();
+        public List<ReservedSlotDto> ReservedSlots { get; set; } = new();
         public List<PlayerStatusDto> Players { get; set; } = new();
         public List<DoorStatusDto> Doors { get; set; } = new();
+    }
+
+    public class QueuedEntryDto
+    {
+        public int Position { get; set; }
+        public string IdentityPreview { get; set; } = string.Empty;
+        public int WaitSeconds { get; set; }
+    }
+
+    public class ReservedSlotDto
+    {
+        public string IdentityPreview { get; set; } = string.Empty;
+        public int RemainingSeconds { get; set; }
     }
 
     public class PlayerStatusDto

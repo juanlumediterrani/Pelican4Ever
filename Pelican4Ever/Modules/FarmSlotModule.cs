@@ -114,7 +114,7 @@ namespace Pelican4Ever.Modules
                     foreach (var door in rawDoors)
                     {
                         var spec = door.ToDoorSpec();
-                        var errors = new List<string>(DoorCatalogValidator.ValidateOne(spec, 16));
+                        var errors = new List<string>(DoorCatalogValidator.ValidateOne(spec, HostPlazaLayout.MaxFarmSlotCount));
 
                         if (!string.IsNullOrWhiteSpace(door.DoorId) && !seenDoorIds.Add(door.DoorId))
                             errors.Add($"DoorId duplicado: '{door.DoorId}'.");
@@ -214,7 +214,7 @@ namespace Pelican4Ever.Modules
                         };
                     }
 
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
 
                     // TASK-ArtifactLoot: Excluir las residencias y anexos de la tirada global de libros perdidos (LOST_BOOK_OR_ITEM)
                     // en Data/Locations["Default"]. Stardew Valley solo excluye "Farm", por lo que en residencias privadas
@@ -246,7 +246,7 @@ namespace Pelican4Ever.Modules
                         bridgeData.CreateOnLoad ??= new CreateLocationData();
                         bridgeData.CreateOnLoad.MapPath = $"Maps/{name}";
                         bridgeData.CreateOnLoad.Type = "StardewValley.GameLocation, Stardew Valley";
-                        bridgeData.CreateOnLoad.AlwaysActive = true;
+                        bridgeData.CreateOnLoad.AlwaysActive = false;
                         bridgeData.CustomFields ??= new Dictionary<string, string>();
                         FarmTemplateCatalog.ApplyNitvCustomFields(bridgeData.CustomFields, "Standard");
                     }
@@ -478,7 +478,7 @@ namespace Pelican4Ever.Modules
                 e.Edit(asset =>
                 {
                     var data = asset.AsDictionary<string, ObjectData>().Data;
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var activeAnnexIds = context?.WorldState.Annexes?.Values.Select(a => a.AnnexId);
 
                     int enrichedCount = 0;
@@ -561,7 +561,7 @@ namespace Pelican4Ever.Modules
                     }
 
                     // TASK-1203: Tallar el paso oeste en Maps/Pelican4Ever_HostFarm si hay puentes activos
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var farmPlaza = HostPlazaLayout.Find(HostPlazaLayout.HostFarm, slotCount);
                     if (farmPlaza?.West is { } westPassage)
                     {
@@ -603,9 +603,9 @@ namespace Pelican4Ever.Modules
                 string bridgeName = Path.GetFileName(e.NameWithoutLocale.BaseName);
                 e.LoadFrom(() =>
                 {
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var bridgeLoc = HostPlazaLayout.Find(bridgeName, slotCount)
-                        ?? HostPlazaLayout.Chain(16).FirstOrDefault(l => string.Equals(l.Name, bridgeName, StringComparison.OrdinalIgnoreCase));
+                        ?? HostPlazaLayout.Chain(HostPlazaLayout.MaxFarmSlotCount).FirstOrDefault(l => string.Equals(l.Name, bridgeName, StringComparison.OrdinalIgnoreCase));
                     if (bridgeLoc == null)
                         return new xTile.Map(bridgeName);
 
@@ -642,9 +642,20 @@ namespace Pelican4Ever.Modules
             {
                 e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/stepping_stones.png", AssetLoadPriority.Medium);
             }
+            else if (e.NameWithoutLocale.IsEquivalentTo("Maps/Town"))
+            {
+                int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
+                if (slotCount > HostPlazaLayout.BaseFarmSlotCount)
+                {
+                    e.Edit(asset =>
+                    {
+                        MapCloneHelper.CarveTownEastGates(asset.AsMap().Data);
+                    }, AssetEditPriority.Late);
+                }
+            }
             else if (e.NameWithoutLocale.IsEquivalentTo("Data/Minecarts"))
             {
-                // TASK-1501: Añadir la Plaza Central (Puente 1) a la red nativa de vagonetas
+                // TASK-1501 / TASK-2407: Añadir la Plaza Central (Puente 1) y los puentes del este a la red nativa de vagonetas
                 e.Edit(asset =>
                 {
                     var networks = asset.AsDictionary<string, StardewValley.GameData.Minecarts.MinecartNetworkData>().Data;
@@ -657,26 +668,34 @@ namespace Pelican4Ever.Modules
                     }
 
                     network.Destinations ??= new List<StardewValley.GameData.Minecarts.MinecartDestinationData>();
-                    network.Destinations.RemoveAll(d => string.Equals(d.Id, MinecartPlazaLogic.PlazaDestinationId, StringComparison.OrdinalIgnoreCase));
+                    network.Destinations.RemoveAll(d =>
+                        string.Equals(d.Id, MinecartPlazaLogic.PlazaDestinationId, StringComparison.OrdinalIgnoreCase) ||
+                        (d.Id != null && d.Id.StartsWith(HostPlazaLayout.BridgePrefix, StringComparison.OrdinalIgnoreCase)));
 
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
-                    if (!MinecartPlazaLogic.ShouldIncludePlazaDestination(slotCount))
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
+                    var destinations = MinecartPlazaLogic.GetActiveMinecartDestinations(slotCount);
+                    if (destinations.Count == 0)
                         return;
 
-                    var plazaDest = new StardewValley.GameData.Minecarts.MinecartDestinationData
-                    {
-                        Id = MinecartPlazaLogic.PlazaDestinationId,
-                        DisplayName = I18n.Get("minecart.plaza_destination"),
-                        TargetLocation = HostPlazaLayout.BridgeName(1),
-                        TargetTile = new Point(MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY),
-                        TargetDirection = MinecartPlazaLogic.BridgeArrivalDirectionName
-                    };
+                    int insertIdx = network.Destinations.FindIndex(d => string.Equals(d.Id, "Bus", StringComparison.OrdinalIgnoreCase));
+                    insertIdx = insertIdx >= 0 ? insertIdx + 1 : network.Destinations.Count;
 
-                    int busIdx = network.Destinations.FindIndex(d => string.Equals(d.Id, "Bus", StringComparison.OrdinalIgnoreCase));
-                    if (busIdx >= 0)
-                        network.Destinations.Insert(busIdx + 1, plazaDest);
-                    else
-                        network.Destinations.Add(plazaDest);
+                    foreach (var dest in destinations)
+                    {
+                        string displayName = dest.BridgeNumber == 1
+                            ? I18n.Get("minecart.plaza_destination")
+                            : I18n.Get("location.bridge", new { number = dest.BridgeNumber });
+
+                        var mcDest = new StardewValley.GameData.Minecarts.MinecartDestinationData
+                        {
+                            Id = dest.DestinationId,
+                            DisplayName = displayName,
+                            TargetLocation = dest.BridgeLocationName,
+                            TargetTile = new Point(MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY),
+                            TargetDirection = MinecartPlazaLogic.BridgeArrivalDirectionName
+                        };
+                        network.Destinations.Insert(insertIdx++, mcDest);
+                    }
                 });
             }
         }
@@ -735,19 +754,19 @@ namespace Pelican4Ever.Modules
             if (context?.WorldState?.Doors != null && context.WorldState.Doors.ContainsKey(door.DoorId))
                 return true;
 
-            int slotCount = context?.Config.FarmSlotCount ?? 16;
+            int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
             return PlazaCatalogFormatter.IsDoorActive(door.DefaultSlotId, door.LocationName, slotCount);
         }
 
         public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
-            var loc = HostPlazaLayout.Find(door.LocationName, 16);
+            var loc = HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount);
             return IsInOpeningOrBorder(door, loc, tileX, tileY);
         }
 
         public static bool IsInOpeningOrBorder(DoorModel door, PlazaLocation? loc, int tileX, int tileY)
         {
-            loc ??= HostPlazaLayout.Find(door.LocationName, 16);
+            loc ??= HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount);
             if (loc == null)
             {
                 var (t1, t2) = GetOpeningTiles(door);
@@ -780,7 +799,7 @@ namespace Pelican4Ever.Modules
             DoorModel door,
             xTile.Tiles.Tile? sampleTile)
         {
-            var loc = HostPlazaLayout.Find(door.LocationName, 16)
+            var loc = HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount)
                    ?? new PlazaLocation(door.LocationName, bld?.LayerWidth ?? 80, bld?.LayerHeight ?? 65, null, null);
             var passTiles = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc)
                 .Select(t => new Point(t.X, t.Y))
@@ -1576,7 +1595,7 @@ namespace Pelican4Ever.Modules
                 string? typeProp = null;
                 existingBack?.Properties.TryGetValue("Type", out typeProp);
 
-                var loc = HostPlazaLayout.Find(door.LocationName, 16)
+                var loc = HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount)
                        ?? new PlazaLocation(door.LocationName, bld.LayerWidth, bld.LayerHeight, null, null);
                 bool isGrass = TerrainTileClassifier.IsMailboxOnGrass(door.Edge, loc, door.TownTileX, door.TownTileY, mx, my);
                 bool existingIsGrass = existingBack != null && TerrainTileClassifier.IsGrassTileIndex(existingBack.TileIndex, typeProp, existingBack.TileSheet?.Id);
@@ -1674,6 +1693,19 @@ namespace Pelican4Ever.Modules
                     {
                         context.Monitor.Log($"[FarmSlotModule] Liberadas {released.Count} asignaciones inválidas o duplicadas: {string.Join(", ", released)}.", LogLevel.Warn);
                     }
+                }
+
+                // ADR-0010 (punto 7): Desescalado seguro — no reducir por debajo de la residencia reclamada más alta
+                var claimedSlots = context.WorldState.Doors.Values
+                    .Where(d => d.OwnerId != 0)
+                    .Select(d => d.FarmSlotId);
+                int effectiveSlotCount = HostPlazaLayout.GetEffectiveFarmSlotCount(context.Config.FarmSlotCount, claimedSlots);
+                if (effectiveSlotCount > context.Config.FarmSlotCount)
+                {
+                    context.Monitor.Log(
+                        $"[FarmSlotModule] FarmSlotCount={context.Config.FarmSlotCount} es menor que la residencia reclamada más alta; se arranca con {effectiveSlotCount} residencias efectivas para no perder datos.",
+                        LogLevel.Warn);
+                    context.Config.FarmSlotCount = effectiveSlotCount;
                 }
 
                 // Data/Locations se construyó al lanzar el juego, sin el estado de la partida
@@ -1789,14 +1821,16 @@ namespace Pelican4Ever.Modules
 
             if (CheckBridge(who.disconnectLocation.Value))
             {
-                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía disconnectLocation en puente '{who.disconnectLocation.Value}' no activo. Redirigiendo a 'Farm'.", LogLevel.Warn);
-                who.disconnectLocation.Value = HostPlazaLayout.HostFarm;
-                who.disconnectPosition.Value = new Vector2(64f * 64f, 15f * 64f);
+                var (anchorLoc, ax, ay, _) = HostPlazaLayout.GetAnchorReturnTarget(who.disconnectLocation.Value);
+                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía disconnectLocation en puente '{who.disconnectLocation.Value}' no activo. Redirigiendo a '{anchorLoc}'.", LogLevel.Warn);
+                who.disconnectLocation.Value = anchorLoc;
+                who.disconnectPosition.Value = new Vector2(ax * 64f, ay * 64f);
             }
             if (CheckBridge(who.lastSleepLocation.Value))
             {
-                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía lastSleepLocation en puente '{who.lastSleepLocation.Value}' no activo. Redirigiendo a 'Farm'.", LogLevel.Warn);
-                who.lastSleepLocation.Value = HostPlazaLayout.HostFarm;
+                var (anchorLoc, _, _, _) = HostPlazaLayout.GetAnchorReturnTarget(who.lastSleepLocation.Value);
+                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía lastSleepLocation en puente '{who.lastSleepLocation.Value}' no activo. Redirigiendo a '{anchorLoc}'.", LogLevel.Warn);
+                who.lastSleepLocation.Value = anchorLoc;
             }
         }
 
@@ -1832,6 +1866,7 @@ namespace Pelican4Ever.Modules
             context.Helper.GameContent.InvalidateCache("Data/Locations");
             context.Helper.GameContent.InvalidateCache("Data/Objects");
             context.Helper.GameContent.InvalidateCache("Data/Minecarts");
+            context.Helper.GameContent.InvalidateCache("Maps/Town");
             context.Helper.GameContent.InvalidateCache("Maps/Pelican4Ever_HostFarm");
             for (int i = 1; i <= HostPlazaLayout.MaxBridges; i++)
             {
@@ -2440,13 +2475,6 @@ namespace Pelican4Ever.Modules
         public static void RemoveHostCabins(Farm farm)
         {
             if (!Context.IsMainPlayer || farm == null) return;
-
-            if (Game1.netWorldState?.Value != null)
-            {
-                int targetCount = context?.Config.FarmSlotCount ?? 16;
-                Game1.netWorldState.Value.highestPlayerLimit.Value = Math.Max(Game1.netWorldState.Value.highestPlayerLimit.Value, targetCount);
-                Game1.netWorldState.Value.currentPlayerLimit.Value = Math.Max(Game1.netWorldState.Value.currentPlayerLimit.Value, targetCount);
-            }
 
             int removed = 0;
             for (int i = farm.buildings.Count - 1; i >= 0; i--)
@@ -5308,7 +5336,7 @@ namespace Pelican4Ever.Modules
 
                 if (locName.StartsWith(HostPlazaLayout.BridgePrefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var chain = HostPlazaLayout.Chain(slotCount);
                     bool inChain = chain.Any(l => string.Equals(l.Name, locName, StringComparison.OrdinalIgnoreCase));
                     if (!inChain)
@@ -5786,7 +5814,7 @@ namespace Pelican4Ever.Modules
                     return true;
 
                 string locName = __instance.NameOrUniqueName;
-                int slotCount = context?.Config.FarmSlotCount ?? 16;
+                int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                 var plazaLoc = HostPlazaLayout.Find(locName, slotCount);
 
                 if (plazaLoc != null)
@@ -6127,7 +6155,7 @@ namespace Pelican4Ever.Modules
 
         private static void ResolvePlazaReturn(DoorModel door, ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
-            int slotCount = context?.Config.FarmSlotCount ?? 16;
+            int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
             var returnTarget = PlazaTopologyVerifier.ResolvePlazaReturnTarget(
                 door.LocationName,
                 door.Edge,
@@ -6318,7 +6346,7 @@ namespace Pelican4Ever.Modules
         {
             try
             {
-                SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? 16);
+                SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount);
 
                 // 1. Identificar si el jugador reside en una parcela asignada en WorldState (propietario o inquilino)
                 DoorAssignment? assignment = context?.WorldState?.FindResidenceOf(who.UniqueMultiplayerID);
