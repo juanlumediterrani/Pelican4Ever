@@ -170,6 +170,22 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 
 ---
 
+### 4.5. Subsistemas de Persistencias Intradía, Vida Residencial Ampliada y Resiliencia Operativa (Épicas 11, 20–25)
+
+1. **Checkpoints Intradía y Rotación (`CheckpointModule`, `SaveBackupService`, `BackupRetentionPolicy`, Épica 11):**
+   * Ejecución periódica del pipeline nativo (`SaveGame.Save()`) sin desconectar pares, clonando los *farmhands* conectados (`CheckpointCloneFarmhands`), con compresión gzip opcional y rotación pura en Core (`BackupRetentionPolicy.ToDelete`).
+2. **Mascotas de Clientes y Compatibilidad con *Nature In The Valley* (Épicas 20 y 24):**
+   * **`ClientPetAdoptionModule` / `PetAdoptionLogic`:** Los clientes que compran un `Pet Bowl` desbloquean en su despertar la visita de Marnie y adoptan una mascota propia vinculada autoritativamente a su cuenco, parcela e identificador.
+   * **Intersección NITV (`FarmTemplateCatalog.MatchesNitvHabitat`, `FoodBuffPersistenceLogic.IsTransientModBuffId`, `VisitorPermissionLogic.IsAllowedVisitorTool`, `Pelican4Ever.NITVCompat`):** Exposición de biomas (`"0"`/`"Outside"`, `"1"`/`"Forest"`/`"Woods"`, `"2"`/`"Beach"` y `"3"`/`"Underground"`) en residencias, anexos y cuevas `_Cave`; exclusión del buff transitorio de carga de red `"NatCSpeedN"` del escalado temporal `85.7x` y de la persistencia; y permiso de redes NITV para visitantes sin `VisitorsCanEdit` manteniendo bloqueada la colocación/retirada de `Terrarium`.
+3. **Pedidos 24/7 por Buzón y Co-Residencia (`MailOrderModule`, Épica 22 y 23):**
+   * **Pedidos diferidos (`MailOrderLogic`, `MailOrderRobinService`, `MailOrderMarnieService`, `MailOrderClintService`, `MailOrderPackageDelivery`):** Compras 24/7 desde buzones de puerta/residencia con cobro inmediato y materialización a las `12:00` reales del día objetivo (bloqueada durante `NightHold`), con paquetes físicos cuya apertura solo se permite a su comprador (`OwnerId`).
+   * **Co-residencia Propietario + Inquilino (`ServerWorldState` v8, `ModDataKeys.TenantId`, `TownMailboxModule`, `LocationCullingLogic`):** Un propietario (`OwnerId`) puede admitir hasta 1 inquilino (`TenantId`) desde el buzón exterior; se desacopla la cabina técnica de autenticación del hogar compartido (`Pelican4Ever_Farm_XX_Home`), se comparten construcciones y animales (`AnimalPage`, `PendingBuildingOrder`, `PendingAnimalOrder`) y se mantiene aislado el progreso individual (carteras, `Shipping Bin`, correo, paquetes, XP y minas), con protocolo seguro de expulsión y traspaso automático de titularidad.
+4. **Identidad de Dispositivo, Admisión de Putre y Resiliencia Operativa (Épica 18 y Épica 25 / ADR-0010):**
+   * **`ClientSecurityModule` y `ProbationTelemetryModule` (`ProbationAndBlacklistLogic`):** Autenticación asimétrica por clave de dispositivo ECDSA P-256 (`P4E\x02` en Lidgren), whitelist/pairing y protocolo de observación de 2 cupos y lista negra operado por Putre.
+   * **Arquitectura de resiliencia propuesta (ADR-0010 / Épica 25, en desarrollo):** Registro único de criticidad de parches Harmony (`PatchRegistry` + `PatchHealthPolicy`: `Security` e `Integrity` bloquean en *fail-closed* `Lockdown`, `Experience` arranca en `Degraded`), lista blanca `VerifiedGameVersions`, `GET /api/v1/host/health` leído desde instantánea atómica fuera de `MainThreadActionQueue`, hilo emisor de `WATCHDOG=1` para systemd y manifiesto verificable `p4e-backup.json` con retención local por defecto (`BackupRetentionDays = 14`, `CheckpointRetention = 12`) coordinado con `Putre`.
+
+---
+
 ## 5. Registro de Decisiones de Arquitectura (ADRs)
 
 Las decisiones arquitectónicas clave y sus alternativas descartadas están documentadas en [`docs/adr/`](docs/adr/):
@@ -182,3 +198,5 @@ Las decisiones arquitectónicas clave y sus alternativas descartadas están docu
 * **ADR-0006:** Energía por sesiones: Saciedad con vaciado continuo, "Bien comido" que activa el descanso sentado y buff diario del Spa.
 * **ADR-0007:** Identidad asimétrica por dispositivo (ECDSA P-256) y desafío `P4E\x02` en el saludo de Lidgren.
 * **ADR-0008 (propuesto):** Rebalanceo para el 1:1: curva diaria de experiencia, pesca más lenta, menos escaleras en las minas y coste de energía por piso en la Caverna Calavera.
+* **ADR-0009:** Generación de anexos con el flujo «Mapas Puente» (`MapStudio`, recorte canónico y clasificadores verificados).
+* **ADR-0010 (propuesto):** Arranque *fail-closed*, salud del host fuera del hilo del juego (`/api/v1/host/health` + watchdog systemd) y contrato de copias (`p4e-backup.json`, retención y `saves.restore`) con Putre.

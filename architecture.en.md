@@ -170,6 +170,22 @@ Only the locations (controlled by the Host) expose metadata in `location.modData
 
 ---
 
+### 4.5. Intraday Persistence, Extended Residential Life, and Operational Resilience Subsystems (Epics 11, 20–25)
+
+1. **Intraday Checkpoints and Rotation (`CheckpointModule`, `SaveBackupService`, `BackupRetentionPolicy`, Epic 11):**
+   * Periodic execution of the native save pipeline (`SaveGame.Save()`) without disconnecting peers, cloning connected farmhands (`CheckpointCloneFarmhands`), with optional gzip compression and pure retention rotation in Core (`BackupRetentionPolicy.ToDelete`).
+2. **Client Pets and *Nature In The Valley* Compatibility (Epics 20 and 24):**
+   * **`ClientPetAdoptionModule` / `PetAdoptionLogic`:** Farmhands purchasing a `Pet Bowl` unlock Marnie's adoption visit on wake-up and obtain an authoritative pet bound to their bowl, parcel, and player ID.
+   * **NITV intersection (`FarmTemplateCatalog.MatchesNitvHabitat`, `FoodBuffPersistenceLogic.IsTransientModBuffId`, `VisitorPermissionLogic.IsAllowedVisitorTool`, `Pelican4Ever.NITVCompat`):** Exposes habitat tags (`"0"`/`"Outside"`, `"1"`/`"Forest"`/`"Woods"`, `"2"`/`"Beach"`, and `"3"`/`"Underground"`) across residences, annexes, and `_Cave` interiors; excludes the transient `"NatCSpeedN"` net-charging buff from `85.7x` time scaling and persistence; and allows NITV nets for visitors without `VisitorsCanEdit` while keeping `Terrarium` placement/removal blocked.
+3. **24/7 Mailbox Shop Orders and Co-Residency (`MailOrderModule`, Epics 22 and 23):**
+   * **Deferred mailbox orders (`MailOrderLogic`, `MailOrderRobinService`, `MailOrderMarnieService`, `MailOrderClintService`, `MailOrderPackageDelivery`):** 24/7 catalog orders from portal/residence mailboxes with immediate payment and delivery at real `12:00` on the target day (blocked during `NightHold`), spawning owner-locked delivery crates (`OwnerId`).
+   * **Owner + Tenant co-residency (`ServerWorldState` v8, `ModDataKeys.TenantId`, `TownMailboxModule`, `LocationCullingLogic`):** An owner (`OwnerId`) can admit up to 1 tenant (`TenantId`) via the exterior mailbox; authentication cabins are decoupled from the shared interior (`Pelican4Ever_Farm_XX_Home`), buildings and animals are shared (`AnimalPage`, `PendingBuildingOrder`, `PendingAnimalOrder`), while individual progression remains isolated (wallets, `Shipping Bin`, mail, packages, XP, mines) with safe eviction and automatic ownership transfer.
+4. **Device Identity, Putre Probation, and Operational Resilience (Epic 18 and Epic 25 / ADR-0010):**
+   * **`ClientSecurityModule` and `ProbationTelemetryModule` (`ProbationAndBlacklistLogic`):** Asymmetric ECDSA P-256 device authentication (`P4E\x02` in Lidgren), pairing whitelist, and Putre's 2-slot probation & blacklist protocol.
+   * **Proposed resilience architecture (ADR-0010 / Epic 25, in progress):** Centralized Harmony patch criticality registry (`PatchRegistry` + `PatchHealthPolicy`: `Security` and `Integrity` fail closed into `Lockdown`, `Experience` boots `Degraded`), `VerifiedGameVersions` whitelist, `GET /api/v1/host/health` served from an atomic snapshot outside `MainThreadActionQueue`, systemd `WATCHDOG=1` sender thread, and verifiable `p4e-backup.json` manifest with default local retention (`BackupRetentionDays = 14`, `CheckpointRetention = 12`) coordinated with `Putre`.
+
+---
+
 ## 5. Architecture Decision Records (ADRs)
 
 The key architectural decisions and their discarded alternatives are documented in [`docs/adr/`](docs/adr/):
@@ -182,3 +198,5 @@ The key architectural decisions and their discarded alternatives are documented 
 * **ADR-0006:** Energy per session: Satiety with a continuous drain, "Well-Fed" enabling seated rest and the daily Spa buff.
 * **ADR-0007:** Asymmetric identity per device (ECDSA P-256) and the `P4E\x02` challenge in the Lidgren handshake.
 * **ADR-0008 (proposed):** Rebalance for 1:1: daily experience curve, slower fishing, fewer mine ladders and an energy cost per floor in the Skull Cavern.
+* **ADR-0009:** Annex generation using the "Bridge Maps" flow (`MapStudio`, canonical crop, and verified classifiers).
+* **ADR-0010 (proposed):** Fail-closed startup, off-game-thread host health (`/api/v1/host/health` + systemd watchdog), and backup contract (`p4e-backup.json`, retention, and `saves.restore`) with Putre.

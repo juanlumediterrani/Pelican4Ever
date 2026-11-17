@@ -74,9 +74,11 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servid
 * [Anfitrión en un VPS](docs/despliegue/host-vps.md) — [EN](docs/despliegue/host-vps.en.md) · [中文](docs/despliegue/host-vps.zh-CN.md)
 * [Anfitrión en local](docs/despliegue/host-local.md) — [EN](docs/despliegue/host-local.en.md) · [中文](docs/despliegue/host-local.zh-CN.md)
 * [Índice de documentación (`docs/README.md`)](docs/README.md)
-* [Diseño del juego](design.md) — [EN](design.en.md) · [中文](design.zh-CN.md)
+* [Especificación General del Sistema (GSS) / Diseño del juego](design.md) — [EN](design.en.md) · [中文](design.zh-CN.md)
 * [Arquitectura técnica](architecture.md) — [EN](architecture.en.md) · [中文](architecture.zh-CN.md)
 * [Backlog de iteraciones y épicas (`backlog.md`)](backlog.md) — solo en español
+* [Backlog de pruebas vivas ejecutables por agentes (`live-agent-tests-backlog.md`)](live-agent-tests-backlog.md) — solo en español
+* [Tareas de testeo con jugadores humanos (`test-users-tasks.md`)](test-users-tasks.md) — solo en español
 * [Especificación de la API de anfitrión](docs/host-api.md) — [EN](docs/host-api.en.md) · [中文](docs/host-api.zh-CN.md)
 * [Decisiones de arquitectura (`docs/adr/`)](docs/adr/)
 * [Guía de sprites y cosméticos del host (`agents/README.md`)](agents/README.md) — solo en español
@@ -100,8 +102,8 @@ Pelican4Ever.sln
 │   └── World/              # Residencias, portales, anexos temáticos, tipos de granja y cuevas
 ├── Pelican4Ever/           # Mod SMAPI (.NET 6, ensamblado con parches Harmony)
 │   ├── Framework/          # ModContext, IModule, routing espacial y clonación de mapas
-│   └── Modules/            # 30 módulos SMAPI desacoplados con registro defensivo
-└── Pelican4Ever.Tests/     # Suite de más de 1.300 pruebas unitarias y de integración en xUnit (.NET 8)
+│   └── Modules/            # 49 módulos SMAPI desacoplados con registro defensivo
+└── Pelican4Ever.Tests/     # Suite de más de 1.680 pruebas unitarias y de integración en xUnit (.NET 8)
 ```
 
 ---

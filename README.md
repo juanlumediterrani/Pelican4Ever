@@ -74,9 +74,11 @@ For complete step-by-step instructions, see the [Preview Server Guide](docs/serv
 * [Host on a VPS](docs/despliegue/host-vps.en.md) — [中文](docs/despliegue/host-vps.zh-CN.md) · [ES](docs/despliegue/host-vps.md)
 * [Host on your own machine](docs/despliegue/host-local.en.md) — [中文](docs/despliegue/host-local.zh-CN.md) · [ES](docs/despliegue/host-local.md)
 * [Documentation index (`docs/README.md`)](docs/README.md)
-* [Game Design](design.en.md) — [中文](design.zh-CN.md) · [ES](design.md)
+* [General System Specification (GSS) / Game Design](design.en.md) — [中文](design.zh-CN.md) · [ES](design.md)
 * [Technical Architecture](architecture.en.md) — [中文](architecture.zh-CN.md) · [ES](architecture.md)
 * [Iterations & Roadmap Backlog (`backlog.md`)](backlog.md) — Spanish only
+* [Live Agent Tests Backlog (`live-agent-tests-backlog.md`)](live-agent-tests-backlog.md) — Spanish only
+* [Human Playtest & Calibration Tasks (`test-users-tasks.md`)](test-users-tasks.md) — Spanish only
 * [Host REST API Specification](docs/host-api.en.md) — [中文](docs/host-api.zh-CN.md) · [ES](docs/host-api.md)
 * [Architecture Decision Records (`docs/adr/`)](docs/adr/)
 * [Agent Sprite & Cosmetics Guide (`agents/README.md`)](agents/README.md) — Spanish only
@@ -100,8 +102,8 @@ Pelican4Ever.sln
 │   └── World/              # Residences, portals, thematic annexes, farm types, and private caves
 ├── Pelican4Ever/           # SMAPI Mod (.NET 6, compiled assembly with Harmony patches)
 │   ├── Framework/          # ModContext, IModule, spatial routing, and map cloning helpers
-│   └── Modules/            # 30 decoupled SMAPI modules with defensive registration
-└── Pelican4Ever.Tests/     # Test suite with 1,300+ unit and integration tests in xUnit (.NET 8)
+│   └── Modules/            # 49 decoupled SMAPI modules with defensive registration
+└── Pelican4Ever.Tests/     # Test suite with 1,680+ unit and integration tests in xUnit (.NET 8)
 ```
 
 ---

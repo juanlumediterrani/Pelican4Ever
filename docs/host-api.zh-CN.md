@@ -442,6 +442,36 @@ Voyager、Putre 或某个诊断流程）。每位申请者最多持有一个：�
 }
 ```
 
+### `GET /api/v1/host/probation`
+
+返回 Putre 试用准入协议的状态（`MaxSlots` = 2、`UsedSlots`、`AvailableSlots`）、待处理工单、观察期内设备及其行为指标（在线时长、`VisitorGuard` 拦截、聊天、经济与日切记录）以及永久黑名单（`Blacklist`）。
+
+### `GET /api/v1/host/health`
+
+直接从 HTTP 线程读取原子健康快照（`HostHealthDto`），**不经过 `MainThreadActionQueue`**，即使游戏主线程卡死或服务器处于未加载存档的 `Lockdown` 状态也能立即响应（ADR-0010）。
+
+**响应 `200 OK`（`HostHealthDto`）：**
+```json
+{
+  "Status": "Ok",
+  "LastTickUtc": "2026-11-16T23:45:10.1234567Z",
+  "SecondsSinceLastTick": 0.04,
+  "SaveLoaded": true,
+  "Lockdown": {
+    "Reasons": [],
+    "Overridden": []
+  },
+  "Patches": {
+    "Total": 84,
+    "Failed": []
+  },
+  "GameVersion": "1.6.15",
+  "SmapiVersion": "4.5.2",
+  "ModVersion": "0.4.9",
+  "UptimeSeconds": 3612.5
+}
+```
+
 ---
 
 ## 3. 经典路由 `/api/`

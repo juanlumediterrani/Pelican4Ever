@@ -24,8 +24,10 @@
 | 主机 API | [ES](host-api.md) · [EN](host-api.en.md) · [中文](host-api.zh-CN.md) | 主机 v1 REST API：路由、认证、允许的远程命令与事件 |
 | ADR | [索引](adr/) · [EN](adr/README.en.md) · [中文](adr/README.zh-CN.md) | 架构决策记录，每份都有这三种语言 |
 | 架构 | [ES](../architecture.md) · [EN](../architecture.en.md) · [中文](../architecture.zh-CN.md) | 系统的技术架构 |
-| 游戏设计 | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | 游戏设计 |
-| 待办列表 | [ES](../backlog.md) | 技术路线图：史诗、任务及其解决情况（**仅有西班牙语**：这是一份 1700 行的历史记录） |
+| 系统规范（GSS）/ 游戏设计 | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | 系统总体规范（`RF`/`RNF`）、子系统与世界规则 |
+| 技术待办列表 | [ES](../backlog.md) | 开发路线图：史诗、任务及其解决情况（**仅有西班牙语**） |
+| 实机测试（智能体） | [ES](../live-agent-tests-backlog.md) | 可由自主智能体复现执行的实机集成与压测待办（**仅有西班牙语**） |
+| 玩家测试任务 | [ES](../test-users-tasks.md) | 需要真人玩家参与的平衡校准与视觉/交互检查（**仅有西班牙语**） |
 | 主机外观 | [ES](../agents/README.md) | 龙头像素画与像素画工具（**仅有西班牙语**） |
 
 ## Web 面板（不在 `main` 与 `dev` 中）
@@ -45,9 +47,9 @@ git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
 ## 规矩
 
 - 游戏是 **Stardew Valley 1.6.15**，搭配 **SMAPI 4.1+** 使用。
-- 模组名为 **Pelican 4Ever**（`Pelican4Ever.SVRTMP`），当前版本 **0.2.0**。
+- 模组名为 **Pelican 4Ever**（`Pelican4Ever.SVRTMP`），当前版本 **0.4.9**。
 - 服务器只公开**一个公共端口**：UDP `24642`。主机 API（`8085`）保留在回环地址上。
-- `config.json` 在**启动时校验**：如果有任何不一致，模组不会注册。没有降级模式。
+- `config.json` 在**启动时校验**：如果有任何不一致，模组不会注册（配置本身无降级模式；针对 `Experience` 类 Harmony 补丁，见提议中的 [ADR-0010](adr/0010-fail-closed-health-and-backup-contract.zh-CN.md)）。
 - 主机始终是一个本地玩家：**不存在原生的专用服务器模式**。选项 `DedicatedServerMode` 在
   当前代码中并未使用。
 - 服务器要求的模组包版本是**精确版本**（而不是 *major.minor*）。模组自身的版本则按

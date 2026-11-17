@@ -282,7 +282,7 @@ Ejecuta un checkpoint intradía en el hilo principal del juego (`TASK-1607`, equ
 ### `GET /api/v1/host/events?since=N`
 
 Devuelve la lista de solo añadir (append-only) de sucesos con `Id > N` en orden estrictamente creciente y sin duplicados. Si `LastEventId` es menor que el cursor solicitado, el registro se ha reiniciado y el cliente debe volver a consultar desde 0.
-Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`), préstamos de dibujado (`host.render.lease.granted`, `host.render.lease.released`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`), expulsión por mods (`player.rejected`, con el motivo), emparejamiento (`player.paired`, `player.pairing.invited`, `player.pairing.revoked`) y comandos remotos (`host.command`, `host.test.command`).
+Incluye inscripciones a festivales (`festival.signup`, `festival.signup.left`), tandas iniciadas y terminadas (`festival.run.started`, `festival.run.ended`, `festival.ceremony.started`), rollover iniciado, completado y atascado en el cambio de día (`rollover.started`, `rollover.completed`, `rollover.stalled`: el mod ha tenido que volver a lanzar el fundido del cambio de día; trae `nudges` y `secondsSinceAdvance`), copia de seguridad creada (`backup.created`), checkpoints intradía (`checkpoint.created` con `backupName`, `bytes`, `totalMs`, `longestTickMs`, `slow` y `nextIntervalMinutes`; `checkpoint.skipped` con `reason` cuando tocaba y no se pudo; `checkpoint.failed` con `error`), descanso del host (`host.rested`), anuncios (`host.announcement`), reinicios controlados (`host.restart.scheduled`, `host.restart.cancelled`, `host.restart.executed`), estado de salud al arrancar (`host.lockdown`, `host.degraded`, `host.lockdown.overridden`), préstamos de dibujado (`host.render.lease.granted`, `host.render.lease.released`) y conexión/desconexión de jugadores (`player.connected`, `player.disconnected`), expulsión por mods (`player.rejected`, con el motivo), emparejamiento (`player.paired`, `player.pairing.invited`, `player.pairing.revoked`) y comandos remotos (`host.command`, `host.test.command`).
 
 **Respuesta `200 OK` (`HostEventsResponseDto`):**
 ```json
@@ -423,6 +423,32 @@ También: comando de consola `p4e_render [status] | <minutos> | off` (solicitant
 ### `GET /api/v1/host/probation`
 
 Devuelve el estado del protocolo de admisión de Putre (`MaxSlots` = 2, `UsedSlots`, `AvailableSlots`), tickets abiertos, dispositivos en observación conductual con sus métricas (tiempo conectado, bloqueos de `VisitorGuard`, chat, economía y rollovers) y la lista negra permanente (`Blacklist`).
+
+### `GET /api/v1/host/health`
+
+Devuelve la instantánea atómica de salud del host (`HostHealthDto`), leída **directamente desde el hilo HTTP sin pasar por `MainThreadActionQueue`**, por lo que responde incluso si el hilo principal del juego está colgado o el servidor permanece en `Lockdown` sin partida cargada (ADR-0010).
+
+**Respuesta `200 OK` (`HostHealthDto`):**
+```json
+{
+  "Status": "Ok",
+  "LastTickUtc": "2026-11-16T23:45:10.1234567Z",
+  "SecondsSinceLastTick": 0.04,
+  "SaveLoaded": true,
+  "Lockdown": {
+    "Reasons": [],
+    "Overridden": []
+  },
+  "Patches": {
+    "Total": 84,
+    "Failed": []
+  },
+  "GameVersion": "1.6.15",
+  "SmapiVersion": "4.5.2",
+  "ModVersion": "0.4.9",
+  "UptimeSeconds": 3612.5
+}
+```
 
 ---
 
