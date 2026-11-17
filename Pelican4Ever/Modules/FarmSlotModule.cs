@@ -5150,6 +5150,21 @@ namespace Pelican4Ever.Modules
                 prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ManorHouse_AnswerDialogueAction)),
                 criticality: PatchCriticality.Integrity);
 
+            PatchSafe(harmony, "NPC.getHome",
+                AccessTools.Method(typeof(NPC), nameof(NPC.getHome), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_GetHome)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Farmer.getChildren",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getChildren), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetChildren)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Farmer.getChildrenCount",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getChildrenCount), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetChildrenCount)),
+                criticality: PatchCriticality.Integrity);
+
             context?.Monitor.Log("[FarmSlotModule] Parches Harmony registrados en PatchRegistry.", LogLevel.Trace);
         }
 
@@ -8512,15 +8527,23 @@ namespace Pelican4Ever.Modules
             return null;
         }
 
+        private static FarmHouse? TryResolveHomeOfFarmerSafe(Farmer? farmer)
+        {
+            if (farmer == null)
+                return null;
+
+            return Context.IsMainPlayer
+                ? (TryResolveLoadedHomeOfFarmer(farmer) ?? ResolveFarmerHomeLocation(farmer))
+                : TryResolveLoadedHomeOfFarmer(farmer);
+        }
+
         private static bool CanRetrieveOfflineFarmhand(Farmer? farmer, bool isOnline, out Cabin? cabin)
         {
             cabin = null;
             if (farmer == null)
                 return false;
 
-            FarmHouse? home = Context.IsMainPlayer
-                ? (TryResolveLoadedHomeOfFarmer(farmer) ?? ResolveFarmerHomeLocation(farmer))
-                : TryResolveLoadedHomeOfFarmer(farmer);
+            FarmHouse? home = TryResolveHomeOfFarmerSafe(farmer);
 
             cabin = home as Cabin;
             bool isCabin = cabin != null;
@@ -8588,6 +8611,107 @@ namespace Pelican4Ever.Modules
 
             __result = true;
             return false;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="NPC.getHome"/> lance <see cref="KeyNotFoundException"/> en clientes cuando el
+        /// cónyuge vive en una residencia privada culleada (<c>Pelican4Ever_Farm_XX_Home</c>).
+        /// </summary>
+        public static bool Prefix_NPC_GetHome(NPC __instance, ref GameLocation __result)
+        {
+            if (__instance == null)
+                return true;
+
+            if (__instance.isMarried() && __instance.getSpouse() is Farmer spouse)
+            {
+                FarmHouse? spouseHome = TryResolveHomeOfFarmerSafe(spouse);
+                if (spouseHome != null)
+                {
+                    __result = spouseHome;
+                    return false;
+                }
+
+                if (VisitorPermissionLogic.ResidenceSlotOf(spouse.homeLocation.Value) != null)
+                {
+                    __result = Game1.getLocationFromName("FarmHouse")
+                        ?? __instance.currentLocation
+                        ?? Game1.getLocationFromName("Town")
+                        ?? Game1.getFarm();
+                    return false;
+                }
+
+                return true;
+            }
+
+            string? defaultMap = __instance.DefaultMap;
+            if (VisitorPermissionLogic.ResidenceSlotOf(defaultMap) != null)
+            {
+                GameLocation? resolved = Game1.getLocationFromName(defaultMap!)
+                    ?? Game1.getLocationFromName(defaultMap!, isStructure: true);
+                __result = resolved
+                    ?? Game1.getLocationFromName("Town")
+                    ?? __instance.currentLocation
+                    ?? Game1.getFarm();
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Farmer.getChildren"/> falle con <see cref="KeyNotFoundException"/> en clientes
+        /// cuya cabaña privada (<c>Pelican4Ever_Farm_XX_Home</c>) aún no esté cargada.
+        /// </summary>
+        public static bool Prefix_Farmer_GetChildren(Farmer __instance, ref List<Child> __result)
+        {
+            if (__instance == null)
+            {
+                __result = new List<Child>();
+                return false;
+            }
+
+            FarmHouse? home = TryResolveHomeOfFarmerSafe(__instance);
+            if (home != null)
+            {
+                __result = home.getChildren();
+                return false;
+            }
+
+            if (VisitorPermissionLogic.ResidenceSlotOf(__instance.homeLocation.Value) != null)
+            {
+                __result = new List<Child>();
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Farmer.getChildrenCount"/> (y <see cref="Farmer.getNumberOfChildren"/>) fallen con
+        /// <see cref="KeyNotFoundException"/> en clientes cuya cabaña privada aún no esté cargada.
+        /// </summary>
+        public static bool Prefix_Farmer_GetChildrenCount(Farmer __instance, ref int __result)
+        {
+            if (__instance == null)
+            {
+                __result = 0;
+                return false;
+            }
+
+            FarmHouse? home = TryResolveHomeOfFarmerSafe(__instance);
+            if (home != null)
+            {
+                __result = home.getChildrenCount();
+                return false;
+            }
+
+            if (VisitorPermissionLogic.ResidenceSlotOf(__instance.homeLocation.Value) != null)
+            {
+                __result = 0;
+                return false;
+            }
+
+            return true;
         }
     }
 }
