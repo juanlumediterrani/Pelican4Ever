@@ -148,6 +148,40 @@ namespace Pelican4Ever.Core.World
             return HostPlazaLayout.IsPlazaLocation(locationName);
         }
 
+        /// <summary>
+        /// Determina si el jugador local puede recuperar objetos de un granjero desconectado desde la caja
+        /// de objetos perdidos de la Casa del Alcalde (<c>ManorHouse</c>), omitiendo cabañas no cargadas
+        /// (p. ej. <c>Pelican4Ever_Farm_XX_Home</c> culleadas en clientes) y protegiendo residencias privadas ajenas.
+        /// </summary>
+        public static bool CanRetrieveOfflineFarmhandItems(
+            bool isMainPlayer,
+            bool isOnline,
+            bool isUnclaimedFarmhand,
+            bool isHomeLoadedAsCabin,
+            bool isInventoryLocked,
+            string? homeLocationName,
+            IReadOnlyDictionary<string, DoorAssignment>? doors,
+            long localPlayerId)
+        {
+            if (isOnline || isUnclaimedFarmhand || !isHomeLoadedAsCabin || isInventoryLocked)
+                return false;
+
+            if (isMainPlayer)
+                return true;
+
+            string? slotId = ResidenceSlotOf(homeLocationName);
+            if (slotId == null || doors == null)
+                return true;
+
+            foreach (DoorAssignment door in doors.Values)
+            {
+                if (string.Equals(door.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                    return CanEdit(door, localPlayerId);
+            }
+
+            return true;
+        }
+
         /// <summary>Texto del estado de acceso para los diálogos.</summary>
         public static string Describe(AccessPolicy policy, bool visitorsCanEdit, ITranslationProvider? translations = null)
         {

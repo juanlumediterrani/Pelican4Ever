@@ -5140,6 +5140,16 @@ namespace Pelican4Ever.Modules
                 prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Event_WaitForOtherPlayers)),
                 criticality: PatchCriticality.Experience);
 
+            PatchSafe(harmony, "ManorHouse.GetRetrievableFarmers",
+                AccessTools.Method(typeof(ManorHouse), nameof(ManorHouse.GetRetrievableFarmers), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ManorHouse_GetRetrievableFarmers)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "ManorHouse.answerDialogueAction",
+                AccessTools.Method(typeof(ManorHouse), nameof(ManorHouse.answerDialogueAction), new[] { typeof(string), typeof(string[]) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ManorHouse_AnswerDialogueAction)),
+                criticality: PatchCriticality.Integrity);
+
             context?.Monitor.Log("[FarmSlotModule] Parches Harmony registrados en PatchRegistry.", LogLevel.Trace);
         }
 
@@ -8485,6 +8495,99 @@ namespace Pelican4Ever.Modules
             }
 
             return true;
+        }
+
+        private static FarmHouse? TryResolveLoadedHomeOfFarmer(Farmer? farmer)
+        {
+            if (farmer == null || string.IsNullOrWhiteSpace(farmer.homeLocation.Value))
+                return null;
+
+            string homeName = farmer.homeLocation.Value;
+            if (Game1.getLocationFromName(homeName) is FarmHouse direct)
+                return direct;
+
+            if (Game1.getLocationFromName(homeName, isStructure: true) is FarmHouse structure)
+                return structure;
+
+            return null;
+        }
+
+        private static bool CanRetrieveOfflineFarmhand(Farmer? farmer, bool isOnline, out Cabin? cabin)
+        {
+            cabin = null;
+            if (farmer == null)
+                return false;
+
+            FarmHouse? home = Context.IsMainPlayer
+                ? (TryResolveLoadedHomeOfFarmer(farmer) ?? ResolveFarmerHomeLocation(farmer))
+                : TryResolveLoadedHomeOfFarmer(farmer);
+
+            cabin = home as Cabin;
+            bool isCabin = cabin != null;
+            bool isLocked = cabin?.inventoryMutex.IsLocked() ?? false;
+            long localPlayerId = Game1.player?.UniqueMultiplayerID ?? 0;
+
+            return VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                Context.IsMainPlayer,
+                isOnline,
+                farmer.isUnclaimedFarmhand,
+                isCabin,
+                isLocked,
+                farmer.homeLocation.Value,
+                context?.WorldState?.Doors,
+                localPlayerId);
+        }
+
+        /// <summary>
+        /// Evita que <see cref="ManorHouse.GetRetrievableFarmers"/> llame a <c>Utility.getHomeOfFarmer</c>
+        /// (<c>Game1.RequireLocation</c>) sobre cabañas privadas culleadas en clientes (<c>Pelican4Ever_Farm_XX_Home</c>),
+        /// lo que lanzaba <see cref="KeyNotFoundException"/> al interactuar con la caja de objetos perdidos.
+        /// </summary>
+        public static bool Prefix_ManorHouse_GetRetrievableFarmers(ref List<Farmer> __result)
+        {
+            var result = new List<Farmer>();
+            var onlineIds = Game1.getOnlineFarmers()
+                .Select(f => f.UniqueMultiplayerID)
+                .ToHashSet();
+
+            foreach (Farmer farmer in Game1.getAllFarmers())
+            {
+                if (farmer == null)
+                    continue;
+
+                bool isOnline = onlineIds.Contains(farmer.UniqueMultiplayerID) || farmer.isActive();
+                if (CanRetrieveOfflineFarmhand(farmer, isOnline, out _))
+                {
+                    result.Add(farmer);
+                }
+            }
+
+            __result = result;
+            return false;
+        }
+
+        /// <summary>
+        /// Protege <see cref="ManorHouse.answerDialogueAction"/> para la acción <c>CheckItems_*</c>,
+        /// resolviendo la cabaña sin <c>RequireLocation</c> y respetando los permisos de residencia.
+        /// </summary>
+        public static bool Prefix_ManorHouse_AnswerDialogueAction(string questionAndAnswer, ref bool __result)
+        {
+            if (string.IsNullOrEmpty(questionAndAnswer) || !questionAndAnswer.StartsWith("CheckItems", StringComparison.Ordinal))
+                return true;
+
+            string[] parts = questionAndAnswer.Split('_');
+            if (parts.Length > 1 && long.TryParse(parts[1], out long playerId))
+            {
+                Farmer? player = Game1.GetPlayer(playerId);
+                bool isOnline = player != null && (Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == player.UniqueMultiplayerID) || player.isActive());
+                if (player != null && CanRetrieveOfflineFarmhand(player, isOnline, out Cabin? cabin) && cabin != null)
+                {
+                    cabin.inventoryMutex.RequestLock(cabin.openFarmhandInventory);
+                }
+            }
+
+            __result = true;
+            return false;
         }
     }
 }

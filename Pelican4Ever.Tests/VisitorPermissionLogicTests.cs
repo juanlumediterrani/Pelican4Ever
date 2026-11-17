@@ -175,5 +175,62 @@ namespace Pelican4Ever.Tests
         {
             Assert.Equal(expected, VisitorPermissionLogic.IsAllowedVisitorTool(typeFullName, itemId));
         }
+
+        [Fact]
+        public void CanRetrieveOfflineFarmhandItems_SkipsUnloadedCabinsAndEnforcesResidencePrivacy()
+        {
+            var door = new DoorAssignment
+            {
+                DoorId = "door_03",
+                FarmSlotId = "Pelican4Ever_Farm_03",
+                OwnerId = 30,
+                TenantId = 31,
+                Policy = AccessPolicy.Public,
+                VisitorsCanEdit = false
+            };
+            var doors = new Dictionary<string, DoorAssignment> { ["door_03"] = door };
+
+            // Cabaña no cargada en el cliente (culleada) -> omitida sin intentar RequireLocation
+            Assert.False(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: false, isOnline: false, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: false, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 10));
+
+            // Granjero conectado, no reclamado o inventario bloqueado -> omitido
+            Assert.False(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: true, isOnline: true, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: true, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 1));
+            Assert.False(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: true, isOnline: false, isUnclaimedFarmhand: true,
+                isHomeLoadedAsCabin: true, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 1));
+            Assert.False(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: true, isOnline: false, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: true, isInventoryLocked: true,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 1));
+
+            // Cliente ajeno no puede abrir inventario offline de residencia privada sin permiso de edición
+            Assert.False(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: false, isOnline: false, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: true, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 10));
+
+            // Co-residente (propietario o inquilino) con la cabaña cargada sí puede recuperar objetos
+            Assert.True(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: false, isOnline: false, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: true, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 30));
+            Assert.True(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: false, isOnline: false, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: true, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 31));
+
+            // Host puede recuperar cualquier cabaña cargada
+            Assert.True(VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                isMainPlayer: true, isOnline: false, isUnclaimedFarmhand: false,
+                isHomeLoadedAsCabin: true, isInventoryLocked: false,
+                "Pelican4Ever_Farm_03_Home", doors, localPlayerId: 1));
+        }
     }
 }
