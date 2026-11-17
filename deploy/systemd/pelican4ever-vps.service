@@ -30,6 +30,9 @@ Restart=always
 RestartSec=30
 # El guardado del cambio de día puede tardar: dar margen antes de matar el proceso
 TimeoutStopSec=120
+# Watchdog systemd alimentado por el mod cada 15 s mientras el hilo del juego siga vivo
+WatchdogSec=180
+NotifyAccess=all
 # SMAPI termina con 143 al recibir SIGTERM en una parada ordenada: no es un fallo
 SuccessExitStatus=143
 

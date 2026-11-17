@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Core.World;
@@ -73,25 +74,30 @@ namespace Pelican4Ever.Modules
             PatchSafe(harmony, "GameLocation.performAction",
                 AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performAction),
                     new[] { typeof(string[]), typeof(Farmer), typeof(Location) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Location_PerformAction)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Location_PerformAction)),
+                criticality: PatchCriticality.Experience);
 
             PatchSafe(harmony, "ShopMenu.tryToPurchaseItem",
                 AccessTools.Method(typeof(ShopMenu), "tryToPurchaseItem",
                     new[] { typeof(ISalable), typeof(ISalable), typeof(int), typeof(int), typeof(int) }),
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_TryToPurchaseItem)),
-                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_TryToPurchaseItem)));
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_TryToPurchaseItem)),
+                criticality: PatchCriticality.Integrity);
 
             PatchSafe(harmony, "ShopMenu.highlightItemToSell",
                 AccessTools.Method(typeof(ShopMenu), nameof(ShopMenu.highlightItemToSell), new[] { typeof(Item) }),
-                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_HighlightItemToSell)));
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_HighlightItemToSell)),
+                criticality: PatchCriticality.Experience);
 
             PatchSafe(harmony, "ShopMenu.receiveLeftClick",
                 AccessTools.Method(typeof(ShopMenu), nameof(ShopMenu.receiveLeftClick), new[] { typeof(int), typeof(int), typeof(bool) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_ReceiveLeftClick)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_ReceiveLeftClick)),
+                criticality: PatchCriticality.Experience);
 
             PatchSafe(harmony, "ShopMenu.receiveRightClick",
                 AccessTools.Method(typeof(ShopMenu), nameof(ShopMenu.receiveRightClick), new[] { typeof(int), typeof(int), typeof(bool) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_ReceiveRightClick)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_ReceiveRightClick)),
+                criticality: PatchCriticality.Experience);
 
             ApplyPackagePatches(harmony);
             ApplyRobinPatches(harmony);
@@ -104,22 +110,14 @@ namespace Pelican4Ever.Modules
             string label,
             System.Reflection.MethodBase? original,
             HarmonyMethod? prefix = null,
-            HarmonyMethod? postfix = null)
+            HarmonyMethod? postfix = null,
+            PatchCriticality criticality = PatchCriticality.Experience)
         {
-            if (original == null)
-            {
-                context?.Monitor.Log($"[MailOrder] No se encontró '{label}' para parchear.", LogLevel.Warn);
+            if (context == null)
                 return;
-            }
 
-            try
-            {
-                harmony.Patch(original, prefix, postfix);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[MailOrder] Error al parchear '{label}': {ex.Message}", LogLevel.Error);
-            }
+            context.Patch($"MailOrder.{label}", "MailOrder", criticality, original, prefix, postfix);
+            _ = harmony;
         }
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)

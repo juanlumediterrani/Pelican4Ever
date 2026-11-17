@@ -84,6 +84,13 @@
   "CheckpointRetention": 12,
   "CheckpointCompress": true,
   "CheckpointCloneFarmhands": true,
-  "BackupRetentionDays": 0,
+  "BackupRetentionDays": 14,
+  "VerifiedGameVersions": [
+    "1.6.15"
+  ],
+  "MinimumSmapiVersion": "4.1.0",
+  "AllowUnverifiedGameVersion": false,
+  "LockdownOverride": [],
+  "HangThresholdSeconds": 120,
   "Modules": {}
 }

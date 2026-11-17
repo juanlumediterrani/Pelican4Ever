@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Pets;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
@@ -72,17 +73,12 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Player.Warped += OnWarped;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
 
-            try
-            {
-                ctx.Harmony.Patch(
-                    original: AccessTools.Method(typeof(CarpenterMenu), "tryToBuild"),
-                    postfix: new HarmonyMethod(typeof(ClientPetAdoptionModule), nameof(Postfix_CarpenterMenu_TryToBuild))
-                );
-            }
-            catch (Exception ex)
-            {
-                ctx.Monitor.Log($"[ClientPetAdoption] Error al parchear CarpenterMenu.tryToBuild: {ex}", LogLevel.Error);
-            }
+            ctx.Patch(
+                "ClientPetAdoption.CarpenterMenu.tryToBuild",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(CarpenterMenu), "tryToBuild"),
+                postfix: new HarmonyMethod(typeof(ClientPetAdoptionModule), nameof(Postfix_CarpenterMenu_TryToBuild)));
         }
 
         /// <summary>

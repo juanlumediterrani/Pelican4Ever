@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
@@ -257,35 +258,27 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.spawnGroundMonsterOffScreen)),
-                    prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_SpawnGroundMonster))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.spawnFlyingMonstersOffScreen)),
-                    prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_SpawnMonsters))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performTenMinuteUpdate)),
-                    postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_TenMinuteUpdate))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.doDailyMountainFarmUpdate)),
-                    prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_DailyMountainFarmUpdate))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.DayUpdate)),
-                    postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_FarmDayUpdate))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                context?.Monitor.Log("[FarmTypeModule] Parches de comportamiento por tipo de residencia aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FarmTypeModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context.Patch("Farm.spawnGroundMonsterOffScreen", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Farm), nameof(Farm.spawnGroundMonsterOffScreen)),
+                prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_SpawnGroundMonster)));
+            context.Patch("Farm.spawnFlyingMonstersOffScreen", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Farm), nameof(Farm.spawnFlyingMonstersOffScreen)),
+                prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_SpawnMonsters)));
+            context.Patch("GameLocation.performTenMinuteUpdate", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performTenMinuteUpdate)),
+                postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_TenMinuteUpdate)));
+            context.Patch("Farm.doDailyMountainFarmUpdate", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Farm), nameof(Farm.doDailyMountainFarmUpdate)),
+                prefix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Prefix_DailyMountainFarmUpdate)));
+            context.Patch("Farm.DayUpdate", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Farm), nameof(Farm.DayUpdate)),
+                postfix: new HarmonyMethod(typeof(FarmTypeModule), nameof(Postfix_FarmDayUpdate)));
+
+            context.Monitor.Log("[FarmTypeModule] Parches de comportamiento por tipo de residencia registrados.", LogLevel.Trace);
         }
 
         /// <summary>Con los monstruos nocturnos activados para el equipo, no aparecen en residencias que no sean de combate.</summary>

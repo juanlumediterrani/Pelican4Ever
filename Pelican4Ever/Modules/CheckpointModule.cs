@@ -52,6 +52,10 @@ namespace Pelican4Ever.Modules
         private long? lastCheckpointEventId;
         private bool lastCheckpointSucceeded;
         private string lastCheckpointStatusMessage = string.Empty;
+        private double lastCloneFarmhandsMs;
+        private double lastSaveSerializeMs;
+        private int lastClonedFarmhandsCount;
+        private long lastEstimatedCloneBytes;
 
         public string Name => "Checkpoint";
 
@@ -337,14 +341,26 @@ namespace Pelican4Ever.Modules
 
             runningManual = manual;
             longestTickMs = 0;
+            lastCloneFarmhandsMs = 0;
+            lastSaveSerializeMs = 0;
+            lastClonedFarmhandsCount = 0;
+            lastEstimatedCloneBytes = 0;
             total.Restart();
             IsSaving = true;
             CheckpointMetadata? previousCheckpoint = context.WorldState.LastCheckpoint;
             try
             {
                 int cloned = 0;
+                long estimatedCloneBytes = 0;
                 if (Game1.otherFarmers.Count > 0)
-                    cloned = CloneLiveFarmhandsIntoSaveData();
+                {
+                    Stopwatch cloneSw = Stopwatch.StartNew();
+                    cloned = CloneLiveFarmhandsIntoSaveData(out estimatedCloneBytes);
+                    cloneSw.Stop();
+                    lastCloneFarmhandsMs = cloneSw.Elapsed.TotalMilliseconds;
+                }
+                lastClonedFarmhandsCount = cloned;
+                lastEstimatedCloneBytes = estimatedCloneBytes;
 
                 context.WorldState.LastCheckpoint = new CheckpointMetadata
                 {
@@ -355,11 +371,14 @@ namespace Pelican4Ever.Modules
 
                 if (!PersistenceModule.FlushToSaveData(context, "checkpoint"))
                     throw new IOException("No se pudo volcar ServerWorldState; se cancela el checkpoint para no guardar un estado incoherente.");
+                Stopwatch saveSw = Stopwatch.StartNew();
                 save = SaveGame.Save();
                 context.Monitor.Log($"[Checkpoint] Guardado iniciado ({(manual ? "manual" : "programado")}; farmhands clonados: {cloned}).", LogLevel.Info);
                 // SMAPI ejecuta la tarea nativa de Save sincrónicamente. Agotar el enumerador aquí evita
                 // ticks de red o del mundo entre el clon de los farmhands y la serialización del mundo.
                 while (save.MoveNext()) { }
+                saveSw.Stop();
+                lastSaveSerializeMs = saveSw.Elapsed.TotalMilliseconds;
                 if (Game1.gameMode != Game1.playingGameMode)
                     throw new IOException($"El juego no pudo escribir el checkpoint: {Game1.debugOutput}");
             }
@@ -407,13 +426,29 @@ namespace Pelican4Ever.Modules
             if (slow)
                 slowStreak++;
 
-            SaveBackupResult? backup = SaveBackupService.Create(context.Monitor, BackupKind.Checkpoint, context.Config.CheckpointCompress);
+            SaveBackupResult? backup = SaveBackupService.Create(
+                context.Monitor,
+                BackupKind.Checkpoint,
+                context.Config.CheckpointCompress,
+                totalGameDays: Game1.Date.TotalDays,
+                gameDate: LoadInstrumentationLogic.FormatGameDate(Game1.currentSeason, Game1.dayOfMonth, Game1.year),
+                modVersion: context.Manifest.Version.ToString(),
+                gameVersion: Game1.version);
             if (backup != null)
             {
                 LastCheckpoint = backup;
                 LastCheckpointLongestTickMs = longestTickMs;
                 SaveBackupService.ApplyRetention(context.Monitor, BackupKind.Checkpoint, context.Config.CheckpointRetention, keepDailyDays: 0);
             }
+
+            SaveLoadMetricsSnapshot metrics = LoadMetricsTracker.CaptureAndRecord(
+                "checkpoint",
+                lastCloneFarmhandsMs,
+                lastSaveSerializeMs,
+                total.Elapsed.TotalMilliseconds,
+                longestTickMs,
+                lastClonedFarmhandsCount,
+                lastEstimatedCloneBytes);
 
             if (context.WorldState.LastCheckpoint != null)
             {
@@ -425,7 +460,7 @@ namespace Pelican4Ever.Modules
             TimeSpan next = CheckpointPolicy.EffectiveInterval(context.Config.CheckpointIntervalMinutes, slowStreak);
             string summaryMsg = $"Checkpoint {(backup != null ? "guardado y copiado" : "guardado sin copia verificada")} ({total.Elapsed.TotalMilliseconds:F0} ms).";
             context.Monitor.Log(
-                $"[Checkpoint] Partida guardada en {total.Elapsed.TotalMilliseconds:F0} ms (tick más largo {longestTickMs:F0} ms){(slow ? ", LENTO" : string.Empty)}. " +
+                $"[Checkpoint] Partida guardada en {total.Elapsed.TotalMilliseconds:F0} ms (tick más largo {longestTickMs:F0} ms, clone={metrics.CloneFarmhandsMs:F1} ms, save={metrics.SaveSerializeMs:F1} ms, xml={metrics.XmlTotalBytes} B, NITV={metrics.TotalNitvCreatures}){(slow ? ", LENTO" : string.Empty)}. " +
                 $"Copia: {backup?.FolderName ?? "NO VERIFICADA"}. Próximo en {(next == TimeSpan.Zero ? "—" : $"{next.TotalMinutes:F0} min")}.",
                 backup == null || slow ? LogLevel.Warn : LogLevel.Info);
 
@@ -439,7 +474,13 @@ namespace Pelican4Ever.Modules
                 ["totalMs"] = Math.Round(total.Elapsed.TotalMilliseconds),
                 ["longestTickMs"] = Math.Round(longestTickMs),
                 ["slow"] = slow,
-                ["nextIntervalMinutes"] = next.TotalMinutes
+                ["nextIntervalMinutes"] = next.TotalMinutes,
+                ["xmlTotalBytes"] = metrics.XmlTotalBytes,
+                ["cloneFarmhandsMs"] = metrics.CloneFarmhandsMs,
+                ["saveSerializeMs"] = metrics.SaveSerializeMs,
+                ["clonedFarmhandsCount"] = metrics.ClonedFarmhandsCount,
+                ["estimatedFarmhandCloneBytes"] = metrics.EstimatedFarmhandCloneBytes,
+                ["totalNitvCreatures"] = metrics.TotalNitvCreatures
             });
 
             if (pendingPostCheckpointCallback != null)
@@ -502,9 +543,10 @@ namespace Pelican4Ever.Modules
             return destructive;
         }
 
-        private int CloneLiveFarmhandsIntoSaveData()
+        private int CloneLiveFarmhandsIntoSaveData(out long estimatedCloneBytes)
         {
             int cloned = 0;
+            estimatedCloneBytes = 0L;
             foreach (KeyValuePair<long, NetRoot<Farmer>> pair in Game1.otherFarmers.Roots.ToList())
             {
                 if (pair.Value is not NetFarmerRoot root)
@@ -514,6 +556,11 @@ namespace Pelican4Ever.Modules
                     throw new InvalidOperationException($"{root.Value?.Name} ({pair.Key}) no tiene entrada en farmhandData; se cancela el checkpoint.");
                 }
                 root.CloneInto(stored);
+                Farmer? value = root.Value;
+                estimatedCloneBytes += LoadInstrumentationLogic.EstimateFarmhandBytes(
+                    value?.Items.Count ?? 0,
+                    value?.mailReceived.Count ?? 0,
+                    value?.questLog.Count ?? 0);
                 cloned++;
             }
             return cloned;

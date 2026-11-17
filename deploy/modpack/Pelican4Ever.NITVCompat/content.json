@@ -137,6 +137,86 @@
           "CustomFields": {
             "Nature.NIV.Outside": "true"
           }
+        },
+        "Pelican4Ever_Farm_01_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_02_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_03_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_04_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_05_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_06_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_07_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_08_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_09_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_10_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_11_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_12_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_13_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_14_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_15_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
+        },
+        "Pelican4Ever_Farm_16_Cave": {
+          "CustomFields": {
+            "Nature.NIV.Underground": "true"
+          }
         }
       }
     }

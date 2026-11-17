@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -60,72 +61,61 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
-            try
-            {
-                var drawFarmerMethod = AccessTools.Method(
-                    typeof(FarmerRenderer),
-                    nameof(FarmerRenderer.draw),
-                    new[]
-                    {
-                        typeof(SpriteBatch),
-                        typeof(FarmerSprite.AnimationFrame),
-                        typeof(int),
-                        typeof(Rectangle),
-                        typeof(Vector2),
-                        typeof(Vector2),
-                        typeof(float),
-                        typeof(int),
-                        typeof(Color),
-                        typeof(float),
-                        typeof(float),
-                        typeof(Farmer),
-                    });
-                if (drawFarmerMethod != null)
+            var drawFarmerMethod = AccessTools.Method(
+                typeof(FarmerRenderer),
+                nameof(FarmerRenderer.draw),
+                new[]
                 {
-                    ctx.Harmony.Patch(
-                        original: drawFarmerMethod,
-                        prefix: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Prefix_DrawFarmer)));
-                }
-                else
-                {
-                    ctx.Monitor.Log("[AgentCosmeticsModule] No se encontró FarmerRenderer.draw(12 args) para parches de skin.", LogLevel.Warn);
-                }
+                    typeof(SpriteBatch),
+                    typeof(FarmerSprite.AnimationFrame),
+                    typeof(int),
+                    typeof(Rectangle),
+                    typeof(Vector2),
+                    typeof(Vector2),
+                    typeof(float),
+                    typeof(int),
+                    typeof(Color),
+                    typeof(float),
+                    typeof(float),
+                    typeof(Farmer),
+                });
+            ctx.Patch(
+                "FarmerRenderer.draw",
+                Name,
+                PatchCriticality.Experience,
+                drawFarmerMethod,
+                prefix: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Prefix_DrawFarmer)));
 
-                var drawMiniPortraitMethod = AccessTools.Method(
-                    typeof(FarmerRenderer),
-                    nameof(FarmerRenderer.drawMiniPortrat),
-                    new[]
-                    {
-                        typeof(SpriteBatch),
-                        typeof(Vector2),
-                        typeof(float),
-                        typeof(float),
-                        typeof(int),
-                        typeof(Farmer),
-                        typeof(float),
-                    });
-                if (drawMiniPortraitMethod != null)
+            var drawMiniPortraitMethod = AccessTools.Method(
+                typeof(FarmerRenderer),
+                nameof(FarmerRenderer.drawMiniPortrat),
+                new[]
                 {
-                    ctx.Harmony.Patch(
-                        original: drawMiniPortraitMethod,
-                        prefix: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Prefix_DrawMiniPortrait)));
-                }
+                    typeof(SpriteBatch),
+                    typeof(Vector2),
+                    typeof(float),
+                    typeof(float),
+                    typeof(int),
+                    typeof(Farmer),
+                    typeof(float),
+                });
+            ctx.Patch(
+                "FarmerRenderer.drawMiniPortrat",
+                Name,
+                PatchCriticality.Experience,
+                drawMiniPortraitMethod,
+                prefix: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Prefix_DrawMiniPortrait)));
 
-                var drawToolMethod = AccessTools.Method(typeof(Game1), nameof(Game1.drawTool), new[] { typeof(Farmer), typeof(int) });
-                if (drawToolMethod != null)
-                {
-                    ctx.Harmony.Patch(
-                        original: drawToolMethod,
-                        prefix: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Prefix_DrawTool)),
-                        finalizer: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Finalizer_DrawTool)));
-                }
+            var drawToolMethod = AccessTools.Method(typeof(Game1), nameof(Game1.drawTool), new[] { typeof(Farmer), typeof(int) });
+            ctx.Patch(
+                "Game1.drawTool",
+                Name,
+                PatchCriticality.Experience,
+                drawToolMethod,
+                prefix: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Prefix_DrawTool)),
+                finalizer: new HarmonyMethod(typeof(AgentCosmeticsModule), nameof(Finalizer_DrawTool)));
 
-                ctx.Monitor.Log("[AgentCosmeticsModule] Parches de renderizado y herramienta para skins de agente aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                ctx.Monitor.Log($"[AgentCosmeticsModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            ctx.Monitor.Log("[AgentCosmeticsModule] Parches de renderizado y herramienta registrados.", LogLevel.Trace);
 
             ctx.AddCommand(SkinCommand,
                 $"Enlaza una skin nativa (putre|dr4co|off) a un jugador (solo Host; sin jugador aplica al Host): {SkinCommand} <putre|dr4co|off> [jugador_nombre_o_id]",

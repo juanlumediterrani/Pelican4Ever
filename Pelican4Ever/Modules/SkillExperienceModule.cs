@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -38,7 +39,11 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnSecond;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => { ready = false; rules = null; Pending.Clear(); clientCheckpoint = null; hostCheckpoint = null; CheckpointPeers.Clear(); };
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnMessage;
-            ctx.Harmony.Patch(AccessTools.Method(typeof(Farmer), nameof(Farmer.gainExperience), new[] { typeof(int), typeof(int) }),
+            ctx.Patch(
+                "Farmer.gainExperience",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.gainExperience), new[] { typeof(int), typeof(int) }),
                 prefix: new HarmonyMethod(typeof(SkillExperienceModule), nameof(PrefixGainExperience)));
         }
 

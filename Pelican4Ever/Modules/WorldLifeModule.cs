@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -68,58 +69,44 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                // 1. Parche en Utility.performLightningUpdate para limitar los rayos a 1-5 por día de tormenta (GAP-16)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Utility), nameof(Utility.performLightningUpdate), new[] { typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_PerformLightningUpdate))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                // 2. Parches en Forest para ampliar el horario del Carro Ambulante los viernes y domingos (GAP-04)
-                var cartTranspiler = new HarmonyMethod(typeof(WorldLifeModule), nameof(Transpiler_ExtendCartHours));
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Forest), nameof(Forest.checkAction)),
-                    transpiler: cartTranspiler
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Forest), nameof(Forest.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) }),
-                    transpiler: cartTranspiler
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Forest), nameof(Forest.UpdateWhenCurrentLocation), new[] { typeof(GameTime) }),
-                    transpiler: cartTranspiler
-                );
+            // 1. Parche en Utility.performLightningUpdate para limitar los rayos a 1-5 por día de tormenta (GAP-16)
+            context.Patch("Utility.performLightningUpdate", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Utility), nameof(Utility.performLightningUpdate), new[] { typeof(int) }),
+                prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_PerformLightningUpdate)));
 
-                // 3. Parche en NPC.updateConstructionAnimation para evitar que Robin abandone su tienda durante obras (GAP-10)
-                var updateConstructionMethod = AccessTools.Method(typeof(NPC), "updateConstructionAnimation");
-                if (updateConstructionMethod != null)
-                {
-                    harmony.Patch(
-                        original: updateConstructionMethod,
-                        prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_UpdateConstructionAnimation))
-                    );
-                }
+            // 2. Parches en Forest para ampliar el horario del Carro Ambulante los viernes y domingos (GAP-04)
+            var cartTranspiler = new HarmonyMethod(typeof(WorldLifeModule), nameof(Transpiler_ExtendCartHours));
+            context.Patch("Forest.checkAction", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Forest), nameof(Forest.checkAction)),
+                transpiler: cartTranspiler);
+            context.Patch("Forest.draw", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Forest), nameof(Forest.draw), new[] { typeof(Microsoft.Xna.Framework.Graphics.SpriteBatch) }),
+                transpiler: cartTranspiler);
+            context.Patch("Forest.UpdateWhenCurrentLocation", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Forest), nameof(Forest.UpdateWhenCurrentLocation), new[] { typeof(GameTime) }),
+                transpiler: cartTranspiler);
 
-                // 4. Parche en Game1.IsThereABuildingUnderConstruction para que Robin atienda su mostrador sin bloqueos (GAP-10)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.IsThereABuildingUnderConstruction), new[] { typeof(string) }),
-                    prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_IsThereABuildingUnderConstruction))
-                );
+            // 3. Parche en NPC.updateConstructionAnimation para evitar que Robin abandone su tienda durante obras (GAP-10)
+            context.Patch("NPC.updateConstructionAnimation", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(NPC), "updateConstructionAnimation"),
+                prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_UpdateConstructionAnimation)),
+                optional: true);
 
-                // 5. Parche en NPC.checkSchedule para cancelar cualquier micro-deambular casual
-                // y permitir que el NPC inicie su horario programado sin bloqueos ni retrasos.
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(NPC), nameof(NPC.checkSchedule), new[] { typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_CheckSchedule))
-                );
+            // 4. Parche en Game1.IsThereABuildingUnderConstruction para que Robin atienda su mostrador sin bloqueos (GAP-10)
+            context.Patch("Game1.IsThereABuildingUnderConstruction", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Game1), nameof(Game1.IsThereABuildingUnderConstruction), new[] { typeof(string) }),
+                prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_IsThereABuildingUnderConstruction)));
 
-                context?.Monitor.Log("[WorldLifeModule] Parches Harmony de mundo (tormentas, carro ambulante, carpintería y rutas) aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[WorldLifeModule] Error aplicando parches Harmony: {ex}", LogLevel.Error);
-            }
+            // 5. Parche en NPC.checkSchedule para cancelar cualquier micro-deambular casual
+            context.Patch("NPC.checkSchedule", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(NPC), nameof(NPC.checkSchedule), new[] { typeof(int) }),
+                prefix: new HarmonyMethod(typeof(WorldLifeModule), nameof(Prefix_CheckSchedule)));
+
+            context.Monitor.Log("[WorldLifeModule] Parches Harmony de mundo registrados.", LogLevel.Trace);
         }
 
         public static IEnumerable<CodeInstruction> Transpiler_ExtendCartHours(IEnumerable<CodeInstruction> instructions)

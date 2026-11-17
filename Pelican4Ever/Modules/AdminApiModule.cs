@@ -60,9 +60,10 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
-            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-            ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
-            ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
+            ctx.RawHelper.Events.GameLoop.GameLaunched += (_, _) => StartServer();
+            ctx.RawHelper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            ctx.RawHelper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
+            ctx.RawHelper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
 
             ctx.AddCommand(
                 "p4e_safe_restart",
@@ -73,7 +74,10 @@ namespace Pelican4Ever.Modules
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
             if (!Context.IsMainPlayer)
+            {
+                StopServer();
                 return;
+            }
 
             StartServer();
         }
@@ -81,7 +85,8 @@ namespace Pelican4Ever.Modules
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
         {
             ActionQueue.ClearPending();
-            StopServer();
+            // Mantener el servidor HTTP activo en pantalla de título y Lockdown para que /api/v1/host/health siga respondiendo.
+            StartServer();
         }
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
@@ -446,6 +451,14 @@ namespace Pelican4Ever.Modules
                 case "GET /api/v1/host/probation":
                 {
                     HostProbationResponseDto dto = ExecuteOnGameThread(BuildHostProbationDto);
+                    WriteJson(res, dto);
+                    break;
+                }
+
+                case "GET /api/v1/host/health":
+                {
+                    // Lectura directa de instantánea atómica fuera de MainThreadActionQueue (ADR-0010, TASK-2503).
+                    HostHealthDto dto = context!.HealthTracker.BuildDto();
                     WriteJson(res, dto);
                     break;
                 }

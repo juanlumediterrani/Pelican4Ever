@@ -34,6 +34,8 @@ namespace Pelican4Ever.Modules
         /// <summary>Lo pide el reinicio controlado: al volver al título, cerrar el juego en vez de recargar.</summary>
         private static bool exitProcessOnTitle;
 
+        private static bool lockdownLogged;
+
         public string Name => "AutoHost";
 
         public ModuleSide Side => ModuleSide.Host;
@@ -84,6 +86,18 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || !attemptPending || exitProcessOnTitle)
                 return;
+
+            if (context.IsLockdown)
+            {
+                if (!lockdownLogged)
+                {
+                    lockdownLogged = true;
+                    context.Monitor.Log(
+                        $"[AutoHost] Servidor en estado LOCKDOWN: se bloquea la carga automática de '{context.Config.AutoHostSaveName}'.",
+                        LogLevel.Error);
+                }
+                return;
+            }
 
             if (Context.IsWorldReady || Game1.activeClickableMenu is not TitleMenu || TitleMenu.subMenu != null)
             {

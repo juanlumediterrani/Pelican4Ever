@@ -114,6 +114,32 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
+        /// Identificadores de herramientas inofensivas de mods compatibles (p. ej. redes de captura de Nature In The Valley)
+        /// permitidas a los visitantes incluso cuando <see cref="DoorAssignment.VisitorsCanEdit"/> es <c>false</c>.
+        /// </summary>
+        private static readonly HashSet<string> AllowedVisitorToolItemIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "NIVNet",
+            "NIVGoldNet",
+            "NIVJadeNet",
+            "NIVSaphNet"
+        };
+
+        /// <summary>
+        /// Indica si una herramienta externa (identificada sin acoplar ensamblados) es segura para su uso por visitantes.
+        /// </summary>
+        public static bool IsAllowedVisitorTool(string? toolTypeFullName, string? itemId)
+        {
+            if (!string.IsNullOrWhiteSpace(toolTypeFullName)
+                && toolTypeFullName.StartsWith("NatureInTheValley.NatInValey", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(itemId) && AllowedVisitorToolItemIds.Contains(itemId);
+        }
+
+        /// <summary>
         /// Indica si la ubicación forma parte de la Plaza Central común (<c>Farm</c> o <c>Pelican4Ever_Bridge_*</c>),
         /// donde solo el anfitrión puede usar herramientas de trabajo, colocar objetos o abrir cofres/máquinas.
         /// </summary>

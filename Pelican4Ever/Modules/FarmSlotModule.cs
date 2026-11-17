@@ -4885,398 +4885,280 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                // Parche para redirigir la salida de una granja Pelican4Ever_Farm_XX hacia su puerta residencial
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_WarpFarmer))
-                );
+            // Parche para redirigir la salida de una granja Pelican4Ever_Farm_XX hacia su puerta residencial
+            PatchSafe(harmony, "Game1.warpFarmer",
+                AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_WarpFarmer)),
+                criticality: PatchCriticality.Integrity);
 
-                // Red de seguridad del servidor: si una petición de warp de un cliente apunta a la cueva
-                // compartida de la Granja Host y la ubicación no existe, crearla antes de resolverla.
-                // Game1.RequireLocation tiene una sobrecarga genérica y otra no genérica con la misma firma;
-                // AccessTools.Method resulta ambiguo, así que resolvemos explícitamente la no genérica.
-                var requireLocation = typeof(Game1)
-                    .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-                    .FirstOrDefault(m =>
-                    {
-                        if (m.Name != nameof(Game1.RequireLocation) || m.IsGenericMethodDefinition)
-                            return false;
-                        var parameters = m.GetParameters();
-                        return parameters.Length == 2
-                            && parameters[0].ParameterType == typeof(string)
-                            && parameters[1].ParameterType == typeof(bool);
-                    });
-                if (requireLocation != null)
+            // Red de seguridad del servidor: si una petición de warp de un cliente apunta a la cueva
+            // compartida de la Granja Host y la ubicación no existe, crearla antes de resolverla.
+            var requireLocation = typeof(Game1)
+                .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .FirstOrDefault(m =>
                 {
-                    harmony.Patch(
-                        original: requireLocation,
-                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation))
-                    );
-                }
-                else
-                {
-                    context?.Monitor.Log("[FarmSlotModule] No se encontró Game1.RequireLocation(string, bool) para parchear.", LogLevel.Warn);
-                }
+                    if (m.Name != nameof(Game1.RequireLocation) || m.IsGenericMethodDefinition)
+                        return false;
+                    var parameters = m.GetParameters();
+                    return parameters.Length == 2
+                        && parameters[0].ParameterType == typeof(string)
+                        && parameters[1].ParameterType == typeof(bool);
+                });
+            PatchSafe(harmony, "Game1.RequireLocation",
+                requireLocation,
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation)),
+                criticality: PatchCriticality.Integrity);
 
-                // Parches anti-griefing en granjas ajenas: bloquear herramientas destructivas y cofres
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farmer), "performBeginUsingTool"),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_PerformBeginUsingTool))
-                );
+            // Parches anti-griefing en granjas ajenas: bloquear herramientas destructivas y cofres
+            PatchSafe(harmony, "Farmer.performBeginUsingTool",
+                AccessTools.Method(typeof(Farmer), "performBeginUsingTool"),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_PerformBeginUsingTool)),
+                criticality: PatchCriticality.Security);
 
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(StardewValley.Objects.Chest), nameof(StardewValley.Objects.Chest.checkForAction)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ChestCheckForAction))
-                );
+            PatchSafe(harmony, "Chest.checkForAction",
+                AccessTools.Method(typeof(StardewValley.Objects.Chest), nameof(StardewValley.Objects.Chest.checkForAction)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ChestCheckForAction)),
+                criticality: PatchCriticality.Security);
 
-                // TASK-914: Protección e interacción de los letreros de anexo
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Sign), nameof(Sign.checkForAction)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SignCheckForAction))
-                );
+            // TASK-914: Protección e interacción de los letreros de anexo
+            PatchSafe(harmony, "Sign.checkForAction",
+                AccessTools.Method(typeof(Sign), nameof(Sign.checkForAction)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SignCheckForAction)),
+                criticality: PatchCriticality.Experience);
 
-                // Parche de Culling dinámico de red para 16 granjas (TASK-603)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.isAlwaysActiveLocation)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation))
-                );
+            // Parche de Culling dinámico de red para 16 granjas (TASK-603)
+            PatchSafe(harmony, "Multiplayer.isAlwaysActiveLocation",
+                AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.isAlwaysActiveLocation)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation)),
+                criticality: PatchCriticality.Integrity);
 
-                // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(BedFurniture), nameof(BedFurniture.ApplyWakeUpPosition)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition))
-                );
+            // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
+            PatchSafe(harmony, "BedFurniture.ApplyWakeUpPosition",
+                AccessTools.Method(typeof(BedFurniture), nameof(BedFurniture.ApplyWakeUpPosition)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition)),
+                criticality: PatchCriticality.Integrity);
 
-                // TASK-605: Destinos de teletransporte (Tótem de granja y obelisco de la isla) hacia la residencia
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(StardewValley.Object), "totemWarpForReal"),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_TotemWarpForReal))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(
-                        typeof(IslandWest),
-                        nameof(IslandWest.performAction),
-                        new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }
-                    ),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IslandWestPerformAction))
-                );
+            // TASK-605: Destinos de teletransporte (Tótem de granja y obelisco de la isla) hacia la residencia
+            PatchSafe(harmony, "Object.totemWarpForReal",
+                AccessTools.Method(typeof(StardewValley.Object), "totemWarpForReal"),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_TotemWarpForReal)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "IslandWest.performAction",
+                AccessTools.Method(
+                    typeof(IslandWest),
+                    nameof(IslandWest.performAction),
+                    new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IslandWestPerformAction)),
+                criticality: PatchCriticality.Experience);
 
-                // Parche de paso libre sin colisión en los portales residenciales de la Plaza Central
-                harmony.Patch(
-                    original: AccessTools.Method(
-                        typeof(GameLocation),
-                        nameof(GameLocation.isCollidingPosition),
-                        new[] {
-                            typeof(Microsoft.Xna.Framework.Rectangle),
-                            typeof(xTile.Dimensions.Rectangle),
-                            typeof(bool),
-                            typeof(int),
-                            typeof(bool),
-                            typeof(Character),
-                            typeof(bool),
-                            typeof(bool),
-                            typeof(bool),
-                            typeof(bool)
-                        }
-                    ),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IsCollidingPosition))
-                );
+            // Parche de paso libre sin colisión en los portales residenciales de la Plaza Central
+            PatchSafe(harmony, "GameLocation.isCollidingPosition",
+                AccessTools.Method(
+                    typeof(GameLocation),
+                    nameof(GameLocation.isCollidingPosition),
+                    new[] {
+                        typeof(Microsoft.Xna.Framework.Rectangle),
+                        typeof(xTile.Dimensions.Rectangle),
+                        typeof(bool),
+                        typeof(int),
+                        typeof(bool),
+                        typeof(Character),
+                        typeof(bool),
+                        typeof(bool),
+                        typeof(bool),
+                        typeof(bool)
+                    }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IsCollidingPosition)),
+                criticality: PatchCriticality.Integrity);
 
-                // TASK-903: Asegurar que las ubicaciones de anexo guardadas en el XML de la partida existan en Game1.locations
-                // antes de que SaveGame.loadDataToLocations restaure cultivos, objetos y máquinas tras reiniciar el servidor
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(SaveGame), nameof(SaveGame.loadDataToLocations)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SaveGameLoadDataToLocations))
-                );
+            // TASK-903: Asegurar que las ubicaciones de anexo guardadas en el XML de la partida existan en Game1.locations
+            PatchSafe(harmony, "SaveGame.loadDataToLocations",
+                AccessTools.Method(typeof(SaveGame), nameof(SaveGame.loadDataToLocations)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SaveGameLoadDataToLocations)),
+                criticality: PatchCriticality.Integrity);
 
-                // TASK-903: Impedir que Farm añada Farmhouse/Greenhouse/ShippingBin/Cabins/SpousePatio/GrandpaCandles a anexos 40×32
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.AddDefaultBuildings)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.UpdatePatio)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.addGrandpaCandles)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
-                );
+            // TASK-903: Impedir que Farm añada Farmhouse/Greenhouse/ShippingBin/Cabins/SpousePatio/GrandpaCandles a anexos 40×32
+            PatchSafe(harmony, "Farm.AddDefaultBuildings",
+                AccessTools.Method(typeof(Farm), nameof(Farm.AddDefaultBuildings)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm)),
+                criticality: PatchCriticality.Integrity);
+            PatchSafe(harmony, "Farm.UpdatePatio",
+                AccessTools.Method(typeof(Farm), nameof(Farm.UpdatePatio)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm)),
+                criticality: PatchCriticality.Integrity);
+            PatchSafe(harmony, "Farm.addGrandpaCandles",
+                AccessTools.Method(typeof(Farm), nameof(Farm.addGrandpaCandles)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm)),
+                criticality: PatchCriticality.Integrity);
 
-                // Redirigir el menú de construcción de Robin y del Mago exclusivamente a la residencia y anexos del jugador
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowConstructOptions), new[] { typeof(string), typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions))
-                );
+            // Redirigir el menú de construcción de Robin y del Mago exclusivamente a la residencia y anexos del jugador
+            PatchSafe(harmony, "GameLocation.ShowConstructOptions",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowConstructOptions), new[] { typeof(string), typeof(int) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions)),
+                criticality: PatchCriticality.Security);
 
-                // TASK-906 / TASK-2011: el menú de animales de Marnie ofrece la residencia, sus anexos
-                // y la granja compartida de Isla Jengibre, en lugar de la granja del host.
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowAnimalShopMenu)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu))
-                );
+            // TASK-906 / TASK-2011: el menú de animales de Marnie ofrece la residencia, sus anexos
+            PatchSafe(harmony, "GameLocation.ShowAnimalShopMenu",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowAnimalShopMenu)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu)),
+                criticality: PatchCriticality.Security);
 
-                // TASK-2011: permitir construir y mover edificios en la granja compartida de Isla Jengibre
-                // en cuanto el jugador haya restaurado la casa. Se registran con PatchSafe para que un
-                // fallo aislado (p. ej. un parámetro mal nombrado) no aborte el resto de parches.
-                PatchSafe(
-                    harmony,
-                    "GameLocation.IsBuildableLocation",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation))
-                );
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.hasPermissionsToMove",
-                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding))
-                );
-                PatchSafe(
-                    harmony,
-                    "GameLocation.OnBuildingMoved",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved))
-                );
+            PatchSafe(harmony, "GameLocation.IsBuildableLocation",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.hasPermissionsToMove",
+                AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "GameLocation.OnBuildingMoved",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved)),
+                criticality: PatchCriticality.Experience);
 
-                // TASK-2015: en vanilla el botón de demoler está reservado al anfitrión
-                // (demolishButton.visible = Game1.IsMasterGame y hasPermissionsToDemolish lo exige),
-                // así que un cliente no podía retirar edificios de su propia residencia ni de su anexo.
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu..ctor",
-                    AccessTools.Constructor(typeof(CarpenterMenu), new[] { typeof(string), typeof(GameLocation) }),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_Ctor))
-                );
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.resetBounds",
-                    AccessTools.Method(typeof(CarpenterMenu), "resetBounds"),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_ResetBounds))
-                );
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.hasPermissionsToDemolish",
-                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToDemolish)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish))
-                );
+            PatchSafe(harmony, "CarpenterMenu..ctor",
+                AccessTools.Constructor(typeof(CarpenterMenu), new[] { typeof(string), typeof(GameLocation) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_Ctor)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.resetBounds",
+                AccessTools.Method(typeof(CarpenterMenu), "resetBounds"),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_ResetBounds)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.hasPermissionsToDemolish",
+                AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToDemolish)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.setUpForBuildingPlacement",
+                AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.setUpForBuildingPlacement)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_SetUpForBuildingPlacement)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "GameLocation.destroyStructure(Building)",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.destroyStructure), new[] { typeof(Building) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_GameLocation_DestroyStructure)),
+                criticality: PatchCriticality.Experience);
 
-                // Diagnóstico del flujo de demolición (pulsar el martillo y borrar el edificio).
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.setUpForBuildingPlacement",
-                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.setUpForBuildingPlacement)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_SetUpForBuildingPlacement))
-                );
-                PatchSafe(
-                    harmony,
-                    "GameLocation.destroyStructure(Building)",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.destroyStructure), new[] { typeof(Building) }),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_GameLocation_DestroyStructure))
-                );
+            PatchSafe(harmony, "NetWitnessedLock.RequestLock",
+                AccessTools.Method(typeof(NetWitnessedLock), nameof(NetWitnessedLock.RequestLock)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NetWitnessedLock_RequestLock)),
+                criticality: PatchCriticality.Integrity);
 
-                // NetWitnessedLock.RequestLock solo funciona en el anfitrión (lanza InvalidOperationException en
-                // un cliente). Se intercepta el demolishLock para que el host ejecute la demolición.
-                PatchSafe(
-                    harmony,
-                    "NetWitnessedLock.RequestLock",
-                    AccessTools.Method(typeof(NetWitnessedLock), nameof(NetWitnessedLock.RequestLock)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NetWitnessedLock_RequestLock))
-                );
+            PatchSafe(harmony, "FarmHouse.GetCellarName",
+                AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FarmHouse_GetCellarName)),
+                criticality: PatchCriticality.Integrity);
 
-                // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FarmHouse_GetCellarName))
-                );
+            PatchSafe(harmony, "Building.getSourceRect",
+                AccessTools.Method(typeof(Building), nameof(Building.getSourceRect)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Building_getSourceRect)),
+                criticality: PatchCriticality.Experience);
 
-                // Corrección gráfica: desfasar verticalmente la textura de Farmhouse con interior Cabin al subir de nivel
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Building), nameof(Building.getSourceRect)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Building_getSourceRect))
-                );
+            PatchSafe(harmony, "GreenhouseBuilding.OnUseHumanDoor",
+                AccessTools.Method(typeof(GreenhouseBuilding), nameof(GreenhouseBuilding.OnUseHumanDoor), new[] { typeof(Farmer) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GreenhouseBuilding_OnUseHumanDoor)),
+                criticality: PatchCriticality.Experience);
 
-                // GAP-20: Interceptar el acceso a invernaderos en ruinas para ofrecer la pasarela interactiva de restauración
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GreenhouseBuilding), nameof(GreenhouseBuilding.OnUseHumanDoor), new[] { typeof(Farmer) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GreenhouseBuilding_OnUseHumanDoor))
-                );
+            PatchSafe(harmony, "Game1.findStructure",
+                AccessTools.Method(typeof(Game1), nameof(Game1.findStructure), new[] { typeof(GameLocation), typeof(string) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FindStructure)),
+                criticality: PatchCriticality.Integrity);
 
-                // Prevención de recursión infinita (StackOverflowException) en Game1.findStructure <-> Game1.getLocationFromName
-                // cuando un edificio tiene nonInstancedIndoorsName cuyo destino aún no está en Game1.locations
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.findStructure), new[] { typeof(GameLocation), typeof(string) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FindStructure))
-                );
+            PatchSafe(harmony, "Utility.getAllPets",
+                AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_GetAllPets)),
+                criticality: PatchCriticality.Experience);
 
-                // Utility.getAllPets hace RequireLocation sobre la casa de cada granjero; en un farmhand las
-                // residencias ajenas no están cargadas y Marnie (animalShop) lanzaba KeyNotFoundException.
-                PatchSafe(
-                    harmony,
-                    "Utility.getAllPets",
-                    AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_GetAllPets))
-                );
+            PatchSafe(harmony, "Farmer.hasPet",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.hasPet)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_HasPet)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "Farmer.getPet",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getPet)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPet)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "Farmer.getPetName",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetName)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetName)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "Farmer.getPetDisplayName",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetDisplayName)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName)),
+                criticality: PatchCriticality.Experience);
 
-                // Los métodos de Farmer que buscan la mascota recorren la casa de TODOS los granjeros con
-                // Utility.getHomeOfFarmer → RequireLocation, y lanzaban en un cliente con residencias ajenas
-                // sin cargar. Se responden con la lista tolerante (en clientes, solo mascotas propias).
-                PatchSafe(
-                    harmony,
-                    "Farmer.hasPet",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.hasPet)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_HasPet))
-                );
-                PatchSafe(
-                    harmony,
-                    "Farmer.getPet",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPet)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPet))
-                );
-                PatchSafe(
-                    harmony,
-                    "Farmer.getPetName",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetName)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetName))
-                );
-                PatchSafe(
-                    harmony,
-                    "Farmer.getPetDisplayName",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetDisplayName)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName))
-                );
+            PatchSafe(harmony, "Utility.findPet",
+                AccessTools.Method(typeof(Utility), nameof(Utility.findPet)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_FindPet)),
+                criticality: PatchCriticality.Experience);
 
-                // Utility.findPet recorre las casas de todos los granjeros con RequireLocation: al pulsar un
-                // cuenco en un cliente lanzaba KeyNotFoundException si otra residencia no estaba cargada.
-                PatchSafe(
-                    harmony,
-                    "Utility.findPet",
-                    AccessTools.Method(typeof(Utility), nameof(Utility.findPet)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_FindPet))
-                );
+            PatchSafe(harmony, "AnimalPage.FindAnimals",
+                AccessTools.Method(typeof(AnimalPage), nameof(AnimalPage.FindAnimals)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_AnimalPage_FindAnimals)),
+                criticality: PatchCriticality.Experience);
 
-                // El menú «Animales» de 1.6 recorre todas las ubicaciones del juego: en un cliente
-                // mostraba la mascota, el caballo y los animales del anfitrión como si fueran suyos.
-                PatchSafe(
-                    harmony,
-                    "AnimalPage.FindAnimals",
-                    AccessTools.Method(typeof(AnimalPage), nameof(AnimalPage.FindAnimals)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_AnimalPage_FindAnimals))
-                );
+            PatchSafe(harmony, "Cabin.getPorchStandingSpot",
+                AccessTools.Method(typeof(Cabin), nameof(Cabin.getPorchStandingSpot)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Cabin_GetPorchStandingSpot)),
+                criticality: PatchCriticality.Experience);
 
-                // Porche residencial propio en granjas privadas (evita (0,0) al usar edificio Farmhouse con interior Cabin).
-                PatchSafe(
-                    harmony,
-                    "Cabin.getPorchStandingSpot",
-                    AccessTools.Method(typeof(Cabin), nameof(Cabin.getPorchStandingSpot)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Cabin_GetPorchStandingSpot))
-                );
+            PatchSafe(harmony, "NPC.marriageDuties",
+                AccessTools.Method(typeof(NPC), nameof(NPC.marriageDuties)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_MarriageDuties)),
+                transpiler: new HarmonyMethod(typeof(FarmSlotModule), nameof(Transpiler_NPC_MarriageDuties)),
+                criticality: PatchCriticality.Experience);
 
-                // Redirigir tareas y porche del cónyuge hacia Pelican4Ever_Farm_XX y aislar banderas estáticas por residencia.
-                PatchSafe(
-                    harmony,
-                    "NPC.marriageDuties",
-                    AccessTools.Method(typeof(NPC), nameof(NPC.marriageDuties)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_MarriageDuties)),
-                    transpiler: new HarmonyMethod(typeof(FarmSlotModule), nameof(Transpiler_NPC_MarriageDuties))
-                );
+            PatchSafe(harmony, "PathFindController.handleWarps",
+                AccessTools.Method(typeof(PathFindController), nameof(PathFindController.handleWarps), new[] { typeof(Rectangle) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PathFindController_HandleWarps)),
+                criticality: PatchCriticality.Experience);
 
-                // Evitar RequireLocation("Cabin") al regresar el cónyuge desde BusStop hacia una cabaña privada _Home.
-                PatchSafe(
-                    harmony,
-                    "PathFindController.handleWarps",
-                    AccessTools.Method(typeof(PathFindController), nameof(PathFindController.handleWarps), new[] { typeof(Rectangle) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PathFindController_HandleWarps))
-                );
+            PatchSafe(harmony, "Event.endBehaviors",
+                AccessTools.Method(typeof(Event), nameof(Event.endBehaviors), new[] { typeof(string[]), typeof(GameLocation) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Event_EndBehaviors)),
+                criticality: PatchCriticality.Experience);
 
-                // Salida de la escena de boda hacia el porche de la residencia del jugador, no hacia la Plaza Host ("Farm").
-                PatchSafe(
-                    harmony,
-                    "Event.endBehaviors",
-                    AccessTools.Method(typeof(Event), nameof(Event.endBehaviors), new[] { typeof(string[]), typeof(GameLocation) }),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Event_EndBehaviors))
-                );
+            PatchSafe(harmony, "GameLocation.answerDialogueAction",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.answerDialogueAction), new[] { typeof(string), typeof(string[]) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GameLocation_AnswerDialogueAction)),
+                criticality: PatchCriticality.Security);
 
-                // Restringir mejoras de casa (Robin), compra del Colgante de Sirena y propuestas de matrimonio al dueño.
-                PatchSafe(
-                    harmony,
-                    "GameLocation.answerDialogueAction",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.answerDialogueAction), new[] { typeof(string), typeof(string[]) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GameLocation_AnswerDialogueAction))
-                );
+            PatchSafe(harmony, "NPC.tryToReceiveActiveObject",
+                AccessTools.Method(typeof(NPC), nameof(NPC.tryToReceiveActiveObject), new[] { typeof(Farmer), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_TryToReceiveActiveObject)),
+                criticality: PatchCriticality.Experience);
 
-                PatchSafe(
-                    harmony,
-                    "NPC.tryToReceiveActiveObject",
-                    AccessTools.Method(typeof(NPC), nameof(NPC.tryToReceiveActiveObject), new[] { typeof(Farmer), typeof(bool) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_TryToReceiveActiveObject))
-                );
+            PatchSafe(harmony, "Stats.checkForAchievements",
+                AccessTools.Method(typeof(Stats), nameof(Stats.checkForAchievements)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Stats_CheckForAchievements)),
+                criticality: PatchCriticality.Integrity);
 
-                // En farmhands con residencia privada (_Home), Client.setUpGame() invoca Stats.checkForAchievements()
-                // antes de recibir/cargar Pelican4Ever_Farm_XX_Home, lanzando KeyNotFoundException y abortando el spawn.
-                PatchSafe(
-                    harmony,
-                    "Stats.checkForAchievements",
-                    AccessTools.Method(typeof(Stats), nameof(Stats.checkForAchievements)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Stats_CheckForAchievements))
-                );
+            PatchSafe(harmony, "Dialogue.ReplacePlayerEnteredStrings",
+                AccessTools.Method(typeof(Dialogue), nameof(Dialogue.ReplacePlayerEnteredStrings), new[] { typeof(string) }),
+                finalizer: new HarmonyMethod(typeof(FarmSlotModule), nameof(Finalizer_Dialogue_ReplacePlayerEnteredStrings)),
+                criticality: PatchCriticality.Experience);
 
-                // En clientes durante la boda diferida, Dialogue.ReplacePlayerEnteredStrings puede invocar
-                // Game1.RequireLocation(homeLocation) antes de que Pelican4Ever_Farm_XX_Home esté cargada.
-                var replaceStringsMethod = AccessTools.Method(typeof(Dialogue), nameof(Dialogue.ReplacePlayerEnteredStrings), new[] { typeof(string) });
-                if (replaceStringsMethod != null)
-                {
-                    harmony.Patch(
-                        original: replaceStringsMethod,
-                        finalizer: new HarmonyMethod(typeof(FarmSlotModule), nameof(Finalizer_Dialogue_ReplacePlayerEnteredStrings))
-                    );
-                }
+            PatchSafe(harmony, "Event.DefaultCommands.WaitForOtherPlayers",
+                AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.WaitForOtherPlayers)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Event_WaitForOtherPlayers)),
+                criticality: PatchCriticality.Experience);
 
-                // En bodas diferidas de un farmhand, WaitForOtherPlayers("weddingEnd...") queda bloqueado en 1/2
-                // porque el host dedicado no participa en la escena.
-                PatchSafe(
-                    harmony,
-                    "Event.DefaultCommands.WaitForOtherPlayers",
-                    AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.WaitForOtherPlayers)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Event_WaitForOtherPlayers))
-                );
-
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos, construcción en residencia y matrimonio aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FarmSlotModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context?.Monitor.Log("[FarmSlotModule] Parches Harmony registrados en PatchRegistry.", LogLevel.Trace);
         }
 
-        /// <summary>
-        /// Aplica un parche Harmony sin que un fallo aislado aborte el registro del resto. Harmony resuelve
-        /// los parámetros de los parches por nombre, así que un nombre equivocado lanza al aplicar el parche
-        /// y, sin esta protección, dejaba sin parchear todo lo registrado después.
-        /// </summary>
         private static void PatchSafe(
             Harmony harmony,
             string label,
             System.Reflection.MethodBase? original,
             HarmonyMethod? prefix = null,
             HarmonyMethod? postfix = null,
-            HarmonyMethod? transpiler = null)
+            HarmonyMethod? transpiler = null,
+            HarmonyMethod? finalizer = null,
+            PatchCriticality criticality = PatchCriticality.Experience,
+            bool optional = false)
         {
-            if (original == null)
-            {
-                context?.Monitor.Log($"[FarmSlotModule] No se encontró '{label}' para parchear.", LogLevel.Warn);
+            if (context == null)
                 return;
-            }
 
-            try
-            {
-                harmony.Patch(original, prefix, postfix, transpiler);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FarmSlotModule] Error al parchear '{label}': {ex.Message}", LogLevel.Error);
-            }
+            context.Patch($"FarmSlot.{label}", "FarmSlot", criticality, original, prefix, postfix, transpiler, finalizer, optional);
+            _ = harmony;
         }
 
         public static bool Prefix_FindStructure(GameLocation parentLocation, string name, ref GameLocation? __result)
@@ -7541,45 +7423,33 @@ namespace Pelican4Ever.Modules
 
         private static void ApplyNitvPatches(Harmony harmony)
         {
-            try
+            Type? nitvEntryType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                Type? nitvEntryType = null;
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                if (string.Equals(asm.GetName().Name, "NatureInTheValley", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.Equals(asm.GetName().Name, "NatureInTheValley", StringComparison.OrdinalIgnoreCase))
-                    {
-                        nitvEntryType = asm.GetType("NatureInTheValley.NatureInTheValleyEntry");
-                        break;
-                    }
-                }
-
-                if (nitvEntryType == null)
-                    return;
-
-                var onWarpMethod = AccessTools.Method(nitvEntryType, "OnWarp", new[] { typeof(object), typeof(WarpedEventArgs) });
-                if (onWarpMethod != null)
-                {
-                    harmony.Patch(
-                        original: onWarpMethod,
-                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NiTV_OnWarp))
-                    );
-                    context?.Monitor.Log("[FarmSlotModule] Parche de concurrencia multijugador aplicado a Nature In The Valley (OnWarp).", LogLevel.Info);
-                }
-
-                var validLocationMethod = AccessTools.Method(nitvEntryType, "validLocation", new[] { typeof(GameLocation), typeof(string) });
-                if (validLocationMethod != null)
-                {
-                    harmony.Patch(
-                        original: validLocationMethod,
-                        postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_NiTV_ValidLocation))
-                    );
-                    context?.Monitor.Log("[FarmSlotModule] Parche de compatibilidad de hábitats aplicado a Nature In The Valley (validLocation).", LogLevel.Info);
+                    nitvEntryType = asm.GetType("NatureInTheValley.NatureInTheValleyEntry");
+                    break;
                 }
             }
-            catch (Exception ex)
+
+            if (nitvEntryType == null)
             {
-                context?.Monitor.Log($"[FarmSlotModule] Advertencia al parchear Nature In The Valley: {ex}", LogLevel.Warn);
+                context?.PatchRegistry.RecordSkippedOptional("FarmSlot.NiTV", "FarmSlot", PatchCriticality.Experience, "NatureInTheValley no instalado.");
+                return;
             }
+
+            PatchSafe(harmony, "NiTV.OnWarp",
+                AccessTools.Method(nitvEntryType, "OnWarp", new[] { typeof(object), typeof(WarpedEventArgs) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NiTV_OnWarp)),
+                criticality: PatchCriticality.Experience,
+                optional: true);
+
+            PatchSafe(harmony, "NiTV.validLocation",
+                AccessTools.Method(nitvEntryType, "validLocation", new[] { typeof(GameLocation), typeof(string) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_NiTV_ValidLocation)),
+                criticality: PatchCriticality.Experience,
+                optional: true);
         }
 
         public static bool Prefix_NiTV_OnWarp(WarpedEventArgs eventArgs)
@@ -7597,24 +7467,12 @@ namespace Pelican4Ever.Modules
 
         public static void Postfix_NiTV_ValidLocation(GameLocation location, string code, ref bool __result)
         {
-            if (__result) return;
-            if (location == null || string.IsNullOrEmpty(code)) return;
+            if (__result || location == null || string.IsNullOrEmpty(code)) return;
 
             var customFields = location.GetData()?.CustomFields;
-            if (customFields == null) return;
-
-            // Criaturas de SH's Wild Animals o paquetes de fauna con nombres literales de bioma
-            if ((string.Equals(code, "Forest", StringComparison.OrdinalIgnoreCase) || string.Equals(code, "Woods", StringComparison.OrdinalIgnoreCase))
-                && customFields.ContainsKey("Nature.NIV.Forest"))
+            if (FarmTemplateCatalog.MatchesNitvHabitat(customFields, code))
             {
                 __result = true;
-                return;
-            }
-
-            if (string.Equals(code, "Beach", StringComparison.OrdinalIgnoreCase) && customFields.ContainsKey("Nature.NIV.Beach"))
-            {
-                __result = true;
-                return;
             }
         }
 

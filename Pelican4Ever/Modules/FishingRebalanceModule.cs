@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -31,9 +32,17 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnSecond;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => rules = null;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnMessage;
-            ctx.Harmony.Patch(AccessTools.Method(typeof(FishingRod), "calculateTimeUntilFishingBite"),
+            ctx.Patch(
+                "FishingRod.calculateTimeUntilFishingBite",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(FishingRod), "calculateTimeUntilFishingBite"),
                 postfix: new HarmonyMethod(typeof(FishingRebalanceModule), nameof(PostfixBiteTime)));
-            ctx.Harmony.Patch(AccessTools.Method(typeof(BobberBar), nameof(BobberBar.update)),
+            ctx.Patch(
+                "BobberBar.update",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(BobberBar), nameof(BobberBar.update)),
                 transpiler: new HarmonyMethod(typeof(FishingRebalanceModule), nameof(TranspileBobberUpdate)));
         }
 

@@ -5,6 +5,7 @@ using Lidgren.Network;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Microsoft.Xna.Framework.Input;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Config;
 using Pelican4Ever.Core.Security;
 using Pelican4Ever.Framework;
@@ -73,52 +74,66 @@ namespace Pelican4Ever.Modules
 
         private static void ApplyTogglePatches(Harmony harmony)
         {
-            harmony.Patch(
+            if (context is not ModContext ctx)
+                return;
+
+            void RegisterTogglePatch(string name, System.Reflection.MethodBase? original, HarmonyMethod prefix, bool optional = false)
+            {
+                ctx.PatchRegistry.Patch(
+                    harmony,
+                    ctx.Monitor,
+                    name,
+                    "ModToggle",
+                    PatchCriticality.Experience,
+                    original,
+                    prefix: prefix,
+                    optional: optional);
+            }
+
+            RegisterTogglePatch("TitleMenu.receiveLeftClick",
                 AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.receiveLeftClick), new[] { typeof(int), typeof(int), typeof(bool) }),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_TitleMenuReceiveLeftClick)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_TitleMenuReceiveLeftClick)));
 
-            harmony.Patch(
+            RegisterTogglePatch("TitleMenu.receiveRightClick",
                 AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.receiveRightClick), new[] { typeof(int), typeof(int), typeof(bool) }),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_BlockTitleMenuWhileModalOpen)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_BlockTitleMenuWhileModalOpen)));
 
-            harmony.Patch(
+            RegisterTogglePatch("TitleMenu.receiveKeyPress",
                 AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.receiveKeyPress), new[] { typeof(Keys) }),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_TitleMenuReceiveKeyPress)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_TitleMenuReceiveKeyPress)));
 
-            harmony.Patch(
+            RegisterTogglePatch("TitleMenu.receiveGamePadButton",
                 AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.receiveGamePadButton), new[] { typeof(Buttons) }),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_TitleMenuReceiveGamePadButton)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_TitleMenuReceiveGamePadButton)));
 
-            harmony.Patch(
+            RegisterTogglePatch("TitleMenu.performHoverAction",
                 AccessTools.Method(typeof(TitleMenu), nameof(TitleMenu.performHoverAction), new[] { typeof(int), typeof(int) }),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_BlockTitleMenuWhileModalOpen)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_BlockTitleMenuWhileModalOpen)));
 
-            harmony.Patch(
+            RegisterTogglePatch("LoadGameMenu.receiveLeftClick",
                 AccessTools.Method(typeof(LoadGameMenu), nameof(LoadGameMenu.receiveLeftClick), new[] { typeof(int), typeof(int), typeof(bool) }),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_LoadGameMenuReceiveLeftClick)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_LoadGameMenuReceiveLeftClick)));
 
-            harmony.Patch(
+            RegisterTogglePatch("SaveFileSlot.Activate",
                 AccessTools.Method(typeof(LoadGameMenu.SaveFileSlot), nameof(LoadGameMenu.SaveFileSlot.Activate)),
-                prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_SaveFileSlotActivate)));
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_SaveFileSlotActivate)));
 
             Type? hostFileSlotType = AccessTools.Inner(typeof(CoopMenu), "HostFileSlot");
             System.Reflection.MethodInfo? hostActivate = hostFileSlotType != null
                 ? AccessTools.Method(hostFileSlotType, nameof(LoadGameMenu.SaveFileSlot.Activate))
                 : null;
-            if (hostActivate != null)
-            {
-                harmony.Patch(
-                    hostActivate,
-                    prefix: new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_SaveFileSlotActivate)));
-            }
+            RegisterTogglePatch("HostFileSlot.Activate",
+                hostActivate,
+                new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_SaveFileSlotActivate)),
+                optional: true);
 
             var handshakePrefix = new HarmonyMethod(typeof(ModToggleModule), nameof(Prefix_LidgrenReceiveHandshake))
             {
                 priority = Priority.High
             };
-            harmony.Patch(
+            RegisterTogglePatch("ModToggle.LidgrenClient.receiveHandshake",
                 AccessTools.Method(typeof(LidgrenClient), "receiveHandshake", new[] { typeof(NetIncomingMessage) }),
-                prefix: handshakePrefix);
+                handshakePrefix);
         }
 
         private static Func<TitleMenu, bool>? CreateShouldAllowInteractionDelegate()

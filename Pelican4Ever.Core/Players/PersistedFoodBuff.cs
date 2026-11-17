@@ -253,12 +253,27 @@ namespace Pelican4Ever.Core.Players
         public const int MaxFoodBuffDurationMs = 48 * 60 * 60 * 1000;
 
         /// <summary>
+        /// Devuelve true si el identificador corresponde a un buff transitorio de mod externo (p. ej. carga de red
+        /// <c>NatCSpeedN</c> de Nature In The Valley) cuya duración en milisegundos reales no debe escalarse ni persistirse.
+        /// </summary>
+        public static bool IsTransientModBuffId(string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id))
+                return false;
+
+            return string.Equals(id, "NatCSpeedN", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>
         /// Devuelve true si el identificador corresponde a un debuff o efecto de combate que nunca debe
         /// escalarse ni persistirse como buff de comida.
         /// </summary>
         public static bool IsDisallowedBuffId(string? id)
         {
             if (string.IsNullOrWhiteSpace(id))
+                return true;
+
+            if (IsTransientModBuffId(id))
                 return true;
 
             if (id is "6" or "7" or "12" or "13" or "14" or "17" or "18" or "19" or "20" or "21" or "24" or "25" or "26" or "27")

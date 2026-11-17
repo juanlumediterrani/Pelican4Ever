@@ -113,5 +113,48 @@ namespace Pelican4Ever.Core.World
                 customFields["Nature.NIV.Beach"] = "true";
             }
         }
+
+        /// <summary>
+        /// Evalúa si los <c>CustomFields</c> <c>Nature.NIV.*</c> de una ubicación satisfacen el código de hábitat
+        /// solicitado por Nature In The Valley (códigos numéricos estándar y nombres literales de bioma).
+        /// </summary>
+        public static bool MatchesNitvHabitat(IReadOnlyDictionary<string, string>? customFields, string? code)
+        {
+            if (customFields == null || string.IsNullOrWhiteSpace(code))
+                return false;
+
+            if (string.Equals(code, "0", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(code, "Outside", StringComparison.OrdinalIgnoreCase))
+            {
+                return HasEnabledField(customFields, "Nature.NIV.Outside");
+            }
+
+            if (string.Equals(code, "1", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(code, "Forest", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(code, "Woods", StringComparison.OrdinalIgnoreCase))
+            {
+                return HasEnabledField(customFields, "Nature.NIV.Forest");
+            }
+
+            if (string.Equals(code, "2", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(code, "Beach", StringComparison.OrdinalIgnoreCase))
+            {
+                return HasEnabledField(customFields, "Nature.NIV.Beach");
+            }
+
+            if (string.Equals(code, "3", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(code, "Underground", StringComparison.OrdinalIgnoreCase))
+            {
+                return HasEnabledField(customFields, "Nature.NIV.Underground");
+            }
+
+            return false;
+        }
+
+        private static bool HasEnabledField(IReadOnlyDictionary<string, string> customFields, string key)
+        {
+            return customFields.TryGetValue(key, out string? value)
+                && string.Equals(value?.Trim(), "true", StringComparison.OrdinalIgnoreCase);
+        }
     }
 }

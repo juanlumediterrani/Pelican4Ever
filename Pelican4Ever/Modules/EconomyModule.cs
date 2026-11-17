@@ -6,6 +6,7 @@ using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
@@ -408,102 +409,103 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                // Parche en Farmer.doneEating para aplicar SatietyBudget y detectar buffs procedentes de comida/bebida
-                MethodInfo? doneEatingMethod = AccessTools.Method(typeof(Farmer), nameof(Farmer.doneEating), Type.EmptyTypes);
-                if (doneEatingMethod != null)
-                {
-                    harmony.Patch(
-                        original: doneEatingMethod,
-                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DoneEating)),
-                        postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_DoneEating)),
-                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_DoneEating))
-                    );
-                }
+            _ = harmony;
+            if (context == null)
+                return;
 
-                // Parche en Farmer.dayupdate para distinguir el cambio de día de un desmayo/muerte al limpiar buffs
-                MethodInfo? dayUpdateMethod = AccessTools.Method(typeof(Farmer), nameof(Farmer.dayupdate), new[] { typeof(int) });
-                if (dayUpdateMethod != null)
-                {
-                    harmony.Patch(
-                        original: dayUpdateMethod,
-                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_FarmerDayUpdate)),
-                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_FarmerDayUpdate))
-                    );
-                }
+            // Parche en Farmer.doneEating para aplicar SatietyBudget y detectar buffs procedentes de comida/bebida
+            context.Patch(
+                "Farmer.doneEating",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.doneEating), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DoneEating)),
+                postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_DoneEating)),
+                finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_DoneEating)));
 
-                // Parche en Farmer.Update para bloquear la regeneración ilimitada nativa de la piscina
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farmer), nameof(Farmer.Update)),
-                    prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_FarmerUpdate))
-                );
+            // Parche en Farmer.dayupdate para distinguir el cambio de día de un desmayo/muerte al limpiar buffs
+            context.Patch(
+                "Farmer.dayupdate",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.dayupdate), new[] { typeof(int) }),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_FarmerDayUpdate)),
+                finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_FarmerDayUpdate)));
 
-                // Parche en MineShaft.clearInactiveMines para mantener los pisos persistentes durante el turno
-                MethodInfo clearInactiveMethod = AccessTools.Method(typeof(MineShaft), "clearInactiveMines");
-                if (clearInactiveMethod != null)
-                {
-                    harmony.Patch(
-                        original: clearInactiveMethod,
-                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_ClearInactiveMines))
-                    );
-                }
+            // Parche en Farmer.Update para bloquear la regeneración ilimitada nativa de la piscina
+            context.Patch(
+                "Farmer.Update",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.Update)),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_FarmerUpdate)));
 
-                // Solo las consultas del ascensor son personales; la generación de pisos sigue siendo compartida.
-                var elevatorTranspiler = new HarmonyMethod(typeof(EconomyModule), nameof(Transpiler_PersonalElevator));
-                harmony.Patch(AccessTools.Constructor(typeof(MineElevatorMenu)), transpiler: elevatorTranspiler);
-                harmony.Patch(AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performAction),
-                    new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }), transpiler: elevatorTranspiler);
+            // Parche en MineShaft.clearInactiveMines para mantener los pisos persistentes durante el turno
+            context.Patch(
+                "MineShaft.clearInactiveMines",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(MineShaft), "clearInactiveMines"),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_ClearInactiveMines)));
 
-                // Parche en Object.sellToStorePrice para multiplicadores agrícolas y artesanales
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.sellToStorePrice), new[] { typeof(long) }),
-                    postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_SellToStorePrice))
-                );
+            // Solo las consultas del ascensor son personales; la generación de pisos sigue siendo compartida.
+            var elevatorTranspiler = new HarmonyMethod(typeof(EconomyModule), nameof(Transpiler_PersonalElevator));
+            context.Patch(
+                "MineElevatorMenu.ctor",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Constructor(typeof(MineElevatorMenu)),
+                transpiler: elevatorTranspiler);
+            context.Patch(
+                "GameLocation.performAction.Elevator",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performAction),
+                    new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }),
+                transpiler: elevatorTranspiler);
 
-                // Parche en Farmer.DailyLuck para asignar suerte diaria individual por jugador (GAP-19)
-                harmony.Patch(
-                    original: AccessTools.PropertyGetter(typeof(Farmer), nameof(Farmer.DailyLuck)),
-                    prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DailyLuck))
-                );
+            // Parche en Object.sellToStorePrice para multiplicadores agrícolas y artesanales
+            context.Patch(
+                "Object.sellToStorePrice",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.sellToStorePrice), new[] { typeof(long) }),
+                postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_SellToStorePrice)));
 
-                // Parche en BuffManager.Apply/Remove/Clear para escalar duración 1:1 (GAP-11) y persistir buffs de comida tras reconexión
-                MethodInfo? buffApplyMethod = AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Apply), new[] { typeof(Buff) });
-                if (buffApplyMethod != null)
-                {
-                    harmony.Patch(
-                        original: buffApplyMethod,
-                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerApply)),
-                        postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_BuffManagerApply)),
-                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_BuffManagerApply))
-                    );
-                }
+            // Parche en Farmer.DailyLuck para asignar suerte diaria individual por jugador (GAP-19)
+            context.Patch(
+                "Farmer.DailyLuck",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.PropertyGetter(typeof(Farmer), nameof(Farmer.DailyLuck)),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_DailyLuck)));
 
-                MethodInfo? buffRemoveMethod = AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Remove), new[] { typeof(string) });
-                if (buffRemoveMethod != null)
-                {
-                    harmony.Patch(
-                        original: buffRemoveMethod,
-                        postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_BuffManagerRemove))
-                    );
-                }
+            // Parche en BuffManager.Apply/Remove/Clear para escalar duración 1:1 (GAP-11) y persistir buffs de comida tras reconexión
+            context.Patch(
+                "BuffManager.Apply",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Apply), new[] { typeof(Buff) }),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerApply)),
+                postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_BuffManagerApply)),
+                finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_BuffManagerApply)));
 
-                MethodInfo? buffClearMethod = AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Clear), Type.EmptyTypes);
-                if (buffClearMethod != null)
-                {
-                    harmony.Patch(
-                        original: buffClearMethod,
-                        prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerClear)),
-                        finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_BuffManagerClear))
-                    );
-                }
+            context.Patch(
+                "BuffManager.Remove",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Remove), new[] { typeof(string) }),
+                postfix: new HarmonyMethod(typeof(EconomyModule), nameof(Postfix_BuffManagerRemove)));
 
-                context?.Monitor.Log("[EconomyModule] Parches Harmony de economía y minas aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[EconomyModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context.Patch(
+                "BuffManager.Clear",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(BuffManager), nameof(BuffManager.Clear), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(EconomyModule), nameof(Prefix_BuffManagerClear)),
+                finalizer: new HarmonyMethod(typeof(EconomyModule), nameof(Finalizer_BuffManagerClear)));
+
+            context.Monitor.Log("[EconomyModule] Parches Harmony de economía y minas registrados.", LogLevel.Trace);
         }
 
         public static IEnumerable<CodeInstruction> Transpiler_PersonalElevator(IEnumerable<CodeInstruction> instructions)
@@ -887,7 +889,7 @@ namespace Pelican4Ever.Modules
             if (ScaledBuffs.TryGetValue(buff, out _))
                 return;
 
-            if (IsCombatDebuff(buff))
+            if (IsCombatDebuff(buff) || FoodBuffPersistenceLogic.IsTransientModBuffId(buff.id))
                 return;
 
             double scaled = Math.Round(buff.millisecondsDuration * BuffTimeScaleFactor);

@@ -356,6 +356,47 @@ namespace Pelican4Ever.Core.Admin
         public List<HostBlacklistEntryDto> Blacklist { get; set; } = new();
     }
 
+    /// <summary>Detalle de un parche fallido en <c>GET /api/v1/host/health</c> (ADR-0010, TASK-2503).</summary>
+    public sealed class HostHealthPatchDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Module { get; set; } = string.Empty;
+        public string Criticality { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    /// <summary>Resumen de estado de parches Harmony en <c>GET /api/v1/host/health</c>.</summary>
+    public sealed class HostHealthPatchesDto
+    {
+        public int Total { get; set; }
+        public List<HostHealthPatchDto> Failed { get; set; } = new();
+    }
+
+    /// <summary>Motivos de bloqueo y excepciones en <c>GET /api/v1/host/health</c>.</summary>
+    public sealed class HostHealthLockdownDto
+    {
+        public List<string> Reasons { get; set; } = new();
+        public List<string> Overridden { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Instantánea atómica de salud del host para <c>GET /api/v1/host/health</c> (servida sin pasar por
+    /// <see cref="MainThreadActionQueue"/>) (ADR-0010, TASK-2503).
+    /// </summary>
+    public sealed class HostHealthDto
+    {
+        public string Status { get; set; } = HostHealthStatus.Starting.ToString();
+        public string LastTickUtc { get; set; } = string.Empty;
+        public double SecondsSinceLastTick { get; set; }
+        public bool SaveLoaded { get; set; }
+        public HostHealthLockdownDto Lockdown { get; set; } = new();
+        public HostHealthPatchesDto Patches { get; set; } = new();
+        public string GameVersion { get; set; } = string.Empty;
+        public string SmapiVersion { get; set; } = string.Empty;
+        public string ModVersion { get; set; } = string.Empty;
+        public double UptimeSeconds { get; set; }
+    }
+
     /// <summary>
     /// Respuesta estándar de acciones de <c>/api/v1/host/*</c>.
     /// </summary>
@@ -396,7 +437,8 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/command",           MutatesGameState: true,  "Ejecuta un comando de consola de la lista de permitidos y devuelve lo que escribe en el registro."),
             new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
             new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico)."),
-            new("GET",  "/api/v1/host/probation",         MutatesGameState: false, "Cupo de admisión de Putre (2 máximo), tickets, jugadores en observación conductual y lista negra.")
+            new("GET",  "/api/v1/host/probation",         MutatesGameState: false, "Cupo de admisión de Putre (2 máximo), tickets, jugadores en observación conductual y lista negra."),
+            new("GET",  "/api/v1/host/health",            MutatesGameState: false, "Salud atómica del host fuera del hilo del juego (Lockdown/Degraded/Ok, parches, versiones y latido de tick).")
         };
 
         /// <summary>

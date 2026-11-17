@@ -313,8 +313,23 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool CheckpointCloneFarmhands { get; set; } = true;
 
-        /// <summary>Días que se conservan las copias diarias del rollover. 0 (por defecto) = no se borra ninguna, como hasta ahora.</summary>
-        public int BackupRetentionDays { get; set; } = 0;
+        /// <summary>Días que se conservan las copias diarias del rollover. 0 = no se borra ninguna.</summary>
+        public int BackupRetentionDays { get; set; } = 14;
+
+        /// <summary>Versiones de Stardew Valley verificadas para arranque en producción (ADR-0010, TASK-2502).</summary>
+        public List<string> VerifiedGameVersions { get; set; } = new() { "1.6.15" };
+
+        /// <summary>Versión mínima exigida de SMAPI para arrancar sin Lockdown (ADR-0010, TASK-2502).</summary>
+        public string MinimumSmapiVersion { get; set; } = "4.1.0";
+
+        /// <summary>Permite arrancar en laboratorio con una versión del juego no incluida en <see cref="VerifiedGameVersions"/>.</summary>
+        public bool AllowUnverifiedGameVersion { get; set; } = false;
+
+        /// <summary>Nombres explícitos de parches críticos aceptados por el dueño para levantar un Lockdown concreto.</summary>
+        public List<string> LockdownOverride { get; set; } = new();
+
+        /// <summary>Segundos máximos sin tick del hilo principal antes de detener el pulso <c>WATCHDOG=1</c> (ADR-0010, TASK-2504).</summary>
+        public int HangThresholdSeconds { get; set; } = 120;
 
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
@@ -448,6 +463,12 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
             if (BackupRetentionDays < 0)
                 errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
+            if (HangThresholdSeconds < 0)
+                errors.Add($"{nameof(HangThresholdSeconds)} no puede ser negativo.");
+            if (!Pelican4Ever.Core.Admin.PatchHealthPolicy.TryParseNumericVersion(MinimumSmapiVersion, out _))
+                errors.Add($"{nameof(MinimumSmapiVersion)} debe tener formato de versión semántica (ej. '4.1.0'). Valor: '{MinimumSmapiVersion}'.");
+            if (!AllowUnverifiedGameVersion && (VerifiedGameVersions == null || !VerifiedGameVersions.Exists(v => !string.IsNullOrWhiteSpace(v))))
+                errors.Add($"{nameof(VerifiedGameVersions)} debe contener al menos una versión verificada salvo que {nameof(AllowUnverifiedGameVersion)} sea true.");
             if (PairingInviteTtlHours is < 1 or > 720)
                 errors.Add($"{nameof(PairingInviteTtlHours)} debe estar entre 1 y 720 horas. Valor: {PairingInviteTtlHours}.");
             foreach (string id in RequiredClientMods ?? new List<string>())

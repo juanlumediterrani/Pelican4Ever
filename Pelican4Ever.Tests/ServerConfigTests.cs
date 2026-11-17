@@ -93,19 +93,25 @@ public class ServerConfigTests
     }
 
     [Fact]
-    public void CheckpointsAndBackupRotationAreOffByDefault()
+    public void CheckpointsAreOffAndBackupRetentionIsFourteenDaysByDefault()
     {
         var config = new ServerConfig();
         Assert.Equal(0, config.CheckpointIntervalMinutes);
         Assert.False(config.CheckpointDebugMode);
-        Assert.Equal(0, config.BackupRetentionDays);
+        Assert.Equal(14, config.BackupRetentionDays);
+        Assert.Equal(120, config.HangThresholdSeconds);
+        Assert.Contains("1.6.15", config.VerifiedGameVersions);
+        Assert.Equal("4.1.0", config.MinimumSmapiVersion);
+        Assert.False(config.AllowUnverifiedGameVersion);
+        Assert.Empty(config.LockdownOverride);
         Assert.Empty(config.Validate());
 
-        var negative = new ServerConfig { CheckpointRetention = -1, BackupRetentionDays = -1, CheckpointMaxDurationMs = -1 };
+        var negative = new ServerConfig { CheckpointRetention = -1, BackupRetentionDays = -1, CheckpointMaxDurationMs = -1, HangThresholdSeconds = -1 };
         var errors = negative.Validate();
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.CheckpointRetention)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.BackupRetentionDays)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.CheckpointMaxDurationMs)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.HangThresholdSeconds)));
     }
 
     [Fact]

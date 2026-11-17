@@ -160,5 +160,20 @@ namespace Pelican4Ever.Tests
             Assert.True(VisitorPermissionLogic.ShouldEvictVisitor("Pelican4Ever_Farm_03_Home", null, doors, 20, out _));
             Assert.False(VisitorPermissionLogic.ShouldEvictVisitor("Town", null, doors, 20, out _));
         }
+
+        [Theory]
+        [InlineData("NatureInTheValley.NatInValeyNet", "NIVNet", true)]
+        [InlineData("NatureInTheValley.NatInValeyGoldenNet", "NIVGoldNet", true)]
+        [InlineData("NatureInTheValley.NatInValeyJadeNet", "NIVjadeNet", true)]
+        [InlineData("NatureInTheValley.NatInValeySaphNet", "NIVSaphNet", true)]
+        [InlineData(null, "NIVJadeNet", true)]
+        [InlineData("StardewValley.Tools.Axe", "Axe", false)]
+        [InlineData("StardewValley.Tools.Pickaxe", "Pickaxe", false)]
+        [InlineData("StardewValley.Tools.Hoe", "Hoe", false)]
+        [InlineData(null, null, false)]
+        public void IsAllowedVisitorTool_AllowsNitvBugNets_AndBlocksWorkingTools(string? typeFullName, string? itemId, bool expected)
+        {
+            Assert.Equal(expected, VisitorPermissionLogic.IsAllowedVisitorTool(typeFullName, itemId));
+        }
     }
 }

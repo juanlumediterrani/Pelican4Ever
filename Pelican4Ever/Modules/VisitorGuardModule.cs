@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -34,28 +35,21 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
-            try
-            {
-                Patch(AccessTools.Method(typeof(Farmer), nameof(Farmer.BeginUsingTool)), nameof(Prefix_BeginUsingTool));
-                Patch(AccessTools.Method(typeof(Utility), nameof(Utility.tryToPlaceItem)), nameof(Prefix_TryToPlaceItem));
-                Patch(AccessTools.Method(typeof(HoeDirt), nameof(HoeDirt.performUseAction)), nameof(Prefix_TerrainUseAction));
-                Patch(AccessTools.Method(typeof(FruitTree), nameof(FruitTree.performUseAction)), nameof(Prefix_TerrainUseAction));
-                Patch(AccessTools.Method(typeof(Chest), nameof(Chest.checkForAction)), nameof(Prefix_ObjectCheckForAction));
-                Patch(AccessTools.Method(typeof(SObject), nameof(SObject.checkForAction)), nameof(Prefix_ObjectCheckForAction));
-                Patch(AccessTools.Method(typeof(GameLocation), nameof(GameLocation.checkAction),
-                    new[] { typeof(xTile.Dimensions.Location), typeof(xTile.Dimensions.Rectangle), typeof(Farmer) }), nameof(Prefix_LocationCheckAction));
-                Patch(AccessTools.Method(typeof(SObject), nameof(SObject.performObjectDropInAction),
-                    new[] { typeof(Item), typeof(bool), typeof(Farmer), typeof(bool) }), nameof(Prefix_DropIn));
-            }
-            catch (Exception ex)
-            {
-                ctx.Monitor.Log($"[VisitorGuard] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            Patch("Farmer.BeginUsingTool", AccessTools.Method(typeof(Farmer), nameof(Farmer.BeginUsingTool)), nameof(Prefix_BeginUsingTool));
+            Patch("Utility.tryToPlaceItem", AccessTools.Method(typeof(Utility), nameof(Utility.tryToPlaceItem)), nameof(Prefix_TryToPlaceItem));
+            Patch("HoeDirt.performUseAction", AccessTools.Method(typeof(HoeDirt), nameof(HoeDirt.performUseAction)), nameof(Prefix_TerrainUseAction));
+            Patch("FruitTree.performUseAction", AccessTools.Method(typeof(FruitTree), nameof(FruitTree.performUseAction)), nameof(Prefix_TerrainUseAction));
+            Patch("Chest.checkForAction", AccessTools.Method(typeof(Chest), nameof(Chest.checkForAction)), nameof(Prefix_ObjectCheckForAction));
+            Patch("Object.checkForAction", AccessTools.Method(typeof(SObject), nameof(SObject.checkForAction)), nameof(Prefix_ObjectCheckForAction));
+            Patch("GameLocation.checkAction", AccessTools.Method(typeof(GameLocation), nameof(GameLocation.checkAction),
+                new[] { typeof(xTile.Dimensions.Location), typeof(xTile.Dimensions.Rectangle), typeof(Farmer) }), nameof(Prefix_LocationCheckAction));
+            Patch("Object.performObjectDropInAction", AccessTools.Method(typeof(SObject), nameof(SObject.performObjectDropInAction),
+                new[] { typeof(Item), typeof(bool), typeof(Farmer), typeof(bool) }), nameof(Prefix_DropIn));
         }
 
-        private static void Patch(System.Reflection.MethodBase original, string prefix)
+        private void Patch(string label, System.Reflection.MethodBase? original, string prefix)
         {
-            context!.Harmony.Patch(original, prefix: new HarmonyMethod(typeof(VisitorGuardModule), prefix));
+            context!.Patch($"VisitorGuard.{label}", Name, PatchCriticality.Security, original, prefix: new HarmonyMethod(typeof(VisitorGuardModule), prefix));
         }
 
         /// <summary>Indica si el jugador local no puede modificar esa ubicación.</summary>
@@ -118,7 +112,9 @@ namespace Pelican4Ever.Modules
                 return true;
             if (tool is MeleeWeapon weapon)
                 return !weapon.isScythe();
-            return tool is Slingshot || tool is FishingRod || tool is Wand;
+            if (tool is Slingshot || tool is FishingRod || tool is Wand)
+                return true;
+            return VisitorPermissionLogic.IsAllowedVisitorTool(tool.GetType().FullName, tool.ItemId);
         }
 
         private static long lastGuardErrorMs;

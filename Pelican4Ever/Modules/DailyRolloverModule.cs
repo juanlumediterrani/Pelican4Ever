@@ -69,10 +69,12 @@ namespace Pelican4Ever.Modules
                 ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
                 ctx.AddCommand("p4e_rollover_now", "Fuerza la secuencia segura de guardado y rollover.", OnForceRollover);
 
-                ctx.Harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.queueWeddingsForToday)),
-                    postfix: new HarmonyMethod(typeof(DailyRolloverModule), nameof(Postfix_Game1_QueueWeddingsForToday))
-                );
+                ctx.Patch(
+                    "Game1.queueWeddingsForToday",
+                    Name,
+                    PatchCriticality.Integrity,
+                    AccessTools.Method(typeof(Game1), nameof(Game1.queueWeddingsForToday)),
+                    postfix: new HarmonyMethod(typeof(DailyRolloverModule), nameof(Postfix_Game1_QueueWeddingsForToday)));
             }
         }
 
@@ -962,9 +964,25 @@ namespace Pelican4Ever.Modules
 
         private bool CreateSaveBackup()
         {
-            SaveBackupResult? backup = SaveBackupService.Create(context.Monitor, BackupKind.Daily, compress: false);
+            SaveBackupResult? backup = SaveBackupService.Create(
+                context.Monitor,
+                BackupKind.Daily,
+                compress: false,
+                totalGameDays: Game1.Date.TotalDays,
+                gameDate: Pelican4Ever.Core.Admin.LoadInstrumentationLogic.FormatGameDate(Game1.currentSeason, Game1.dayOfMonth, Game1.year),
+                modVersion: context.Manifest.Version.ToString(),
+                gameVersion: Game1.version);
             if (backup == null)
                 return false;
+
+            Pelican4Ever.Core.Admin.SaveLoadMetricsSnapshot metrics = Framework.LoadMetricsTracker.CaptureAndRecord(
+                "rollover",
+                cloneFarmhandsMs: 0,
+                saveSerializeMs: 0,
+                totalMs: 0,
+                longestTickMs: 0,
+                clonedFarmhandsCount: 0,
+                estimatedFarmhandCloneBytes: 0);
 
             LastBackupFileName = backup.FolderName;
             LastBackupCreatedUtc = backup.CreatedUtc.ToString("O");
@@ -979,10 +997,12 @@ namespace Pelican4Ever.Modules
                     ["backupName"] = backup.FolderName,
                     ["createdAtUtc"] = LastBackupCreatedUtc,
                     ["fileCount"] = backup.FileCount,
-                    ["verifiedBy"] = "SHA-256"
+                    ["verifiedBy"] = "SHA-256",
+                    ["xmlTotalBytes"] = metrics.XmlTotalBytes,
+                    ["totalNitvCreatures"] = metrics.TotalNitvCreatures
                 });
 
-            context.Monitor.Log($"[DailyRolloverModule] Backup verificado en: {backup.FolderPath}", LogLevel.Info);
+            context.Monitor.Log($"[DailyRolloverModule] Backup verificado en: {backup.FolderPath} (save={metrics.XmlTotalBytes} B, NITV={metrics.TotalNitvCreatures})", LogLevel.Info);
             SaveBackupService.ApplyRetention(context.Monitor, BackupKind.Daily, keepCheckpoints: 0, keepDailyDays: context.Config.BackupRetentionDays);
             return true;
         }

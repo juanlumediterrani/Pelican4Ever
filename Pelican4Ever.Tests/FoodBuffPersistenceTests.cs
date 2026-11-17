@@ -248,4 +248,26 @@ public class FoodBuffPersistenceTests
         Assert.NotNull(restored.Players[42L].ActiveFoodBuffs);
         Assert.Empty(restored.Players[42L].ActiveFoodBuffs);
     }
+
+    [Fact]
+    public void TransientModBuff_NatCSpeedN_IsExcludedFromScalingAndFoodPersistence()
+    {
+        Assert.True(FoodBuffPersistenceLogic.IsTransientModBuffId("NatCSpeedN"));
+        Assert.True(FoodBuffPersistenceLogic.IsTransientModBuffId("natcspeedn"));
+        Assert.False(FoodBuffPersistenceLogic.IsTransientModBuffId("food"));
+        Assert.True(FoodBuffPersistenceLogic.IsDisallowedBuffId("NatCSpeedN"));
+
+        DateTimeOffset now = new DateTimeOffset(2026, 11, 16, 16, 0, 0, TimeSpan.Zero);
+        var record = new PlayerRecord();
+        var payload = new FoodBuffsPayload
+        {
+            Buffs = new List<FoodBuffReportEntry>
+            {
+                new FoodBuffReportEntry { Id = "NatCSpeedN", RemainingMilliseconds = 20_000 }
+            }
+        };
+
+        record.ApplyFoodBuffsReport(payload, now);
+        Assert.Empty(record.ActiveFoodBuffs);
+    }
 }

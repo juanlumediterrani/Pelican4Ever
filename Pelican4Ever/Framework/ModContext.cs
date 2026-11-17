@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using HarmonyLib;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Config;
@@ -35,6 +36,18 @@ namespace Pelican4Ever.Framework
 
         /// <summary>Estado autoritativo del servidor. Solo es significativo en el host tras cargar la partida.</summary>
         public ServerWorldState WorldState { get; set; } = new();
+
+        /// <summary>Registro centralizado de parches Harmony y su criticidad (TASK-2501).</summary>
+        public PatchRegistry PatchRegistry { get; } = new();
+
+        /// <summary>Instantánea atómica de salud observable fuera del hilo del juego (TASK-2503).</summary>
+        public HostHealthTracker HealthTracker { get; } = new();
+
+        /// <summary>Última evaluación de salud/criticidad (arranca en Starting hasta evaluar módulos y versiones).</summary>
+        public PatchHealthDecision HealthDecision { get; private set; } = new() { Status = HostHealthStatus.Starting };
+
+        /// <summary>Indica si el servidor debe bloquear la carga de partida y conexiones entrantes (TASK-2502).</summary>
+        public bool IsLockdown => HealthDecision.IsLockdown;
 
         private readonly HarmonyPatchToggle patchToggle = new();
 
@@ -96,6 +109,50 @@ namespace Pelican4Ever.Framework
             Manifest = manifest;
             Harmony = harmony;
             Current = this;
+        }
+
+        /// <summary>
+        /// Registra y aplica un parche Harmony a través del <see cref="PatchRegistry"/> centralizado (TASK-2501).
+        /// </summary>
+        public bool Patch(
+            string name,
+            string moduleName,
+            PatchCriticality criticality,
+            MethodBase? original,
+            HarmonyMethod? prefix = null,
+            HarmonyMethod? postfix = null,
+            HarmonyMethod? transpiler = null,
+            HarmonyMethod? finalizer = null,
+            bool optional = false)
+        {
+            return PatchRegistry.Patch(
+                Harmony,
+                Monitor,
+                name,
+                moduleName,
+                criticality,
+                original,
+                prefix,
+                postfix,
+                transpiler,
+                finalizer,
+                optional);
+        }
+
+        /// <summary>
+        /// Recalcula la decisión de salud (<see cref="PatchHealthPolicy"/>) y actualiza la instantánea atómica de <c>/health</c>.
+        /// </summary>
+        public PatchHealthDecision EvaluateHealth(string? gameVersion, string? smapiVersion, bool saveLoaded)
+        {
+            PatchHealthDecision decision = PatchRegistry.Evaluate(Config, gameVersion, smapiVersion);
+            HealthDecision = decision;
+            HealthTracker.UpdateDecision(
+                decision,
+                gameVersion ?? string.Empty,
+                smapiVersion ?? string.Empty,
+                Manifest.Version.ToString(),
+                saveLoaded);
+            return decision;
         }
 
         /// <summary>

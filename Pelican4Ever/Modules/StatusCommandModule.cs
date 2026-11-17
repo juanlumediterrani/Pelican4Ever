@@ -20,6 +20,32 @@ namespace Pelican4Ever.Modules
         {
             this.context = context;
             context.AddCommand("p4e_status", "Muestra el estado de Pelican 4Ever (reloj, calendario, jugadores).", OnStatus);
+            context.AddCommand("p4e_load_metrics", "Muestra métricas de guardado/serialización y criaturas NITV (TASK-2506).", OnLoadMetrics);
+        }
+
+        private void OnLoadMetrics(string command, string[] args)
+        {
+            IMonitor log = context.Monitor;
+            long currentBytes = Framework.LoadMetricsTracker.MeasureCurrentSaveBytes();
+            int currentNitv = Framework.LoadMetricsTracker.CountNitvCreatures();
+            log.Log($"=== Métricas de carga Pelican 4Ever (actual: xmlBytes={currentBytes}, nitvCreatures={currentNitv}, farmhands={Game1.otherFarmers.Count}) ===", LogLevel.Info);
+            LogMetricsSnapshot(log, "Último checkpoint", Framework.LoadMetricsTracker.LastCheckpointMetrics);
+            LogMetricsSnapshot(log, "Último rollover", Framework.LoadMetricsTracker.LastRolloverMetrics);
+        }
+
+        private static void LogMetricsSnapshot(IMonitor log, string label, Pelican4Ever.Core.Admin.SaveLoadMetricsSnapshot? snap)
+        {
+            if (snap == null)
+            {
+                log.Log($"  {label}: sin datos registrados en esta sesión.", LogLevel.Info);
+                return;
+            }
+
+            log.Log(
+                $"  {label} ({snap.RecordedAtUtc}): xmlBytes={snap.XmlTotalBytes}, cloneMs={snap.CloneFarmhandsMs:F1} " +
+                $"(farmhands={snap.ClonedFarmhandsCount}, estCloneBytes={snap.EstimatedFarmhandCloneBytes}), " +
+                $"serializeMs={snap.SaveSerializeMs:F1}, totalMs={snap.TotalMs:F1}, longestTickMs={snap.LongestTickMs:F1}, nitvCreatures={snap.TotalNitvCreatures}",
+                LogLevel.Info);
         }
 
         private void OnStatus(string command, string[] args)

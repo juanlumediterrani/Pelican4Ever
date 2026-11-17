@@ -45,6 +45,9 @@ namespace Pelican4Ever.Core.Admin
         public const string PlayerProbationGraduated = "player.probation.graduated";
         public const string VisitorDenied = "player.visitor.denied";
         public const string ChatAbuse = "player.chat.abuse";
+        public const string HostLockdown = "host.lockdown";
+        public const string HostDegraded = "host.degraded";
+        public const string HostLockdownOverridden = "host.lockdown.overridden";
     }
 
     /// <summary>

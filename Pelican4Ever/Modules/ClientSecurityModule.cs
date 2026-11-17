@@ -1665,85 +1665,104 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            int failures = 0;
+            _ = harmony;
+            if (context is not ModContext ctx)
+                return;
 
-            void TryPatch(string name, Action apply)
-            {
-                try
-                {
-                    apply();
-                }
-                catch (Exception ex)
-                {
-                    failures++;
-                    context?.Monitor.Log($"[ClientSecurityModule] Error al aplicar el parche '{name}': {ex}", LogLevel.Error);
-                }
-            }
+            bool allOk = true;
 
             // 1. Inyección de token en el cliente al presentarse al servidor
-            TryPatch("Client.sendPlayerIntroduction", () => harmony.Patch(
-                original: AccessTools.Method(typeof(Client), nameof(Client.sendPlayerIntroduction)),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction))
-            ));
+            allOk &= ctx.Patch(
+                "Client.sendPlayerIntroduction",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(Client), nameof(Client.sendPlayerIntroduction)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction)));
 
             // 2. Override de getUserID en las implementaciones concretas de Client (IP directa, Steam y GOG Galaxy).
             var patchedGetUserID = new HashSet<MethodBase>();
-            void PatchGetUserID(Type? clientType)
+            void PatchGetUserID(Type? clientType, bool optional)
             {
-                if (clientType == null) return;
-                var method = AccessTools.Method(clientType, "getUserID");
-                if (method == null || method.IsAbstract || !patchedGetUserID.Add(method)) return;
+                if (clientType == null)
+                {
+                    if (optional)
+                        ctx.PatchRegistry.RecordSkippedOptional("SDKClient.getUserID", Name, PatchCriticality.Security, "SDK opcional no cargado.");
+                    return;
+                }
 
-                TryPatch($"{clientType.Name}.getUserID", () => harmony.Patch(
-                    original: method,
-                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_GetUserID))
-                ));
+                var method = AccessTools.Method(clientType, "getUserID");
+                if (method == null || method.IsAbstract || !patchedGetUserID.Add(method))
+                    return;
+
+                allOk &= ctx.Patch(
+                    $"{clientType.Name}.getUserID",
+                    Name,
+                    PatchCriticality.Security,
+                    method,
+                    prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_GetUserID)),
+                    optional: optional);
             }
 
-            PatchGetUserID(typeof(Client));
-            PatchGetUserID(typeof(LidgrenClient));
-            PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.Steam.SteamNetClient"));
-            PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.GogGalaxy.GalaxyNetClient"));
+            PatchGetUserID(typeof(Client), optional: false);
+            PatchGetUserID(typeof(LidgrenClient), optional: false);
+            PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.Steam.SteamNetClient"), optional: true);
+            PatchGetUserID(AccessTools.TypeByName("StardewValley.SDKs.GogGalaxy.GalaxyNetClient"), optional: true);
 
-            TryPatch("LidgrenServer.sendVersionInfo", () => harmony.Patch(
-                original: AccessTools.Method(typeof(LidgrenServer), "sendVersionInfo"),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendVersionInfo))));
-            TryPatch("LidgrenClient.receiveHandshake", () => harmony.Patch(
-                original: AccessTools.Method(typeof(LidgrenClient), "receiveHandshake"),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_ReceiveHandshake))));
+            allOk &= ctx.Patch(
+                "LidgrenServer.sendVersionInfo",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(LidgrenServer), "sendVersionInfo"),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendVersionInfo)));
+            allOk &= ctx.Patch(
+                "LidgrenClient.receiveHandshake",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(LidgrenClient), "receiveHandshake"),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_ReceiveHandshake)));
 
             // 3. Sincronización proactiva de tokens y filtro de lista blanca por IP antes de enviar la lista de peones
-            TryPatch("GameServer.sendAvailableFarmhands", () => harmony.Patch(
-                original: AccessTools.Method(typeof(GameServer), nameof(GameServer.sendAvailableFarmhands)),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendAvailableFarmhands))
-            ));
+            allOk &= ctx.Patch(
+                "GameServer.sendAvailableFarmhands",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(GameServer), nameof(GameServer.sendAvailableFarmhands)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_SendAvailableFarmhands)));
 
             // 4. Validación y reclamo autoritativo en el host (GameServer.checkFarmhandRequest)
-            TryPatch("GameServer.checkFarmhandRequest", () => harmony.Patch(
-                original: AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_CheckFarmhandRequest))
-            ));
+            allOk &= ctx.Patch(
+                "GameServer.checkFarmhandRequest",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(GameServer), nameof(GameServer.checkFarmhandRequest)),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_CheckFarmhandRequest)));
 
             // 5. Bloqueo visual y control de pertenencia de ranuras en FarmhandMenu
-            TryPatch("FarmhandSlot.ctor", () => harmony.Patch(
-                original: AccessTools.Constructor(typeof(FarmhandMenu.FarmhandSlot), new[] { typeof(FarmhandMenu), typeof(Farmer) }),
-                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_Ctor))
-            ));
+            allOk &= ctx.Patch(
+                "FarmhandSlot.ctor",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Constructor(typeof(FarmhandMenu.FarmhandSlot), new[] { typeof(FarmhandMenu), typeof(Farmer) }),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_Ctor)));
 
             // 6. Etiqueta visual "[De otro jugador]" en las ranuras bloqueadas
-            TryPatch("FarmhandSlot.drawSlotName", () => harmony.Patch(
-                original: AccessTools.Method(typeof(FarmhandMenu.FarmhandSlot), "drawSlotName"),
-                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_DrawSlotName))
-            ));
+            allOk &= ctx.Patch(
+                "FarmhandSlot.drawSlotName",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(FarmhandMenu.FarmhandSlot), "drawSlotName"),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandSlot_DrawSlotName)));
 
             // 7. Ordenación inteligente del menú de peones (personajes propios primero)
-            TryPatch("FarmhandMenu.ctor", () => harmony.Patch(
-                original: AccessTools.Constructor(typeof(FarmhandMenu), new[] { typeof(Client) }),
-                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_Ctor))
-            ));
+            allOk &= ctx.Patch(
+                "FarmhandMenu.ctor",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Constructor(typeof(FarmhandMenu), new[] { typeof(Client) }),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_Ctor)));
 
-            if (failures == 0)
-                context?.Monitor.Log("[ClientSecurityModule] Parches Harmony de seguridad y posesión aplicados correctamente.", LogLevel.Trace);
+            if (allOk)
+                ctx.Monitor.Log("[ClientSecurityModule] Parches Harmony de seguridad y posesión aplicados correctamente.", LogLevel.Trace);
         }
 
         // ─────────────────────────── Parches Harmony ───────────────────────────

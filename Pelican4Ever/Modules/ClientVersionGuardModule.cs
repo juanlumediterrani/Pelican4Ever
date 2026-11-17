@@ -39,7 +39,10 @@ namespace Pelican4Ever.Modules
             var messageType = typeof(IModHelper).Assembly.GetTypes()
                 .Single(t => t.IsEnum && t.Name == "MessageType");
             modContextMessageType = Convert.ToByte(Enum.Parse(messageType, "ModContext"));
-            context.Harmony.Patch(
+            context.Patch(
+                "SMultiplayer.OnServerProcessingMessage",
+                Name,
+                PatchCriticality.Security,
                 AccessTools.Method(multiplayerType, "OnServerProcessingMessage"),
                 prefix: new HarmonyMethod(typeof(ClientVersionGuardModule), nameof(BeforeServerMessage)));
             context.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;

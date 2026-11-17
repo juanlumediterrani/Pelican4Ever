@@ -5,6 +5,7 @@ using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -509,51 +510,54 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                // Parche en Game1.UpdateGameClock para anular el avance automático por acumulación de milisegundos en el Host
-                // (nuestro OneSecondUpdateTicked se encarga de llamar a performTenMinuteClockUpdate cuando toca).
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.UpdateGameClock)),
-                    prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_UpdateGameClock))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                // Parche en Game1.shouldTimePass para que en multijugador no se pause el reloj por abrir menús individuales
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.shouldTimePass)),
-                    postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_shouldTimePass))
-                );
+            // Parche en Game1.UpdateGameClock para anular el avance automático por acumulación de milisegundos en el Host
+            // (nuestro OneSecondUpdateTicked se encarga de llamar a performTenMinuteClockUpdate cuando toca).
+            context.Patch(
+                "Game1.UpdateGameClock",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Game1), nameof(Game1.UpdateGameClock)),
+                prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_UpdateGameClock)));
 
-                // Parche en Utility.CalculateMinutesUntilMorning para descontar los minutos ya simulados en NightHold (GAP-17)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Utility), nameof(Utility.CalculateMinutesUntilMorning), new[] { typeof(int), typeof(int) }),
-                    postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_CalculateMinutesUntilMorning))
-                );
+            // Parche en Game1.shouldTimePass para que en multijugador no se pause el reloj por abrir menús individuales
+            context.Patch(
+                "Game1.shouldTimePass",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Game1), nameof(Game1.shouldTimePass)),
+                postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_shouldTimePass)));
 
-                // Evitar doble procesamiento de máquinas a las 02:00 cuando Game1._newDayAfterFade salta hasta las 06:00
-                // mientras NightHold seguirá simulando 02:00-06:00 en tiempo real 1:1
-                var passTimeMethod = AccessTools.Method(typeof(GameLocation), nameof(GameLocation.passTimeForObjects), new[] { typeof(int) });
-                if (passTimeMethod != null)
-                {
-                    harmony.Patch(
-                        original: passTimeMethod,
-                        prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_PassTimeForObjects))
-                    );
-                }
+            // Parche en Utility.CalculateMinutesUntilMorning para descontar los minutos ya simulados en NightHold (GAP-17)
+            context.Patch(
+                "Utility.CalculateMinutesUntilMorning",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(Utility), nameof(Utility.CalculateMinutesUntilMorning), new[] { typeof(int), typeof(int) }),
+                postfix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Postfix_CalculateMinutesUntilMorning)));
 
-                // Parche en DayTimeMoneyBox.draw para mostrar la hora real más allá de 01:50 y evitar que se pinte en rojo o vibre
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(DayTimeMoneyBox), nameof(DayTimeMoneyBox.draw), new[] { typeof(SpriteBatch) }),
-                    prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_DayTimeMoneyBox_draw)),
-                    transpiler: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Transpiler_DayTimeMoneyBox_draw))
-                );
+            // Evitar doble procesamiento de máquinas a las 02:00 cuando Game1._newDayAfterFade salta hasta las 06:00
+            // mientras NightHold seguirá simulando 02:00-06:00 en tiempo real 1:1
+            context.Patch(
+                "GameLocation.passTimeForObjects",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.passTimeForObjects), new[] { typeof(int) }),
+                prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_PassTimeForObjects)));
 
-                context?.Monitor.Log("[RealTimeClockModule] Harmony patches aplicados correctamente.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[RealTimeClockModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            // Parche en DayTimeMoneyBox.draw para mostrar la hora real más allá de 01:50 y evitar que se pinte en rojo o vibre
+            context.Patch(
+                "DayTimeMoneyBox.draw",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(DayTimeMoneyBox), nameof(DayTimeMoneyBox.draw), new[] { typeof(SpriteBatch) }),
+                prefix: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Prefix_DayTimeMoneyBox_draw)),
+                transpiler: new HarmonyMethod(typeof(RealTimeClockModule), nameof(Transpiler_DayTimeMoneyBox_draw)));
+
+            context.Monitor.Log("[RealTimeClockModule] Harmony patches registrados.", LogLevel.Trace);
         }
 
         public static bool Prefix_UpdateGameClock(GameTime time)

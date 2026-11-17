@@ -441,19 +441,16 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), "startSleep"),
-                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_StartSleep))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                context?.Monitor.Log("[BedLogoutModule] Harmony patch en GameLocation.startSleep aplicado.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[BedLogoutModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context.Patch(
+                "GameLocation.startSleep",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(GameLocation), "startSleep"),
+                prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_StartSleep)));
         }
 
         /// <summary>

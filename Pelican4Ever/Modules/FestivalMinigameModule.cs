@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Festivals;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -68,23 +69,18 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event), nameof(Event.EndPlayerControlSequence)),
-                    prefix: new HarmonyMethod(typeof(FestivalMinigameModule), nameof(Prefix_EndPlayerControlSequence))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.AwardFestivalPrize)),
-                    prefix: new HarmonyMethod(typeof(FestivalMinigameModule), nameof(Prefix_AwardFestivalPrize))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                context?.Monitor.Log("[FestivalMinigameModule] Parches de minijuegos festivos aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FestivalMinigameModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context.Patch("Event.EndPlayerControlSequence", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event), nameof(Event.EndPlayerControlSequence)),
+                prefix: new HarmonyMethod(typeof(FestivalMinigameModule), nameof(Prefix_EndPlayerControlSequence)));
+            context.Patch("Event.DefaultCommands.AwardFestivalPrize", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.AwardFestivalPrize)),
+                prefix: new HarmonyMethod(typeof(FestivalMinigameModule), nameof(Prefix_AwardFestivalPrize)));
+
+            context.Monitor.Log("[FestivalMinigameModule] Parches de minijuegos festivos registrados.", LogLevel.Trace);
         }
 
         /// <summary>

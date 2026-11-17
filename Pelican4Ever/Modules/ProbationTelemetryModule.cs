@@ -55,16 +55,12 @@ namespace Pelican4Ever.Modules
                 nameof(ChatBox.receiveChatMessage),
                 new[] { typeof(long), typeof(int), typeof(LocalizedContentManager.LanguageCode), typeof(string) });
 
-            if (receiveChat != null)
-            {
-                ctx.Harmony.Patch(
-                    original: receiveChat,
-                    postfix: new HarmonyMethod(typeof(ProbationTelemetryModule), nameof(Postfix_ReceiveChatMessage)));
-            }
-            else
-            {
-                ctx.Monitor.Log("[ProbationTelemetry] No se pudo localizar ChatBox.receiveChatMessage para telemetría de chat.", LogLevel.Warn);
-            }
+            ctx.Patch(
+                "ChatBox.receiveChatMessage",
+                Name,
+                PatchCriticality.Security,
+                receiveChat,
+                postfix: new HarmonyMethod(typeof(ProbationTelemetryModule), nameof(Postfix_ReceiveChatMessage)));
         }
 
         /// <summary>
