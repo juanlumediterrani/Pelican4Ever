@@ -2473,7 +2473,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Dependencias:** TASK-2407.
   * **Descripción:**
     - Auditar el código que lee o escribe el estado de un puente desde fuera de él (buzones, portales, catálogo `/residencias`, vagoneta).
-    - Si no hay dependencias, registrar los puentes `1..3` sin `AlwaysActive`; si las hay, documentarlas y dejar la migración para la Épica 25.
+    - Si no hay dependencias, registrar los puentes `1..3` sin `AlwaysActive`; si las hay, documentarlas y dejar la migración para la [épica de concurrencia](#concurrencia-v06).
   * **Criterios de aceptación:**
     1. Resultado de la auditoría anotado en esta tarea.
     2. Si se migra: un cliente fuera de los puentes no recibe sus ubicaciones al conectar y todo lo verificado en la Épica 10 sigue funcionando.
@@ -2513,151 +2513,77 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 
 ---
 
-### Épica 25 (v0.6): Concurrencia Ampliada — Gestión de Interés y Aforo por Mapa (rama `feat/v0.6-extended-concurrency`)
-> **Objetivo:** Superar los 16 jugadores simultáneos (hasta 64) haciendo que el tráfico dependa de quién comparte mapa y no del total de conectados. Aforo de 16 en todo mapa salvo `Town`, la Plaza Central y los puentes, donde se intenta un tope mayor y se restringe según lo que se mida. Rasgo opcional (`ExtendedConcurrency`, apagado por defecto) porque encarece los requisitos del host. Decisiones en [ADR-0011](docs/adr/0011-extended-concurrency-interest-management.md). **Requiere la Épica 24.**
+<a id="concurrencia-v06"></a>
 
-#### 25.0 Reglas de Producto y Puntos de Conflicto del Motor (Stardew Valley 1.6.15)
+### Épica 26 (v0.6): Concurrencia ampliada y aforo por mapa (rama `feat/v0.6-extended-concurrency`)
 
-1. **Medir antes de diseñar el detalle:** las tareas 2501 a 2503 no cambian el comportamiento del servidor y condicionan el resto.
-2. **Rasgo apagado = 0.5:** con `ExtendedConcurrency = false` no se aplica ningún parche de esta épica.
-3. **Ningún delta se descarta** para un receptor que conserva el objeto; solo se retrasa, se agrupa o se sustituye por una resincronización completa.
-4. **Puntos de conflicto anticipados:**
-   - **Conflicto 1 — Reenvío a todos:** `GameServer.rebroadcastClientMessage` reenvía los tipos de `isClientBroadcastType` (entre ellos `0` y `6`) a todos los clientes: 240 flujos con 16 jugadores, 4032 con 64.
-   - **Conflicto 2 — Residencias activas para todos:** `Multiplayer.broadcastLocationMessage` y el envío al conectar de `checkFarmhandRequest` tratan cada residencia con residente conectado como activa para todos los clientes (unas 450 ubicaciones con 64 conectados).
-   - **Conflicto 3 — Deltas incrementales:** saltarse un delta desincroniza la copia del receptor.
-   - **Conflicto 4 — Coste cuadrático dentro del mapa:** persiste en `Town` y los puentes cuando superan los 16 ocupantes.
-   - **Conflicto 5 — Traslado denegado:** el cliente inicia el fundido antes de que el host responda al mensaje tipo `5`.
-   - **Conflicto 6 — Host de un solo hilo:** actualiza en cada tick toda ubicación activa.
-   - **Conflicto 7 — Supuestos de pocos jugadores:** festivales, minijuegos, «todos listos», checkpoints (`CloneInto` por jugador) y cierre ordenado del cambio de día.
-   - **Conflicto 8 — Banco de pruebas:** hacen falta decenas de clientes reales; cada uno es una instancia completa del juego.
+**Objetivo.** Validar primero 24 clientes remotos, con capacidad de reunión medida en el pueblo, la plaza y los puentes. Los escalones posteriores son 32, 48 y 64. La admisión al servidor, el aforo voluntario por mapa y el número de residencias se publican por separado. [ADR-0011](docs/adr/0011-extended-concurrency-interest-management.md)
 
----
+**Base.** Integrar el trabajo sobre la 0.5.1 verificada de `dev` (`d06b01f`). Su Épica 25 corresponde a resiliencia operativa. Esta propuesta ocupa `TASK-2601` a `TASK-2612`. El ensayo anterior alcanzó 16 clientes remotos en un mundo con 64 residencias pobladas. A 24 aún faltan medidas de red, experiencia de juego y restauración. [Informe de la 0.5.0](https://github.com/juanlumediterrani/Pelican4Ever/blob/d06b01f85e08667675ae524ae9194af5da583def/docs/v0.5-residence-scaling-verification-2026-11-17.md)
 
-- [ ] **TASK-2501: Telemetría de red y de tick en el host (`Pelican4Ever.Core/Admin`, `AdminApiModule.cs`, módulo nuevo `NetTelemetryModule.cs`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** Ninguna.
-  * **Descripción:**
-    - Contar en el host mensajes y bytes enviados por tipo de mensaje y por receptor, en ventanas de 10 s.
-    - Medir la duración del tick (mediana y percentil 95), el número de ubicaciones activas y la ocupación por mapa.
-    - Exponerlo en `AdminApi` y en un comando de consola; sin coste apreciable cuando nadie lo consulta.
-    - Registrar la línea base con 16 jugadores en el servidor actual.
-  * **Criterios de aceptación:**
-    1. Tabla de línea base (bytes/s por tipo, tick p95, ubicaciones activas) con 2, 8 y 16 jugadores.
-    2. La telemetría no cambia el comportamiento del servidor ni añade más de un 1 % al tick.
+**Secuencia del ensayo.** Medir a 24 con la replicación de la 0.5.1 y la capacidad ampliada solo para laboratorio. Repetir en iguales condiciones con el filtro residencial. Si se alcanza el objetivo, se puede publicar ese escalón con el protocolo de personajes original tras verificar aforos, transiciones y compatibilidad. Investigar los deltas remotos cuando el desglose de costes lo justifique.
 
-- [ ] **TASK-2502: Banco de carga con clientes sin render (`scripts/`, módulo de pruebas `LoadBotModule.cs`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2501.
-  * **Descripción:**
-    - Script que lanza *n* clientes con `HeadlessRendering`, cada uno con su identidad de dispositivo de laboratorio, contra un host local.
-    - Módulo de cliente, activo solo con `EnableTestCommands`, que mueve al personaje por un guion: pasear por `Town`, cruzar puentes, entrar y salir de su residencia, usar herramientas.
-    - Medir cuántos clientes caben en la máquina de pruebas y documentar el límite.
-  * **Criterios de aceptación:**
-    1. Un comando levanta 16 clientes que se mueven sin intervención durante 30 minutos.
-    2. Documentado el máximo de clientes por máquina y cómo repartir la carga entre varias.
+- [ ] **TASK-2601 · Instrumentación y línea base de la 0.5.1**
+  * **Prioridad:** Alta. **Dependencia:** base de residencias y admisión de la 0.5.1.
+  * Reutilizar las métricas de guardado de `LoadMetricsTracker`. En ventanas de 10 s recoger mensajes y bytes por tipo y receptor, de dónde proceden (host o reenvío), subida efectiva del transporte, tamaño y antigüedad del pendiente más viejo por conexión. Medir el trabajo del tick (mediana, p95 y máximo), el recorrido y serialización de raíces, ocupación por mapa, CPU, memoria y tiempo de entrada hasta poder jugar.
+  * Exponer resultados en consola y `AdminApi`. Instrumentar la referencia expresamente en el laboratorio y documentar cómo se mide el coste de la propia captura.
+  * **Aceptación:** tabla con 2, 8 y 16 clientes, condiciones del ensayo y capturas comparables con y sin instrumentación. Sobrecoste ≤ 1 % en el trabajo del tick bajo la misma carga. Separar carga útil, tráfico en el transporte y pausas de guardado.
 
-- [ ] **TASK-2503: Spike — entrega diferida de deltas de jugadores lejanos y viabilidad de los parches**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2501, TASK-2502.
-  * **Descripción:**
-    - Comprobar en el ensamblado de SMAPI que no sustituye `Multiplayer.broadcastLocationMessage` y que admite un parche sobre `GameServer.rebroadcastClientMessage`.
-    - Prototipar los candidatos A (lotes en orden), B (delta por receptor) y C (estado compacto + resincronización) de ADR-0011 y medir el ahorro y la corrección de cada uno con el banco de carga.
-    - Documentar qué ocurre hoy cuando una residencia pasa a activa para clientes ya conectados.
-  * **Criterios de aceptación:**
-    1. Candidato elegido, con medidas, anotado en ADR-0011 como hallazgo.
-    2. Prueba de 30 minutos sin copias desincronizadas con el candidato elegido.
-    3. Si ninguno es correcto, queda documentado y la épica se replantea antes de seguir.
+- [ ] **TASK-2602 · Banco reproducible con clientes reales**
+  * **Prioridad:** Alta. **Dependencia:** TASK-2601.
+  * Partir del ensayo de 16 clientes SMAPI y recuperar o reproducir su arnés. Cada cliente tendrá identidad de laboratorio y un guion determinista para moverse, usar herramientas, acceder a residencias y cruzar puentes. Desactivar el dibujado únicamente en el modo de prueba del cliente cuando se necesite. El `HeadlessRendering` actual se interrumpe para el cliente en partida.
+  * **Aceptación:** un comando mantiene a 16 clientes activos durante 30 min, incluso en segundo plano. Al menos un cliente visible reproduce las acciones. Registrar cadencia de los bots, límite por máquina y reparto entre máquinas para distinguir saturación del generador y del host.
 
-- [ ] **TASK-2504: Configuración del rasgo (`ServerConfig.cs`, `config.example.json`, `ModToggleModule.cs`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** Épica 24 (TASK-2401).
-  * **Descripción:**
-    - Añadir `ExtendedConcurrency` (`false`), `DefaultLocationCapacity` (`16`) y `LocationCapacityOverrides` (`{}`).
-    - Validar `MaxConcurrentPlayers` en `1..16` con el rasgo apagado y `1..64` encendido.
-    - Registrar los módulos de esta épica solo con el rasgo encendido.
-  * **Criterios de aceptación:**
-    1. Con el rasgo apagado, `MaxConcurrentPlayers = 32` es un error de validación.
-    2. Con el rasgo apagado no hay ningún parche de la Épica 25 aplicado (comprobado en el registro de parches).
+- [ ] **TASK-2603 · Activación y capacidad efectiva de admisión**
+  * **Prioridad:** Alta. **Dependencia:** 0.5.1 con admisión, cola, reserva de reconexión y expulsión por inactividad.
+  * Introducir `ExtendedConcurrency=false`, `DefaultLocationCapacity=16` y `LocationCapacityOverrides={}`. Validar `MaxConcurrentPlayers` en `1..16` o `1..64` según el rasgo. Aplicar el mismo límite efectivo en `ServerConfig`, transporte, `AdmissionLogic`, `IdleKickLogic` y estado de administración. Los dos últimos módulos de dominio limitan hoy el valor a 16.
+  * **Aceptación:** con capacidad 24, el cliente 17 llega al juego y el 25 entra en cola si hay plaza de espera. La regla de inactividad por encima de la mitad comienza con 13 clientes. El host queda fuera del contador. Con el rasgo apagado, configurar 32 devuelve error, pasan las pruebas de admisión de la 0.5.1 y el registro de parches concuerda con esa base.
 
-- [ ] **TASK-2505: Aforo por mapa (`Pelican4Ever.Core/Networking/LocationCapacityLogic.cs`, `AdmissionLogic.cs`, módulo nuevo `LocationCapacityModule.cs`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2504, Épica 24 (TASK-2402).
-  * **Descripción:**
-    - Implementar en Core la clasificación de mapas (alta capacidad o aforo por defecto), los ajustes por nombre y las exenciones de ADR-0011 (residente, traslado forzado, administración).
-    - Aplicar la decisión en el host al atender el mensaje tipo `5`.
-    - Replicar la ocupación de los mapas con aforo a los clientes y comprobarla antes de iniciar el traslado.
-    - Resolver la cancelación limpia en el cliente cuando el host deniega pese a la comprobación previa.
-  * **Criterios de aceptación:**
-    1. El jugador 17 no entra en una residencia ajena con 16 dentro y recibe un mensaje con la ocupación.
-    2. El residente entra siempre en su residencia.
-    3. Un desmayo o el cambio de día nunca dejan a un jugador sin destino por aforo.
-    4. Un traslado denegado no deja al cliente en pantalla negra.
-    5. Pruebas unitarias de clasificación, ajustes y exenciones.
+- [ ] **TASK-2604 · Control a 24 con el protocolo de la 0.5.1**
+  * **Prioridad:** Alta. **Dependencias:** TASK-2601, TASK-2602 y TASK-2603.
+  * Elevar únicamente los límites de admisión necesarios en el perfil de laboratorio. Tomar una copia inicial de la partida y ejecutar tres guiones: vecinos repartidos entre residencias pobladas, reunión en movimiento en `Town` y `Farm`, y transiciones con festival, viajes y reconexión. Incorporar checkpoint, cambio de día y recarga. Conservar hardware, cuota de memoria, mods, semilla o copia de partida y secuencia de acciones para repetir cada variante.
+  * **Aceptación:** informe con clientes realmente activos, tiempo de ejecución, bytes de los tipos 0 y 6, subida total, colas por receptor, pausas y observaciones desde el cliente visible. Si el host o los generadores se saturan, registrar dónde y a qué carga. Este ensayo proporciona la referencia para TASK-2606.
 
-- [ ] **TASK-2506: Residencias activas por receptor (`LocationCullingLogic.cs`, `FarmSlotModule.cs`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2503, TASK-2504.
-  * **Descripción:**
-    - Añadir `LocationCullingLogic.ShouldSendTo` y aplicarlo en `Multiplayer.broadcastLocationMessage` y en el envío de ubicaciones al conectar.
-    - Reenviar la ubicación completa a quien entra en una residencia que no tenía.
-    - Mantener en el residente la instancia sincronizada que necesitan los menús de Robin y Marnie (`RetainSyncedOwnPrivateLocation`).
-  * **Criterios de aceptación:**
-    1. Un cliente recibe al conectar solo sus residencias y las ubicaciones comunes.
-    2. Un visitante ve el estado correcto al entrar en una residencia ajena y al volver a entrar más tarde.
-    3. Construcción, animales y pedidos por buzón siguen funcionando para propietario e inquilino.
-    4. Pruebas unitarias de `ShouldSendTo`.
+- [ ] **TASK-2605 · Reserva de entrada al mapa antes del fundido**
+  * **Prioridad:** Alta. **Dependencia:** TASK-2603.
+  * Resolver en `LocationCapacityLogic` el destino efectivo, su aforo y sus exenciones. Aplicar la autorización del host antes de iniciar cualquier viaje voluntario limitado, tanto con copia activa en el cliente como cuando se necesita pedirla. La ocupación replicada informa al jugador. El host cuenta de forma atómica ocupantes y concesiones en curso por instancia.
+  * Asociar la reserva a jugador, destino e intento. Confirmar una sola llegada y liberar por cancelación, caducidad o desconexión. Mantener separada la reserva global de reconexión. Denegar con mapa y ocupación, conservando control, posición y pantalla en el origen.
+  * **Aceptación:** con 15 de 16 plazas ocupadas y dos solicitudes simultáneas, conceder una sola, incluida la variante en la que un solicitante tiene el destino cargado. Cubrir respuesta tardía, intento duplicado, abandono y reutilización de la plaza. Probar propietario e inquilino de regreso por un puente lleno, desmayo, expulsión residencial, fin de evento, cambio de día y teletransporte administrativo. Un destino temporalmente por encima del umbral sigue operativo y admite nuevas visitas cuando vuelve a haber hueco.
 
-- [ ] **TASK-2507: Reenvío de mensajes de cliente por ubicación (módulo nuevo `InterestRelayModule.cs`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2503, TASK-2506.
-  * **Descripción:**
-    - Sustituir el reenvío a todos por la tabla de receptores de ADR-0011 para los tipos `0` y `6`.
-    - Implementar la entrega diferida con el candidato elegido en el spike (como máximo cada 30 ticks).
-    - Dejar sin cambios el estado del mundo, el equipo y el chat.
-  * **Criterios de aceptación:**
-    1. Con 32 clientes repartidos en mapas distintos, los bytes/s del tipo `0` bajan respecto al reenvío vanilla en la proporción medida en el spike.
-    2. Al coincidir dos jugadores en un mapa, cada uno ve al otro con apariencia, objeto en mano y animación correctos.
-    3. Prueba de 30 minutos con el banco de carga sin copias desincronizadas.
+- [ ] **TASK-2606 · Replicación residencial por raíz y por receptor**
+  * **Prioridad:** Alta. **Dependencia:** TASK-2604.
+  * En `LocationCullingLogic` y `FarmSlotModule`, resolver receptores según la raíz, propietario e inquilino conectados, visitantes e interiores dependientes. Aplicar al envío inicial y al tipo 6 generado por el host o reenviado desde un cliente. Verificar en vivo los puntos Harmony con SMAPI 4.5.2 y el conjunto de mods de referencia.
+  * Asegurar una copia completa vigente al adquirir interés y antes de aplicar deltas. Conservar la instancia residencial de Robin y Marnie para residentes fuera del mapa. Cubrir la activación de una residencia con clientes que ya estaban conectados.
+  * **Aceptación:** un tercero en la playa queda fuera de los envíos residenciales ajenos. Un visitante dentro de un edificio conserva la raíz necesaria mientras el residente modifica el exterior. Tras salir y volver, inventario, construcción y animales concuerdan con el host. Verificar pedidos por buzón para propietario e inquilino. Repetir TASK-2604 desde la misma copia, manteniendo el tipo 0 original, y publicar ahorro de red, CPU y tiempo de conexión por separado.
 
-- [ ] **TASK-2508: Mapas concurridos y clasificación de mapas problemáticos (`LocationCapacityLogic.cs`, `VisitorGuardModule.cs`)**
-  * **Prioridad:** Media
-  * **Dependencias:** TASK-2505, TASK-2507.
-  * **Descripción:**
-    - Implementar la escalera de ADR-0011 para mapas de alta capacidad con más de 16 ocupantes: frecuencia a 6 ticks, restricción de acciones y aforo por ajuste.
-    - Medir `Town`, la Plaza Central y los puentes con 24, 32 y 48 ocupantes y fijar hasta qué peldaño hace falta llegar en cada uno.
-    - Revisar minas, Caverna Calavera, interiores con tienda y festivales; documentar cuáles se quedan en 16.
-  * **Criterios de aceptación:**
-    1. Tabla de ocupación medida por mapa con el peldaño aplicado y el aforo resultante.
-    2. La restricción de acciones avisa al jugador en vez de fallar en silencio.
+- [ ] **TASK-2607 · Decisión sobre los deltas de personajes remotos**
+  * **Prioridad:** Alta. **Dependencia:** TASK-2606.
+  * Comparar control y filtro residencial. Anotar en ADR-0011 qué limita el escalón y qué proporción corresponde al tipo 0. Si se cumple el objetivo con el protocolo actual, registrar esa elección. Si el tipo 0 limita la capacidad, comparar las alternativas justificadas por las medidas.
+  * A agrupa los deltas en orden y conserva su carga útil. B requiere una referencia propia por receptor porque `NetRoot.Write` llama a `MarkClean()`. C conserva presencia compacta y requiere auditar la presentación del jugador y los eventos que clonan al `Farmer` remoto.
+  * **Aceptación:** decisión por escalón con bytes de transporte, coste del host y del cliente, memoria, edad del estado y respuesta al encontrarse. Para cada candidato ensayado, comprobar convergencia con dos receptores a ritmos distintos y registrar su ventaja o causa de descarte. Si no hay un candidato satisfactorio, se conserva el protocolo y solo se publica la capacidad ya verificada.
 
-- [ ] **TASK-2509: Auditoría de supuestos de pocos jugadores (`FestivalMinigameModule.cs`, `FestivalParticipationModule.cs`, `CheckpointModule.cs`, `DailyRolloverModule.cs`, `ChatChannelModule.cs`)**
-  * **Prioridad:** Media
-  * **Dependencias:** TASK-2502.
-  * **Descripción:**
-    - Probar con más de 16 conectados: festivales y sus minijuegos, comprobaciones de «todos listos», duración del checkpoint con clonado de cada jugador vivo, cierre ordenado del cambio de día, listas de jugadores en la interfaz y en `AdminApi`.
-    - Corregir lo que falle o dejarlo anotado con su aforo.
-  * **Criterios de aceptación:**
-    1. Informe con cada subsistema probado, su resultado y la corrección o la limitación aplicada.
-    2. Un checkpoint con 32 conectados termina dentro de `CheckpointMaxDurationMs` o queda documentado el ajuste.
+- [ ] **TASK-2608 · Implementación del candidato de personajes, si procede**
+  * **Prioridad:** Condicionada a TASK-2607. **Dependencia:** selección documentada de A, B o C.
+  * Implementar exclusivamente la variante elegida. Proteger el paso de lejano a cercano y la desconexión o reconexión con actualizaciones pendientes. Para entrega diferida, contrastar la espera programada máxima de 30 ticks con el retraso efectivo observado. Mantener las rutas de mundo, equipo y chat.
+  * **Aceptación si se activa:** 30 min con entradas y salidas de mapa, sin divergencias. Objeto en mano, apariencia y animación correctos al encontrarse. Ningún delta anterior al cambio de base sobrescribe el estado completo. Reproducir, frente a TASK-2606, el beneficio que motivó la decisión. Si TASK-2607 conserva el protocolo, esta tarea queda diferida y el escalón sigue su verificación.
 
-- [ ] **TASK-2510: Escalones 24, 32, 48 y 64 y requisitos del host (`docs/despliegue/host-vps.md`, `docs/host-api.md`)**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2505 a TASK-2509.
-  * **Descripción:**
-    - Ejecutar el banco de carga en cada escalón y contrastar con los umbrales de ADR-0011 (tick p95 ≤ 16 ms, sin cola de envío creciente en 30 minutos).
-    - Publicar CPU, memoria y subida necesarias por escalón y el máximo soportado.
-  * **Criterios de aceptación:**
-    1. Cada escalón queda marcado como soportado, experimental o no alcanzado, con sus medidas.
-    2. La guía de despliegue explica cómo activar el rasgo y qué máquina necesita cada escalón.
+- [ ] **TASK-2609 · Capacidad de reunión y medidas por mapa**
+  * **Prioridad:** Alta. **Dependencias:** TASK-2605 y TASK-2606. Repetir con TASK-2608 si el perfil usa ese candidato.
+  * Empezar por 16 entradas voluntarias en cada mapa. Probar por separado `Town`, `Farm`, los puentes y los mapas temporales de festival. Revisar interiores con tienda, minas y Caverna Calavera. Elevar explícitamente el aforo de laboratorio para cada prueba e identificar la instancia o el mapa medido.
+  * En mapas saturados, ensayar primero cambios de jugador cada 6 ticks, después restricciones avisadas sobre acciones permitidas que generen carga y finalmente el aforo por configuración. Medir cada intervención con clientes en movimiento y un observador visible.
+  * **Aceptación:** tabla por mapa con ocupantes probados, perfil y aforo recomendado. Un perfil de 64 clientes globales solo podrá recomendar 64 reunidos en un mapa si también se ensayó esa reunión. Verificar tránsito y acceso residencial con los aforos publicados.
 
-- [ ] **TASK-2511: Internacionalización, verificación en vivo y bump a `0.6.0`**
-  * **Prioridad:** Alta
-  * **Dependencias:** TASK-2501 a TASK-2510.
-  * **Descripción:**
-    - Textos de aforo y de acciones restringidas en ES/EN/ZH.
-    - Verificación en vivo con jugadores reales en el mayor escalón soportado.
-    - Actualizar `manifest.json` y `architecture.md`.
-  * **Criterios de aceptación:**
-    1. `dotnet test` en verde.
-    2. Con `ExtendedConcurrency = false`, la suite de verificación de la 0.5 pasa sin cambios.
-    3. Sesión en vivo documentada con más de 16 jugadores.
+- [ ] **TASK-2610 · Festivales, transiciones y persistencia**
+  * **Prioridad:** Alta. **Dependencias:** TASK-2605 y TASK-2606.
+  * Ensayar tandas, minijuegos, comprobaciones de «todos listos», fin de evento con destinos concurridos, listas de jugadores en chat y administración, checkpoint y cierre ordenado del día. Hacer coincidir viajes y reconexiones con las transiciones.
+  * **Aceptación:** por escalón, registrar tiempo de clonación, serialización, checkpoint completo, pausa máxima, rollover y tiempo de vaciado de colas. Comparar checkpoint con `CheckpointMaxDurationMs` y rollover con el presupuesto de 120 s de ADR-0010. Documentar ajustes y pausas visibles. Recargar la copia y contrastar personajes, inventarios y estado residencial frente a lo observado antes de guardar. Corregir o documentar con su límite cada subsistema afectado.
+
+- [ ] **TASK-2611 · Veredicto por escalón y guía del host**
+  * **Prioridad:** Alta. **Dependencias:** TASK-2607, TASK-2609 y TASK-2610, más TASK-2608 para perfiles que utilicen su protocolo.
+  * Ejecutar incrementalmente a 24, 32, 48 y 64 clientes. En cada escalón contrastar los tres escenarios de ADR-0011 y repetir las pruebas pertinentes sobre el perfil final. Exponer las métricas en la guía de despliegue, el contrato de `AdminApi` y el comando de consola.
+  * **Aceptación:** escalón soportado con tick p95 ≤ 16 ms de trabajo ordinario y sin crecimiento sostenido de la cola hacia ningún cliente en 30 min, estado convergente, transiciones jugables y restauración correcta. Publicar además antigüedad máxima de pendientes, pausa máxima, experiencia visible, CPU, cuota y pico de memoria, subida, política de guardado y aforos ensayados. Clasificar las cargas degradadas o incompletas como experimentales y las que el banco no alcanzó como tales. Se puede cerrar un escalón mientras continúan los experimentos de los siguientes.
+
+- [ ] **TASK-2612 · Internacionalización, verificación en vivo y versión 0.6.0**
+  * **Prioridad:** Alta. **Dependencia:** TASK-2611 con al menos un escalón soportado por encima de 16.
+  * Completar los mensajes de aforo, espera, denegación y restricciones en ES/EN/ZH. Actualizar `manifest.json` y la arquitectura al publicar.
+  * **Aceptación:** `dotnet test` en verde, suite de la 0.5.1 superada con el rasgo apagado y sesión en vivo documentada con jugadores reales en el mayor escalón declarado soportado. Registrar el perfil de configuración y la capacidad de reunión que se verificó.

@@ -1,102 +1,90 @@
-# ADR-0011: Concurrencia Ampliada por Gestión de Interés y Tope de Jugadores por Mapa
+# ADR-0011: Concurrencia ampliada y aforo por mapa
 
 * **Estado:** Propuesto
-* **Fecha:** 2026-11-15
-* **Versión objetivo:** 0.6 (rama `feat/v0.6-extended-concurrency`)
-* **Depende de:** [ADR-0010](0010-scalable-residences-admission-queue.md) (admisión única, magnitudes separadas, puentes no siempre activos) y [ADR-0004](0004-host-authority-client-mod-and-satiety.md) (mod obligatorio en clientes).
+* **Fecha:** 2026-11-15. Revisión técnica del 2026-11-19.
+* **Versión objetivo:** 0.6, rama `feat/v0.6-extended-concurrency`.
+* **Dependencias:** [ADR-0010, residencias y admisión al servidor](0010-scalable-residences-admission-queue.md) y [ADR-0004, autoridad del host y mod obligatorio](0004-host-authority-client-mod-and-satiety.md).
+* **Plan de trabajo:** [Épica 26 del backlog](../../backlog.md#concurrencia-v06).
 
-## Contexto
+## Objetivo y evidencia disponible
 
-Con 32 o 64 residencias (ADR-0010) el siguiente límite es la simultaneidad: 16 jugadores a la vez. Se quiere superar ese número con un tope de **16 jugadores por mapa** allí donde el mapa lo necesite, sin tope fijo en los mapas ligeros.
+Queremos que más vecinos puedan jugar a la vez, tanto trabajando en sus residencias como reuniéndose en el pueblo. Publicaremos dos capacidades distintas: cuántos clientes remotos admite el servidor y cuántas personas pueden reunirse con buena respuesta en cada mapa ensayado. El primer objetivo son **24 clientes**. Los siguientes escalones experimentales son 32, 48 y 64.
 
-Hechos verificados sobre el decompilado de Stardew Valley 1.6.15:
+La base de comparación es `dev` 0.5.1 (`d06b01f`), que ya incorpora las pruebas de la 0.5.0. En el ensayo del 17 de noviembre, una VM de 2 vCPU sostuvo **16 clientes remotos y un host** en una partida con 64 residencias pobladas. El checkpoint duró 8,299 s, incluidos 45,32 ms de clonación de los personajes. En la medición separada por tamaño del mundo, con 64 residencias se alcanzaron 4,71 GiB de memoria máxima, un checkpoint de 8,916 s y un cambio de día de 32,44 s. Se elevó la cuota del servicio de 4 a 6 GiB para ese ensayo. Con 32 residencias el checkpoint ya alcanzaba 6,551 s, por encima del objetivo habitual de 3 s. Estas mediciones justifican ensayar 24 y conservar la pausa de guardado como métrica independiente. Quedan por medir los bytes por tipo de mensaje y el efecto de reunir a los jugadores en un solo mapa. [Informe de verificación 0.5.0](https://github.com/juanlumediterrani/Pelican4Ever/blob/d06b01f85e08667675ae524ae9194af5da583def/docs/v0.5-residence-scaling-verification-2026-11-17.md)
 
-1. **No hay tope de jugadores en el motor** más allá de `MaximumConnections` de Lidgren y de una cabaña por peón (ADR-0010).
-2. **El host reenvía a todos, sin mirar la ubicación.** `GameServer.processIncomingMessage` llama a `rebroadcastClientMessage(message, Multiplayer.AllPlayers)` para todo tipo de `Multiplayer.isClientBroadcastType`, entre ellos el `0` (delta de jugador) y el `6` (delta de ubicación). Cada cliente emite su delta cada 3 ticks (`farmerDeltaBroadcastPeriod`). Con *n* clientes son *n·(n−1)* flujos: 240 con 16, 4032 con 64.
-3. **Las ubicaciones siempre activas se envían a todos.** `Multiplayer.broadcastLocationMessage` manda los deltas de una ubicación siempre activa a todo `Game1.otherFarmers`; `GameServer.checkFarmhandRequest` envía todas ellas completas al conectar. Con el culling actual, cada residente conectado mantiene activas sus hasta 7 ubicaciones **para todos los clientes**: con 64 conectados, unas 450.
-4. **Las ubicaciones no siempre activas ya tienen gestión de interés.** El mismo método envía sus deltas solo a los jugadores que están dentro, y el host la reenvía completa a quien entra. `Town` funciona así.
-5. **El host es un cliente completo en un solo hilo:** actualiza en cada tick toda ubicación activa.
-6. **La entrada a un mapa pasa por el host.** El cliente pide la ubicación con el mensaje tipo `5`, que `GameServer` atiende en `warpFarmer`.
+La versión 1.6 anunció ocho jugadores en PC. El mod Unlimited Players es un precedente para elevar el límite configurable. El aforo operativo de Pelican4Ever se determinará con su propia partida, hardware y conjunto de mods. [Notas oficiales de Stardew Valley 1.6](https://www.stardewvalley.net/stardew-valley-1-6-update-full-changelog/) · [Unlimited Players](https://armitxes.net/Project/StardewValley/UnlimitedPlayers)
 
-Decisiones de producto tomadas:
+## Comportamiento observado en Stardew Valley 1.6.15
 
-* En `Town` y en los puentes se intenta **subir el tope por encima de 16**: sincronizan sobre todo jugadores y posiciones, apenas objetos. Las restricciones de acciones o de aforo se irán aplicando según lo que se mida.
-* En los mapas que den problemas, el tope es **16**.
-* Si la solución encarece de forma apreciable los requisitos del host, debe poder **activarse o desactivarse desde la configuración**.
-
-## Decisión
-
-### 1. Rasgo opcional
-
-| Clave | Valor por defecto | Efecto |
-| --- | --- | --- |
-| `ExtendedConcurrency` | `false` | Apagado: el servidor se comporta exactamente como en la 0.5 y `MaxConcurrentPlayers` no pasa de `16`. |
-| `MaxConcurrentPlayers` | `16` | Con el rasgo encendido admite `1..64`. |
-| `DefaultLocationCapacity` | `16` | Aforo de todo mapa que no sea de alta capacidad. |
-| `LocationCapacityOverrides` | `{}` | Aforo propio por nombre de ubicación; ajusta lo anterior sin tocar código. |
-
-Con el rasgo apagado no se aplica ningún parche de esta decisión. Cambiarlo exige reiniciar el servidor.
-
-### 2. Aforo por mapa
-
-1. El aforo lo decide `LocationCapacityLogic` (`Pelican4Ever.Core/Networking`), consultado desde el mismo punto de admisión de ADR-0010.
-2. **Mapas de alta capacidad** (sin aforo propio; rige `MaxConcurrentPlayers`): `Town`, la Plaza Central (`Farm`) y todo `Pelican4Ever_Bridge_*`.
-3. **El resto de mapas** tiene aforo `DefaultLocationCapacity` (`16`): residencias y sus dependencias, anexos, interiores, minas, Caverna Calavera y cualquier otro. Un mapa pasa a alta capacidad solo tras medirlo.
-4. El aforo se aplica a las **entradas voluntarias**. Nunca se deniega: la entrada de un residente a su residencia y dependencias, un traslado forzado (desmayo, cambio de día, expulsión de una residencia, fin de evento) ni un teletransporte de administración.
-5. La autoridad es el host, al atender el mensaje tipo `5`. El cliente consulta antes una vista replicada de la ocupación para no iniciar el fundido de pantalla de un traslado que va a ser denegado.
-6. Quien no cabe recibe un mensaje con el mapa y su ocupación; no hay cola por mapa.
-
-### 3. Gestión de interés
-
-**Residencias y anexos: activos por receptor.** `LocationCullingLogic.ShouldKeepActive` sigue decidiendo si el host simula y acepta construcción en la ubicación. Se añade `ShouldSendTo(receptor)`: los deltas y el envío completo al conectar llegan solo a quien está dentro y a los residentes conectados de esa residencia. Los demás clientes no reciben nada de ella hasta que entran.
-
-**Mensajes de cliente reenviados por ubicación.**
-
-| Mensaje | Receptores |
+| Ruta inspeccionada | Comportamiento que condiciona la propuesta |
 | --- | --- |
-| Delta de ubicación (tipo `6`) | Solo los clientes que tienen esa ubicación (dentro de ella, o residentes si es una residencia). |
-| Delta de jugador (tipo `0`), mismo mapa | Inmediato, como en vanilla. |
-| Delta de jugador (tipo `0`), otro mapa | Diferido: el host lo entrega agrupado, como máximo cada `30` ticks (0,5 s). |
-| Estado del mundo, equipo y chat | A todos, sin cambios. |
+| `Multiplayer.UpdateLate`, `broadcastFarmerDeltas`, `GameServer.rebroadcastClientMessage` | Cada tres ticks hay normalmente una oportunidad de enviar los cambios pendientes del jugador. El host reenvía los tipos 0 (jugador) y 6 (ubicación) a los demás clientes. Con 16 clientes hay 240 parejas dirigidas posibles y con 64 hay 4.032. Para conocer paquetes y bytes hacen falta medidas de tráfico durante actividad real. |
+| `GameServer.checkFarmhandRequest`, `sendServerIntroduction` | Al entrar se envían ubicaciones siempre activas completas y se presentan los demás personajes conectados. La conexión tiene un coste propio, distinto del tráfico durante el juego. |
+| `Multiplayer.broadcastLocationMessage`, `isActiveLocation` | Las ubicaciones siempre activas llegan a todos. Para otras ubicaciones, el host también considera a quienes están en interiores de sus edificios. Una estructura puede compartir raíz de red con el mapa padre. |
+| `Multiplayer.updateRoots`, `broadcastLocationDeltas` | El host recorre raíces y busca cambios en ubicaciones, incluidas las generadas. Puede gastar CPU en recorrer y serializar aunque el conjunto final de destinatarios sea pequeño. |
+| Traslado en `Game1` y recepción en `GameServer.processIncomingMessage` | Con una raíz activa ya cargada, el cliente puede completar el viaje localmente. Si hay host dedicado, puede enviar el tipo 5 como aviso con `needsLocationInfo=false`. El servidor llama a `warpFarmer` cuando se solicita la ubicación. En esa ruta el cliente puede dejar `currentLocation` a `null` mientras espera. |
+| `NetRoot.Write` y `Multiplayer.processIncomingMessage` | Escribir el delta marca limpia la raíz mediante `MarkClean()`. Hay eventos que clonan al `Farmer` remoto. Ambos comportamientos afectan a cualquier representación alternativa del personaje. |
 
-Los deltas de la red del juego son incrementales: **ninguno se descarta** para un receptor que conserva ese objeto, o su copia se desincroniza. El mecanismo de entrega diferida se elige en un spike entre tres candidatos y se anota aquí como hallazgo:
+En SMAPI 4.5.2, `SMultiplayer` instala interceptores al inicializar cliente y servidor y delega los mensajes ordinarios al juego. La compatibilidad del punto de parche concreto con Harmony y el conjunto de mods se comprobará en ejecución. [Código de SMAPI 4.5.2](https://github.com/Pathoschild/SMAPI/blob/4.5.2/src/SMAPI/Framework/SMultiplayer.cs)
 
-* **A.** Agrupar en orden los deltas originales y entregarlos por lotes.
-* **B.** Que el host reescriba un delta propio por receptor a partir de su copia del jugador.
-* **C.** Sustituir al jugador lejano por un estado compacto (nombre, mapa, apariencia) y resincronizarlo completo cuando comparte mapa.
+## Decisión propuesta
 
-### 4. Mapas concurridos
+### 1. Activación y límites
 
-Dentro de un mismo mapa el coste sigue siendo cuadrático (40 jugadores en `Town` son 1560 flujos). Cuando un mapa de alta capacidad supera los 16 jugadores se aplica, por este orden y solo hasta donde las medidas lo pidan:
+| Clave | Por defecto | Efecto propuesto |
+| --- | --- | --- |
+| `ExtendedConcurrency` | `false` | Requiere reinicio. Apagado conserva el comportamiento de la base 0.5.1, incluido el máximo de 16 clientes. |
+| `MaxConcurrentPlayers` | `16` | Con el rasgo activo admite valores de 1 a 64. El perfil publicado indica el máximo probado para cada host. El contador excluye al anfitrión. |
+| `DefaultLocationCapacity` | `16` | Umbral de entradas voluntarias por mapa, también para festivales y mapas temporales. |
+| `LocationCapacityOverrides` | `{}` | Ajustes por nombre de ubicación. El ajuste tiene precedencia sobre el valor por defecto y la ocupación sigue limitada por los clientes admitidos al servidor. |
 
-1. **Menos frecuencia:** el delta de jugador entre ocupantes de ese mapa pasa de cada 3 ticks a cada 6.
-2. **Menos acciones:** se restringen en ese mapa las acciones que generan deltas de ubicación (colocar objetos, bombas, labrar, talar).
-3. **Menos gente:** se le fija un aforo en `LocationCapacityOverrides`.
+`Town`, la Plaza Central (`Farm`) y los puentes `Pelican4Ever_Bridge_*` son candidatos a un aforo mayor. Cada uno empieza con el umbral por defecto. En laboratorio se eleva explícitamente el aforo del mapa bajo prueba. En la guía de producción solo se recomienda el mayor valor superado allí, con sus condiciones. Los interiores, minas, Caverna Calavera y festivales mantienen el umbral de 16 hasta que exista una medición propia.
 
-### 5. Apertura por escalones medidos
+Para probar el escalón 24 hay que actualizar conjuntamente la validación de `ServerConfig`, la capacidad de `AdmissionLogic` y el umbral de `IdleKickLogic`. Los dos últimos limitan hoy su entrada a 16 aun cuando el transporte admita más conexiones. El rasgo apagado conserva los rangos, la cola y los parches de la base. La telemetría para medir esa referencia se habilita expresamente en el laboratorio. [Admisión en 0.5.1](https://github.com/juanlumediterrani/Pelican4Ever/blob/d06b01f85e08667675ae524ae9194af5da583def/Pelican4Ever.Core/Networking/AdmissionLogic.cs#L102) · [Inactividad en 0.5.1](https://github.com/juanlumediterrani/Pelican4Ever/blob/d06b01f85e08667675ae524ae9194af5da583def/Pelican4Ever.Core/Players/IdleKickLogic.cs#L46)
 
-`MaxConcurrentPlayers` se valida en cuatro escalones: **24, 32, 48 y 64**. Un escalón se documenta como soportado solo si, en el host de referencia y con esa carga en el banco de pruebas:
+### 2. Admisión a un mapa antes del fundido
 
-* el tick del host se mantiene en **16 ms** o menos en el percentil 95; y
-* ningún cliente acumula cola de envío creciente durante 30 minutos.
+1. La admisión global de ADR-0010 decide quién entra en la partida. Una vez dentro, `LocationCapacityLogic` resuelve el destino efectivo y sus exenciones. El cliente solicita al host autorización **antes del fundido** para todo traslado voluntario sujeto a aforo, incluso con la raíz del destino ya cargada. La vista replicada de ocupación permite anticipar el aviso.
+2. El host cuenta ocupantes y plazas ya concedidas para esa instancia, y reserva la última plaza en una sola operación. Asocia la concesión al jugador, destino e intento. La llegada confirma la ocupación una sola vez. Cancelación, desconexión y caducidad liberan la reserva. Una respuesta tardía de otro intento se ignora. La reserva de reconexión global de la 0.5 sigue su propio ciclo.
+3. Ante denegación o espera agotada, el jugador conserva el control en el origen. La denegación muestra destino y ocupación, sin cola por mapa. La autorización cubre tanto el camino local como el que pide al host el estado completo.
+4. El residente puede volver a su residencia y dependencias aunque el destino esté lleno. Un puente intermedio saturado debe ofrecerle un regreso efectivo a casa. Desmayos, cambio de día, expulsión de una residencia, fin de evento y teletransporte administrativo conservan un destino válido. Estas entradas pueden superar el umbral. Se cuentan al llegar y las nuevas visitas esperan fuera hasta que haya hueco.
 
-Los requisitos de CPU, memoria y ancho de banda de subida de cada escalón se publican en la guía de despliegue. La telemetría que lo mide queda disponible en `AdminApi` también en producción.
+### 3. Replicación residencial por receptor
 
-## Consecuencias
+Es la primera optimización que se ensayará. `ShouldKeepActive` conserva su papel en el tratamiento de ubicaciones activas. La nueva decisión de destinatarios se toma por **raíz de red** y tiene en cuenta al propietario y al inquilino conectados, ocupantes, visitantes en interiores dependientes y destino de una entrada autorizada. Se aplica al envío completo inicial, a los cambios generados por el host y al reenvío de cambios de ubicación del cliente (tipo 6). Se mantienen los destinatarios ordinarios de los mapas compartidos.
 
-* **Positivas:** el tráfico deja de crecer con el cuadrado del total de conectados y pasa a crecer con el cuadrado de los que comparten mapa; un cliente deja de recibir las residencias ajenas; el aforo por mapa es un dato de configuración que se ajusta tras cada medición sin tocar código.
-* **Negativas:** el protocolo entre host y clientes se aparta del de vanilla (ya era obligatorio el mismo mod en ambos lados); el estado de los jugadores de otros mapas llega con hasta 0,5 s de retraso; aparece un caso nuevo de fallo, la copia desincronizada, que hay que vigilar con pruebas de carga; el host necesita más CPU y subida, de ahí que el rasgo venga apagado.
-* **Compatibilidad:** con `ExtendedConcurrency = false` no cambia nada respecto a la 0.5.
+El receptor que adquiere interés necesita una copia completa vigente antes de aplicar sus deltas. Al perderlo y regresar, debe partir de un estado válido aunque haya cambios durante su ausencia. Los residentes conservan la copia sincronizada que usan Robin, Marnie y los pedidos remotos. La prueba funcional combina una modificación exterior mientras un visitante está en un edificio, su salida al exterior, una ausencia y una segunda visita. Se contrastan inventario, animales y construcción con el estado del host. [Retención de la instancia residencial](../../Pelican4Ever/Modules/FarmSlotModule.cs)
 
-## Sin verificar al redactar
+### 4. Personajes remotos y mapas concurridos
 
-1. Que SMAPI no sustituya `Multiplayer.broadcastLocationMessage` ni interfiera con un parche sobre `GameServer.rebroadcastClientMessage`.
-2. Cuál de los candidatos A, B o C es correcto y cuánto ahorra cada uno; no hay ninguna medida todavía.
-3. Cómo se cancela limpiamente en el cliente un traslado que el host deniega.
-4. Qué hace hoy el culling cuando una residencia pasa a activa para clientes ya conectados que no la tienen.
-5. Cuántos clientes sin render caben en la máquina de pruebas para alcanzar los escalones de 48 y 64.
-6. El comportamiento de festivales, minijuegos, comprobaciones de «todos listos», checkpoints y cierre ordenado del cambio de día con más de 16 conectados.
+En el primer ensayo se conserva la replicación de jugadores de la 0.5.1. Se repite la carga con el filtro residencial y solo se cambia el tipo 0 si las medidas atribuyen a esos deltas una parte relevante del límite. La tabla recoge candidatos para ese experimento.
 
-## Pendiente de decidir
+| Candidato | Beneficio que se mediría | Condición de corrección y coste |
+| --- | --- | --- |
+| A. Agrupar los deltas originales en orden | Menos envíos y cabeceras. Si todos reciben todos los deltas, se conserva la carga útil entre cada pareja. | Medir las ráfagas de entrega y el trabajo del cliente. Vaciar o reconciliar los pendientes al encontrarse. |
+| B. Generar deltas por receptor | Evitar cambios intermedios para un destinatario lejano. | Hace falta una referencia independiente por receptor. Medir memoria y CPU y demostrar convergencia con dos receptores a ritmos distintos pese a `MarkClean()`. |
+| C. Presencia remota compacta | Comunicar solo los cambios de presencia necesarios a distancia y recuperar el personaje completo al coincidir. | Auditar presentaciones y consumidores del `Farmer` remoto, incluidos eventos. Evitar que un delta antiguo sobrescriba la copia completa. El coste global depende también de la frecuencia de presencia. |
 
-* **Festivales:** usan un mapa temporal y son el momento de mayor reunión. Empiezan con aforo `16` como cualquier mapa no medido; subirlo depende de la auditoría del punto 6 anterior.
+Para un candidato diferido, el objetivo inicial de emisión lejana es como máximo 30 ticks de espera programada (0,5 s nominales a 60 Hz). Se mide aparte la edad real del estado que observa el cliente. Quienes comparten mapa conservan la cadencia habitual. Cada receptor que mantiene la misma copia procesa sus incrementos válidos en orden o recibe una nueva base completa. Mundo, equipo y chat conservan sus rutas. [Entrega ordenada en Lidgren](https://github.com/lidgren/lidgren-network-gen3/blob/master/Lidgren.Network/Documentation/Tutorial.html) · [Estado de referencia para deltas](https://gafferongames.com/post/snapshot_compression/)
+
+Con 40 personas reunidas hay 1.560 parejas dirigidas posibles en el mismo mapa. Si se satura, se ensaya primero generar cambios de jugador cada 6 ticks en vez de 3, preservando los incrementos necesarios. Si domina el coste de cambios del mapa, se ensayan restricciones avisadas sobre acciones concretas que sigan permitidas en la base. Si la experiencia sigue degradándose, se fija el último aforo que pasó la prueba. Una restricción entra en el perfil publicado solo con su medición.
+
+### 5. Escalones y criterio de publicación
+
+Se ensayan **24, 32, 48 y 64 clientes remotos** de forma incremental. Se conserva la misma partida inicial, hardware, conjunto de mods y guion al comparar variantes. El control a 24 eleva únicamente los límites necesarios para el ensayo y mantiene la replicación de referencia. Se compara con el filtro residencial y, si se justifica, con el candidato de personajes. Un escalón satisfactorio puede publicarse con la replicación de personajes original.
+
+| Escenario | Evidencia que se recoge |
+| --- | --- |
+| Vecinos repartidos entre residencias pobladas | Bytes/s y mensajes/s por tipo y receptor, subida efectiva del host, recorrido y serialización de raíces, CPU, memoria máxima y tiempo desde conexión hasta control del personaje. |
+| Reunión en movimiento | `Town`, `Farm` y los puentes se miden por separado. Al menos un cliente dibuja y permite observar llegada, movimiento, objeto en mano y uso de herramienta. Se anota el máximo de ocupantes probado en cada mapa. |
+| Transiciones y persistencia | Combinar fin de festival, viajes, reconexiones y espera de admisión. Ejecutar un checkpoint y el cambio de día. Recargar la copia y contrastar personajes, inventarios y estado residencial. |
+
+El umbral para el juego ordinario es **tick p95 ≤ 16 ms de trabajo del host** y ausencia de crecimiento sostenido de la cola hacia cualquier cliente durante **30 minutos**. Se mide tiempo real de ejecución de la actualización, además de la cadencia entre actualizaciones. Se registran la pausa máxima, la antigüedad de la actualización pendiente más vieja por receptor y el retraso observado al coincidir. Checkpoint y cambio de día se publican por separado, con su pausa y recuperación de las colas. Un p95 favorable por sí solo puede ocultar un guardado largo o un cliente siempre retrasado. [Temporización de MonoGame](https://docs.monogame.net/articles/getting_to_know/howto/HowTo_VariableStepGameLoop.html)
+
+Para declarar un escalón **soportado** se documentarán además la convergencia del estado, la respuesta en un cliente visible, la recuperación de las transiciones y la restauración correcta bajo el perfil de guardado publicado. Un resultado incompleto o degradado queda experimental, y una carga que el generador no pudo sostener queda sin alcanzar. La guía indicará versión, CPU, RAM y cuota, subida, clientes admitidos, aforos ensayados y política de checkpoints. El nivel de residencias se informa por separado.
+
+## Consecuencias y cuestiones abiertas
+
+La separación por receptor puede reducir la subida y las copias residenciales en los clientes. Su efecto en CPU depende del tiempo que el host siga dedicando al recorrido de raíces y al guardado. Las reservas añaden un viaje de ida y vuelta en traslados limitados. Cambiar el protocolo de personajes añade riesgos de retraso y copias divergentes, y queda condicionado al beneficio medido.
+
+Quedan pendientes la verificación de parches en vivo, las transiciones de interés con clientes ya conectados, el regreso por puentes llenos, los festivales y las tandas con más de 16 conectados, y el número de clientes reales que puede sostener cada máquina generadora. El render sin dibujado de la 0.5.1 se aplica al host. El banco tendrá que comprobar por separado el modo de laboratorio del cliente y la experiencia visible. [Política actual de renderizado](../../Pelican4Ever/Modules/HeadlessRenderModule.cs)

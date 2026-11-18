@@ -15,7 +15,7 @@ replaced by another ADR. The table is the index; the detail is in each file.
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | Rebalance for 1:1: daily experience curve, slower fishing, fewer ladders and an energy cost in the Skull Cavern | Proposed | 2026-11-14 |
 | [0009](0009-annex-vanilla-composition.md) | Annex generation with the "Bridge Maps" flow (`MapStudio` + canonical crop + verified classifiers) | Accepted | 2026-11-08 |
 | [0010](0010-scalable-residences-admission-queue.md) | Scalable residences (16/32/64) with 16 concurrent players, admission queue, idle kick and gates on the east edge of `Town` | Proposed | 2026-11-15 |
-| [0011](0011-extended-concurrency-interest-management.md) | Extended concurrency (up to 64 concurrent players) through interest management, with a cap of 16 per map except `Town`, plaza and bridges; opt-in feature | Proposed | 2026-11-15 |
+| [0011](0011-extended-concurrency-interest-management.md) | Opt-in concurrency trials starting at 24 clients, with per-recipient residence replication and measured map capacities | Proposed | 2026-11-15 |
 
 ## How to read them
 

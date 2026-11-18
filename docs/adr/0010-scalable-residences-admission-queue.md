@@ -34,7 +34,7 @@ Hechos verificados sobre el decompilado de Stardew Valley 1.6.15 y el código de
 
 ### 2. Admisión por orden de llegada con cola
 
-1. Toda decisión de entrada pasa por un único punto de dominio puro, `AdmissionLogic` (`Pelican4Ever.Core/Networking`), que devuelve *admitido*, *en cola (posición n)* o *rechazado (motivo)*. ADR-0011 añade ahí el tope por mapa.
+1. Toda decisión de entrada al servidor pasa por un único punto de dominio puro, `AdmissionLogic` (`Pelican4Ever.Core/Networking`), que devuelve *admitido*, *en cola (posición n)* o *rechazado (motivo)*. Una vez admitido el cliente, la autorización de un traslado limitado y su reserva temporal se rigen por [ADR-0011](0011-extended-concurrency-interest-management.md).
 2. Una conexión entra en la cola **después** de superar la prueba de identidad de dispositivo (ADR-0007): quien no está autorizado no ocupa plaza de espera.
 3. Con `MaxConcurrentPlayers` clientes en juego, la conexión se retiene antes de la selección de personaje y recibe su posición por el mensaje de espera que el juego ya usa (`OutgoingMessage` tipo 11). Al liberarse una plaza se atiende a la conexión más antigua.
 4. Con la cola llena, la conexión se cierra con un mensaje que lo dice.
