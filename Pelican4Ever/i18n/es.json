@@ -164,6 +164,7 @@
   "mailbox.orders.shop.krobus": "🌑 Tienda de Krobus",
   "mailbox.orders.shop.dwarf": "💎 Tienda del Enano",
   "visitor.denied": "El dueño no permite a las visitas modificar esta residencia.",
+  "bombs.mines_only": "Solo puedes usar bombas y munición explosiva en las minas.",
   "catalog.header": "=== RESIDENCIAS DE LA PLAZA ===",
   "catalog.none_free": "{{occupied}} ocupadas, ninguna libre.",
   "catalog.prompt_walk": "{{occupied}} ocupadas, {{free}} libres. Camina hacia un portal libre de la plaza para fundar la tuya.",

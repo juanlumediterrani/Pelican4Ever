@@ -164,6 +164,7 @@
   "mailbox.orders.shop.krobus": "🌑 Krobus's Shop",
   "mailbox.orders.shop.dwarf": "💎 Dwarf's Shop",
   "visitor.denied": "The owner does not allow visitors to modify this residence.",
+  "bombs.mines_only": "Bombs and explosive ammo can only be used in mining dungeons.",
   "catalog.header": "=== PLAZA RESIDENCES ===",
   "catalog.none_free": "{{occupied}} occupied, none free.",
   "catalog.prompt_walk": "{{occupied}} occupied, {{free}} free. Walk to an open plaza portal to establish yours.",

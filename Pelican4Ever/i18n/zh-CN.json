@@ -164,6 +164,7 @@
   "mailbox.orders.shop.krobus": "🌑 科罗布斯的商店",
   "mailbox.orders.shop.dwarf": "💎 矮人的商店",
   "visitor.denied": "主人不允许访客修改这处居所。",
+  "bombs.mines_only": "炸弹和爆炸弹丸只能在矿洞中使用。",
   "catalog.header": "=== 广场居所 ===",
   "catalog.none_free": "已占用 {{occupied}} 处，没有空闲居所。",
   "catalog.prompt_walk": "已占用 {{occupied}} 处，空闲 {{free}} 处。走到广场上开放的传送门即可建立你的居所。",

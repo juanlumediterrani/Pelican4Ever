@@ -60,6 +60,7 @@ namespace Pelican4Ever
                 new FarmTypeModule(),
                 new FarmTypeLootModule(),
                 new VisitorGuardModule(),
+                new BombRestrictionsModule(),
                 new TownMailboxModule(),
                 new MailOrderModule(),
                 new ChatChannelModule(),
