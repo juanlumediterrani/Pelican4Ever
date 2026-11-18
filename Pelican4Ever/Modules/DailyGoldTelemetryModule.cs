@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -36,11 +37,19 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnSecond;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => { ready = false; closingGameDay = null; Pending.Clear(); ActiveTeamMoneyMutations.Clear(); };
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnMessage;
-            ctx.Harmony.Patch(AccessTools.PropertySetter(typeof(Farmer), nameof(Farmer.Money)),
+            ctx.Patch(
+                "Farmer.Money.set",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.PropertySetter(typeof(Farmer), nameof(Farmer.Money)),
                 prefix: new HarmonyMethod(typeof(DailyGoldTelemetryModule), nameof(PrefixMoney)),
                 postfix: new HarmonyMethod(typeof(DailyGoldTelemetryModule), nameof(PostfixMoney)));
             foreach (string name in new[] { nameof(FarmerTeam.AddIndividualMoney), nameof(FarmerTeam.SetIndividualMoney) })
-                ctx.Harmony.Patch(AccessTools.Method(typeof(FarmerTeam), name),
+                ctx.Patch(
+                    $"FarmerTeam.{name}",
+                    Name,
+                    PatchCriticality.Experience,
+                    AccessTools.Method(typeof(FarmerTeam), name),
                     prefix: new HarmonyMethod(typeof(DailyGoldTelemetryModule), nameof(PrefixTeamMoney)),
                     postfix: new HarmonyMethod(typeof(DailyGoldTelemetryModule), nameof(PostfixTeamMoney)));
         }

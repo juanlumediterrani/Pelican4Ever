@@ -170,6 +170,22 @@ Pelican4Ever.sln
 
 ---
 
+### 4.5. 日内持久化、扩展居所生活与运维韧性子系统（史诗 11、20–25）
+
+1. **日内检查点与备份轮转（`CheckpointModule`、`SaveBackupService`、`BackupRetentionPolicy`，史诗 11）：**
+   * 在不断开对端连接的情况下周期性触发原生保存流程（`SaveGame.Save()`），克隆在线农场助手（`CheckpointCloneFarmhands`），支持可选 gzip 压缩以及 Core 中的纯轮转策略（`BackupRetentionPolicy.ToDelete`）。
+2. **客户端宠物领养与 *Nature In The Valley* 兼容（史诗 20 与 24）：**
+   * **`ClientPetAdoptionModule` / `PetAdoptionLogic`：** 购买 `Pet Bowl` 的客户端在醒来时解锁 Marnie 拜访事件，并获得权威绑定到其食盆、地块与玩家 ID 的专属宠物。
+   * **NITV 交集（`FarmTemplateCatalog.MatchesNitvHabitat`、`FoodBuffPersistenceLogic.IsTransientModBuffId`、`VisitorPermissionLogic.IsAllowedVisitorTool`、`Pelican4Ever.NITVCompat`）：** 在私人居所、附属区与 `_Cave` 洞穴中暴露生态标记（`"0"`/`"Outside"`、`"1"`/`"Forest"`/`"Woods"`、`"2"`/`"Beach"`、`"3"`/`"Underground"`）；将捕虫网蓄力的临时减速增益 `"NatCSpeedN"` 排除在 `85.7x` 时间缩放与持久化之外；允许没有 `VisitorsCanEdit` 权限的访客使用 NITV 捕虫网，同时保持 `Terrarium` 放置/回收锁定。
+3. **24/7 信箱商店订购与同居机制（`MailOrderModule`，史诗 22 与 23）：**
+   * **延期交付订单（`MailOrderLogic`、`MailOrderRobinService`、`MailOrderMarnieService`、`MailOrderClintService`、`MailOrderPackageDelivery`）：** 通过传送门/居所信箱全天候下单、即时扣款，并在目标日真实时间 `12:00` 交付（在 `NightHold` 期间阻塞），生成的实体包裹仅允许购买者本人（`OwnerId`）开启。
+   * **房主 + 租客同居（`ServerWorldState` v8、`ModDataKeys.TenantId`、`TownMailboxModule`、`LocationCullingLogic`）：** 房主（`OwnerId`）可通过门外信箱接纳最多 1 名租客（`TenantId`）；将用于网络认证的技术小屋与共享室内居所（`Pelican4Ever_Farm_XX_Home`）解耦，共享建筑与动物管理（`AnimalPage`、`PendingBuildingOrder`、`PendingAnimalOrder`），同时保持个人进度严格隔离（钱包、`Shipping Bin`、邮件、包裹、经验与矿井），并提供安全驱逐与自动过户协议。
+4. **设备身份、Putre 观察期与运维韧性（史诗 18 与史诗 25 / ADR-0010）：**
+   * **`ClientSecurityModule` 与 `ProbationTelemetryModule`（`ProbationAndBlacklistLogic`）：** 基于 ECDSA P-256 的非对称设备身份认证（Lidgren 中的 `P4E\x02`）、白名单配对以及由 Putre 管理的 2 名额试用观察与永久黑名单协议。
+   * **提议中的韧性架构（ADR-0010 / 史诗 25，开发中）：** 统一的 Harmony 补丁关键等级注册表（`PatchRegistry` + `PatchHealthPolicy`：`Security` 与 `Integrity` 失败即进入 *fail-closed* `Lockdown`，`Experience` 进入 `Degraded`）、`VerifiedGameVersions` 白名单、脱离 `MainThreadActionQueue` 直接读取原子快照的 `GET /api/v1/host/health`、systemd `WATCHDOG=1` 心跳线程，以及与 `Putre` 协同的可校验 `p4e-backup.json` 清单和默认本地保留策略（`BackupRetentionDays = 14`、`CheckpointRetention = 12`）。
+
+---
+
 ## 5. 架构决策记录（ADR）
 
 关键的架构决策及其被否决的备选方案记录于 [`docs/adr/`](docs/adr/)：
@@ -182,3 +198,5 @@ Pelican4Ever.sln
 * **ADR-0006：** 按局管理的能量：持续衰减的饱腹值、激活坐着休息的「吃饱」增益以及 Spa 每日增益。
 * **ADR-0007：** 基于设备的不对称身份（ECDSA P-256）以及 Lidgren 握手中的 `P4E\x02` 挑战。
 * **ADR-0008（提议中）：** 面向 1:1 的再平衡：每日经验曲线、更慢的钓鱼、更少的矿井梯子以及骷髅洞穴每层的能量消耗。
+* **ADR-0009：** 使用「桥接地图」流程生成附属区域（`MapStudio`、规范裁剪与已验证分类器）。
+* **ADR-0010（提议中）：** 快速失败启动、脱离游戏主线程的主机健康接口（`/api/v1/host/health` + systemd 看门狗）以及与 Putre 约定的备份契约（`p4e-backup.json`、轮转保留与 `saves.restore`）。

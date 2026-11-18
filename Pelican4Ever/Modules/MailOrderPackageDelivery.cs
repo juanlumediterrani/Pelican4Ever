@@ -23,15 +23,18 @@ namespace Pelican4Ever.Modules
         {
             PatchSafe(harmony, "Chest.checkForAction",
                 AccessTools.Method(typeof(Chest), nameof(Chest.checkForAction), new[] { typeof(Farmer), typeof(bool) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_CheckForAction)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_CheckForAction)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Security);
 
             PatchSafe(harmony, "Chest.performToolAction",
                 AccessTools.Method(typeof(Chest), nameof(Chest.performToolAction), new[] { typeof(Tool) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_PerformToolAction)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_PerformToolAction)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Security);
 
             PatchSafe(harmony, "Object.onExplosion",
                 AccessTools.Method(typeof(StardewValley.Object), nameof(StardewValley.Object.onExplosion), new[] { typeof(Farmer) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_OnExplosion)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Chest_OnExplosion)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Security);
         }
 
         private static bool IsMailPackage(Chest? chest, out long ownerId)

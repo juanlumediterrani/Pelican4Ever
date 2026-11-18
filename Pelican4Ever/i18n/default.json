@@ -8,9 +8,7 @@
   "dialog.understood": "Understood",
   "furnace_unlock.learned": "You learned how to craft a Furnace!",
   "recipe_fallback.learned": "You learned how to craft {{recipe}}.",
-
   "plaza.welcome": "Welcome to Central Plaza! Walk to a free portal in the plaza or cross the western passage to the bridges (or type /residencias) to establish your farm.",
-
   "residence.claim.need_pairing": "Enter your pairing code first to claim a residence.",
   "residence.claim.already_owner": "You already own a residence ({{description}}). Each farmer may only own one parcel.",
   "residence.claim.confirm_question": "Do you want to establish your farm on this parcel?\nSelected layout: {{farmType}}.",
@@ -19,30 +17,25 @@
   "residence.claim.success": "Residence claimed! Template: {{farmType}}.",
   "residence.claim.cancelled": "Establishment cancelled; residence remains vacant.",
   "residence.claim.failed": "Could not establish this residence.",
-
   "residence.door.enter": "Enter my farm",
   "residence.door.policy_option": "Change access (current: {{status}})",
   "residence.door.visit": "Visit {{owner}}'s farm",
   "residence.door.info": "Residence of {{owner}}. Type: {{type}}. Access: {{access}}.",
-
   "residence.policy.locked": "Locked: only me",
   "residence.policy.friends": "Friends only",
   "residence.policy.public": "Open to all visitors",
   "residence.policy.toggle_edit": "Visitors can edit: {{state}} (click to change)",
   "residence.policy.manage_friends": "Manage friends",
   "residence.policy.updated": "Access updated: {{status}}",
-
   "residence.friends.remove": "Remove {{name}}",
   "residence.friends.add": "Add {{name}}",
   "residence.friends.updated_added": "{{name}} is now on your friends list.",
   "residence.friends.updated_removed": "{{name}} has been removed from your friends list.",
-
   "residence.permission.closed": "closed",
   "residence.permission.friends_only": "friends only",
   "residence.permission.open": "open",
   "residence.permission.visitors_can_edit": "{{access}}, visitors can edit",
   "residence.permission.visitors_view_only": "{{access}}, visitors view only",
-
   "annex.acquired": "Annex acquired: {{name}}! The passage is now open.",
   "annex.owner_only": "This passage is closed. Only the residence owner can acquire an extension here.",
   "annex.owner_only_short": "This access is closed. Only the owner can purchase an annex expansion.",
@@ -56,11 +49,9 @@
   "annex.tier_second": "Second annex",
   "annex.dialog_prompt": "Exit {{side}}: Space available for farm expansion [{{tier}}].\nWould you like to acquire a private annex?",
   "annex.dialog_confirm": "Confirm purchase of '{{name}}' for the {{side}} exit for {{price}}g?",
-
   "side.north": "North",
   "side.east": "East",
   "side.south": "South",
-
   "residence.claim.choose_farm_type": "{{description}}.\nThis residence is vacant. What type of farm would you like to establish?",
   "residence.claim.confirm_full": "You are about to establish this residence ({{farmType}}) and enter.\nDo you confirm? If you choose No, it will not be claimed or built.",
   "residence.owner_menu_prompt": "Your residence in {{location}}. (Type: {{type}})",
@@ -69,7 +60,6 @@
   "residence.policy.hud_edit_disabled": "Visitors may now only look.",
   "residence.friends.no_friends": "You do not have any friends on the list yet. Add an online player:",
   "residence.friends.has_friends": "Friends of your residence ({{count}}). With 'Friends only', only they may enter.",
-
   "greenhouse.owner_only": "The greenhouse of this residence is in ruins. Only its owner can restore it.",
   "greenhouse.need_materials": "You don't have enough resources. You need {{gold}}g, {{wood}} Wood, {{stone}} Stone and {{bars}} Gold Bars.",
   "greenhouse.repaired": "The greenhouse has been successfully restored! You can now cultivate crops year-round.",
@@ -79,7 +69,6 @@
   "greenhouse.choice_joja": "Hire construction crew ({{gold}}g)",
   "greenhouse.choice_leave": "Leave it for now (or complete the Community Center Pantry)",
   "greenhouse.prompt_repair": "The greenhouse of your residence is in ruins. Would you like to repair it?",
-
   "carpenter.location_access_failed_host": "Could not access location '{{location}}'. Please try again.",
   "carpenter.location_not_synced_client": "Your residence is not synchronized yet. Visit it once and speak with me again.",
   "carpenter.no_blueprints": "There are no buildings available to construct in '{{location}}' right now.",
@@ -88,7 +77,6 @@
   "carpenter.cant_demolish_pet_bowl": "You can't demolish this pet bowl: it's linked to {{pet}}.",
   "carpenter.unknown_pet": "a pet",
   "carpenter.island_shared": "Ginger Island (shared)",
-
   "residence.friends_only_deny_visit": "Only friends of {{owner}} may enter.",
   "residence.door_locked": "The door is locked.",
   "residence.parcel_friends_only": "This parcel is for friends of its owner only.",
@@ -97,7 +85,6 @@
   "annex.private_locked": "This annex is private and locked.",
   "residence.no_permission_modify": "You do not have permission to modify this farm.",
   "residence.chest_private": "This chest is private.",
-
   "farm_template.Standard": "Standard Farm (Classic balanced)",
   "farm_template.Foraging": "Forest Farm (Foraging & wood)",
   "farm_template.Fishing": "Riverland Farm (Fishing & islands)",
@@ -106,7 +93,6 @@
   "farm_template.FourCorners": "Four Corners Farm (Compartments)",
   "farm_template.Ranching": "Meadowlands Farm (Ranching & chewy blue grass)",
   "farm_template.Beach": "Beach Farm (Sand & shoreline foraging)",
-
   "annex_template.Standard": "Standard Crop Plot",
   "annex_template.Fishing": "River Bend",
   "annex_template.Foraging": "Forest Strip",
@@ -115,7 +101,6 @@
   "annex_template.FourCorners": "Mixed Quadrant",
   "annex_template.Ranching": "Blue Grass Meadow",
   "annex_template.Beach": "Tropical Shore",
-
   "mailbox.menu.enter": "🏠 Enter my farm",
   "mailbox.menu.check_mail": "📬 Check mail ({{count}} unread)",
   "mailbox.menu.check_mail_empty": "📬 Check mail (empty)",
@@ -134,6 +119,7 @@
   "mailbox.orders.catalog_prompt": "Which shop would you like to order from by mail? (Arrives next noon at 12:00 PM)",
   "mailbox.orders.shop_unavailable": "This shop is not available at your current progression.",
   "mailbox.orders.item_queued": "Order confirmed: {{item}} x{{count}} will arrive at your farm at 12:00 PM.",
+  "mailbox.orders.cannot_sell": "You cannot sell items from mail orders. Use the Shipping Bin (farm item delivery box) on your farm as in vanilla mode.",
   "mailbox.orders.none_pending": "You have no pending mail orders.",
   "mailbox.orders.pending_item_line": "• {{shop}}: {{count}} item(s) — delivery: {{date}} (12:00 PM)",
   "mailbox.orders.pending_building_line": "• Robin's construction ({{building}}) — starts: {{date}} (12:00 PM)",
@@ -178,7 +164,7 @@
   "mailbox.orders.shop.krobus": "🌑 Krobus's Shop",
   "mailbox.orders.shop.dwarf": "💎 Dwarf's Shop",
   "visitor.denied": "The owner does not allow visitors to modify this residence.",
-
+  "bombs.mines_only": "Bombs and explosive ammo can only be used in mining dungeons.",
   "catalog.header": "=== PLAZA RESIDENCES ===",
   "catalog.none_free": "{{occupied}} occupied, none free.",
   "catalog.prompt_walk": "{{occupied}} occupied, {{free}} free. Walk to an open plaza portal to establish yours.",
@@ -188,7 +174,6 @@
   "catalog.summary_count": "{{occupied}} occupied, {{free}} free.",
   "catalog.none_occupied": "None occupied yet.",
   "catalog.registered_doors": "Registered residences ({{count}} available):",
-
   "economy.spa_relaxed": "Relaxed: you recover {{points}} energy and health over {{duration}}.",
   "economy.spa_already_used": "You have already enjoyed the Bathhouse today.",
   "economy.mining_shift_renewed": "Mining shift renewed: Ore nodes have respawned.",
@@ -206,7 +191,6 @@
   "economy.passive_regen_exhausted": "Daily rest exhausted: you must sleep tonight to restore energy.",
   "economy.sitting_regen": "Resting on bench: +{{gained}} energy ({{remaining}} remaining today).",
   "economy.sitting_regen_exhausted": "Daily bench rest exhausted: you must sleep tonight to restore energy.",
-
   "market.board_title": "Pelican Town Community Market Board:",
   "market.available_listings": "Available listings on Community Market:",
   "market.buy_question": "Do you want to buy {{item}} (x{{stack}}) from {{seller}} for {{price}}g?",
@@ -238,7 +222,6 @@
   "market.purchase_success": "You bought {{item}} (x{{stack}}) for {{price}}g.",
   "market.not_the_seller": "Only the original seller can withdraw this listing.",
   "market.withdrawn_success": "You withdrew {{item}} (x{{stack}}) from the market.",
-
   "festival.no_scores": "No scores recorded yet in today's festival.",
   "festival.leaderboard_header": "=== Standings for {{date}} ===",
   "festival.ceremony_warning_15m": "[Festival Notice] The {{ceremony}} ceremony will begin in 15 minutes (21:00) on the beach.",
@@ -274,12 +257,10 @@
   "festival.rank_1": "1. [1st Place]",
   "festival.rank_2": "2. [2nd Place]",
   "festival.rank_3": "3. [3rd Place]",
-
   "chat.local_help": "Send message to local proximity channel (/l or /local <message>)",
   "chat.global_help": "Send message to global channel (/g or /global <message>)",
   "chat.local_usage": "Usage: /l <message> or /local <message>",
   "chat.global_usage": "Usage: /g <message> or /global <message>",
-
   "clock.command_help": "Adjust in-game server time (/time or /hora <+X|-X|reset|set HH:mm>)",
   "clock.status_usage": "[Clock] Current offset: {{offset}}h. Game time: {{time}}. Usage: /time <+X|-X|reset|set HH:mm>",
   "clock.reset": "[Clock] Reset to real time. Game time: {{time}}.",
@@ -288,18 +269,16 @@
   "clock.adjusted_minutes": "[Clock] Adjusted {{sign}}{{minutes}} min. New time: {{time}} (Total offset: {{offset}}h).",
   "clock.adjusted_hours": "[Clock] Adjusted {{sign}}{{hours}}h. New time: {{time}} (Total offset: {{offset}}h).",
   "clock.invalid_format": "[Clock] Invalid format. Valid examples: /time +2, /time -1, /time +30m, /time reset, /time set 14:00",
-
   "bed_logout.offline_rest": "Offline rest: +{{gained}} energy recovered.",
+  "bed_logout.offline_rest_health": "Offline rest: +{{health}} health recovered.",
+  "bed_logout.offline_rest_both": "Offline rest: +{{energy}} energy and +{{health}} health recovered.",
   "bed_logout.host_agent_active": "Rest recorded. Host agent mode active: server remains online.",
   "bed_logout.disconnecting": "Rest recorded. Disconnecting safely...",
-
   "rollover.warning_10min": "Notice: in 10 minutes the farm will be saved and connections closed for day rollover.",
   "rollover.closing_server": "Save confirmed. The server will close this connection to change the date.",
   "rollover.disconnecting": "Save confirmed. Disconnecting for day rollover.",
-
   "checkpoint.saving_soon": "Saving the world in a few seconds…",
   "checkpoint.restored_notice": "Restored from the {{time}} checkpoint.",
-
   "security.verifying_code": "Verifying pairing code...",
   "security.pairing_code_prompt": "Pairing code (Pelican 4Ever):",
   "security.pairing_code_prompt_alias": "Pairing code for {{alias}}:",
@@ -311,10 +290,8 @@
   "security.pairing_exhausted": "You have exhausted pairing attempts. Disconnecting...",
   "security.pairing_ip_mismatch": "This pairing code is linked to another IP address.",
   "security.pairing_success": "Device paired successfully as '{{alias}}'!",
-
   "marnie.need_destination": "You must claim a residence or restore the Ginger Island house before buying animals.",
   "marnie.location_not_synced": "The farm is not synchronized yet. Try again in a few seconds.",
-
   "marnie.pet_letter.title": "A Stray Animal Needs a Home",
   "marnie.pet_letter.body": "Dear {{player}},^^I noticed that you recently placed a pet bowl outside your residence. As it turns out, a stray animal has been wandering near my ranch without a home.^^I will stop by your farm with them soon. Please have some love to spare!^^   -Marnie",
   "marnie.pet_event.intro": "Hello, {{player}}! Look who I brought along with me. I found this little stray wandering near my ranch, and when I saw you set up a water bowl outside, I thought of you right away.",
@@ -324,9 +301,7 @@
   "marnie.pet_event.naming_title": "Choose a name for your new {{petType}}:",
   "marnie.pet_event.accepted": "Wonderful! Take good care of {{petName}}, and don't forget to fill their water bowl every day. See you soon!",
   "marnie.pet_event.declined": "I understand... Don't worry, I'll find another good home for them. Have a wonderful day!",
-
   "side.west": "West",
-
   "badge.claim_slot": "[E / Click or Walk] Claim Farm Slot",
   "badge.my_slot": "🏠 My Plot (Walk to enter)",
   "badge.neighbor_slot": "🏠 {{owner}}'s Plot",
@@ -334,20 +309,17 @@
   "badge.annex_return": "🏠 Return to residence (Walk to exit)",
   "badge.annex_purchase": "[E / Click or Walk] Purchase Annex",
   "badge.annex_unavailable": "🚫 Expansion unavailable",
-
   "annex.rejection.insufficient_funds": "You don't have enough money to acquire this annex.",
   "annex.rejection.not_residence_owner": "Only the residence owner can acquire annexes.",
   "annex.rejection.already_exists": "An annex has already been acquired at this entrance.",
   "annex.rejection.side_not_free": "This entrance does not support an annex.",
   "annex.rejection.max_reached": "You have reached the maximum number of annexes for this residence.",
   "annex.rejection.default": "Could not acquire the annex.",
-
   "cave.dialog_prompt": "How would you like to prepare your private cave?",
   "cave.choice_mushrooms": "Mushrooms",
   "cave.choice_bats": "Fruit Bats",
   "cave.selected_mushrooms": "Your cave has been prepared with mushroom boxes.",
   "cave.selected_bats": "Your cave has been prepared to attract fruit bats.",
-
   "location.host_farm": "Host Farm",
   "location.host_farm_named": "{{name}} Farm",
   "location.bridge": "Bridge {{number}}",
@@ -357,7 +329,6 @@
   "location.cellar_slot": "Plot {{slot}} Cellar",
   "location.greenhouse_slot": "Plot {{slot}} Greenhouse",
   "location.annex_slot": "Annex {{side}} ({{type}})",
-
   "farm_template.Standard.name": "Standard Farm",
   "farm_template.Foraging.name": "Forest Farm",
   "farm_template.Fishing.name": "Riverland Farm",
@@ -366,7 +337,6 @@
   "farm_template.FourCorners.name": "Four Corners Farm",
   "farm_template.Ranching.name": "Meadowlands Farm",
   "farm_template.Beach.name": "Beach Farm",
-
   "door.Farm_Portal_01.description": "Plot 01 (Host Farm - North West)",
   "door.Farm_Portal_02.description": "Plot 02 (Host Farm - North East)",
   "door.Farm_Portal_03.description": "Plot 03 (Host Farm - South West)",
@@ -383,7 +353,6 @@
   "door.Farm_Portal_14.description": "Plot 14 (Bridge 3 - North Right)",
   "door.Farm_Portal_15.description": "Plot 15 (Bridge 3 - South Left)",
   "door.Farm_Portal_16.description": "Plot 16 (Bridge 3 - South Right)",
-
   "mailbox.menu.tenancy": "Tenant...",
   "mailbox.menu.tenancy_active": "Tenant: {{tenant}}",
   "mailbox.menu.tenancy_requests": "Tenant ({{count}} requests)",
@@ -418,5 +387,12 @@
   "mod_toggle.load_warning.keep_and_load": "Keep Enabled & Load",
   "mod_toggle.server_warning.title": "Pelican 4Ever Server",
   "mod_toggle.server_warning.body": "This server runs Pelican 4Ever, which is currently disabled on your client. Do you want to enable it and connect?",
-  "mod_toggle.server_warning.enable_and_connect": "Enable Pelican & Connect"
+  "mod_toggle.server_warning.enable_and_connect": "Enable Pelican & Connect",
+  "residence.upgrade.owner_only": "Only the residence owner can upgrade this house. Tenants can live here, or claim their own residence door in Pelican Town.",
+  "residence.upgrade.need_residence": "You need your own claimed residence in Pelican Town before upgrading your house.",
+  "residence.marriage.owner_only": "Only the residence owner can buy the Mermaid's Pendant or get married here. Claim your own residence door in Pelican Town first.",
+  "residence.marriage.need_residence": "You need your own claimed residence in Pelican Town before getting married or inviting a roommate.",
+  "admission.queue_position": "Server is full. Your queue position: {{position}}/{{capacity}}.",
+  "admission.queue_full": "The server and waiting queue are full. Please try again later.",
+  "idle.warning_hud": "Idle warning: you will be disconnected in {{minutes}} min if you remain inactive."
 }

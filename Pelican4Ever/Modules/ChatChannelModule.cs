@@ -183,6 +183,22 @@ namespace Pelican4Ever.Modules
                     Game1.chatBox?.addMessage(localFormatted, new Color(130, 230, 130));
                 }
             }
+            else if (e.Type == ChatMessages.ServerBroadcast)
+            {
+                // Si PelicanChat está cargado, su ChatTransportModule gestiona ServerBroadcast con sanitización y pestañas
+                if (context.Helper.ModRegistry.IsLoaded("Pelican4Ever.Chat"))
+                    return;
+
+                var broadcast = e.ReadAs<ServerBroadcastPayload>();
+                if (broadcast == null || string.IsNullOrWhiteSpace(broadcast.Message))
+                    return;
+
+                string text = string.Equals(broadcast.Source, "discord", StringComparison.OrdinalIgnoreCase)
+                    ? $"[Discord] {broadcast.Author}: {broadcast.Message}"
+                    : broadcast.Message;
+
+                Game1.chatBox?.addMessage(text, new Color(broadcast.ColorR, broadcast.ColorG, broadcast.ColorB));
+            }
         }
     }
 }

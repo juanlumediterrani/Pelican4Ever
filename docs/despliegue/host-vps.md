@@ -290,6 +290,14 @@ ssh -L 8085:127.0.0.1:8085 usuario@tu-vps
 **Sin Steam abierto no hay códigos de invitación**: los jugadores entran por IP directa al
 puerto `24642` (en el menú, *Conexión Directa*).
 
+### Escalado de residencias (16 → 32 → 64) y cola de admisión (v0.5)
+
+Claves en `config.json` (requieren reiniciar el servidor):
+- `FarmSlotCount`: `1..16`, `32` o `64`. Al pasar de `16` a `32` o `64`, se abren dos gates al este de `Maps/Town` (junto a la Herrería y al Museo) y los puentes `4..7` o `4..15` sin alterar las 16 residencias base. No es seguro desescalar por debajo de la residencia reclamada más alta; el host elevará automáticamente el efectivo al mínimo que la conserve.
+- `MaxConcurrentPlayers` (`1..16`, por defecto `16`) y `AdmissionQueueCapacity` (`0..32`, por defecto `16`).
+- `ReconnectGraceMinutes` (`0..30`, por defecto `5`): reserva de plaza tras caída de red.
+- `IdleKickMinutes` (por defecto `30`, `0` desactiva) e `IdleKickWarningMinutes` (por defecto `2`): expulsión por inactividad solo cuando los conectados superan `MaxConcurrentPlayers / 2`.
+
 ---
 
 ## 9. Operación diaria

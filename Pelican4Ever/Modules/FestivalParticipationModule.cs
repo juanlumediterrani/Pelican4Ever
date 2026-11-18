@@ -107,23 +107,18 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event), nameof(Event.forceFestivalContinue)),
-                    prefix: new HarmonyMethod(typeof(FestivalParticipationModule), nameof(Prefix_ForceFestivalContinue))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.WaitForOtherPlayers)),
-                    prefix: new HarmonyMethod(typeof(FestivalParticipationModule), nameof(Prefix_WaitForOtherPlayers))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                context?.Monitor.Log("[FestivalParticipationModule] Parches del evento principal por inscripción aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FestivalParticipationModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context.Patch("Event.forceFestivalContinue", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event), nameof(Event.forceFestivalContinue)),
+                prefix: new HarmonyMethod(typeof(FestivalParticipationModule), nameof(Prefix_ForceFestivalContinue)));
+            context.Patch("FestivalParticipation.WaitForOtherPlayers", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.WaitForOtherPlayers)),
+                prefix: new HarmonyMethod(typeof(FestivalParticipationModule), nameof(Prefix_WaitForOtherPlayers)));
+
+            context.Monitor.Log("[FestivalParticipationModule] Parches del evento principal por inscripción registrados.", LogLevel.Trace);
         }
 
         private static string TodaysFestivalId() => $"festival_{Game1.currentSeason}{Game1.dayOfMonth}";

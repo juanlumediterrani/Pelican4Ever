@@ -1,5 +1,6 @@
 using System;
 using HarmonyLib;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -25,18 +26,13 @@ namespace Pelican4Ever.Modules
         public void Register(ModContext ctx)
         {
             context = ctx;
-            try
-            {
-                ctx.Harmony.Patch(
-                    original: AccessTools.Method(typeof(BreakableContainer), nameof(BreakableContainer.releaseContents)),
-                    prefix: new HarmonyMethod(typeof(FarmTypeLootModule), nameof(Prefix_ReleaseContents)),
-                    finalizer: new HarmonyMethod(typeof(FarmTypeLootModule), nameof(Finalizer_ReleaseContents))
-                );
-            }
-            catch (Exception ex)
-            {
-                ctx.Monitor.Log($"[FarmTypeLoot] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            ctx.Patch(
+                "BreakableContainer.releaseContents",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(BreakableContainer), nameof(BreakableContainer.releaseContents)),
+                prefix: new HarmonyMethod(typeof(FarmTypeLootModule), nameof(Prefix_ReleaseContents)),
+                finalizer: new HarmonyMethod(typeof(FarmTypeLootModule), nameof(Finalizer_ReleaseContents)));
         }
 
         /// <summary>Durante el reparto del botín, la caja de una residencia de playa se trata como de partida de playa.</summary>

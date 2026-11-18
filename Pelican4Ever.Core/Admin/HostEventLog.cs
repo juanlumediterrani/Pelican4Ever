@@ -39,6 +39,16 @@ namespace Pelican4Ever.Core.Admin
         public const string RemoteCommand = "host.command";
         public const string RenderLeaseGranted = "host.render.lease.granted";
         public const string RenderLeaseReleased = "host.render.lease.released";
+        public const string ChatMessage = "chat.message";
+        public const string PlayerBlacklisted = "player.blacklisted";
+        public const string PlayerBlacklistRemoved = "player.blacklist.removed";
+        public const string PlayerProbationGraduated = "player.probation.graduated";
+        public const string VisitorDenied = "player.visitor.denied";
+        public const string ChatAbuse = "player.chat.abuse";
+        public const string HostLockdown = "host.lockdown";
+        public const string HostDegraded = "host.degraded";
+        public const string HostLockdownOverridden = "host.lockdown.overridden";
+        public const string HostEventResolved = "host.event.resolved";
     }
 
     /// <summary>

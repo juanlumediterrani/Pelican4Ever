@@ -5,6 +5,7 @@ using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
@@ -34,17 +35,12 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
             ctx.Helper.Events.Display.RenderedWorld += OnRenderedWorld;
 
-            try
-            {
-                ctx.Harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.draw), new[] { typeof(SpriteBatch) }),
-                    transpiler: new HarmonyMethod(typeof(TownMailboxModule), nameof(Transpiler_FarmDrawMailboxIndicator))
-                );
-            }
-            catch (Exception ex)
-            {
-                ctx.Monitor.Log($"[TownMailbox] No se pudo parchear Farm.draw (indicador de correo): {ex}", LogLevel.Error);
-            }
+            ctx.Patch(
+                "Farm.draw.MailboxIndicator",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(Farm), nameof(Farm.draw), new[] { typeof(SpriteBatch) }),
+                transpiler: new HarmonyMethod(typeof(TownMailboxModule), nameof(Transpiler_FarmDrawMailboxIndicator)));
         }
 
         /// <summary>Casilla fuera de cualquier mapa: el indicador se dibuja fuera de pantalla.</summary>

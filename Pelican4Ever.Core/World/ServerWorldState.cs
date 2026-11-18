@@ -117,9 +117,15 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 8;
+        public const int CurrentSchemaVersion = 10;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
+
+        /// <summary>
+        /// Versión aplicada de la migración de estado de eventos <c>/H</c> (v0.4.9).
+        /// Permanece en 0 hasta que <c>HostEventRelayModule</c> repara el estado en vivo de la partida.
+        /// </summary>
+        public int HostEventMigrationVersion { get; set; }
 
         /// <summary>Registros de jugadores (clave: UniqueMultiplayerID). Fuente única de la verdad del estado del jugador.</summary>
         public Dictionary<long, PlayerRecord> Players { get; set; } = new();
@@ -154,6 +160,12 @@ namespace Pelican4Ever.Core.World
         /// <summary>Invitaciones de emparejamiento pendientes (con IP autorizada, código de un solo uso y caducidad de 3 días).</summary>
         public List<PairingInvite> PairingInvites { get; set; } = new();
 
+        /// <summary>Tickets abiertos por Putre en Discord para admisión por huella sin exponer IP (máximo 2 concurrentes).</summary>
+        public List<Pelican4Ever.Core.Security.PutreAdmissionTicket> PutreTickets { get; set; } = new();
+
+        /// <summary>Lista negra permanente de dispositivos y cuentas de Discord; solo el propietario puede retirarla.</summary>
+        public List<Pelican4Ever.Core.Security.BlacklistEntry> Blacklist { get; set; } = new();
+
         /// <summary>Último día de juego cerrado por un Rollover (TotalDays), o -1.</summary>
         public int LastRolloverGameDay { get; set; } = -1;
 
@@ -171,6 +183,9 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Pedidos de compra de animales por buzón pendientes de llegar a mediodía (TASK-2201).</summary>
         public List<PendingAnimalOrder> PendingAnimalOrders { get; set; } = new();
+
+        /// <summary>Mejoras de herramientas ya entregadas en paquete cuya limpieza en el cliente aún está pendiente de confirmación.</summary>
+        public Dictionary<long, PendingToolUpgradeClear> PendingToolUpgradeClears { get; set; } = new();
 
         /// <summary>Devuelve el registro del jugador, creándolo si no existe.</summary>
         public PlayerRecord GetOrCreatePlayer(long uniqueMultiplayerId, string name)
@@ -469,6 +484,21 @@ namespace Pelican4Ever.Core.World
                 changed = true;
             }
 
+            // v8 → v9: seguimiento de migración de eventos /H bloqueados (v0.4.9).
+            if (SchemaVersion < 9)
+            {
+                SchemaVersion = 9;
+                changed = true;
+            }
+
+            // v9 → v10: confirmación de limpieza en cliente tras entrega de mejoras de herramientas de Clint.
+            if (SchemaVersion < 10)
+            {
+                PendingToolUpgradeClears ??= new Dictionary<long, PendingToolUpgradeClear>();
+                SchemaVersion = 10;
+                changed = true;
+            }
+
             if (PendingMailItemOrders == null)
             {
                 PendingMailItemOrders = new List<PendingMailItemOrder>();
@@ -484,6 +514,12 @@ namespace Pelican4Ever.Core.World
             if (PendingAnimalOrders == null)
             {
                 PendingAnimalOrders = new List<PendingAnimalOrder>();
+                changed = true;
+            }
+
+            if (PendingToolUpgradeClears == null)
+            {
+                PendingToolUpgradeClears = new Dictionary<long, PendingToolUpgradeClear>();
                 changed = true;
             }
 
@@ -533,6 +569,18 @@ namespace Pelican4Ever.Core.World
             {
                 PairingInvites = new List<PairingInvite>();
                 changed = true;
+            }
+
+            if (Players != null)
+            {
+                foreach (PlayerRecord player in Players.Values)
+                {
+                    if (player != null && player.ActiveFoodBuffs == null)
+                    {
+                        player.ActiveFoodBuffs = new List<PersistedFoodBuff>();
+                        changed = true;
+                    }
+                }
             }
 
             return changed;

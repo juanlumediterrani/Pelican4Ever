@@ -24,7 +24,9 @@ namespace Pelican4Ever.Modules
     {
         private static ModContext? context;
         private static int pendingOfflineStaminaGain = 0;
+        private static int pendingOfflineHealthGain = 0;
         public const string BedLogoutMessageType = "BedLogoutRequest";
+        public const string OfflineRecoveryMessageType = "OfflineRecoveryRestored";
 
         private static BedLogoutPayload? pendingBedLogoutPayload;
         private static bool isBedLogoutPendingAfterLevels;
@@ -66,6 +68,7 @@ namespace Pelican4Ever.Modules
         private void OnReturnedToTitle(object? sender, StardewModdingAPI.Events.ReturnedToTitleEventArgs e)
         {
             pendingOfflineStaminaGain = 0;
+            pendingOfflineHealthGain = 0;
             pendingBedLogoutPayload = null;
             isBedLogoutPendingAfterLevels = false;
             isHostRestPendingAfterLevels = false;
@@ -75,11 +78,13 @@ namespace Pelican4Ever.Modules
 
         private void OnUpdateTicked(object? sender, StardewModdingAPI.Events.UpdateTickedEventArgs e)
         {
-            if (pendingOfflineStaminaGain > 0 && Context.IsWorldReady && Game1.player != null)
+            if ((pendingOfflineStaminaGain > 0 || pendingOfflineHealthGain > 0) && Context.IsWorldReady && Game1.player != null)
             {
-                int gained = pendingOfflineStaminaGain;
+                int staminaGained = pendingOfflineStaminaGain;
+                int healthGained = pendingOfflineHealthGain;
                 pendingOfflineStaminaGain = 0;
-                ApplyOfflineStaminaToLocalPlayer(gained);
+                pendingOfflineHealthGain = 0;
+                ApplyOfflineRecoveryToLocalPlayer(staminaGained, healthGained);
             }
 
             if (!Context.IsWorldReady || Game1.player == null)
@@ -203,20 +208,125 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void ApplyOfflineStaminaToLocalPlayer(int gained)
+        private static void ApplyOfflineRecoveryToLocalPlayer(int staminaGained, int healthGained)
         {
-            if (Game1.player == null || gained <= 0)
+            if (Game1.player == null || (staminaGained <= 0 && healthGained <= 0))
                 return;
 
-            float oldStamina = Game1.player.Stamina;
-            Game1.player.Stamina = OfflineStaminaRegenLogic.ApplyGain(Game1.player.Stamina, Game1.player.MaxStamina, gained);
-            if (Game1.player.Stamina > 0 && Game1.player.exhausted.Value)
+            int appliedStamina = 0;
+            if (staminaGained > 0)
             {
-                Game1.player.exhausted.Value = false;
+                float oldStamina = Game1.player.Stamina;
+                Game1.player.Stamina = OfflineStaminaRegenLogic.ApplyGain(Game1.player.Stamina, Game1.player.MaxStamina, staminaGained);
+                appliedStamina = Math.Max(0, (int)Math.Round(Game1.player.Stamina - oldStamina));
+                if (Game1.player.Stamina > 0 && Game1.player.exhausted.Value)
+                {
+                    Game1.player.exhausted.Value = false;
+                }
+
+                context?.Monitor.Log($"[BedLogoutModule] Recuperación de energía offline aplicada al jugador local: +{appliedStamina} ({oldStamina:F0} -> {Game1.player.Stamina:F0}/{Game1.player.MaxStamina}).", LogLevel.Info);
             }
 
-            Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.offline_rest", new { gained }), HUDMessage.newQuest_type));
-            context?.Monitor.Log($"[BedLogoutModule] Recuperación de energía offline aplicada al jugador local: +{gained} ({oldStamina:F0} -> {Game1.player.Stamina:F0}/{Game1.player.MaxStamina}).", LogLevel.Info);
+            int appliedHealth = 0;
+            if (healthGained > 0)
+            {
+                int oldHealth = Game1.player.health;
+                Game1.player.health = OfflineStaminaRegenLogic.ApplyHealthGain(Game1.player.health, Game1.player.maxHealth, healthGained);
+                appliedHealth = Math.Max(0, Game1.player.health - oldHealth);
+                context?.Monitor.Log($"[BedLogoutModule] Recuperación de salud offline aplicada al jugador local: +{appliedHealth} ({oldHealth} -> {Game1.player.health}/{Game1.player.maxHealth}).", LogLevel.Info);
+            }
+
+            if (appliedStamina > 0 && appliedHealth > 0)
+            {
+                Game1.addHUDMessage(new HUDMessage(
+                    I18n.Get("bed_logout.offline_rest_both", new { energy = appliedStamina, health = appliedHealth }),
+                    HUDMessage.newQuest_type));
+            }
+            else if (appliedStamina > 0)
+            {
+                Game1.addHUDMessage(new HUDMessage(
+                    I18n.Get("bed_logout.offline_rest", new { gained = appliedStamina }),
+                    HUDMessage.newQuest_type));
+            }
+            else if (appliedHealth > 0)
+            {
+                Game1.addHUDMessage(new HUDMessage(
+                    I18n.Get("bed_logout.offline_rest_health", new { health = appliedHealth }),
+                    HUDMessage.newQuest_type));
+            }
+        }
+
+        private static DateTimeOffset ResolveAnchor(DateTimeOffset preferred, DateTimeOffset fallback, DateTimeOffset lastSeen)
+        {
+            if (preferred != DateTimeOffset.MinValue)
+                return preferred;
+            if (fallback != DateTimeOffset.MinValue)
+                return fallback;
+            return lastSeen;
+        }
+
+        private readonly record struct OfflineRecoveryComputation(
+            float NewStamina,
+            int StaminaGainedInt,
+            TimeSpan StaminaOfflineDuration,
+            int NewHealth,
+            int HealthGained,
+            TimeSpan HealthOfflineDuration);
+
+        private static OfflineRecoveryComputation ComputeOfflineRecovery(PlayerRecord record, Farmer farmer, DateTimeOffset nowUtc)
+        {
+            float fullBarHours = context?.Config.OfflineRegenFullBarHours ?? 0f;
+            DateTimeOffset staminaAnchor = ResolveAnchor(record.OfflineStaminaAnchorUtc, DateTimeOffset.MinValue, record.LastSeenUtc);
+            DateTimeOffset healthAnchor = ResolveAnchor(record.OfflineHealthAnchorUtc, staminaAnchor, record.LastSeenUtc);
+
+            float newStamina = farmer.Stamina;
+            int staminaGainedInt = 0;
+            TimeSpan offlineStamina = TimeSpan.Zero;
+            if (staminaAnchor != DateTimeOffset.MinValue)
+            {
+                offlineStamina = nowUtc - staminaAnchor;
+                if (offlineStamina > TimeSpan.FromSeconds(30))
+                {
+                    float calculated = OfflineStaminaRegenLogic.CalculateNewStamina(
+                        currentStamina: farmer.Stamina,
+                        maxStamina: farmer.MaxStamina,
+                        offlineDuration: offlineStamina,
+                        fullBarHours: fullBarHours);
+                    float gained = calculated - farmer.Stamina;
+                    if (gained > 0.5f)
+                    {
+                        newStamina = calculated;
+                        staminaGainedInt = (int)Math.Round(gained);
+                    }
+                }
+            }
+
+            int newHealth = farmer.health;
+            int healthGained = 0;
+            TimeSpan offlineHealth = TimeSpan.Zero;
+            if (healthAnchor != DateTimeOffset.MinValue)
+            {
+                offlineHealth = nowUtc - healthAnchor;
+                if (offlineHealth > TimeSpan.FromSeconds(30))
+                {
+                    int calculatedHealth = OfflineStaminaRegenLogic.CalculateNewHealth(
+                        currentHealth: farmer.health,
+                        maxHealth: farmer.maxHealth,
+                        offlineDuration: offlineHealth,
+                        fullBarHours: fullBarHours);
+                    healthGained = Math.Max(0, calculatedHealth - farmer.health);
+                    if (healthGained > 0)
+                        newHealth = calculatedHealth;
+                }
+            }
+
+            return new OfflineRecoveryComputation(
+                newStamina,
+                staminaGainedInt,
+                offlineStamina,
+                newHealth,
+                healthGained,
+                offlineHealth);
         }
 
         private void OnHostSaveLoaded(object? sender, StardewModdingAPI.Events.SaveLoadedEventArgs e)
@@ -231,33 +341,15 @@ namespace Pelican4Ever.Modules
             if (!context.WorldState.Players.TryGetValue(hostId, out var hostRecord))
                 return;
 
-            DateTimeOffset anchor = hostRecord.OfflineStaminaAnchorUtc != DateTimeOffset.MinValue
-                ? hostRecord.OfflineStaminaAnchorUtc
-                : hostRecord.LastSeenUtc;
-
-            if (anchor == DateTimeOffset.MinValue)
-                return;
-
-            TimeSpan offlineDuration = DateTimeOffset.UtcNow - anchor;
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            var recovery = ComputeOfflineRecovery(hostRecord, Game1.player, nowUtc);
             hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.MinValue;
-            hostRecord.LastSeenUtc = DateTimeOffset.UtcNow;
+            hostRecord.OfflineHealthAnchorUtc = DateTimeOffset.MinValue;
+            hostRecord.LastSeenUtc = nowUtc;
 
-            if (offlineDuration <= TimeSpan.FromSeconds(30))
-                return;
-
-            float oldStamina = Game1.player.Stamina;
-            float newStamina = OfflineStaminaRegenLogic.CalculateNewStamina(
-                currentStamina: oldStamina,
-                maxStamina: Game1.player.MaxStamina,
-                offlineDuration: offlineDuration,
-                fullBarHours: context.Config.OfflineRegenFullBarHours
-            );
-
-            float gained = newStamina - oldStamina;
-            if (gained > 0.5f)
+            if (recovery.StaminaGainedInt > 0 || recovery.HealthGained > 0)
             {
-                int gainedInt = (int)Math.Round(gained);
-                ApplyOfflineStaminaToLocalPlayer(gainedInt);
+                ApplyOfflineRecoveryToLocalPlayer(recovery.StaminaGainedInt, recovery.HealthGained);
             }
         }
 
@@ -280,13 +372,14 @@ namespace Pelican4Ever.Modules
                 player.ActiveDayPriorToGrace = Game1.Date.TotalDays;
             }
 
-            // Aplicar recuperación gradual de estamina durante su tiempo desconectado (GAP-07 / Offline Regen)
-            ApplyOfflineStaminaRegen(player, e.Peer.PlayerID);
+            // Aplicar recuperación gradual de estamina y salud durante su tiempo desconectado (GAP-07 / Offline Regen)
+            ApplyOfflineRecovery(player, e.Peer.PlayerID);
 
             player.CurrentSessionStartUtc = DateTimeOffset.UtcNow;
             player.LastActiveGameDay = Game1.Date.TotalDays;
             player.LastSeenUtc = DateTimeOffset.UtcNow;
             player.OfflineStaminaAnchorUtc = DateTimeOffset.MinValue;
+            player.OfflineHealthAnchorUtc = DateTimeOffset.MinValue;
             player.EnsureDailyCounters(Game1.Date.TotalDays);
             context.Monitor.Log($"[BedLogoutModule] Jugador {e.Peer.PlayerID} conectado. Marcado activo para día {Game1.Date.TotalDays} (MadrugadorEnGracia: {inGraceWindow}).", LogLevel.Trace);
 
@@ -302,45 +395,42 @@ namespace Pelican4Ever.Modules
                 });
         }
 
-        private static void ApplyOfflineStaminaRegen(PlayerRecord player, long playerId)
+        private static void ApplyOfflineRecovery(PlayerRecord player, long playerId)
         {
             if (context == null || context.Config.OfflineRegenFullBarHours <= 0)
-                return;
-
-            DateTimeOffset anchor = player.OfflineStaminaAnchorUtc;
-            if (anchor == DateTimeOffset.MinValue)
-            {
-                anchor = player.LastSeenUtc;
-            }
-
-            if (anchor == DateTimeOffset.MinValue)
-                return;
-
-            TimeSpan offlineDuration = DateTimeOffset.UtcNow - anchor;
-            if (offlineDuration <= TimeSpan.FromSeconds(30))
                 return;
 
             Farmer? farmer = Game1.GetPlayer(playerId);
             if (farmer == null)
                 return;
 
-            float oldStamina = farmer.Stamina;
-            float newStamina = OfflineStaminaRegenLogic.CalculateNewStamina(
-                currentStamina: oldStamina,
-                maxStamina: farmer.MaxStamina,
-                offlineDuration: offlineDuration,
-                fullBarHours: context.Config.OfflineRegenFullBarHours
-            );
-
-            float gained = newStamina - oldStamina;
-            if (gained > 0.5f)
+            var recovery = ComputeOfflineRecovery(player, farmer, DateTimeOffset.UtcNow);
+            if (recovery.StaminaGainedInt > 0)
             {
-                farmer.Stamina = newStamina;
-                context.Monitor.Log($"[BedLogoutModule] Jugador {player.PlayerName} ({playerId}) descansó {offlineDuration.TotalMinutes:F1}m offline: +{gained:F0} energía ({newStamina:F0}/{farmer.MaxStamina}).", LogLevel.Info);
+                farmer.Stamina = recovery.NewStamina;
+                context.Monitor.Log($"[BedLogoutModule] Jugador {player.PlayerName} ({playerId}) descansó {recovery.StaminaOfflineDuration.TotalMinutes:F1}m offline: +{recovery.StaminaGainedInt} energía ({recovery.NewStamina:F0}/{farmer.MaxStamina}).", LogLevel.Info);
+            }
 
+            if (farmer.Stamina > 0f && farmer.exhausted.Value)
+            {
+                farmer.exhausted.Value = false;
+            }
+
+            if (recovery.HealthGained > 0)
+            {
+                farmer.health = recovery.NewHealth;
+                context.Monitor.Log($"[BedLogoutModule] Jugador {player.PlayerName} ({playerId}) descansó {recovery.HealthOfflineDuration.TotalMinutes:F1}m offline: +{recovery.HealthGained} salud ({recovery.NewHealth}/{farmer.maxHealth}).", LogLevel.Info);
+            }
+
+            if (recovery.StaminaGainedInt > 0 || recovery.HealthGained > 0)
+            {
                 context.Helper.Multiplayer.SendMessage(
-                    message: (int)Math.Round(gained),
-                    messageType: "OfflineStaminaRestored",
+                    message: new OfflineRecoveryPayload
+                    {
+                        StaminaGained = recovery.StaminaGainedInt,
+                        HealthGained = recovery.HealthGained
+                    },
+                    messageType: OfflineRecoveryMessageType,
                     modIDs: new[] { context.Manifest.UniqueID },
                     playerIDs: new[] { playerId }
                 );
@@ -357,8 +447,10 @@ namespace Pelican4Ever.Modules
 
             if (context.WorldState.Players.TryGetValue(e.Peer.PlayerID, out var record))
             {
-                record.LastSeenUtc = DateTimeOffset.UtcNow;
-                record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                record.LastSeenUtc = now;
+                record.OfflineStaminaAnchorUtc = now;
+                record.OfflineHealthAnchorUtc = now;
                 record.CurrentSessionStartUtc = DateTimeOffset.MinValue;
             }
 
@@ -395,9 +487,11 @@ namespace Pelican4Ever.Modules
 
                 int restDay = payload?.GameDay > 0 ? payload.GameDay : Game1.Date.TotalDays;
                 var record = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
+                DateTimeOffset now = DateTimeOffset.UtcNow;
                 record.RestedOnGameDay = restDay;
                 record.LastActiveGameDay = restDay;
-                record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                record.OfflineStaminaAnchorUtc = now;
+                record.OfflineHealthAnchorUtc = now;
 
                 Farmer? sleepingFarmer = Game1.GetPlayer(playerId);
                 if (sleepingFarmer != null && payload != null && !string.IsNullOrEmpty(payload.LocationName))
@@ -421,7 +515,25 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            // En el Cliente: aplicar recuperación de energía offline al volver
+            // En el Cliente: aplicar recuperación de energía y salud offline al volver
+            if (!Context.IsMainPlayer && e.Type == OfflineRecoveryMessageType)
+            {
+                var recovery = e.ReadAs<OfflineRecoveryPayload>();
+                if (recovery != null && (recovery.StaminaGained > 0 || recovery.HealthGained > 0))
+                {
+                    if (Context.IsWorldReady && Game1.player != null)
+                    {
+                        ApplyOfflineRecoveryToLocalPlayer(recovery.StaminaGained, recovery.HealthGained);
+                    }
+                    else
+                    {
+                        pendingOfflineStaminaGain += Math.Max(0, recovery.StaminaGained);
+                        pendingOfflineHealthGain += Math.Max(0, recovery.HealthGained);
+                    }
+                }
+                return;
+            }
+
             if (!Context.IsMainPlayer && e.Type == "OfflineStaminaRestored")
             {
                 int gained = e.ReadAs<int>();
@@ -429,7 +541,7 @@ namespace Pelican4Ever.Modules
                 {
                     if (Context.IsWorldReady && Game1.player != null)
                     {
-                        ApplyOfflineStaminaToLocalPlayer(gained);
+                        ApplyOfflineRecoveryToLocalPlayer(gained, 0);
                     }
                     else
                     {
@@ -441,19 +553,61 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), "startSleep"),
-                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_StartSleep))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                context?.Monitor.Log("[BedLogoutModule] Harmony patch en GameLocation.startSleep aplicado.", LogLevel.Trace);
-            }
-            catch (Exception ex)
+            context.Patch(
+                "GameLocation.startSleep",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(GameLocation), "startSleep"),
+                prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_StartSleep)));
+
+            // LevelUpMenu vanilla recarga vida y energía al 100% al elegir profesión o cerrar el menú,
+            // asumiendo un cierre nocturno; fuera de showingEndOfNightStuff debemos preservarlas.
+            context.Patch(
+                "LevelUpMenu.getImmediateProfessionPerk",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(LevelUpMenu), nameof(LevelUpMenu.getImmediateProfessionPerk), new[] { typeof(int) }),
+                prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_LevelUpPerk)),
+                postfix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Postfix_LevelUpPerk)));
+
+            context.Patch(
+                "LevelUpMenu.getLevelPerk",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(LevelUpMenu), nameof(LevelUpMenu.getLevelPerk), new[] { typeof(int), typeof(int) }),
+                prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_LevelUpPerk)),
+                postfix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Postfix_LevelUpPerk)));
+        }
+
+        public static void Prefix_LevelUpPerk(out LevelUpResourceLogic.ResourceSnapshot? __state)
+        {
+            if (context == null
+                || !context.IsModEnabled
+                || !Context.IsWorldReady
+                || Game1.player == null
+                || !LevelUpResourceLogic.ShouldPreserveResources(Game1.showingEndOfNightStuff))
             {
-                context?.Monitor.Log($"[BedLogoutModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
+                __state = null;
+                return;
             }
+
+            __state = new LevelUpResourceLogic.ResourceSnapshot(
+                Game1.player.health,
+                Game1.player.maxHealth,
+                Game1.player.stamina);
+        }
+
+        public static void Postfix_LevelUpPerk(LevelUpResourceLogic.ResourceSnapshot? __state)
+        {
+            if (__state is not { } before || Game1.player == null)
+                return;
+
+            Game1.player.health = LevelUpResourceLogic.ResolveHealth(before, Game1.player.maxHealth);
+            Game1.player.stamina = LevelUpResourceLogic.ResolveStamina(before, Game1.player.MaxStamina);
         }
 
         /// <summary>
@@ -476,7 +630,9 @@ namespace Pelican4Ever.Modules
                 isHostPlayer: true,
                 agentHostEnabled: stayOnline);
 
-            record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            record.OfflineStaminaAnchorUtc = now;
+            record.OfflineHealthAnchorUtc = now;
 
             AdminApiModule.EventLog.Append(
                 HostEventTypes.HostRested,
@@ -601,6 +757,12 @@ namespace Pelican4Ever.Modules
             {
                 Game1.ExitToTitle();
             }, 1500);
+        }
+
+        public sealed class OfflineRecoveryPayload
+        {
+            public int StaminaGained { get; set; }
+            public int HealthGained { get; set; }
         }
     }
 }

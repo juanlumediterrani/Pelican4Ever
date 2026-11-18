@@ -94,6 +94,9 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Día de juego al que corresponden los contadores diarios (si no coincide, se consideran a 0).</summary>
         public int SatietyGameDay { get; set; } = -1;
 
+        /// <summary>Buffs de comida/bebida activos con vencimiento real UTC (GAP-11 / persistencia tras reconexión).</summary>
+        public List<PersistedFoodBuff> ActiveFoodBuffs { get; set; } = new();
+
         /// <summary>Contador diario y fracciones de experiencia de cada habilidad.</summary>
         public Economy.DailySkillExperience SkillExperience { get; set; } = new();
 
@@ -109,6 +112,18 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Registro del ciclo de adopción de mascota de ranura (Épica 20).</summary>
         public Pelican4Ever.Core.Pets.PetAdoptionRecord PetAdoption { get; set; } = new();
 
+        /// <summary>Métricas conductuales y de red recopiladas en el host para observación de Putre.</summary>
+        public Pelican4Ever.Core.Security.PlayerBehaviorMetrics Behavior { get; set; } = new();
+
+        /// <summary>Nombre del cónyuge cuya ceremonia de boda quedó completada offline y pendiente de reproducirse al reconectar (Opción 4A).</summary>
+        public string? PendingWeddingSpouse { get; set; }
+
+        /// <summary>Último día de juego en que se evaluó o mostró el diálogo nocturno de embarazo para este jugador.</summary>
+        public int LastPregnancyPromptGameDay { get; set; } = -1;
+
+        /// <summary>Último día de juego en que se procesó el nacimiento de un hijo pendiente.</summary>
+        public int LastBirthingHandledGameDay { get; set; } = -1;
+
         /// <summary>Última vez que se vio al jugador (UTC).</summary>
         public DateTimeOffset LastSeenUtc { get; set; } = DateTimeOffset.MinValue;
 
@@ -117,6 +132,29 @@ namespace Pelican4Ever.Core.Players
 
         /// <summary>Momento UTC desde el que se computa la regeneración de energía offline (se resetea al conectar o en Rollover).</summary>
         public DateTimeOffset OfflineStaminaAnchorUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>Momento UTC desde el que se computa la regeneración pasiva de salud offline (solo se consume al reconectar).</summary>
+        public DateTimeOffset OfflineHealthAnchorUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>
+        /// Actualiza las anclas offline tras procesar un rollover diario:
+        /// - Preserva <see cref="OfflineHealthAnchorUtc"/> (y la rellena desde la estamina/última vista si faltaba)
+        ///   para que la salud siga regenerando de forma continua aunque ocurra un cambio de día offline.
+        /// - Reinicia <see cref="OfflineStaminaAnchorUtc"/> únicamente cuando <see cref="SleepPolicy.WakeUpEnergy"/>
+        ///   reescribió la energía (<see cref="RolloverOutcome.Rested"/> o <see cref="RolloverOutcome.Penalized"/>).
+        /// </summary>
+        public void UpdateOfflineAnchorsForRollover(RolloverOutcome outcome, DateTimeOffset nowUtc)
+        {
+            if (OfflineHealthAnchorUtc == DateTimeOffset.MinValue)
+            {
+                OfflineHealthAnchorUtc = OfflineStaminaAnchorUtc != DateTimeOffset.MinValue
+                    ? OfflineStaminaAnchorUtc
+                    : LastSeenUtc;
+            }
+
+            if (outcome != RolloverOutcome.Untouched)
+                OfflineStaminaAnchorUtc = nowUtc;
+        }
 
         /// <summary>
         /// Último día de juego en el que el jugador estuvo activo ANTES de la ventana de madrugador.
@@ -306,6 +344,103 @@ namespace Pelican4Ever.Core.Players
 
         private static TimeSpan ClampSeconds(int seconds, TimeSpan max)
             => TimeSpan.FromSeconds(Math.Clamp(seconds, 0, Math.Max(0, (int)max.TotalSeconds)));
+
+        /// <summary>Inserta o reemplaza un buff de comida activo y limpia los ya caducados.</summary>
+        public void UpsertFoodBuff(PersistedFoodBuff buff, DateTimeOffset nowUtc)
+        {
+            if (buff == null || FoodBuffPersistenceLogic.IsDisallowedBuffId(buff.Id))
+                return;
+
+            ActiveFoodBuffs ??= new List<PersistedFoodBuff>();
+            PruneExpiredFoodBuffs(nowUtc);
+
+            if (buff.ExpiresAtUtc <= nowUtc)
+                return;
+
+            PersistedFoodBuff copy = buff.Clone();
+            int index = ActiveFoodBuffs.FindIndex(b => string.Equals(b.Id, copy.Id, StringComparison.Ordinal));
+            if (index >= 0)
+            {
+                ActiveFoodBuffs[index] = copy;
+            }
+            else if (ActiveFoodBuffs.Count < FoodBuffPersistenceLogic.MaxPersistedFoodBuffs)
+            {
+                ActiveFoodBuffs.Add(copy);
+            }
+        }
+
+        /// <summary>Elimina el buff de comida persistido con ese identificador, si existía.</summary>
+        public bool RemoveFoodBuff(string? id)
+        {
+            if (string.IsNullOrWhiteSpace(id) || ActiveFoodBuffs == null || ActiveFoodBuffs.Count == 0)
+                return false;
+
+            return ActiveFoodBuffs.RemoveAll(b => string.Equals(b.Id, id, StringComparison.Ordinal)) > 0;
+        }
+
+        /// <summary>Borra todos los buffs de comida persistidos.</summary>
+        public bool ClearFoodBuffs()
+        {
+            if (ActiveFoodBuffs == null || ActiveFoodBuffs.Count == 0)
+                return false;
+
+            ActiveFoodBuffs.Clear();
+            return true;
+        }
+
+        /// <summary>Elimina los buffs de comida ya caducados respecto a <paramref name="nowUtc"/>.</summary>
+        public int PruneExpiredFoodBuffs(DateTimeOffset nowUtc)
+        {
+            if (ActiveFoodBuffs == null || ActiveFoodBuffs.Count == 0)
+                return 0;
+
+            return ActiveFoodBuffs.RemoveAll(b =>
+                b == null
+                || FoodBuffPersistenceLogic.IsDisallowedBuffId(b.Id)
+                || b.ExpiresAtUtc <= nowUtc);
+        }
+
+        /// <summary>Genera el paquete de red con los buffs aún vigentes expresados en milisegundos restantes.</summary>
+        public FoodBuffsPayload ToFoodBuffsPayload(DateTimeOffset nowUtc)
+        {
+            ActiveFoodBuffs ??= new List<PersistedFoodBuff>();
+            PruneExpiredFoodBuffs(nowUtc);
+
+            var payload = new FoodBuffsPayload();
+            foreach (PersistedFoodBuff buff in ActiveFoodBuffs)
+            {
+                int remainingMs = buff.RemainingMilliseconds(nowUtc);
+                if (remainingMs > 0)
+                    payload.Buffs.Add(buff.ToReportEntry(nowUtc));
+            }
+            return payload;
+        }
+
+        /// <summary>Aplica en el host el informe de buffs de comida del cliente, sellando el vencimiento con el reloj del host.</summary>
+        public void ApplyFoodBuffsReport(FoodBuffsPayload? payload, DateTimeOffset hostNowUtc, Func<string, bool>? isRejectedBuffId = null)
+        {
+            ActiveFoodBuffs = FoodBuffPersistenceLogic.NormalizeIncoming(payload, hostNowUtc, isRejectedBuffId);
+        }
+
+        /// <summary>Aplica en el cliente el snapshot de buffs recibido del host, sellando el vencimiento con el reloj local.</summary>
+        public void ApplyFoodBuffsSnapshot(FoodBuffsPayload? payload, DateTimeOffset clientNowUtc)
+        {
+            ActiveFoodBuffs = FoodBuffPersistenceLogic.NormalizeIncoming(payload, clientNowUtc);
+        }
+
+        /// <summary>Copia la lista de buffs de comida activos desde otro registro (evita que SyncDoorsState pise estado local).</summary>
+        public void CopyFoodBuffsFrom(PlayerRecord source)
+        {
+            ActiveFoodBuffs = new List<PersistedFoodBuff>();
+            if (source?.ActiveFoodBuffs == null)
+                return;
+
+            foreach (PersistedFoodBuff buff in source.ActiveFoodBuffs)
+            {
+                if (buff != null)
+                    ActiveFoodBuffs.Add(buff.Clone());
+            }
+        }
     }
 
     /// <summary>Estado de consumo que un cliente comunica al host (mensaje de mod <c>SatietyReport</c>).</summary>

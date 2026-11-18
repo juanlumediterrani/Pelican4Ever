@@ -121,7 +121,7 @@ namespace Pelican4Ever.Tests
 
             foreach (var door in doors)
             {
-                var loc = HostPlazaLayout.Find(door.LocationName, 16)!;
+                var loc = HostPlazaLayout.Find(door.LocationName, 64)!;
                 Assert.NotNull(loc);
 
                 var path = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc);
@@ -140,7 +140,7 @@ namespace Pelican4Ever.Tests
                 Assert.True(seenSigns.Add((door.LocationName, mx, my)), $"Duplicate sign tile at ({mx}, {my}) in {door.LocationName} for {door.DoorId}");
             }
 
-            Assert.Equal(16, seenSigns.Count);
+            Assert.Equal(64, seenSigns.Count);
         }
 
         [Theory]

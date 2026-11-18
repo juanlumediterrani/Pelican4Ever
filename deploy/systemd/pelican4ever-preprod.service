@@ -21,6 +21,8 @@ ExecStart=/bin/sh -c 'cd "$STARDEW_DIR" && exec ./StardewModdingAPI'
 Restart=always
 RestartSec=30
 TimeoutStopSec=120
+WatchdogSec=180
+NotifyAccess=all
 # SMAPI termina con 143 al recibir SIGTERM en una parada ordenada: no es un fallo
 SuccessExitStatus=143
 

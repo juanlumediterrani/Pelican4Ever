@@ -4,6 +4,7 @@ using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Core.World;
@@ -30,6 +31,8 @@ namespace Pelican4Ever.Modules
 
         // Estado local de sesión de pedido en el cliente/jugador local
         private static string? activeShopOrderId;
+        private static ShopMenu? activeMailOrderShopMenu;
+        private static int lastSellBlockedTick = -100;
         private static readonly List<MailOrderItemLine> activeShopBuffer = new();
         private static int activeShopExpectedDeliveryDay;
 
@@ -50,6 +53,7 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
             ctx.Helper.Events.GameLoop.DayStarted += OnDayStarted;
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
+            ctx.Helper.Events.Display.MenuChanged += OnMenuChanged;
             ctx.Helper.Events.Multiplayer.PeerConnected += OnPeerConnected;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
 
@@ -70,13 +74,30 @@ namespace Pelican4Ever.Modules
             PatchSafe(harmony, "GameLocation.performAction",
                 AccessTools.Method(typeof(GameLocation), nameof(GameLocation.performAction),
                     new[] { typeof(string[]), typeof(Farmer), typeof(Location) }),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Location_PerformAction)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Location_PerformAction)),
+                criticality: PatchCriticality.Experience);
 
             PatchSafe(harmony, "ShopMenu.tryToPurchaseItem",
                 AccessTools.Method(typeof(ShopMenu), "tryToPurchaseItem",
                     new[] { typeof(ISalable), typeof(ISalable), typeof(int), typeof(int), typeof(int) }),
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_TryToPurchaseItem)),
-                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_TryToPurchaseItem)));
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_TryToPurchaseItem)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "ShopMenu.highlightItemToSell",
+                AccessTools.Method(typeof(ShopMenu), nameof(ShopMenu.highlightItemToSell), new[] { typeof(Item) }),
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_ShopMenu_HighlightItemToSell)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "ShopMenu.receiveLeftClick",
+                AccessTools.Method(typeof(ShopMenu), nameof(ShopMenu.receiveLeftClick), new[] { typeof(int), typeof(int), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_ReceiveLeftClick)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "ShopMenu.receiveRightClick",
+                AccessTools.Method(typeof(ShopMenu), nameof(ShopMenu.receiveRightClick), new[] { typeof(int), typeof(int), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_ShopMenu_ReceiveRightClick)),
+                criticality: PatchCriticality.Experience);
 
             ApplyPackagePatches(harmony);
             ApplyRobinPatches(harmony);
@@ -89,22 +110,14 @@ namespace Pelican4Ever.Modules
             string label,
             System.Reflection.MethodBase? original,
             HarmonyMethod? prefix = null,
-            HarmonyMethod? postfix = null)
+            HarmonyMethod? postfix = null,
+            PatchCriticality criticality = PatchCriticality.Experience)
         {
-            if (original == null)
-            {
-                context?.Monitor.Log($"[MailOrder] No se encontró '{label}' para parchear.", LogLevel.Warn);
+            if (context == null)
                 return;
-            }
 
-            try
-            {
-                harmony.Patch(original, prefix, postfix);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[MailOrder] Error al parchear '{label}': {ex.Message}", LogLevel.Error);
-            }
+            context.Patch($"MailOrder.{label}", "MailOrder", criticality, original, prefix, postfix);
+            _ = harmony;
         }
 
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
@@ -112,6 +125,7 @@ namespace Pelican4Ever.Modules
             ResetLocalSessions();
             if (Context.IsMainPlayer)
             {
+                ReconcilePendingToolUpgradeClearsOnHost();
                 TryDeliverDueOrders();
                 BroadcastOrdersSync();
             }
@@ -130,6 +144,7 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer)
                 return;
 
+            ReconcilePendingToolUpgradeClearsOnHost();
             TryDeliverDueOrders();
             BroadcastOrdersSync();
         }
@@ -151,17 +166,45 @@ namespace Pelican4Ever.Modules
             }
         }
 
+        private void OnMenuChanged(object? sender, MenuChangedEventArgs e)
+        {
+            if (activeMailOrderShopMenu != null && ReferenceEquals(e.OldMenu, activeMailOrderShopMenu) && !ReferenceEquals(e.NewMenu, activeMailOrderShopMenu))
+            {
+                activeMailOrderShopMenu = null;
+            }
+
+            if (activeShopOrderId != null && e.NewMenu is not ShopMenu)
+            {
+                FlushActiveShopBuffer();
+            }
+
+            if (clintUpgradeMailSessionActive
+                && e.OldMenu is ShopMenu oldShop
+                && string.Equals(oldShop.ShopId, "ClintUpgrade", StringComparison.Ordinal)
+                && e.NewMenu is not ShopMenu)
+            {
+                clintUpgradeMailSessionActive = false;
+            }
+        }
+
         private void OnPeerConnected(object? sender, PeerConnectedEventArgs e)
         {
             if (Context.IsMainPlayer && Context.IsWorldReady)
             {
                 SendOrdersSyncTo(e.Peer.PlayerID);
+                if (context != null && context.WorldState.PendingToolUpgradeClears.TryGetValue(e.Peer.PlayerID, out PendingToolUpgradeClear? pending))
+                {
+                    ReconcilePendingToolUpgradeClearsOnHost();
+                    SendToolUpgradeDeliveredToClient(e.Peer.PlayerID, pending.QualifiedToolId, force: true, knownOnline: true);
+                }
             }
         }
 
         private static void ResetLocalSessions()
         {
             activeShopOrderId = null;
+            activeMailOrderShopMenu = null;
+            lastSellBlockedTick = -100;
             activeShopBuffer.Clear();
             activeShopExpectedDeliveryDay = 0;
             ResetRobinSession();
@@ -444,19 +487,93 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            if (Game1.activeClickableMenu is ShopMenu shopMenu && shopMenu.portraitTexture == null && !string.IsNullOrWhiteSpace(ownerName))
+            if (Game1.activeClickableMenu is ShopMenu shopMenu)
             {
-                try
+                ConfigureMailOrderShopMenu(shopMenu);
+
+                if (shopMenu.portraitTexture == null && !string.IsNullOrWhiteSpace(ownerName))
                 {
-                    string assetName = $"Portraits\\{ownerName}";
-                    if (Game1.content.DoesAssetExist<Texture2D>(assetName))
-                        shopMenu.portraitTexture = Game1.content.Load<Texture2D>(assetName);
-                }
-                catch
-                {
-                    // Sin retrato personalizado si no existe asset
+                    try
+                    {
+                        string assetName = $"Portraits\\{ownerName}";
+                        if (Game1.content.DoesAssetExist<Texture2D>(assetName))
+                            shopMenu.portraitTexture = Game1.content.Load<Texture2D>(assetName);
+                    }
+                    catch
+                    {
+                        // Sin retrato personalizado si no existe asset
+                    }
                 }
             }
+        }
+
+        internal static void ConfigureMailOrderShopMenu(ShopMenu shopMenu)
+        {
+            activeMailOrderShopMenu = shopMenu;
+            shopMenu.categoriesToSellHere.Clear();
+            shopMenu.tagsToSellHere.Clear();
+        }
+
+        internal static bool IsMailOrderShopMenu(ShopMenu? menu)
+        {
+            if (menu == null)
+                return false;
+
+            if (activeMailOrderShopMenu != null)
+                return ReferenceEquals(menu, activeMailOrderShopMenu);
+
+            return (activeShopOrderId != null && string.Equals(menu.ShopId, activeShopOrderId, StringComparison.Ordinal))
+                || (clintUpgradeMailSessionActive && string.Equals(menu.ShopId, "ClintUpgrade", StringComparison.Ordinal));
+        }
+
+        public static void Postfix_ShopMenu_HighlightItemToSell(ShopMenu __instance, ref bool __result)
+        {
+            if (__result && IsMailOrderShopMenu(__instance) && __instance.heldItem == null)
+                __result = false;
+        }
+
+        public static bool Prefix_ShopMenu_ReceiveLeftClick(ShopMenu __instance, int x, int y)
+        {
+            return !TryHandleBlockedMailOrderSellClick(__instance, x, y);
+        }
+
+        public static bool Prefix_ShopMenu_ReceiveRightClick(ShopMenu __instance, int x, int y)
+        {
+            return !TryHandleBlockedMailOrderSellClick(__instance, x, y);
+        }
+
+        private static bool TryHandleBlockedMailOrderSellClick(ShopMenu menu, int x, int y)
+        {
+            if (!IsMailOrderShopMenu(menu))
+                return false;
+
+            if (menu.safetyTimer > 0 || menu.heldItem != null || menu.readOnly || menu.inventory == null)
+                return false;
+
+            if (menu.inventory.getItemAt(x, y) == null)
+                return false;
+
+            NotifyMailOrderSellBlocked(menu);
+            return true;
+        }
+
+        private static void NotifyMailOrderSellBlocked(ShopMenu menu)
+        {
+            string message = I18n.Get("mailbox.orders.cannot_sell");
+            int currentTick = Game1.ticks;
+            if (currentTick - lastSellBlockedTick >= 15)
+            {
+                Game1.playSound("cancel");
+                lastSellBlockedTick = currentTick;
+            }
+
+            if (!string.IsNullOrEmpty(menu.potraitPersonDialogue))
+                menu.potraitPersonDialogue = Game1.parseText(message, Game1.dialogueFont, 304);
+
+            bool alreadyVisible = Game1.hudMessages.Any(m =>
+                m != null && string.Equals(m.message, message, StringComparison.Ordinal));
+            if (!alreadyVisible)
+                Game1.addHUDMessage(new HUDMessage(message, HUDMessage.error_type));
         }
 
         private static int prePurchaseMoney;
@@ -501,6 +618,7 @@ namespace Pelican4Ever.Modules
         {
             string? shopId = activeShopOrderId;
             activeShopOrderId = null;
+            activeMailOrderShopMenu = null;
 
             if (string.IsNullOrEmpty(shopId) || activeShopBuffer.Count == 0 || context == null)
             {
@@ -627,6 +745,27 @@ namespace Pelican4Ever.Modules
                         {
                             Game1.addHUDMessage(new HUDMessage(res.Message, res.Accepted ? HUDMessage.newQuest_type : HUDMessage.error_type));
                         }
+                    }
+                    break;
+
+                case MailOrderMessages.ToolUpgradeStarted:
+                    if (Context.IsMainPlayer)
+                    {
+                        HandleToolUpgradeStartedOnHost(e.FromPlayerID, e.ReadAs<ToolUpgradeStartedPayload>());
+                    }
+                    break;
+
+                case MailOrderMessages.ToolUpgradeDelivered:
+                    if (!Context.IsMainPlayer && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
+                    {
+                        HandleToolUpgradeDeliveredOnClient(e.ReadAs<ToolUpgradeDeliveredPayload>());
+                    }
+                    break;
+
+                case MailOrderMessages.ToolUpgradeClearAck:
+                    if (Context.IsMainPlayer)
+                    {
+                        HandleToolUpgradeClearAckOnHost(e.FromPlayerID, e.ReadAs<ToolUpgradeClearAckPayload>());
                     }
                     break;
             }

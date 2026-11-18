@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -29,9 +30,17 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnSecond;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += (_, _) => rules = null;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnMessage;
-            ctx.Harmony.Patch(AccessTools.Method(typeof(MineShaft), nameof(MineShaft.checkStoneForItems)),
+            ctx.Patch(
+                "MineShaft.checkStoneForItems",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(MineShaft), nameof(MineShaft.checkStoneForItems)),
                 transpiler: new HarmonyMethod(typeof(MineLadderModule), nameof(TranspileStone)));
-            ctx.Harmony.Patch(AccessTools.Method(typeof(MineShaft), nameof(MineShaft.monsterDrop)),
+            ctx.Patch(
+                "MineShaft.monsterDrop",
+                Name,
+                PatchCriticality.Integrity,
+                AccessTools.Method(typeof(MineShaft), nameof(MineShaft.monsterDrop)),
                 transpiler: new HarmonyMethod(typeof(MineLadderModule), nameof(TranspileMonster)));
         }
 

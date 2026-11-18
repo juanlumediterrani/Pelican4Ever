@@ -14,7 +14,19 @@ namespace Pelican4Ever.Core.Security
         Revoked,
 
         /// <summary>Dispositivo suspendido temporalmente.</summary>
-        Suspended
+        Suspended,
+
+        /// <summary>Dispositivo en lista negra permanente; solo el propietario puede retirarlo.</summary>
+        Blacklisted
+    }
+
+    /// <summary>Etapa de observación para nuevos invitados admitidos por Putre.</summary>
+    public enum ProbationStage
+    {
+        None = 0,
+        Observing = 1,
+        Graduated = 2,
+        Blacklisted = 3
     }
 
     /// <summary>
@@ -51,6 +63,18 @@ namespace Pelican4Ever.Core.Security
 
         /// <summary>Última dirección IP conocida desde la que conectó (puramente informativo, no se usa como credencial).</summary>
         public string LastSeenIp { get; set; } = string.Empty;
+
+        /// <summary>Tutor o sistema que concedió el acceso (p. ej. "putre" u "owner").</summary>
+        public string InvitedBy { get; set; } = string.Empty;
+
+        /// <summary>ID numérico de Discord asociado al alta si entró por Putre.</summary>
+        public string DiscordUserId { get; set; } = string.Empty;
+
+        /// <summary>Estado del período de observación conductual.</summary>
+        public ProbationStage ProbationStage { get; set; } = ProbationStage.None;
+
+        /// <summary>Instante UTC en que completó los lapsos de prueba.</summary>
+        public DateTimeOffset? GraduatedAtUtc { get; set; }
 
         /// <summary>Decodifica y devuelve los bytes SPKI de la clave pública.</summary>
         public byte[] GetPublicKeySpki() => string.IsNullOrWhiteSpace(PublicKeyBase64)

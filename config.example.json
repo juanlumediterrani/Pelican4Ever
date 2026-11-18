@@ -66,6 +66,11 @@
     "Pelican4Ever.NITVCompat"
   ],
   "FarmSlotCount": 16,
+  "MaxConcurrentPlayers": 16,
+  "AdmissionQueueCapacity": 16,
+  "ReconnectGraceMinutes": 5,
+  "IdleKickMinutes": 30,
+  "IdleKickWarningMinutes": 2,
   "MaxAnnexesPerResidence": 2,
   "FirstAnnexPriceMultiplier": 0.4,
   "SecondAnnexPriceMultiplier": 1.0,
@@ -77,6 +82,8 @@
   "AutoHostSaveName": "",
   "RestartExitsProcess": false,
   "HeadlessRendering": true,
+  "AutoResolveHostEvents": true,
+  "HostEventAutoResolveDelaySeconds": 5,
   "CheckpointIntervalMinutes": 0,
   "EnableTestCommands": false,
   "CheckpointDebugMode": false,
@@ -84,6 +91,13 @@
   "CheckpointRetention": 12,
   "CheckpointCompress": true,
   "CheckpointCloneFarmhands": true,
-  "BackupRetentionDays": 0,
+  "BackupRetentionDays": 14,
+  "VerifiedGameVersions": [
+    "1.6.15"
+  ],
+  "MinimumSmapiVersion": "4.1.0",
+  "AllowUnverifiedGameVersion": false,
+  "LockdownOverride": [],
+  "HangThresholdSeconds": 120,
   "Modules": {}
 }

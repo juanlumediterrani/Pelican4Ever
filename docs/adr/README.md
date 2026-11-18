@@ -14,7 +14,8 @@ por otro ADR. La tabla es el índice; el detalle está en cada fichero.
 | [0007](0007-dispositivo-identidad-y-acceso-seguro.md) · [EN](0007-dispositivo-identidad-y-acceso-seguro.en.md) · [中文](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md) | Identidad asimétrica por dispositivo (ECDSA P-256) y desafío `P4E\x02` en Lidgren | Aceptado | 2026-11-11 |
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | Rebalanceo para el 1:1: curva diaria de experiencia, pesca más lenta, menos escaleras y coste de energía en la Caverna Calavera | Propuesto | 2026-11-14 |
 | [0009](0009-annex-vanilla-composition.md) | Generación de anexos con el flujo «Mapas Puente» (`MapStudio` + recorte canónico + clasificadores verificados) | Aceptado | 2026-11-08 |
-| [0010](0010-scalable-residences-admission-queue.md) | Residencias escalables (16/32/64) con 16 simultáneos, cola de admisión, expulsión por inactividad y gates al este de `Town` | Propuesto | 2026-11-15 |
+| [0010](0010-fail-closed-health-and-backup-contract.md) · [EN](0010-fail-closed-health-and-backup-contract.en.md) · [中文](0010-fail-closed-health-and-backup-contract.zh-CN.md) | Arranque *fail-closed*, salud del host (`/health` + watchdog) y contrato de copias con Putre | Propuesto | 2026-11-16 |
+| [0010 (v0.5)](0010-scalable-residences-admission-queue.md) | Residencias escalables (16/32/64) con 16 simultáneos, cola de admisión, expulsión por inactividad y gates al este de `Town` | Aceptado (`64` experimental) | 2026-11-15 |
 | [0011](0011-extended-concurrency-interest-management.md) | Concurrencia opcional por escalones desde 24 clientes, con replicación residencial por receptor y aforo medido por mapa | Propuesto | 2026-11-15 |
 
 ## Cómo leerlos

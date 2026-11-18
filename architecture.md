@@ -123,8 +123,8 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 1. **Registro Declarativo en `Data/Locations` (Sin ubicaciones huérfanas al cargar):**
    * En `SaveGame.loadDataToLocations`, Stardew Valley 1.6 crea las ubicaciones a partir de `Data/Locations` (`CreateOnLoad`).
    * Mediante `Helper.Events.Content.AssetRequested` sobre `"Data/Locations"`, el mod inyecta de forma declarativa:
-     - Las residencias privadas `Pelican4Ever_Farm_01` .. `Pelican4Ever_Farm_16` (según `FarmSlotCount`), con `CreateOnLoad = new CreateLocationData { MapPath = template.MapAssetKey, Type = "StardewValley.Farm, Stardew Valley", AlwaysActive = true }`.
-     - Los mapas puente activos `Pelican4Ever_Bridge_1..3` calculados determinísticamente según `FarmSlotCount` (`ceil((FarmSlotCount - 4) / 4)`): tipo `GameLocation`, exteriores (`Nature.NIV.Outside = "true"`), sin recurrir jamás a `Game1.locations.Add` ni a puentes volátiles en memoria.
+     - Las residencias privadas `Pelican4Ever_Farm_01` .. `Pelican4Ever_Farm_64` (según `FarmSlotCount`: hasta `16`, `32` operativo o `64` experimental), con `CreateOnLoad = new CreateLocationData { MapPath = template.MapAssetKey, Type = "StardewValley.Farm, Stardew Valley", AlwaysActive = true }`.
+     - Los mapas puente activos `Pelican4Ever_Bridge_1..15` calculados determinísticamente según `FarmSlotCount` (`ceil((FarmSlotCount - 4) / 4)`): tipo `GameLocation`, exteriores (`Nature.NIV.Outside = "true"`), registrados con `AlwaysActive = false` (verificado que ningún módulo requiere sincronizarlos fuera de ellos), conectando los puentes `1..3` al oeste de `Farm` y las cadenas pares/impares del este (`4..15`) a los dos gates tallados al este de `Town` (`Maps/Town`, Herrería `y=81..82` y Museo `y=92..93`), sin recurrir jamás a `Game1.locations.Add` ni a puentes volátiles en memoria.
    * Nota de motor (verificada en `GameLocation.cs` línea 2459): `CanBuildHere()` exige que `Game1.multiplayer.isAlwaysActiveLocation(this)` sea `true`. Para los granjeros del servidor se mantiene `AlwaysActive = true`, lo que garantiza compatibilidad total con Robin, edificios y animales con un coste de red despreciable.
 
 2. **Generación Determinista de Mapas Puente (`MapCloneHelper.CreateBridgeMap`):**
@@ -132,7 +132,7 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
    * El generador limpia el autobús averiado y arbustos centrales, sella el perímetro contra el vacío salvo las aperturas de portales y pasos activos, coloca vallas en la antigua carretera y talla los pasos Este y Oeste escribiendo los warps declarativos continuos en `map.Properties["Warp"]`.
 
 3. **Arquitectura de Dominio Puro (`Pelican4Ever.Core/World/`):**
-   * **`HostPlazaLayout`:** Define la topología y dimensiones de la plaza (`Farm` de 80×65 y puentes `Pelican4Ever_Bridge_1..3` de 35×30), el conteo de puentes según `FarmSlotCount` y los pasos encadenados Este/Oeste con sus coordenadas de llegada bidireccionales.
+   * **`HostPlazaLayout`:** Define la topología y dimensiones de la plaza (`Farm` de 80×65 y hasta 15 puentes `Pelican4Ever_Bridge_1..15` de 35×30 en tres cadenas: oeste `1..3`, este-Herrería pares `4..14` y este-Museo impares `5..15`), el conteo de puentes según `FarmSlotCount` (degradando de forma segura si existen reclamos por encima) y los pasos bidireccionales junto a la red de vagonetas (`MinecartPlazaLogic`).
    * **`DoorCatalogValidator`:** Valida el catálogo de 16 portales residenciales en `doors.json` (borde explícito `PortalEdge`, pertenencia a la plaza, márgenes y buzón adyacente).
    * **`SpatialWarpRouter`:** Calcula de forma determinista las casillas y orientación de llegada a la residencia según el borde cardinal del portal (`North`, `South`, `West`, `East`) y la plantilla de granja, las casillas de retorno a la plaza frente a la apertura, y las casillas de disparo (`IsPortalTriggerTile`).
    * **`TerrainTileClassifier`:** Clasifica el terreno para el tallado y autotiling procedural de caminos de losas (`stepping_stones`) respetando copas de árboles y terreno firme.
@@ -170,6 +170,23 @@ Solo las ubicaciones (controladas por el Host) exponen metadatos en `location.mo
 
 ---
 
+### 4.5. Subsistemas de Persistencias Intradía, Vida Residencial Ampliada y Resiliencia Operativa (Épicas 11, 20–25)
+
+1. **Checkpoints Intradía y Rotación (`CheckpointModule`, `SaveBackupService`, `BackupRetentionPolicy`, Épica 11):**
+   * Ejecución periódica del pipeline nativo (`SaveGame.Save()`) sin desconectar pares, clonando los *farmhands* conectados (`CheckpointCloneFarmhands`), con compresión gzip opcional y rotación pura en Core (`BackupRetentionPolicy.ToDelete`).
+2. **Mascotas de Clientes y Compatibilidad con *Nature In The Valley* (Épicas 20 y 24):**
+   * **`ClientPetAdoptionModule` / `PetAdoptionLogic`:** Los clientes que compran un `Pet Bowl` desbloquean en su despertar la visita de Marnie y adoptan una mascota propia vinculada autoritativamente a su cuenco, parcela e identificador.
+   * **Intersección NITV (`FarmTemplateCatalog.MatchesNitvHabitat`, `FoodBuffPersistenceLogic.IsTransientModBuffId`, `VisitorPermissionLogic.IsAllowedVisitorTool`, `Pelican4Ever.NITVCompat`):** Exposición de biomas (`"0"`/`"Outside"`, `"1"`/`"Forest"`/`"Woods"`, `"2"`/`"Beach"` y `"3"`/`"Underground"`) en residencias, anexos y cuevas `_Cave`; exclusión del buff transitorio de carga de red `"NatCSpeedN"` del escalado temporal `85.7x` y de la persistencia; y permiso de redes NITV para visitantes sin `VisitorsCanEdit` manteniendo bloqueada la colocación/retirada de `Terrarium`.
+3. **Pedidos 24/7 por Buzón y Co-Residencia (`MailOrderModule`, Épica 22 y 23):**
+   * **Pedidos diferidos (`MailOrderLogic`, `MailOrderRobinService`, `MailOrderMarnieService`, `MailOrderClintService`, `MailOrderPackageDelivery`):** Compras 24/7 desde buzones de puerta/residencia con cobro inmediato y materialización a las `12:00` reales del día objetivo (bloqueada durante `NightHold`), con paquetes físicos cuya apertura solo se permite a su comprador (`OwnerId`).
+   * **Co-residencia Propietario + Inquilino (`ServerWorldState` v8, `ModDataKeys.TenantId`, `TownMailboxModule`, `LocationCullingLogic`):** Un propietario (`OwnerId`) puede admitir hasta 1 inquilino (`TenantId`) desde el buzón exterior; se desacopla la cabina técnica de autenticación del hogar compartido (`Pelican4Ever_Farm_XX_Home`), se comparten construcciones y animales (`AnimalPage`, `PendingBuildingOrder`, `PendingAnimalOrder`) y se mantiene aislado el progreso individual (carteras, `Shipping Bin`, correo, paquetes, XP y minas), con protocolo seguro de expulsión y traspaso automático de titularidad.
+4. **Identidad de Dispositivo, Admisión, Cola y Resiliencia Operativa (Épica 18 y Épica 25 / ADR-0010 v0.5):**
+   * **`ClientSecurityModule` y `ProbationTelemetryModule` (`ProbationAndBlacklistLogic`, `FarmhandAuthLogic`):** Autenticación asimétrica por clave de dispositivo ECDSA P-256 (`P4E\x02` en Lidgren), whitelist/pairing, filtrado del saludo `sendAvailableFarmhands` a 1 único peón por conexión (con reserva de ofrecimiento en vuelo para evitar colisiones simultáneas), y protocolo de observación de 2 cupos y lista negra operado por Putre.
+   * **Cola de admisión, reserva de plaza e inactividad (`AdmissionLogic`, `IdleKickModule`, `ClientSecurityModule`):** Separa `FarmSlotCount` (residencias) de `MaxConcurrentPlayers` (1..16 clientes simultáneos) con cola FIFO (`AdmissionQueueCapacity`), reserva de plaza por `ReconnectGraceMinutes` ante desconexión involuntaria, expulsión por inactividad (`IdleKickModule`) solo por encima de `MaxConcurrentPlayers / 2`, y bombeo en segundo plano de `FarmhandMenu.update` mediante `Specialized.UnvalidatedUpdateTicked` cuando la ventana pierde foco (`pauseWhenOutOfFocus && multiplayerMode == 0`).
+   * **Arquitectura de resiliencia propuesta (ADR-0010 / Épica 25):** Registro único de criticidad de parches Harmony (`PatchRegistry` + `PatchHealthPolicy`: `Security` e `Integrity` bloquean en *fail-closed* `Lockdown`, `Experience` arranca en `Degraded`), lista blanca `VerifiedGameVersions`, `GET /api/v1/host/health` leído desde instantánea atómica fuera de `MainThreadActionQueue`, hilo emisor de `WATCHDOG=1` para systemd y manifiesto verificable `p4e-backup.json` con retención local por defecto (`BackupRetentionDays = 14`, `CheckpointRetention = 12`) coordinado con `Putre`.
+
+---
+
 ## 5. Registro de Decisiones de Arquitectura (ADRs)
 
 Las decisiones arquitectónicas clave y sus alternativas descartadas están documentadas en [`docs/adr/`](docs/adr/):
@@ -182,5 +199,7 @@ Las decisiones arquitectónicas clave y sus alternativas descartadas están docu
 * **ADR-0006:** Energía por sesiones: Saciedad con vaciado continuo, "Bien comido" que activa el descanso sentado y buff diario del Spa.
 * **ADR-0007:** Identidad asimétrica por dispositivo (ECDSA P-256) y desafío `P4E\x02` en el saludo de Lidgren.
 * **ADR-0008 (propuesto):** Rebalanceo para el 1:1: curva diaria de experiencia, pesca más lenta, menos escaleras en las minas y coste de energía por piso en la Caverna Calavera.
-* **ADR-0010 (propuesto):** Residencias escalables (16/32/64) con 16 simultáneos, cola de admisión y gates al este de `Town`.
+* **ADR-0009:** Generación de anexos con el flujo «Mapas Puente» (`MapStudio`, recorte canónico y clasificadores verificados).
+* **ADR-0010 (propuesto):** Arranque *fail-closed*, salud del host fuera del hilo del juego (`/api/v1/host/health` + watchdog systemd) y contrato de copias (`p4e-backup.json`, retención y `saves.restore`) con Putre.
+* **ADR-0010 (v0.5, aceptado; `64` experimental):** Residencias escalables (16/32/64) con 16 simultáneos, cola de admisión, reservas tras caída de red, expulsión por inactividad y gates al este de `Town`. Verificado en vivo en [`docs/v0.5-residence-scaling-verification-2026-11-17.md`](docs/v0.5-residence-scaling-verification-2026-11-17.md).
 * [**ADR-0011 (propuesto)**](docs/adr/0011-extended-concurrency-interest-management.md) plantea validar 24 clientes con `ExtendedConcurrency`, autorizar entradas antes del fundido y medir por separado el aforo de reunión en cada mapa. La primera optimización envía los cambios residenciales por receptor.

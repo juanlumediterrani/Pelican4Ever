@@ -27,7 +27,8 @@ namespace Pelican4Ever.Modules
             PatchSafe(harmony, "CarpenterMenu.tryToBuild",
                 AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.tryToBuild)),
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_CarpenterMenu_TryToBuild)),
-                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_CarpenterMenu_TryToBuild)));
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_CarpenterMenu_TryToBuild)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Integrity);
 
             PatchSafe(harmony, "CarpenterMenu.receiveLeftClick",
                 AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.receiveLeftClick), new[] { typeof(int), typeof(int), typeof(bool) }),
@@ -40,7 +41,8 @@ namespace Pelican4Ever.Modules
 
             PatchSafe(harmony, "Building.isThereAnythingtoPreventConstruction",
                 AccessTools.Method(typeof(Building), nameof(Building.isThereAnythingtoPreventConstruction)),
-                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_Building_PreventConstruction)));
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_Building_PreventConstruction)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Integrity);
         }
 
         private static void ShowRobinMailMenu()
@@ -90,6 +92,9 @@ namespace Pelican4Ever.Modules
 
         private static void ShowMailHouseUpgradeOffer()
         {
+            if (!FarmSlotModule.EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
+                return;
+
             int level = Game1.player.HouseUpgradeLevel;
             string? offerText = level switch
             {
@@ -121,6 +126,9 @@ namespace Pelican4Ever.Modules
 
         private static void AcceptMailHouseUpgrade()
         {
+            if (!FarmSlotModule.EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
+                return;
+
             int level = Game1.player.HouseUpgradeLevel;
             int goldCost = level switch { 0 => 10000, 1 => 65000, 2 => 100000, _ => 0 };
             string? matId = level switch { 0 => "(O)388", 1 => "(O)709", _ => null };

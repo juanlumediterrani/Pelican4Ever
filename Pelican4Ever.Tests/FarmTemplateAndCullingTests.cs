@@ -172,5 +172,48 @@ namespace Pelican4Ever.Tests
                 Assert.Equal("true", fields["Nature.NIV.Beach"]);
             }
         }
+
+        [Theory]
+        [InlineData("Foraging", "1", true)]
+        [InlineData("Foraging", "Forest", true)]
+        [InlineData("Foraging", "Woods", true)]
+        [InlineData("Foraging", "2", false)]
+        [InlineData("FourCorners", "1", true)]
+        [InlineData("Fishing", "2", true)]
+        [InlineData("Fishing", "Beach", true)]
+        [InlineData("Fishing", "1", false)]
+        [InlineData("Beach", "2", true)]
+        [InlineData("Beach", "0", true)]
+        [InlineData("Standard", "0", true)]
+        [InlineData("Standard", "Outside", true)]
+        [InlineData("Standard", "3", false)]
+        public void FarmTemplateCatalog_MatchesNitvHabitat_SupportsNumericAndLiteralBiomeCodes(
+            string templateId,
+            string code,
+            bool expected)
+        {
+            var fields = new Dictionary<string, string>();
+            FarmTemplateCatalog.ApplyNitvCustomFields(fields, templateId);
+
+            Assert.Equal(expected, FarmTemplateCatalog.MatchesNitvHabitat(fields, code));
+        }
+
+        [Theory]
+        [InlineData("3", true)]
+        [InlineData("Underground", true)]
+        [InlineData("0", false)]
+        [InlineData("1", false)]
+        [InlineData("2", false)]
+        public void FarmTemplateCatalog_MatchesNitvHabitat_SupportsUndergroundCaves(string code, bool expected)
+        {
+            var caveFields = new Dictionary<string, string>
+            {
+                ["Nature.NIV.Underground"] = "true"
+            };
+
+            Assert.Equal(expected, FarmTemplateCatalog.MatchesNitvHabitat(caveFields, code));
+            Assert.False(FarmTemplateCatalog.MatchesNitvHabitat(new Dictionary<string, string> { ["Nature.NIV.Underground"] = "false" }, "3"));
+            Assert.False(FarmTemplateCatalog.MatchesNitvHabitat(null, "3"));
+        }
     }
 }

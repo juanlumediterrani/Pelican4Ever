@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
+using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
@@ -13,7 +15,11 @@ using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Audio;
+using StardewValley.BellsAndWhistles;
 using StardewValley.Buildings;
+using StardewValley.Characters;
+using StardewValley.Events;
 using StardewValley.Extensions;
 using StardewValley.GameData.Locations;
 using StardewValley.GameData.Objects;
@@ -21,6 +27,7 @@ using StardewValley.Locations;
 using StardewValley.Menus;
 using StardewValley.Network;
 using StardewValley.Objects;
+using StardewValley.Pathfinding;
 using StardewValley.TerrainFeatures;
 using StardewValley.Tools;
 
@@ -35,6 +42,7 @@ namespace Pelican4Ever.Modules
         private static ModContext? context;
         private static bool welcomeNotified;
         private static bool chatCommandsRegistered;
+        private static bool deferredBirthNamingPending;
 
         /// <summary>Granja compartida de Isla Jengibre, disponible para los servicios de Robin/Marnie una vez restaurada.</summary>
         private const string SharedIslandFarmId = "IslandWest";
@@ -106,7 +114,7 @@ namespace Pelican4Ever.Modules
                     foreach (var door in rawDoors)
                     {
                         var spec = door.ToDoorSpec();
-                        var errors = new List<string>(DoorCatalogValidator.ValidateOne(spec, 16));
+                        var errors = new List<string>(DoorCatalogValidator.ValidateOne(spec, HostPlazaLayout.MaxFarmSlotCount));
 
                         if (!string.IsNullOrWhiteSpace(door.DoorId) && !seenDoorIds.Add(door.DoorId))
                             errors.Add($"DoorId duplicado: '{door.DoorId}'.");
@@ -206,7 +214,7 @@ namespace Pelican4Ever.Modules
                         };
                     }
 
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
 
                     // TASK-ArtifactLoot: Excluir las residencias y anexos de la tirada global de libros perdidos (LOST_BOOK_OR_ITEM)
                     // en Data/Locations["Default"]. Stardew Valley solo excluye "Farm", por lo que en residencias privadas
@@ -238,7 +246,7 @@ namespace Pelican4Ever.Modules
                         bridgeData.CreateOnLoad ??= new CreateLocationData();
                         bridgeData.CreateOnLoad.MapPath = $"Maps/{name}";
                         bridgeData.CreateOnLoad.Type = "StardewValley.GameLocation, Stardew Valley";
-                        bridgeData.CreateOnLoad.AlwaysActive = true;
+                        bridgeData.CreateOnLoad.AlwaysActive = false;
                         bridgeData.CustomFields ??= new Dictionary<string, string>();
                         FarmTemplateCatalog.ApplyNitvCustomFields(bridgeData.CustomFields, "Standard");
                     }
@@ -470,7 +478,7 @@ namespace Pelican4Ever.Modules
                 e.Edit(asset =>
                 {
                     var data = asset.AsDictionary<string, ObjectData>().Data;
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var activeAnnexIds = context?.WorldState.Annexes?.Values.Select(a => a.AnnexId);
 
                     int enrichedCount = 0;
@@ -553,7 +561,7 @@ namespace Pelican4Ever.Modules
                     }
 
                     // TASK-1203: Tallar el paso oeste en Maps/Pelican4Ever_HostFarm si hay puentes activos
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var farmPlaza = HostPlazaLayout.Find(HostPlazaLayout.HostFarm, slotCount);
                     if (farmPlaza?.West is { } westPassage)
                     {
@@ -595,9 +603,9 @@ namespace Pelican4Ever.Modules
                 string bridgeName = Path.GetFileName(e.NameWithoutLocale.BaseName);
                 e.LoadFrom(() =>
                 {
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var bridgeLoc = HostPlazaLayout.Find(bridgeName, slotCount)
-                        ?? HostPlazaLayout.Chain(16).FirstOrDefault(l => string.Equals(l.Name, bridgeName, StringComparison.OrdinalIgnoreCase));
+                        ?? HostPlazaLayout.Chain(HostPlazaLayout.MaxFarmSlotCount).FirstOrDefault(l => string.Equals(l.Name, bridgeName, StringComparison.OrdinalIgnoreCase));
                     if (bridgeLoc == null)
                         return new xTile.Map(bridgeName);
 
@@ -634,9 +642,20 @@ namespace Pelican4Ever.Modules
             {
                 e.LoadFromModFile<Microsoft.Xna.Framework.Graphics.Texture2D>("assets/stepping_stones.png", AssetLoadPriority.Medium);
             }
+            else if (e.NameWithoutLocale.IsEquivalentTo("Maps/Town"))
+            {
+                int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
+                if (slotCount > HostPlazaLayout.BaseFarmSlotCount)
+                {
+                    e.Edit(asset =>
+                    {
+                        MapCloneHelper.CarveTownEastGates(asset.AsMap().Data);
+                    }, AssetEditPriority.Late);
+                }
+            }
             else if (e.NameWithoutLocale.IsEquivalentTo("Data/Minecarts"))
             {
-                // TASK-1501: Añadir la Plaza Central (Puente 1) a la red nativa de vagonetas
+                // TASK-1501 / TASK-2407: Añadir la Plaza Central (Puente 1) y los puentes del este a la red nativa de vagonetas
                 e.Edit(asset =>
                 {
                     var networks = asset.AsDictionary<string, StardewValley.GameData.Minecarts.MinecartNetworkData>().Data;
@@ -649,26 +668,34 @@ namespace Pelican4Ever.Modules
                     }
 
                     network.Destinations ??= new List<StardewValley.GameData.Minecarts.MinecartDestinationData>();
-                    network.Destinations.RemoveAll(d => string.Equals(d.Id, MinecartPlazaLogic.PlazaDestinationId, StringComparison.OrdinalIgnoreCase));
+                    network.Destinations.RemoveAll(d =>
+                        string.Equals(d.Id, MinecartPlazaLogic.PlazaDestinationId, StringComparison.OrdinalIgnoreCase) ||
+                        (d.Id != null && d.Id.StartsWith(HostPlazaLayout.BridgePrefix, StringComparison.OrdinalIgnoreCase)));
 
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
-                    if (!MinecartPlazaLogic.ShouldIncludePlazaDestination(slotCount))
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
+                    var destinations = MinecartPlazaLogic.GetActiveMinecartDestinations(slotCount);
+                    if (destinations.Count == 0)
                         return;
 
-                    var plazaDest = new StardewValley.GameData.Minecarts.MinecartDestinationData
-                    {
-                        Id = MinecartPlazaLogic.PlazaDestinationId,
-                        DisplayName = I18n.Get("minecart.plaza_destination"),
-                        TargetLocation = HostPlazaLayout.BridgeName(1),
-                        TargetTile = new Point(MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY),
-                        TargetDirection = MinecartPlazaLogic.BridgeArrivalDirectionName
-                    };
+                    int insertIdx = network.Destinations.FindIndex(d => string.Equals(d.Id, "Bus", StringComparison.OrdinalIgnoreCase));
+                    insertIdx = insertIdx >= 0 ? insertIdx + 1 : network.Destinations.Count;
 
-                    int busIdx = network.Destinations.FindIndex(d => string.Equals(d.Id, "Bus", StringComparison.OrdinalIgnoreCase));
-                    if (busIdx >= 0)
-                        network.Destinations.Insert(busIdx + 1, plazaDest);
-                    else
-                        network.Destinations.Add(plazaDest);
+                    foreach (var dest in destinations)
+                    {
+                        string displayName = dest.BridgeNumber == 1
+                            ? I18n.Get("minecart.plaza_destination")
+                            : I18n.Get("location.bridge", new { number = dest.BridgeNumber });
+
+                        var mcDest = new StardewValley.GameData.Minecarts.MinecartDestinationData
+                        {
+                            Id = dest.DestinationId,
+                            DisplayName = displayName,
+                            TargetLocation = dest.BridgeLocationName,
+                            TargetTile = new Point(MinecartPlazaLogic.BridgeArrivalTileX, MinecartPlazaLogic.BridgeArrivalTileY),
+                            TargetDirection = MinecartPlazaLogic.BridgeArrivalDirectionName
+                        };
+                        network.Destinations.Insert(insertIdx++, mcDest);
+                    }
                 });
             }
         }
@@ -727,19 +754,19 @@ namespace Pelican4Ever.Modules
             if (context?.WorldState?.Doors != null && context.WorldState.Doors.ContainsKey(door.DoorId))
                 return true;
 
-            int slotCount = context?.Config.FarmSlotCount ?? 16;
+            int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
             return PlazaCatalogFormatter.IsDoorActive(door.DefaultSlotId, door.LocationName, slotCount);
         }
 
         public static bool IsInOpeningOrBorder(DoorModel door, int tileX, int tileY)
         {
-            var loc = HostPlazaLayout.Find(door.LocationName, 16);
+            var loc = HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount);
             return IsInOpeningOrBorder(door, loc, tileX, tileY);
         }
 
         public static bool IsInOpeningOrBorder(DoorModel door, PlazaLocation? loc, int tileX, int tileY)
         {
-            loc ??= HostPlazaLayout.Find(door.LocationName, 16);
+            loc ??= HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount);
             if (loc == null)
             {
                 var (t1, t2) = GetOpeningTiles(door);
@@ -772,7 +799,7 @@ namespace Pelican4Ever.Modules
             DoorModel door,
             xTile.Tiles.Tile? sampleTile)
         {
-            var loc = HostPlazaLayout.Find(door.LocationName, 16)
+            var loc = HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount)
                    ?? new PlazaLocation(door.LocationName, bld?.LayerWidth ?? 80, bld?.LayerHeight ?? 65, null, null);
             var passTiles = SpatialWarpRouter.GetResidencePathTiles(door.Edge, door.TownTileX, door.TownTileY, loc)
                 .Select(t => new Point(t.X, t.Y))
@@ -1568,7 +1595,7 @@ namespace Pelican4Ever.Modules
                 string? typeProp = null;
                 existingBack?.Properties.TryGetValue("Type", out typeProp);
 
-                var loc = HostPlazaLayout.Find(door.LocationName, 16)
+                var loc = HostPlazaLayout.Find(door.LocationName, HostPlazaLayout.MaxFarmSlotCount)
                        ?? new PlazaLocation(door.LocationName, bld.LayerWidth, bld.LayerHeight, null, null);
                 bool isGrass = TerrainTileClassifier.IsMailboxOnGrass(door.Edge, loc, door.TownTileX, door.TownTileY, mx, my);
                 bool existingIsGrass = existingBack != null && TerrainTileClassifier.IsGrassTileIndex(existingBack.TileIndex, typeProp, existingBack.TileSheet?.Id);
@@ -1666,6 +1693,19 @@ namespace Pelican4Ever.Modules
                     {
                         context.Monitor.Log($"[FarmSlotModule] Liberadas {released.Count} asignaciones inválidas o duplicadas: {string.Join(", ", released)}.", LogLevel.Warn);
                     }
+                }
+
+                // ADR-0010 (punto 7): Desescalado seguro — no reducir por debajo de la residencia reclamada más alta
+                var claimedSlots = context.WorldState.Doors.Values
+                    .Where(d => d.OwnerId != 0)
+                    .Select(d => d.FarmSlotId);
+                int effectiveSlotCount = HostPlazaLayout.GetEffectiveFarmSlotCount(context.Config.FarmSlotCount, claimedSlots);
+                if (effectiveSlotCount > context.Config.FarmSlotCount)
+                {
+                    context.Monitor.Log(
+                        $"[FarmSlotModule] FarmSlotCount={context.Config.FarmSlotCount} es menor que la residencia reclamada más alta; se arranca con {effectiveSlotCount} residencias efectivas para no perder datos.",
+                        LogLevel.Warn);
+                    context.Config.FarmSlotCount = effectiveSlotCount;
                 }
 
                 // Data/Locations se construyó al lanzar el juego, sin el estado de la partida
@@ -1781,14 +1821,16 @@ namespace Pelican4Ever.Modules
 
             if (CheckBridge(who.disconnectLocation.Value))
             {
-                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía disconnectLocation en puente '{who.disconnectLocation.Value}' no activo. Redirigiendo a 'Farm'.", LogLevel.Warn);
-                who.disconnectLocation.Value = HostPlazaLayout.HostFarm;
-                who.disconnectPosition.Value = new Vector2(64f * 64f, 15f * 64f);
+                var (anchorLoc, ax, ay, _) = HostPlazaLayout.GetAnchorReturnTarget(who.disconnectLocation.Value);
+                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía disconnectLocation en puente '{who.disconnectLocation.Value}' no activo. Redirigiendo a '{anchorLoc}'.", LogLevel.Warn);
+                who.disconnectLocation.Value = anchorLoc;
+                who.disconnectPosition.Value = new Vector2(ax * 64f, ay * 64f);
             }
             if (CheckBridge(who.lastSleepLocation.Value))
             {
-                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía lastSleepLocation en puente '{who.lastSleepLocation.Value}' no activo. Redirigiendo a 'Farm'.", LogLevel.Warn);
-                who.lastSleepLocation.Value = HostPlazaLayout.HostFarm;
+                var (anchorLoc, _, _, _) = HostPlazaLayout.GetAnchorReturnTarget(who.lastSleepLocation.Value);
+                context?.Monitor.Log($"[FarmSlotModule] El jugador {who.Name} tenía lastSleepLocation en puente '{who.lastSleepLocation.Value}' no activo. Redirigiendo a '{anchorLoc}'.", LogLevel.Warn);
+                who.lastSleepLocation.Value = anchorLoc;
             }
         }
 
@@ -1824,6 +1866,7 @@ namespace Pelican4Ever.Modules
             context.Helper.GameContent.InvalidateCache("Data/Locations");
             context.Helper.GameContent.InvalidateCache("Data/Objects");
             context.Helper.GameContent.InvalidateCache("Data/Minecarts");
+            context.Helper.GameContent.InvalidateCache("Maps/Town");
             context.Helper.GameContent.InvalidateCache("Maps/Pelican4Ever_HostFarm");
             for (int i = 1; i <= HostPlazaLayout.MaxBridges; i++)
             {
@@ -2433,13 +2476,6 @@ namespace Pelican4Ever.Modules
         {
             if (!Context.IsMainPlayer || farm == null) return;
 
-            if (Game1.netWorldState?.Value != null)
-            {
-                int targetCount = context?.Config.FarmSlotCount ?? 16;
-                Game1.netWorldState.Value.highestPlayerLimit.Value = Math.Max(Game1.netWorldState.Value.highestPlayerLimit.Value, targetCount);
-                Game1.netWorldState.Value.currentPlayerLimit.Value = Math.Max(Game1.netWorldState.Value.currentPlayerLimit.Value, targetCount);
-            }
-
             int removed = 0;
             for (int i = farm.buildings.Count - 1; i >= 0; i--)
             {
@@ -2544,6 +2580,8 @@ namespace Pelican4Ever.Modules
                 unclaimedCheckCooldown--;
                 return;
             }
+
+            TryRunDeferredHouseholdClientEvents();
 
             var curLoc = Game1.currentLocation;
             if (curLoc == null || !HostPlazaLayout.IsPlazaLocation(curLoc.NameOrUniqueName) || Game1.player == null || Game1.isFestival())
@@ -3715,6 +3753,10 @@ namespace Pelican4Ever.Modules
             {
                 HandleDemolishBuildingResult(e.ReadAs<DemolishBuildingResultPayload>());
             }
+            else if (e.Type == ModMessages.FamilyEventAction && Context.IsMainPlayer)
+            {
+                HandleFamilyEventAction(e.FromPlayerID, e.ReadAs<FamilyEventActionPayload>());
+            }
             else if (e.Type == ModMessages.SyncDoorsState && !Context.IsMainPlayer
                 && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
             {
@@ -3753,6 +3795,13 @@ namespace Pelican4Ever.Modules
                             && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? local))
                         {
                             kvp.Value.CopyConsumptionFrom(local);
+                        }
+
+                        if (kvp.Key == localId
+                            && EconomyModule.HasLocalFoodBuffState
+                            && context.WorldState.Players.TryGetValue(kvp.Key, out PlayerRecord? localFoodBuffRecord))
+                        {
+                            kvp.Value.CopyFoodBuffsFrom(localFoodBuffRecord);
                         }
 
                         if (kvp.Key == localId && SkillExperienceModule.HasLocalState
@@ -4864,321 +4913,305 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                // Parche para redirigir la salida de una granja Pelican4Ever_Farm_XX hacia su puerta residencial
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_WarpFarmer))
-                );
+            // Parche para redirigir la salida de una granja Pelican4Ever_Farm_XX hacia su puerta residencial
+            PatchSafe(harmony, "Game1.warpFarmer",
+                AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_WarpFarmer)),
+                criticality: PatchCriticality.Integrity);
 
-                // Red de seguridad del servidor: si una petición de warp de un cliente apunta a la cueva
-                // compartida de la Granja Host y la ubicación no existe, crearla antes de resolverla.
-                // Game1.RequireLocation tiene una sobrecarga genérica y otra no genérica con la misma firma;
-                // AccessTools.Method resulta ambiguo, así que resolvemos explícitamente la no genérica.
-                var requireLocation = typeof(Game1)
-                    .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
-                    .FirstOrDefault(m =>
-                    {
-                        if (m.Name != nameof(Game1.RequireLocation) || m.IsGenericMethodDefinition)
-                            return false;
-                        var parameters = m.GetParameters();
-                        return parameters.Length == 2
-                            && parameters[0].ParameterType == typeof(string)
-                            && parameters[1].ParameterType == typeof(bool);
-                    });
-                if (requireLocation != null)
+            // Red de seguridad del servidor: si una petición de warp de un cliente apunta a la cueva
+            // compartida de la Granja Host y la ubicación no existe, crearla antes de resolverla.
+            var requireLocation = typeof(Game1)
+                .GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)
+                .FirstOrDefault(m =>
                 {
-                    harmony.Patch(
-                        original: requireLocation,
-                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation))
-                    );
-                }
-                else
-                {
-                    context?.Monitor.Log("[FarmSlotModule] No se encontró Game1.RequireLocation(string, bool) para parchear.", LogLevel.Warn);
-                }
+                    if (m.Name != nameof(Game1.RequireLocation) || m.IsGenericMethodDefinition)
+                        return false;
+                    var parameters = m.GetParameters();
+                    return parameters.Length == 2
+                        && parameters[0].ParameterType == typeof(string)
+                        && parameters[1].ParameterType == typeof(bool);
+                });
+            PatchSafe(harmony, "Game1.RequireLocation",
+                requireLocation,
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_RequireLocation)),
+                criticality: PatchCriticality.Integrity);
 
-                // Parches anti-griefing en granjas ajenas: bloquear herramientas destructivas y cofres
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farmer), "performBeginUsingTool"),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_PerformBeginUsingTool))
-                );
+            // Parches anti-griefing en granjas ajenas: bloquear herramientas destructivas y cofres
+            PatchSafe(harmony, "Farmer.performBeginUsingTool",
+                AccessTools.Method(typeof(Farmer), "performBeginUsingTool"),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_PerformBeginUsingTool)),
+                criticality: PatchCriticality.Security);
 
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(StardewValley.Objects.Chest), nameof(StardewValley.Objects.Chest.checkForAction)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ChestCheckForAction))
-                );
+            PatchSafe(harmony, "Chest.checkForAction",
+                AccessTools.Method(typeof(StardewValley.Objects.Chest), nameof(StardewValley.Objects.Chest.checkForAction)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ChestCheckForAction)),
+                criticality: PatchCriticality.Security);
 
-                // TASK-914: Protección e interacción de los letreros de anexo
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Sign), nameof(Sign.checkForAction)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SignCheckForAction))
-                );
+            // TASK-914: Protección e interacción de los letreros de anexo
+            PatchSafe(harmony, "Sign.checkForAction",
+                AccessTools.Method(typeof(Sign), nameof(Sign.checkForAction)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SignCheckForAction)),
+                criticality: PatchCriticality.Experience);
 
-                // Parche de Culling dinámico de red para 16 granjas (TASK-603)
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.isAlwaysActiveLocation)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation))
-                );
+            // Parche de Culling dinámico de red para 16 granjas (TASK-603)
+            PatchSafe(harmony, "Multiplayer.isAlwaysActiveLocation",
+                AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.isAlwaysActiveLocation)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsAlwaysActiveLocation)),
+                criticality: PatchCriticality.Integrity);
 
-                // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(BedFurniture), nameof(BedFurniture.ApplyWakeUpPosition)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition))
-                );
+            // Parche para evitar excepción y congelamiento de clientes por cabañas faltantes o no cargadas
+            PatchSafe(harmony, "BedFurniture.ApplyWakeUpPosition",
+                AccessTools.Method(typeof(BedFurniture), nameof(BedFurniture.ApplyWakeUpPosition)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ApplyWakeUpPosition)),
+                criticality: PatchCriticality.Integrity);
 
-                // TASK-605: Destinos de teletransporte (Tótem de granja y obelisco de la isla) hacia la residencia
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(StardewValley.Object), "totemWarpForReal"),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_TotemWarpForReal))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(
-                        typeof(IslandWest),
-                        nameof(IslandWest.performAction),
-                        new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }
-                    ),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IslandWestPerformAction))
-                );
+            // TASK-605: Destinos de teletransporte (Tótem de granja y obelisco de la isla) hacia la residencia
+            PatchSafe(harmony, "Object.totemWarpForReal",
+                AccessTools.Method(typeof(StardewValley.Object), "totemWarpForReal"),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_TotemWarpForReal)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "IslandWest.performAction",
+                AccessTools.Method(
+                    typeof(IslandWest),
+                    nameof(IslandWest.performAction),
+                    new[] { typeof(string[]), typeof(Farmer), typeof(xTile.Dimensions.Location) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IslandWestPerformAction)),
+                criticality: PatchCriticality.Experience);
 
-                // Parche de paso libre sin colisión en los portales residenciales de la Plaza Central
-                harmony.Patch(
-                    original: AccessTools.Method(
-                        typeof(GameLocation),
-                        nameof(GameLocation.isCollidingPosition),
-                        new[] {
-                            typeof(Microsoft.Xna.Framework.Rectangle),
-                            typeof(xTile.Dimensions.Rectangle),
-                            typeof(bool),
-                            typeof(int),
-                            typeof(bool),
-                            typeof(Character),
-                            typeof(bool),
-                            typeof(bool),
-                            typeof(bool),
-                            typeof(bool)
-                        }
-                    ),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IsCollidingPosition))
-                );
+            // Parche de paso libre sin colisión en los portales residenciales de la Plaza Central
+            PatchSafe(harmony, "GameLocation.isCollidingPosition",
+                AccessTools.Method(
+                    typeof(GameLocation),
+                    nameof(GameLocation.isCollidingPosition),
+                    new[] {
+                        typeof(Microsoft.Xna.Framework.Rectangle),
+                        typeof(xTile.Dimensions.Rectangle),
+                        typeof(bool),
+                        typeof(int),
+                        typeof(bool),
+                        typeof(Character),
+                        typeof(bool),
+                        typeof(bool),
+                        typeof(bool),
+                        typeof(bool)
+                    }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_IsCollidingPosition)),
+                criticality: PatchCriticality.Integrity);
 
-                // TASK-903: Asegurar que las ubicaciones de anexo guardadas en el XML de la partida existan en Game1.locations
-                // antes de que SaveGame.loadDataToLocations restaure cultivos, objetos y máquinas tras reiniciar el servidor
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(SaveGame), nameof(SaveGame.loadDataToLocations)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SaveGameLoadDataToLocations))
-                );
+            // TASK-903: Asegurar que las ubicaciones de anexo guardadas en el XML de la partida existan en Game1.locations
+            PatchSafe(harmony, "SaveGame.loadDataToLocations",
+                AccessTools.Method(typeof(SaveGame), nameof(SaveGame.loadDataToLocations)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SaveGameLoadDataToLocations)),
+                criticality: PatchCriticality.Integrity);
 
-                // TASK-903: Impedir que Farm añada Farmhouse/Greenhouse/ShippingBin/Cabins/SpousePatio/GrandpaCandles a anexos 40×32
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.AddDefaultBuildings)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.UpdatePatio)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Farm), nameof(Farm.addGrandpaCandles)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm))
-                );
+            // TASK-903: Impedir que Farm añada Farmhouse/Greenhouse/ShippingBin/Cabins/SpousePatio/GrandpaCandles a anexos 40×32
+            PatchSafe(harmony, "Farm.AddDefaultBuildings",
+                AccessTools.Method(typeof(Farm), nameof(Farm.AddDefaultBuildings)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm)),
+                criticality: PatchCriticality.Integrity);
+            PatchSafe(harmony, "Farm.UpdatePatio",
+                AccessTools.Method(typeof(Farm), nameof(Farm.UpdatePatio)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm)),
+                criticality: PatchCriticality.Integrity);
+            PatchSafe(harmony, "Farm.addGrandpaCandles",
+                AccessTools.Method(typeof(Farm), nameof(Farm.addGrandpaCandles)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_SkipOnAnnexFarm)),
+                criticality: PatchCriticality.Integrity);
 
-                // Redirigir el menú de construcción de Robin y del Mago exclusivamente a la residencia y anexos del jugador
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowConstructOptions), new[] { typeof(string), typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions))
-                );
+            // Redirigir el menú de construcción de Robin y del Mago exclusivamente a la residencia y anexos del jugador
+            PatchSafe(harmony, "GameLocation.ShowConstructOptions",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowConstructOptions), new[] { typeof(string), typeof(int) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowConstructOptions)),
+                criticality: PatchCriticality.Security);
 
-                // TASK-906 / TASK-2011: el menú de animales de Marnie ofrece la residencia, sus anexos
-                // y la granja compartida de Isla Jengibre, en lugar de la granja del host.
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowAnimalShopMenu)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu))
-                );
+            // TASK-906 / TASK-2011: el menú de animales de Marnie ofrece la residencia, sus anexos
+            PatchSafe(harmony, "GameLocation.ShowAnimalShopMenu",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.ShowAnimalShopMenu)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ShowAnimalShopMenu)),
+                criticality: PatchCriticality.Security);
 
-                // TASK-2011: permitir construir y mover edificios en la granja compartida de Isla Jengibre
-                // en cuanto el jugador haya restaurado la casa. Se registran con PatchSafe para que un
-                // fallo aislado (p. ej. un parámetro mal nombrado) no aborte el resto de parches.
-                PatchSafe(
-                    harmony,
-                    "GameLocation.IsBuildableLocation",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation))
-                );
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.hasPermissionsToMove",
-                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding))
-                );
-                PatchSafe(
-                    harmony,
-                    "GameLocation.OnBuildingMoved",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved))
-                );
+            PatchSafe(harmony, "GameLocation.IsBuildableLocation",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.IsBuildableLocation)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_IsBuildableLocation)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.hasPermissionsToMove",
+                AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToMove)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterCanMoveIslandBuilding)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "GameLocation.OnBuildingMoved",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.OnBuildingMoved)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_OnIslandBuildingMoved)),
+                criticality: PatchCriticality.Experience);
 
-                // TASK-2015: en vanilla el botón de demoler está reservado al anfitrión
-                // (demolishButton.visible = Game1.IsMasterGame y hasPermissionsToDemolish lo exige),
-                // así que un cliente no podía retirar edificios de su propia residencia ni de su anexo.
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu..ctor",
-                    AccessTools.Constructor(typeof(CarpenterMenu), new[] { typeof(string), typeof(GameLocation) }),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_Ctor))
-                );
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.resetBounds",
-                    AccessTools.Method(typeof(CarpenterMenu), "resetBounds"),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_ResetBounds))
-                );
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.hasPermissionsToDemolish",
-                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToDemolish)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish))
-                );
+            PatchSafe(harmony, "CarpenterMenu..ctor",
+                AccessTools.Constructor(typeof(CarpenterMenu), new[] { typeof(string), typeof(GameLocation) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_Ctor)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.resetBounds",
+                AccessTools.Method(typeof(CarpenterMenu), "resetBounds"),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_ResetBounds)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.hasPermissionsToDemolish",
+                AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.hasPermissionsToDemolish)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_HasPermissionsToDemolish)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "CarpenterMenu.setUpForBuildingPlacement",
+                AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.setUpForBuildingPlacement)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_SetUpForBuildingPlacement)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "GameLocation.destroyStructure(Building)",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.destroyStructure), new[] { typeof(Building) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_GameLocation_DestroyStructure)),
+                criticality: PatchCriticality.Experience);
 
-                // Diagnóstico del flujo de demolición (pulsar el martillo y borrar el edificio).
-                PatchSafe(
-                    harmony,
-                    "CarpenterMenu.setUpForBuildingPlacement",
-                    AccessTools.Method(typeof(CarpenterMenu), nameof(CarpenterMenu.setUpForBuildingPlacement)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_CarpenterMenu_SetUpForBuildingPlacement))
-                );
-                PatchSafe(
-                    harmony,
-                    "GameLocation.destroyStructure(Building)",
-                    AccessTools.Method(typeof(GameLocation), nameof(GameLocation.destroyStructure), new[] { typeof(Building) }),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_GameLocation_DestroyStructure))
-                );
+            PatchSafe(harmony, "NetWitnessedLock.RequestLock",
+                AccessTools.Method(typeof(NetWitnessedLock), nameof(NetWitnessedLock.RequestLock)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NetWitnessedLock_RequestLock)),
+                criticality: PatchCriticality.Integrity);
 
-                // NetWitnessedLock.RequestLock solo funciona en el anfitrión (lanza InvalidOperationException en
-                // un cliente). Se intercepta el demolishLock para que el host ejecute la demolición.
-                PatchSafe(
-                    harmony,
-                    "NetWitnessedLock.RequestLock",
-                    AccessTools.Method(typeof(NetWitnessedLock), nameof(NetWitnessedLock.RequestLock)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NetWitnessedLock_RequestLock))
-                );
+            PatchSafe(harmony, "FarmHouse.GetCellarName",
+                AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FarmHouse_GetCellarName)),
+                criticality: PatchCriticality.Integrity);
 
-                // GAP-10 / TASK-905: Enrutar sótanos privados de cabañas a su respectiva residencia
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(FarmHouse), nameof(FarmHouse.GetCellarName)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FarmHouse_GetCellarName))
-                );
+            PatchSafe(harmony, "Building.getSourceRect",
+                AccessTools.Method(typeof(Building), nameof(Building.getSourceRect)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Building_getSourceRect)),
+                criticality: PatchCriticality.Experience);
 
-                // Corrección gráfica: desfasar verticalmente la textura de Farmhouse con interior Cabin al subir de nivel
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Building), nameof(Building.getSourceRect)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Building_getSourceRect))
-                );
+            PatchSafe(harmony, "GreenhouseBuilding.OnUseHumanDoor",
+                AccessTools.Method(typeof(GreenhouseBuilding), nameof(GreenhouseBuilding.OnUseHumanDoor), new[] { typeof(Farmer) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GreenhouseBuilding_OnUseHumanDoor)),
+                criticality: PatchCriticality.Experience);
 
-                // GAP-20: Interceptar el acceso a invernaderos en ruinas para ofrecer la pasarela interactiva de restauración
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(GreenhouseBuilding), nameof(GreenhouseBuilding.OnUseHumanDoor), new[] { typeof(Farmer) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GreenhouseBuilding_OnUseHumanDoor))
-                );
+            PatchSafe(harmony, "Game1.findStructure",
+                AccessTools.Method(typeof(Game1), nameof(Game1.findStructure), new[] { typeof(GameLocation), typeof(string) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FindStructure)),
+                criticality: PatchCriticality.Integrity);
 
-                // Prevención de recursión infinita (StackOverflowException) en Game1.findStructure <-> Game1.getLocationFromName
-                // cuando un edificio tiene nonInstancedIndoorsName cuyo destino aún no está en Game1.locations
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.findStructure), new[] { typeof(GameLocation), typeof(string) }),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_FindStructure))
-                );
+            PatchSafe(harmony, "Utility.getAllPets",
+                AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_GetAllPets)),
+                criticality: PatchCriticality.Experience);
 
-                // Utility.getAllPets hace RequireLocation sobre la casa de cada granjero; en un farmhand las
-                // residencias ajenas no están cargadas y Marnie (animalShop) lanzaba KeyNotFoundException.
-                PatchSafe(
-                    harmony,
-                    "Utility.getAllPets",
-                    AccessTools.Method(typeof(Utility), nameof(Utility.getAllPets)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_GetAllPets))
-                );
+            PatchSafe(harmony, "Farmer.hasPet",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.hasPet)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_HasPet)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "Farmer.getPet",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getPet)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPet)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "Farmer.getPetName",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetName)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetName)),
+                criticality: PatchCriticality.Experience);
+            PatchSafe(harmony, "Farmer.getPetDisplayName",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetDisplayName)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName)),
+                criticality: PatchCriticality.Experience);
 
-                // Los métodos de Farmer que buscan la mascota recorren la casa de TODOS los granjeros con
-                // Utility.getHomeOfFarmer → RequireLocation, y lanzaban en un cliente con residencias ajenas
-                // sin cargar. Se responden con la lista tolerante (en clientes, solo mascotas propias).
-                PatchSafe(
-                    harmony,
-                    "Farmer.hasPet",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.hasPet)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_HasPet))
-                );
-                PatchSafe(
-                    harmony,
-                    "Farmer.getPet",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPet)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPet))
-                );
-                PatchSafe(
-                    harmony,
-                    "Farmer.getPetName",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetName)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetName))
-                );
-                PatchSafe(
-                    harmony,
-                    "Farmer.getPetDisplayName",
-                    AccessTools.Method(typeof(Farmer), nameof(Farmer.getPetDisplayName)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetPetDisplayName))
-                );
+            PatchSafe(harmony, "Utility.findPet",
+                AccessTools.Method(typeof(Utility), nameof(Utility.findPet)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_FindPet)),
+                criticality: PatchCriticality.Experience);
 
-                // Utility.findPet recorre las casas de todos los granjeros con RequireLocation: al pulsar un
-                // cuenco en un cliente lanzaba KeyNotFoundException si otra residencia no estaba cargada.
-                PatchSafe(
-                    harmony,
-                    "Utility.findPet",
-                    AccessTools.Method(typeof(Utility), nameof(Utility.findPet)),
-                    prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Utility_FindPet))
-                );
+            PatchSafe(harmony, "AnimalPage.FindAnimals",
+                AccessTools.Method(typeof(AnimalPage), nameof(AnimalPage.FindAnimals)),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_AnimalPage_FindAnimals)),
+                criticality: PatchCriticality.Experience);
 
-                // El menú «Animales» de 1.6 recorre todas las ubicaciones del juego: en un cliente
-                // mostraba la mascota, el caballo y los animales del anfitrión como si fueran suyos.
-                PatchSafe(
-                    harmony,
-                    "AnimalPage.FindAnimals",
-                    AccessTools.Method(typeof(AnimalPage), nameof(AnimalPage.FindAnimals)),
-                    postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_AnimalPage_FindAnimals))
-                );
+            PatchSafe(harmony, "Cabin.getPorchStandingSpot",
+                AccessTools.Method(typeof(Cabin), nameof(Cabin.getPorchStandingSpot)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Cabin_GetPorchStandingSpot)),
+                criticality: PatchCriticality.Experience);
 
-                context?.Monitor.Log("[FarmSlotModule] Parches Harmony de enrutado, anti-griefing, culling de red, colisión, anexos, protección de despertar, sótanos privados, invernaderos y construcción en residencia aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FarmSlotModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            PatchSafe(harmony, "NPC.marriageDuties",
+                AccessTools.Method(typeof(NPC), nameof(NPC.marriageDuties)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_MarriageDuties)),
+                transpiler: new HarmonyMethod(typeof(FarmSlotModule), nameof(Transpiler_NPC_MarriageDuties)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "PathFindController.handleWarps",
+                AccessTools.Method(typeof(PathFindController), nameof(PathFindController.handleWarps), new[] { typeof(Rectangle) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_PathFindController_HandleWarps)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "Event.endBehaviors",
+                AccessTools.Method(typeof(Event), nameof(Event.endBehaviors), new[] { typeof(string[]), typeof(GameLocation) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_Event_EndBehaviors)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "GameLocation.answerDialogueAction",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.answerDialogueAction), new[] { typeof(string), typeof(string[]) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GameLocation_AnswerDialogueAction)),
+                criticality: PatchCriticality.Security);
+
+            PatchSafe(harmony, "NPC.tryToReceiveActiveObject",
+                AccessTools.Method(typeof(NPC), nameof(NPC.tryToReceiveActiveObject), new[] { typeof(Farmer), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_TryToReceiveActiveObject)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "Stats.checkForAchievements",
+                AccessTools.Method(typeof(Stats), nameof(Stats.checkForAchievements)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Stats_CheckForAchievements)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Dialogue.ReplacePlayerEnteredStrings",
+                AccessTools.Method(typeof(Dialogue), nameof(Dialogue.ReplacePlayerEnteredStrings), new[] { typeof(string) }),
+                finalizer: new HarmonyMethod(typeof(FarmSlotModule), nameof(Finalizer_Dialogue_ReplacePlayerEnteredStrings)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "Event.DefaultCommands.WaitForOtherPlayers",
+                AccessTools.Method(typeof(Event.DefaultCommands), nameof(Event.DefaultCommands.WaitForOtherPlayers)),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Event_WaitForOtherPlayers)),
+                criticality: PatchCriticality.Experience);
+
+            PatchSafe(harmony, "ManorHouse.GetRetrievableFarmers",
+                AccessTools.Method(typeof(ManorHouse), nameof(ManorHouse.GetRetrievableFarmers), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ManorHouse_GetRetrievableFarmers)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "ManorHouse.answerDialogueAction",
+                AccessTools.Method(typeof(ManorHouse), nameof(ManorHouse.answerDialogueAction), new[] { typeof(string), typeof(string[]) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_ManorHouse_AnswerDialogueAction)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "NPC.getHome",
+                AccessTools.Method(typeof(NPC), nameof(NPC.getHome), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NPC_GetHome)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Farmer.getChildren",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getChildren), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetChildren)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Farmer.getChildrenCount",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.getChildrenCount), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetChildrenCount)),
+                criticality: PatchCriticality.Integrity);
+
+            context?.Monitor.Log("[FarmSlotModule] Parches Harmony registrados en PatchRegistry.", LogLevel.Trace);
         }
 
-        /// <summary>
-        /// Aplica un parche Harmony sin que un fallo aislado aborte el registro del resto. Harmony resuelve
-        /// los parámetros de los parches por nombre, así que un nombre equivocado lanza al aplicar el parche
-        /// y, sin esta protección, dejaba sin parchear todo lo registrado después.
-        /// </summary>
         private static void PatchSafe(
             Harmony harmony,
             string label,
             System.Reflection.MethodBase? original,
             HarmonyMethod? prefix = null,
             HarmonyMethod? postfix = null,
-            HarmonyMethod? transpiler = null)
+            HarmonyMethod? transpiler = null,
+            HarmonyMethod? finalizer = null,
+            PatchCriticality criticality = PatchCriticality.Experience,
+            bool optional = false)
         {
-            if (original == null)
-            {
-                context?.Monitor.Log($"[FarmSlotModule] No se encontró '{label}' para parchear.", LogLevel.Warn);
+            if (context == null)
                 return;
-            }
 
-            try
-            {
-                harmony.Patch(original, prefix, postfix, transpiler);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FarmSlotModule] Error al parchear '{label}': {ex.Message}", LogLevel.Error);
-            }
+            context.Patch($"FarmSlot.{label}", "FarmSlot", criticality, original, prefix, postfix, transpiler, finalizer, optional);
+            _ = harmony;
         }
 
         public static bool Prefix_FindStructure(GameLocation parentLocation, string name, ref GameLocation? __result)
@@ -5303,7 +5336,7 @@ namespace Pelican4Ever.Modules
 
                 if (locName.StartsWith(HostPlazaLayout.BridgePrefix, StringComparison.OrdinalIgnoreCase))
                 {
-                    int slotCount = context?.Config.FarmSlotCount ?? 16;
+                    int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                     var chain = HostPlazaLayout.Chain(slotCount);
                     bool inChain = chain.Any(l => string.Equals(l.Name, locName, StringComparison.OrdinalIgnoreCase));
                     if (!inChain)
@@ -5781,7 +5814,7 @@ namespace Pelican4Ever.Modules
                     return true;
 
                 string locName = __instance.NameOrUniqueName;
-                int slotCount = context?.Config.FarmSlotCount ?? 16;
+                int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
                 var plazaLoc = HostPlazaLayout.Find(locName, slotCount);
 
                 if (plazaLoc != null)
@@ -6122,7 +6155,7 @@ namespace Pelican4Ever.Modules
 
         private static void ResolvePlazaReturn(DoorModel door, ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
         {
-            int slotCount = context?.Config.FarmSlotCount ?? 16;
+            int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
             var returnTarget = PlazaTopologyVerifier.ResolvePlazaReturnTarget(
                 door.LocationName,
                 door.Edge,
@@ -6313,7 +6346,7 @@ namespace Pelican4Ever.Modules
         {
             try
             {
-                SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? 16);
+                SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount);
 
                 // 1. Identificar si el jugador reside en una parcela asignada en WorldState (propietario o inquilino)
                 DoorAssignment? assignment = context?.WorldState?.FindResidenceOf(who.UniqueMultiplayerID);
@@ -7443,45 +7476,33 @@ namespace Pelican4Ever.Modules
 
         private static void ApplyNitvPatches(Harmony harmony)
         {
-            try
+            Type? nitvEntryType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                Type? nitvEntryType = null;
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                if (string.Equals(asm.GetName().Name, "NatureInTheValley", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (string.Equals(asm.GetName().Name, "NatureInTheValley", StringComparison.OrdinalIgnoreCase))
-                    {
-                        nitvEntryType = asm.GetType("NatureInTheValley.NatureInTheValleyEntry");
-                        break;
-                    }
-                }
-
-                if (nitvEntryType == null)
-                    return;
-
-                var onWarpMethod = AccessTools.Method(nitvEntryType, "OnWarp", new[] { typeof(object), typeof(WarpedEventArgs) });
-                if (onWarpMethod != null)
-                {
-                    harmony.Patch(
-                        original: onWarpMethod,
-                        prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NiTV_OnWarp))
-                    );
-                    context?.Monitor.Log("[FarmSlotModule] Parche de concurrencia multijugador aplicado a Nature In The Valley (OnWarp).", LogLevel.Info);
-                }
-
-                var validLocationMethod = AccessTools.Method(nitvEntryType, "validLocation", new[] { typeof(GameLocation), typeof(string) });
-                if (validLocationMethod != null)
-                {
-                    harmony.Patch(
-                        original: validLocationMethod,
-                        postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_NiTV_ValidLocation))
-                    );
-                    context?.Monitor.Log("[FarmSlotModule] Parche de compatibilidad de hábitats aplicado a Nature In The Valley (validLocation).", LogLevel.Info);
+                    nitvEntryType = asm.GetType("NatureInTheValley.NatureInTheValleyEntry");
+                    break;
                 }
             }
-            catch (Exception ex)
+
+            if (nitvEntryType == null)
             {
-                context?.Monitor.Log($"[FarmSlotModule] Advertencia al parchear Nature In The Valley: {ex}", LogLevel.Warn);
+                context?.PatchRegistry.RecordSkippedOptional("FarmSlot.NiTV", "FarmSlot", PatchCriticality.Experience, "NatureInTheValley no instalado.");
+                return;
             }
+
+            PatchSafe(harmony, "NiTV.OnWarp",
+                AccessTools.Method(nitvEntryType, "OnWarp", new[] { typeof(object), typeof(WarpedEventArgs) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_NiTV_OnWarp)),
+                criticality: PatchCriticality.Experience,
+                optional: true);
+
+            PatchSafe(harmony, "NiTV.validLocation",
+                AccessTools.Method(nitvEntryType, "validLocation", new[] { typeof(GameLocation), typeof(string) }),
+                postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_NiTV_ValidLocation)),
+                criticality: PatchCriticality.Experience,
+                optional: true);
         }
 
         public static bool Prefix_NiTV_OnWarp(WarpedEventArgs eventArgs)
@@ -7499,24 +7520,12 @@ namespace Pelican4Ever.Modules
 
         public static void Postfix_NiTV_ValidLocation(GameLocation location, string code, ref bool __result)
         {
-            if (__result) return;
-            if (location == null || string.IsNullOrEmpty(code)) return;
+            if (__result || location == null || string.IsNullOrEmpty(code)) return;
 
             var customFields = location.GetData()?.CustomFields;
-            if (customFields == null) return;
-
-            // Criaturas de SH's Wild Animals o paquetes de fauna con nombres literales de bioma
-            if ((string.Equals(code, "Forest", StringComparison.OrdinalIgnoreCase) || string.Equals(code, "Woods", StringComparison.OrdinalIgnoreCase))
-                && customFields.ContainsKey("Nature.NIV.Forest"))
+            if (FarmTemplateCatalog.MatchesNitvHabitat(customFields, code))
             {
                 __result = true;
-                return;
-            }
-
-            if (string.Equals(code, "Beach", StringComparison.OrdinalIgnoreCase) && customFields.ContainsKey("Nature.NIV.Beach"))
-            {
-                __result = true;
-                return;
             }
         }
 
@@ -7838,6 +7847,899 @@ namespace Pelican4Ever.Modules
             );
 
             return false;
+        }
+
+        private static bool TryGetSpouseResidenceSlotId(NPC? spouse, out string? slotId)
+        {
+            slotId = null;
+            if (spouse == null)
+                return false;
+
+            Farmer? farmerSpouse = spouse.getSpouse();
+            if (farmerSpouse != null)
+            {
+                DoorAssignment? door = context?.WorldState.FindResidenceOf(farmerSpouse.UniqueMultiplayerID);
+                if (door != null && door.OwnerId == farmerSpouse.UniqueMultiplayerID && !string.IsNullOrEmpty(door.FarmSlotId))
+                {
+                    slotId = door.FarmSlotId;
+                    return true;
+                }
+
+                string? fromHome = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(farmerSpouse.homeLocation.Value);
+                if (!string.IsNullOrEmpty(fromHome))
+                {
+                    slotId = fromHome;
+                    return true;
+                }
+            }
+
+            string? fromDefault = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(spouse.DefaultMap);
+            if (!string.IsNullOrEmpty(fromDefault))
+            {
+                slotId = fromDefault;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static FarmHouse? ResolveFarmerHomeLocation(Farmer? farmer)
+        {
+            if (farmer == null)
+                return null;
+
+            DoorAssignment? residence = context?.WorldState.FindResidenceOf(farmer.UniqueMultiplayerID);
+            if (residence != null && residence.OwnerId == farmer.UniqueMultiplayerID && !string.IsNullOrEmpty(residence.FarmSlotId))
+            {
+                if (ResolveResidenceCabin($"{residence.FarmSlotId}{ResidenceUpgradeLogic.CabinHomeSuffix}", residence) is Cabin slotCabin)
+                    return slotCabin;
+            }
+
+            return !string.IsNullOrEmpty(farmer.homeLocation.Value)
+                ? Game1.getLocationFromName(farmer.homeLocation.Value) as FarmHouse
+                : null;
+        }
+
+        public static bool Prefix_Cabin_GetPorchStandingSpot(Cabin __instance, ref Point __result)
+        {
+            string? slotId = ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(__instance.uniqueName.Value ?? __instance.NameOrUniqueName);
+            Farm? parentFarm = __instance.ParentBuilding?.GetParentLocation() as Farm;
+
+            if (string.IsNullOrEmpty(slotId)
+                && parentFarm != null
+                && parentFarm.NameOrUniqueName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                slotId = parentFarm.NameOrUniqueName;
+            }
+
+            if (string.IsNullOrEmpty(slotId))
+                return true;
+
+            Farm? farm = parentFarm ?? Game1.getLocationFromName(slotId) as Farm;
+            Building? building = __instance.ParentBuilding;
+            Point entry = farm?.GetMainFarmHouseEntry() ?? new Point(64, 15);
+
+            var (px, py) = HouseholdRolloverLogic.ComputeResidencePorchSpot(
+                entry.X,
+                entry.Y,
+                building?.tileX.Value ?? -1,
+                building?.tileY.Value ?? -1,
+                building?.tilesHigh.Value ?? -1,
+                building?.isCabin ?? false);
+
+            __result = new Point(px, py);
+            return false;
+        }
+
+        public static void Prefix_NPC_MarriageDuties(NPC __instance)
+        {
+            if (TryGetSpouseResidenceSlotId(__instance, out _))
+            {
+                // Cada residencia privada evalúa tareas de cónyuge sin bloquearse entre sí por las banderas estáticas globales.
+                NPC.hasSomeoneWateredCrops = false;
+                NPC.hasSomeoneFedThePet = false;
+                NPC.hasSomeoneFedTheAnimals = false;
+                NPC.hasSomeoneRepairedTheFences = false;
+            }
+        }
+
+        public static Farm ResolveSpouseDutyFarm(NPC spouse)
+        {
+            if (TryGetSpouseResidenceSlotId(spouse, out string? slotId)
+                && !string.IsNullOrEmpty(slotId)
+                && Game1.getLocationFromName(slotId) is Farm slotFarm)
+            {
+                return slotFarm;
+            }
+
+            return Game1.getFarm();
+        }
+
+        public static void WarpSpouseToDutyFarm(NPC spouse, string targetLocationName, Point position)
+        {
+            if (string.Equals(targetLocationName, "Farm", StringComparison.OrdinalIgnoreCase)
+                && TryGetSpouseResidenceSlotId(spouse, out string? slotId)
+                && !string.IsNullOrEmpty(slotId)
+                && Game1.getLocationFromName(slotId) != null)
+            {
+                Game1.warpCharacter(spouse, slotId, position);
+                return;
+            }
+
+            Game1.warpCharacter(spouse, targetLocationName, position);
+        }
+
+        public static IEnumerable<CodeInstruction> Transpiler_NPC_MarriageDuties(IEnumerable<CodeInstruction> instructions)
+        {
+            MethodInfo? getFarmMethod = AccessTools.Method(typeof(Game1), nameof(Game1.getFarm), Type.EmptyTypes);
+            MethodInfo? warpCharMethod = AccessTools.Method(typeof(Game1), nameof(Game1.warpCharacter), new[] { typeof(NPC), typeof(string), typeof(Point) });
+            MethodInfo? resolveFarmHelper = AccessTools.Method(typeof(FarmSlotModule), nameof(ResolveSpouseDutyFarm));
+            MethodInfo? warpHelper = AccessTools.Method(typeof(FarmSlotModule), nameof(WarpSpouseToDutyFarm));
+
+            foreach (CodeInstruction instruction in instructions)
+            {
+                if (getFarmMethod != null && instruction.Calls(getFarmMethod) && resolveFarmHelper != null)
+                {
+                    var ldarg = new CodeInstruction(OpCodes.Ldarg_0);
+                    ldarg.MoveLabelsFrom(instruction);
+                    ldarg.MoveBlocksFrom(instruction);
+                    yield return ldarg;
+                    yield return new CodeInstruction(OpCodes.Call, resolveFarmHelper);
+                }
+                else if (warpCharMethod != null && instruction.Calls(warpCharMethod) && warpHelper != null)
+                {
+                    instruction.operand = warpHelper;
+                    yield return instruction;
+                }
+                else
+                {
+                    yield return instruction;
+                }
+            }
+        }
+
+        public static bool Prefix_PathFindController_HandleWarps(
+            PathFindController __instance,
+            Character? ___character,
+            Rectangle position)
+        {
+            if (__instance.location is not BusStop || ___character is not NPC npc || !npc.isMarried() || !npc.followSchedule)
+                return true;
+
+            Warp? warp = __instance.location.isCollidingWithWarpOrDoor(position, npc);
+            if (warp == null || warp.X > 9)
+                return true;
+
+            Farmer? spouse = npc.getSpouse();
+            if (spouse == null || string.IsNullOrEmpty(ResidenceUpgradeLogic.ExtractSlotIdFromCabinName(spouse.homeLocation.Value)))
+                return true;
+
+            if (ResolveFarmerHomeLocation(spouse) is not FarmHouse home)
+                return true;
+
+            Point entryLocation = home.getEntryLocation();
+            if (npc.temporaryController != null && npc.controller != null)
+            {
+                npc.controller.location = home;
+            }
+
+            __instance.location = home;
+            Game1.warpCharacter(npc, home, new Vector2(entryLocation.X, entryLocation.Y));
+
+            if (__instance.location.farmers.Any() && __instance.location.doors.ContainsKey(new Point(entryLocation.X, entryLocation.Y - 1)))
+            {
+                __instance.location.playSound("doorClose", new Vector2(entryLocation.X, entryLocation.Y), null, SoundContext.NPC);
+            }
+
+            if (__instance.pathToEndPoint.Count > 0)
+            {
+                __instance.pathToEndPoint.Pop();
+            }
+
+            Point tilePoint = npc.TilePoint;
+            while (__instance.pathToEndPoint.Count > 0
+                && (Math.Abs(__instance.pathToEndPoint.Peek().X - tilePoint.X) > 1 || Math.Abs(__instance.pathToEndPoint.Peek().Y - tilePoint.Y) > 1))
+            {
+                __instance.pathToEndPoint.Pop();
+            }
+
+            return false;
+        }
+
+        public static void Postfix_Event_EndBehaviors(Event __instance, string[] args)
+        {
+            if (!string.Equals(ArgUtility.Get(args, 1), "wedding", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            Farmer? who = __instance.farmer ?? Game1.player;
+            if (who == null || context == null)
+                return;
+
+            DoorAssignment? residence = context.WorldState.FindResidenceOf(who.UniqueMultiplayerID);
+            if (residence == null || residence.OwnerId != who.UniqueMultiplayerID || string.IsNullOrEmpty(residence.FarmSlotId))
+                return;
+
+            FarmHouse? homeOfFarmer = ResolveFarmerHomeLocation(who);
+            Point porch;
+            if (homeOfFarmer != null)
+            {
+                porch = homeOfFarmer.getPorchStandingSpot();
+            }
+            else
+            {
+                Farm? targetFarm = Game1.getLocationFromName(residence.FarmSlotId) as Farm;
+                Point entry = targetFarm?.GetMainFarmHouseEntry() ?? new Point(64, 15);
+                var (px, py) = HouseholdRolloverLogic.ComputeResidencePorchSpot(entry.X, entry.Y, -1, -1, -1, false);
+                porch = new Point(px, py);
+            }
+
+            __instance.setExitLocation(residence.FarmSlotId, Math.Max(0, porch.X - 1), porch.Y);
+
+            if (Context.IsMainPlayer && who.getSpouse() is NPC spouse && Game1.getLocationFromName(residence.FarmSlotId) != null)
+            {
+                Game1.warpCharacter(spouse, residence.FarmSlotId, porch);
+                spouse.faceDirection(2);
+            }
+
+            // En Pelican 4Ever la boda diferida se reproduce solo en el cliente del jugador que reconecta;
+            // el host dedicado (y otros jugadores conectados) no asisten a la escena, por lo que ReadyCheckDialog("wedding")
+            // quedaría esperando indefinidamente ("Waiting for other players..."). Confirmamos la salida local al instante.
+            if (Game1.activeClickableMenu is ReadyCheckDialog readyCheck
+                && string.Equals(readyCheck.checkName, "wedding", StringComparison.OrdinalIgnoreCase))
+            {
+                if (AccessTools.Field(typeof(ReadyCheckDialog), "onConfirm")?.GetValue(readyCheck) is ConfirmationDialog.behavior confirm)
+                {
+                    Game1.netReady.SetLocalReady("wedding", ready: false);
+                    Game1.exitActiveMenu();
+                    confirm(who);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Verifica que el jugador local sea propietario (<see cref="DoorAssignment.OwnerId"/>) de su residencia
+        /// antes de ampliar la casa, comprar el Colgante de Sirena o proponer matrimonio/compañía.
+        /// </summary>
+        public static bool EnsureLocalPlayerOwnsResidenceForHouseholdAction(bool isMarriageAction)
+        {
+            Farmer? player = Game1.player;
+            if (player == null)
+                return false;
+
+            DoorAssignment? residence = context?.WorldState.FindResidenceOf(player.UniqueMultiplayerID);
+            HouseholdRestrictionReason reason = HouseholdRolloverLogic.CanUpgradeHouseOrMarry(player.UniqueMultiplayerID, residence);
+            if (reason == HouseholdRestrictionReason.None)
+                return true;
+
+            string key = (isMarriageAction, reason) switch
+            {
+                (true, HouseholdRestrictionReason.NotOwner) => "residence.marriage.owner_only",
+                (true, HouseholdRestrictionReason.NoResidence) => "residence.marriage.need_residence",
+                (false, HouseholdRestrictionReason.NotOwner) => "residence.upgrade.owner_only",
+                _ => "residence.upgrade.need_residence"
+            };
+
+            Game1.drawObjectDialogue(I18n.Get(key));
+            return false;
+        }
+
+        public static bool Prefix_GameLocation_AnswerDialogueAction(string questionAndAnswer, ref bool __result)
+        {
+            if (string.Equals(questionAndAnswer, "carpenter_Upgrade", StringComparison.Ordinal)
+                || string.Equals(questionAndAnswer, "upgrade_Yes", StringComparison.Ordinal))
+            {
+                if (!EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
+                {
+                    __result = true;
+                    return false;
+                }
+            }
+            else if (string.Equals(questionAndAnswer, "mariner_Buy", StringComparison.Ordinal))
+            {
+                if (!EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: true))
+                {
+                    __result = true;
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        public static bool Prefix_NPC_TryToReceiveActiveObject(NPC __instance, Farmer who, bool probe, ref bool __result)
+        {
+            if (__instance.SimpleNonVillagerNPC || who == null || who != Game1.player)
+                return true;
+
+            StardewValley.Object? activeObj = who.ActiveObject;
+            if (activeObj == null || !who.friendshipData.ContainsKey(__instance.Name))
+                return true;
+
+            bool isMarriageProposal = activeObj.QualifiedItemId == "(O)460"
+                || activeObj.HasContextTag(ItemContextTagManager.SanitizeContextTag("propose_roommate_" + __instance.Name));
+
+            if (!isMarriageProposal)
+                return true;
+
+            DoorAssignment? residence = context?.WorldState.FindResidenceOf(who.UniqueMultiplayerID);
+            if (HouseholdRolloverLogic.CanUpgradeHouseOrMarry(who.UniqueMultiplayerID, residence) == HouseholdRestrictionReason.None)
+                return true;
+
+            if (!probe)
+            {
+                EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: true);
+            }
+
+            __result = true;
+            return false;
+        }
+
+        private static void TryRunDeferredHouseholdClientEvents()
+        {
+            if (context == null || Game1.player == null || deferredBirthNamingPending)
+                return;
+
+            if (pendingEvictionCheck || Game1.isWarping || Game1.globalFade || !Context.IsPlayerFree || Game1.eventUp || Game1.dialogueUp || Game1.activeClickableMenu != null)
+                return;
+
+            Farmer player = Game1.player;
+            if (Game1.currentLocation is not Cabin homeCabin
+                || string.IsNullOrEmpty(player.homeLocation.Value)
+                || !string.Equals(homeCabin.NameOrUniqueName, player.homeLocation.Value, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            if (!context.WorldState.Players.TryGetValue(player.UniqueMultiplayerID, out PlayerRecord? record))
+                return;
+
+            // 1. Ceremonia de boda offline pendiente (Opción 4A)
+            if (!string.IsNullOrEmpty(record.PendingWeddingSpouse) && !player.hasRoommate())
+            {
+                string spouseName = record.PendingWeddingSpouse;
+                record.PendingWeddingSpouse = null;
+                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                {
+                    Kind = FamilyEventActionKind.WeddingCeremonySeen,
+                    SpouseName = spouseName,
+                    GameDay = Game1.Date.TotalDays
+                });
+
+                if (string.Equals(player.spouse, spouseName, StringComparison.Ordinal))
+                {
+                    Game1.currentLocation.startEvent(Utility.getWeddingEvent(player));
+                }
+                return;
+            }
+
+            if (Context.IsMainPlayer || !player.isMarriedOrRoommates() || string.IsNullOrEmpty(player.spouse))
+                return;
+
+            NPC? spouseNpc = player.getSpouse();
+            Friendship? friendship = player.GetSpouseFriendship();
+            int today = Game1.Date.TotalDays;
+
+            // 2. Parto / llegada diferida del bebé
+            if (spouseNpc != null
+                && friendship != null
+                && friendship.NextBirthingDate != null
+                && friendship.DaysUntilBirthing <= 0
+                && record.LastBirthingHandledGameDay < today)
+            {
+                record.LastBirthingHandledGameDay = today;
+                StartDeferredChildBirthDialogue(player, spouseNpc, today);
+                return;
+            }
+
+            // 3. Pregunta de embarazo / adopción diferida (5 % diario determinista por día y jugador)
+            if (record.LastPregnancyPromptGameDay < today)
+            {
+                record.LastPregnancyPromptGameDay = today;
+                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                {
+                    Kind = FamilyEventActionKind.PregnancyPromptEvaluated,
+                    SpouseName = player.spouse,
+                    GameDay = today
+                });
+
+                double roll = Utility.CreateRandom(Game1.stats.DaysPlayed, Game1.uniqueIDForThisGame / 2, 470124797.0, player.UniqueMultiplayerID).NextDouble();
+                bool spouseCanGetPregnant = spouseNpc?.canGetPregnant() ?? false;
+                bool spouseWantsChildren = spouseNpc != null && GameStateQuery.CheckConditions(spouseNpc.GetData()?.SpouseWantsChildren);
+
+                if (HouseholdRolloverLogic.ShouldOfferPregnancyQuestion(
+                    isMarriedOrRoommates: true,
+                    hasSpouseNpc: spouseNpc != null,
+                    spouseCanGetPregnant: spouseCanGetPregnant,
+                    spouseWantsChildren: spouseWantsChildren,
+                    hasNextBirthingDate: friendship?.NextBirthingDate != null,
+                    currentGameDay: today,
+                    lastPromptGameDay: today - 1,
+                    randomRoll: roll))
+                {
+                    Response[] answerChoices =
+                    {
+                        new Response("Yes", Game1.content.LoadString("Strings\\Events:HaveBabyAnswer_Yes")),
+                        new Response("Not", Game1.content.LoadString("Strings\\Events:HaveBabyAnswer_No"))
+                    };
+                    string path = spouseNpc!.isAdoptionSpouse() ? "Strings\\Events:HaveBabyQuestion_Adoption" : "Strings\\Events:HaveBabyQuestion";
+                    Game1.currentLocation.createQuestionDialogue(
+                        Game1.content.LoadString(path, player.Name),
+                        answerChoices,
+                        (who, answer) =>
+                        {
+                            if (string.Equals(answer, "Yes", StringComparison.Ordinal))
+                            {
+                                WorldDate birthDate = new WorldDate(Game1.Date);
+                                birthDate.TotalDays += 14;
+                                who.GetSpouseFriendship().NextBirthingDate = birthDate;
+                                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                                {
+                                    Kind = FamilyEventActionKind.PregnancyAccepted,
+                                    SpouseName = who.spouse,
+                                    GameDay = Game1.Date.TotalDays,
+                                    NextBirthingTotalDays = birthDate.TotalDays
+                                });
+                            }
+                        },
+                        spouseNpc);
+                }
+            }
+        }
+
+        private static void StartDeferredChildBirthDialogue(Farmer player, NPC spouseNpc, int today)
+        {
+            deferredBirthNamingPending = true;
+            Random random = Utility.CreateRandom(Game1.uniqueIDForThisGame, Game1.stats.DaysPlayed);
+            bool isMale = player.getNumberOfChildren() == 0
+                ? random.NextBool()
+                : player.getChildren()[0].Gender == Gender.Female;
+
+            string message;
+            if (spouseNpc.isAdoptionSpouse())
+            {
+                message = Game1.content.LoadString("Strings\\Events:BirthMessage_Adoption", Lexicon.getGenderedChildTerm(isMale));
+            }
+            else if (spouseNpc.Gender == Gender.Male)
+            {
+                message = Game1.content.LoadString("Strings\\Events:BirthMessage_PlayerMother", Lexicon.getGenderedChildTerm(isMale));
+            }
+            else
+            {
+                message = Game1.content.LoadString("Strings\\Events:BirthMessage_SpouseMother", Lexicon.getGenderedChildTerm(isMale), spouseNpc.displayName);
+            }
+
+            Game1.drawObjectDialogue(message);
+            Game1.afterDialogues = () =>
+            {
+                Game1.activeClickableMenu = new NamingMenu(
+                    rawName => CompleteDeferredChildBirth(rawName, isMale, spouseNpc, today),
+                    Game1.content.LoadString(isMale ? "Strings\\Events:BabyNamingTitle_Male" : "Strings\\Events:BabyNamingTitle_Female"),
+                    "");
+            };
+        }
+
+        private static void CompleteDeferredChildBirth(string rawName, bool isMale, NPC spouseNpc, int today)
+        {
+            try
+            {
+                Farmer player = Game1.player;
+                FarmHouse home = ResolveFarmerHomeLocation(player) ?? Utility.getHomeOfFarmer(player);
+                double chance = (spouseNpc.hasDarkSkin() ? 0.5 : 0.0) + (player.hasDarkSkin() ? 0.5 : 0.0);
+                bool isDarkSkinned = Utility.CreateRandom(Game1.uniqueIDForThisGame, Game1.stats.DaysPlayed).NextBool(chance);
+
+                string uniqueName = string.IsNullOrWhiteSpace(rawName) ? "Baby" : rawName.Trim();
+                List<NPC> allCharacters = Utility.getAllCharacters();
+                bool duplicate;
+                do
+                {
+                    duplicate = false;
+                    if (Game1.characterData.ContainsKey(uniqueName))
+                    {
+                        uniqueName += " ";
+                        duplicate = true;
+                        continue;
+                    }
+                    foreach (NPC item in allCharacters)
+                    {
+                        if (item.Name == uniqueName)
+                        {
+                            uniqueName += " ";
+                            duplicate = true;
+                        }
+                    }
+                }
+                while (duplicate);
+
+                Child baby = new Child(uniqueName, isMale, isDarkSkinned, player)
+                {
+                    Age = 0,
+                    Position = new Vector2(16f, 4f) * 64f + new Vector2(0f, -24f)
+                };
+                home.characters.Add(baby);
+                Game1.stats.checkForFullHouseAchievement(isDirectUnlock: true);
+                Game1.playSound("smallSelect");
+                spouseNpc.daysAfterLastBirth = 5;
+                player.GetSpouseFriendship().NextBirthingDate = null;
+
+                if (player.getChildrenCount() == 2)
+                {
+                    spouseNpc.shouldSayMarriageDialogue.Value = true;
+                    spouseNpc.currentMarriageDialogue.Insert(0, new MarriageDialogueReference("Data\\ExtraDialogue", "NewChild_SecondChild" + Game1.random.Next(1, 3), true));
+                }
+                else if (spouseNpc.isAdoptionSpouse())
+                {
+                    spouseNpc.currentMarriageDialogue.Insert(0, new MarriageDialogueReference("Data\\ExtraDialogue", "NewChild_Adoption", true, rawName));
+                }
+                else
+                {
+                    spouseNpc.currentMarriageDialogue.Insert(0, new MarriageDialogueReference("Data\\ExtraDialogue", "NewChild_FirstChild", true, rawName));
+                }
+
+                string tokenizedSpouse = spouseNpc.GetTokenizedDisplayName() ?? spouseNpc.Name;
+                var multiplayer = context?.Helper.Reflection.GetField<Multiplayer>(typeof(Game1), "multiplayer").GetValue();
+                multiplayer?.globalChatInfoMessage(
+                    "Baby",
+                    Lexicon.capitalize(player.Name),
+                    tokenizedSpouse,
+                    Lexicon.getTokenizedGenderedChildTerm(isMale),
+                    Lexicon.getTokenizedPronoun(isMale),
+                    baby.displayName);
+
+                SendFamilyEventActionToHost(new FamilyEventActionPayload
+                {
+                    Kind = FamilyEventActionKind.BirthingCompleted,
+                    SpouseName = spouseNpc.Name,
+                    GameDay = today
+                });
+            }
+            finally
+            {
+                deferredBirthNamingPending = false;
+                Game1.exitActiveMenu();
+            }
+        }
+
+        private static void SendFamilyEventActionToHost(FamilyEventActionPayload payload)
+        {
+            if (context == null || Game1.MasterPlayer == null)
+                return;
+
+            if (Context.IsMainPlayer)
+            {
+                HandleFamilyEventAction(Game1.player.UniqueMultiplayerID, payload);
+                return;
+            }
+
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                ModMessages.FamilyEventAction,
+                new[] { context.Manifest.UniqueID },
+                new[] { Game1.MasterPlayer.UniqueMultiplayerID });
+        }
+
+        private static void HandleFamilyEventAction(long playerId, FamilyEventActionPayload? payload)
+        {
+            if (context == null || !Context.IsMainPlayer || payload == null || playerId == 0)
+                return;
+
+            if (!context.WorldState.Players.TryGetValue(playerId, out PlayerRecord? record))
+            {
+                Farmer? farmer = Game1.GetPlayer(playerId);
+                record = new PlayerRecord
+                {
+                    UniqueMultiplayerID = playerId,
+                    PlayerName = farmer?.Name ?? string.Empty
+                };
+                context.WorldState.Players[playerId] = record;
+            }
+
+            switch (payload.Kind)
+            {
+                case FamilyEventActionKind.WeddingCeremonySeen:
+                    record.PendingWeddingSpouse = null;
+                    break;
+
+                case FamilyEventActionKind.PregnancyPromptEvaluated:
+                    record.LastPregnancyPromptGameDay = Math.Max(record.LastPregnancyPromptGameDay, payload.GameDay);
+                    break;
+
+                case FamilyEventActionKind.PregnancyAccepted:
+                    record.LastPregnancyPromptGameDay = Math.Max(record.LastPregnancyPromptGameDay, payload.GameDay);
+                    if (payload.NextBirthingTotalDays.HasValue
+                        && Game1.GetPlayer(playerId) is Farmer pregnantFarmer
+                        && !string.IsNullOrEmpty(pregnantFarmer.spouse)
+                        && pregnantFarmer.friendshipData.TryGetValue(pregnantFarmer.spouse, out Friendship? pregFriendship))
+                    {
+                        WorldDate birthDate = new WorldDate();
+                        birthDate.TotalDays = payload.NextBirthingTotalDays.Value;
+                        pregFriendship.NextBirthingDate = birthDate;
+                    }
+                    break;
+
+                case FamilyEventActionKind.BirthingCompleted:
+                    record.LastBirthingHandledGameDay = Math.Max(record.LastBirthingHandledGameDay, payload.GameDay);
+                    if (Game1.GetPlayer(playerId) is Farmer birthingFarmer
+                        && !string.IsNullOrEmpty(birthingFarmer.spouse)
+                        && birthingFarmer.friendshipData.TryGetValue(birthingFarmer.spouse, out Friendship? birthFriendship))
+                    {
+                        birthFriendship.NextBirthingDate = null;
+                    }
+                    if (!string.IsNullOrEmpty(payload.SpouseName)
+                        && Game1.getCharacterFromName(payload.SpouseName) is NPC spouseNpc)
+                    {
+                        spouseNpc.daysAfterLastBirth = 5;
+                    }
+                    break;
+            }
+
+            context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
+            BroadcastDoorsSync();
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Stats.checkForAchievements"/> falle con <see cref="KeyNotFoundException"/> durante
+        /// <c>Client.setUpGame()</c> cuando la cabaña privada <c>Pelican4Ever_Farm_XX_Home</c> aún no está cargada en el cliente.
+        /// </summary>
+        public static bool Prefix_Stats_CheckForAchievements()
+        {
+            if (Context.IsMainPlayer)
+                return true;
+
+            string? homeName = Game1.player?.homeLocation?.Value;
+            if (!string.IsNullOrEmpty(homeName)
+                && homeName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
+                && Game1.getLocationFromName(homeName) == null
+                && Game1.getLocationFromName(homeName, isStructure: true) == null)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Dialogue.ReplacePlayerEnteredStrings"/> aborte diálogos en el cliente
+        /// si la cabaña privada <c>Pelican4Ever_Farm_XX_Home</c> aún no está cargada (por ejemplo, al cerrar la boda diferida).
+        /// </summary>
+        public static Exception? Finalizer_Dialogue_ReplacePlayerEnteredStrings(Exception? __exception, string str, ref string __result)
+        {
+            if (__exception is KeyNotFoundException
+                && !Context.IsMainPlayer
+                && !string.IsNullOrEmpty(Game1.player?.homeLocation?.Value)
+                && Game1.player.homeLocation.Value.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
+            {
+                __result = str ?? string.Empty;
+                return null;
+            }
+
+            return __exception;
+        }
+
+        /// <summary>
+        /// Evita que la boda diferida de un farmhand quede bloqueada en <c>Waiting for other players... (1/2)</c>
+        /// cuando <see cref="Event.DefaultCommands.WaitForOtherPlayers"/> espera al host dedicado en <c>weddingEnd*</c>.
+        /// </summary>
+        public static bool Prefix_Event_WaitForOtherPlayers(Event @event, string[] args)
+        {
+            if (Context.IsMainPlayer)
+                return true;
+
+            if (args != null
+                && args.Length > 1
+                && args[1].StartsWith("weddingEnd", StringComparison.OrdinalIgnoreCase))
+            {
+                if (Game1.activeClickableMenu is ReadyCheckDialog)
+                {
+                    Game1.activeClickableMenu = null;
+                }
+                @event.CurrentCommand++;
+                context?.Monitor.Log($"[FarmSlotModule] Saltando WaitForOtherPlayers('{args[1]}') en boda diferida de cliente.", LogLevel.Debug);
+                return false;
+            }
+
+            return true;
+        }
+
+        private static FarmHouse? TryResolveLoadedHomeOfFarmer(Farmer? farmer)
+        {
+            if (farmer == null || string.IsNullOrWhiteSpace(farmer.homeLocation.Value))
+                return null;
+
+            string homeName = farmer.homeLocation.Value;
+            if (Game1.getLocationFromName(homeName) is FarmHouse direct)
+                return direct;
+
+            if (Game1.getLocationFromName(homeName, isStructure: true) is FarmHouse structure)
+                return structure;
+
+            return null;
+        }
+
+        private static FarmHouse? TryResolveHomeOfFarmerSafe(Farmer? farmer)
+        {
+            if (farmer == null)
+                return null;
+
+            return Context.IsMainPlayer
+                ? (TryResolveLoadedHomeOfFarmer(farmer) ?? ResolveFarmerHomeLocation(farmer))
+                : TryResolveLoadedHomeOfFarmer(farmer);
+        }
+
+        private static bool CanRetrieveOfflineFarmhand(Farmer? farmer, bool isOnline, out Cabin? cabin)
+        {
+            cabin = null;
+            if (farmer == null)
+                return false;
+
+            FarmHouse? home = TryResolveHomeOfFarmerSafe(farmer);
+
+            cabin = home as Cabin;
+            bool isCabin = cabin != null;
+            bool isLocked = cabin?.inventoryMutex.IsLocked() ?? false;
+            long localPlayerId = Game1.player?.UniqueMultiplayerID ?? 0;
+
+            return VisitorPermissionLogic.CanRetrieveOfflineFarmhandItems(
+                Context.IsMainPlayer,
+                isOnline,
+                farmer.isUnclaimedFarmhand,
+                isCabin,
+                isLocked,
+                farmer.homeLocation.Value,
+                context?.WorldState?.Doors,
+                localPlayerId);
+        }
+
+        /// <summary>
+        /// Evita que <see cref="ManorHouse.GetRetrievableFarmers"/> llame a <c>Utility.getHomeOfFarmer</c>
+        /// (<c>Game1.RequireLocation</c>) sobre cabañas privadas culleadas en clientes (<c>Pelican4Ever_Farm_XX_Home</c>),
+        /// lo que lanzaba <see cref="KeyNotFoundException"/> al interactuar con la caja de objetos perdidos.
+        /// </summary>
+        public static bool Prefix_ManorHouse_GetRetrievableFarmers(ref List<Farmer> __result)
+        {
+            var result = new List<Farmer>();
+            var onlineIds = Game1.getOnlineFarmers()
+                .Select(f => f.UniqueMultiplayerID)
+                .ToHashSet();
+
+            foreach (Farmer farmer in Game1.getAllFarmers())
+            {
+                if (farmer == null)
+                    continue;
+
+                bool isOnline = onlineIds.Contains(farmer.UniqueMultiplayerID) || farmer.isActive();
+                if (CanRetrieveOfflineFarmhand(farmer, isOnline, out _))
+                {
+                    result.Add(farmer);
+                }
+            }
+
+            __result = result;
+            return false;
+        }
+
+        /// <summary>
+        /// Protege <see cref="ManorHouse.answerDialogueAction"/> para la acción <c>CheckItems_*</c>,
+        /// resolviendo la cabaña sin <c>RequireLocation</c> y respetando los permisos de residencia.
+        /// </summary>
+        public static bool Prefix_ManorHouse_AnswerDialogueAction(string questionAndAnswer, ref bool __result)
+        {
+            if (string.IsNullOrEmpty(questionAndAnswer) || !questionAndAnswer.StartsWith("CheckItems", StringComparison.Ordinal))
+                return true;
+
+            string[] parts = questionAndAnswer.Split('_');
+            if (parts.Length > 1 && long.TryParse(parts[1], out long playerId))
+            {
+                Farmer? player = Game1.GetPlayer(playerId);
+                bool isOnline = player != null && (Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == player.UniqueMultiplayerID) || player.isActive());
+                if (player != null && CanRetrieveOfflineFarmhand(player, isOnline, out Cabin? cabin) && cabin != null)
+                {
+                    cabin.inventoryMutex.RequestLock(cabin.openFarmhandInventory);
+                }
+            }
+
+            __result = true;
+            return false;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="NPC.getHome"/> lance <see cref="KeyNotFoundException"/> en clientes cuando el
+        /// cónyuge vive en una residencia privada culleada (<c>Pelican4Ever_Farm_XX_Home</c>).
+        /// </summary>
+        public static bool Prefix_NPC_GetHome(NPC __instance, ref GameLocation __result)
+        {
+            if (__instance == null)
+                return true;
+
+            if (__instance.isMarried() && __instance.getSpouse() is Farmer spouse)
+            {
+                FarmHouse? spouseHome = TryResolveHomeOfFarmerSafe(spouse);
+                if (spouseHome != null)
+                {
+                    __result = spouseHome;
+                    return false;
+                }
+
+                if (VisitorPermissionLogic.ResidenceSlotOf(spouse.homeLocation.Value) != null)
+                {
+                    __result = Game1.getLocationFromName("FarmHouse")
+                        ?? __instance.currentLocation
+                        ?? Game1.getLocationFromName("Town")
+                        ?? Game1.getFarm();
+                    return false;
+                }
+
+                return true;
+            }
+
+            string? defaultMap = __instance.DefaultMap;
+            if (VisitorPermissionLogic.ResidenceSlotOf(defaultMap) != null)
+            {
+                GameLocation? resolved = Game1.getLocationFromName(defaultMap!)
+                    ?? Game1.getLocationFromName(defaultMap!, isStructure: true);
+                __result = resolved
+                    ?? Game1.getLocationFromName("Town")
+                    ?? __instance.currentLocation
+                    ?? Game1.getFarm();
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Farmer.getChildren"/> falle con <see cref="KeyNotFoundException"/> en clientes
+        /// cuya cabaña privada (<c>Pelican4Ever_Farm_XX_Home</c>) aún no esté cargada.
+        /// </summary>
+        public static bool Prefix_Farmer_GetChildren(Farmer __instance, ref List<Child> __result)
+        {
+            if (__instance == null)
+            {
+                __result = new List<Child>();
+                return false;
+            }
+
+            FarmHouse? home = TryResolveHomeOfFarmerSafe(__instance);
+            if (home != null)
+            {
+                __result = home.getChildren();
+                return false;
+            }
+
+            if (VisitorPermissionLogic.ResidenceSlotOf(__instance.homeLocation.Value) != null)
+            {
+                __result = new List<Child>();
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Evita que <see cref="Farmer.getChildrenCount"/> (y <see cref="Farmer.getNumberOfChildren"/>) fallen con
+        /// <see cref="KeyNotFoundException"/> en clientes cuya cabaña privada aún no esté cargada.
+        /// </summary>
+        public static bool Prefix_Farmer_GetChildrenCount(Farmer __instance, ref int __result)
+        {
+            if (__instance == null)
+            {
+                __result = 0;
+                return false;
+            }
+
+            FarmHouse? home = TryResolveHomeOfFarmerSafe(__instance);
+            if (home != null)
+            {
+                __result = home.getChildrenCount();
+                return false;
+            }
+
+            if (VisitorPermissionLogic.ResidenceSlotOf(__instance.homeLocation.Value) != null)
+            {
+                __result = 0;
+                return false;
+            }
+
+            return true;
         }
     }
 }

@@ -29,7 +29,7 @@ namespace Pelican4Ever.Tests
             bool changed = state.Migrate();
 
             Assert.True(changed);
-            Assert.Equal(8, state.SchemaVersion);
+            Assert.Equal(ServerWorldState.CurrentSchemaVersion, state.SchemaVersion);
             Assert.Null(state.Doors["Farm_Portal_01"].TenantId);
             Assert.NotNull(state.Doors["Farm_Portal_01"].PendingTenantRequests);
         }

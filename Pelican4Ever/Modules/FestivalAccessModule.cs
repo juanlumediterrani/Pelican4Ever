@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Festivals;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
@@ -34,32 +35,25 @@ namespace Pelican4Ever.Modules
 
         private void ApplyHarmonyPatches(Harmony harmony)
         {
-            try
-            {
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
-                    prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_WarpFarmer)),
-                    finalizer: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Finalizer_WarpFarmer))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event), nameof(Event.tryToLoadFestival)),
-                    postfix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Postfix_TryToLoadFestival))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event), nameof(Event.TryStartEndFestivalDialogue)),
-                    prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_TryStartEndFestivalDialogue))
-                );
-                harmony.Patch(
-                    original: AccessTools.Method(typeof(Event), nameof(Event.exitEvent)),
-                    prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_ExitEvent))
-                );
+            _ = harmony;
+            if (context == null)
+                return;
 
-                context?.Monitor.Log("[FestivalAccessModule] Parches de entrada y salida libre de festivales aplicados.", LogLevel.Trace);
-            }
-            catch (Exception ex)
-            {
-                context?.Monitor.Log($"[FestivalAccessModule] Error al aplicar parches Harmony: {ex}", LogLevel.Error);
-            }
+            context.Patch("Festival.Game1.warpFarmer", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Game1), nameof(Game1.warpFarmer), new[] { typeof(LocationRequest), typeof(int), typeof(int), typeof(int) }),
+                prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_WarpFarmer)),
+                finalizer: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Finalizer_WarpFarmer)));
+            context.Patch("Event.tryToLoadFestival", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event), nameof(Event.tryToLoadFestival)),
+                postfix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Postfix_TryToLoadFestival)));
+            context.Patch("Event.TryStartEndFestivalDialogue", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event), nameof(Event.TryStartEndFestivalDialogue)),
+                prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_TryStartEndFestivalDialogue)));
+            context.Patch("Event.exitEvent", Name, PatchCriticality.Experience,
+                AccessTools.Method(typeof(Event), nameof(Event.exitEvent)),
+                prefix: new HarmonyMethod(typeof(FestivalAccessModule), nameof(Prefix_ExitEvent)));
+
+            context.Monitor.Log("[FestivalAccessModule] Parches de entrada y salida libre de festivales registrados.", LogLevel.Trace);
         }
 
         /// <summary>

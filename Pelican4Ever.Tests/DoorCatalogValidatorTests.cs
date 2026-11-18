@@ -12,9 +12,9 @@ namespace Pelican4Ever.Tests
         public void RealCatalog_PassesValidationWithZeroErrors()
         {
             var specs = DoorCatalogFixture.LoadDoorSpecs();
-            Assert.Equal(16, specs.Count);
+            Assert.Equal(64, specs.Count);
 
-            var errors = DoorCatalogValidator.Validate(specs, 16);
+            var errors = DoorCatalogValidator.Validate(specs, 64);
             Assert.Empty(errors);
         }
 

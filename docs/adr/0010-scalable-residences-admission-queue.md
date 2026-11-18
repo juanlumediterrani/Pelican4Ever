@@ -1,6 +1,6 @@
 # ADR-0010: Residencias Escalables (16/32/64), Cola de Admisión y Gates al Este de Pelican Town
 
-* **Estado:** Propuesto
+* **Estado:** Aceptado (`FarmSlotCount = 32` máximo operativo bajo `MemoryMax=4G`; `FarmSlotCount = 64` experimental — ver [informe de verificación 2026-11-17](../v0.5-residence-scaling-verification-2026-11-17.md))
 * **Fecha:** 2026-11-15
 * **Versión objetivo:** 0.5 (rama `feat/v0.5-residence-scaling`)
 * **Amplía:** [ADR-0003](0003-declarative-farm-slots.md) y [ADR-0005](0005-host-plaza-and-bridge-maps.md). **Prepara:** [ADR-0011](0011-extended-concurrency-interest-management.md).
@@ -100,6 +100,19 @@ Si no se cumple, 64 queda marcado como experimental y 32 como máximo soportado.
 * **Positivas:** más vecinos sin más carga de red por cliente; el jugador que no cabe sabe su posición en la cola; una caída de red no manda al jugador al final de la cola; el saludo deja de crecer con el número de cuentas y de exponer personajes ajenos; la topología por cadenas admite nuevas anclas sin rehacer el modelo.
 * **Negativas:** `Maps/Town` pasa a depender de la configuración del servidor (host y clientes deben coincidir, como ya ocurre con los puentes); las cadenas del este llegan a seis pantallas, que la vagoneta acorta pero no elimina; el guardado y el cambio de día crecen linealmente con las residencias.
 * **Migración:** las partidas con 16 residencias no cambian. `ServerWorldState` no necesita campos nuevos para las residencias `17..64` (los identificadores `Pelican4Ever_Farm_NN` ya son de dos dígitos); `doors.json` crece o se genera para los puentes `4..15`.
+
+## Hallazgos empíricos de implementación
+
+1. **`Maps/Town.xnb` (130×110):**
+   * **Gate Este-Herrería (puentes pares `4, 6, 8, 10, 12, 14`):** filas `y = 81..82`, tallando `x = 111..129` con hierba transitable y warps en `x = 130` hacia `Pelican4Ever_Bridge_4 (1, 23..24)`. Retorno a `Town` en `(128, 81)` mirando al oeste.
+   * **Gate Este-Museo (puentes impares `5, 7, 9, 11, 13, 15`):** filas `y = 92..93`, tallando `x = 111..129` con hierba transitable y warps en `x = 130` hacia `Pelican4Ever_Bridge_5 (1, 23..24)`. Retorno a `Town` en `(128, 92)` mirando al oeste.
+2. **Desconexión voluntaria frente a caída de red:** `LidgrenClient.disconnect(neatly = true)` envía `OutgoingMessage` tipo `19` (`Multiplayer.disconnecting`) antes de cerrar el socket; las caídas de red y timeouts no lo envían.
+3. **Puentes `1..3` sin `AlwaysActive`:** la auditoría confirmó que ningún módulo depende de sincronizar `Pelican4Ever_Bridge_1..3` en clientes fuera de ellos; todos los puentes `1..15` quedan registrados con `AlwaysActive = false`.
+4. **Medición de niveles y concurrencia real en AWS (`i-053e53c1536f541fd`, 2026-11-17):**
+   * Tier `16`: checkpoint `3.820 ms`, rollover `9,292 s`, `VmHWM = 2.789.880 kB`.
+   * Tier `32`: checkpoint `6.551 ms`, rollover `16,061 s`, `VmHWM = 3.613.660 kB` (cabe dentro de `MemoryMax=4G`).
+   * Tier `64`: checkpoint `8.916 ms`, rollover `32,440 s`, `VmHWM = 4.937.216 kB` (excede `MemoryMax=4G` y `CheckpointMaxDurationMs=3000`); con 16 clientes remotos simultáneos (`17` conectados) y 64 residencias pobladas, `CheckpointCloneFarmhands` empleó `45,32 ms` sin saturar red ni CPU (`~65–72 %`). Según el punto 8, **`64` queda marcado como experimental** (requiere elevar `MemoryMax` a `>= 6G`) y **`32` como máximo soportado en producción estándar**.
+5. **Cola y carga en segundo plano:** cuando `FarmhandMenu` pierde el foco de ventana (`pauseWhenOutOfFocus && multiplayerMode == 0`), Stardew pausa `TitleMenu.update` y SMAPI omite `UpdateTicked` durante `gameMode == 6`; el cliente bombea `FarmhandMenu.update` desde `Specialized.UnvalidatedUpdateTicked` para recibir promociones y carga inicial aunque el jugador esté en otra ventana.
 
 ## Sin verificar al redactar
 

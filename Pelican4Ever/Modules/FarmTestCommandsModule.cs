@@ -1,19 +1,23 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Admin;
+using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
+using StardewValley.Buildings;
 using StardewValley.Locations;
 using StardewValley.Menus;
 using StardewValley.Monsters;
 using StardewValley.Network;
 using StardewValley.Objects;
+using StardewValley.TerrainFeatures;
 
 namespace Pelican4Ever.Modules
 {
@@ -48,6 +52,7 @@ namespace Pelican4Ever.Modules
             ("p4e_lightning", "Hace caer n rayos seguros (sin tope diario): p4e_lightning <hueco|hueco/Lado|host> [n=1]", (m, a) => m.OnLightning(a)),
             ("p4e_weather", "Fija el clima del valle: p4e_weather <sun|rain|storm> [today|tomorrow]", (m, a) => m.OnWeather(a)),
             ("p4e_skill", "Fija un nivel de habilidad: p4e_skill <jugador> <farming|fishing|foraging|mining|combat|luck> <0-10>", (m, a) => m.OnSkill(a)),
+            ("p4e_farm_populate", "Puebla N residencias (16|32|64) con dueño, gallinero, cultivos y 2 anexos cada una para laboratorio.", (m, a) => m.OnPopulate(a)),
         };
 
         public void Register(ModContext ctx)
@@ -57,7 +62,47 @@ namespace Pelican4Ever.Modules
                 ctx.AddCommand(command.Name, command.Help, (_, args) => Run(command.Name, args, command.Handler));
 
             ctx.Helper.Events.GameLoop.SaveLoaded += (_, _) => RegisterChatCommands();
+            ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnOneSecondUpdateTicked;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
+        }
+
+        private void OnOneSecondUpdateTicked(object? sender, OneSecondUpdateTickedEventArgs e)
+        {
+            if (!Context.IsMainPlayer || !Context.IsWorldReady || !context.Config.EnableTestCommands || string.IsNullOrEmpty(Constants.CurrentSavePath))
+                return;
+
+            string cmdFile = Path.Combine(Constants.CurrentSavePath, "p4e_test_cmd.txt");
+            if (!File.Exists(cmdFile))
+                return;
+
+            string[] lines;
+            try
+            {
+                lines = File.ReadAllLines(cmdFile);
+                File.Delete(cmdFile);
+            }
+            catch (Exception ex)
+            {
+                context.Monitor.Log($"[FarmTest] No se pudo leer {cmdFile}: {ex.Message}", LogLevel.Warn);
+                return;
+            }
+
+            foreach (string rawLine in lines)
+            {
+                string[] parts = rawLine.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length == 0)
+                    continue;
+
+                var match = Commands.FirstOrDefault(c => string.Equals(c.Name, parts[0], StringComparison.OrdinalIgnoreCase));
+                if (match.Handler != null)
+                {
+                    Run(match.Name, parts.Skip(1).ToArray(), match.Handler);
+                }
+                else
+                {
+                    Say($"Comando desconocido en p4e_test_cmd.txt: {parts[0]}", LogLevel.Warn);
+                }
+            }
         }
 
         // ---------- Registro y salida ----------
@@ -151,6 +196,128 @@ namespace Pelican4Ever.Modules
                 return;
 
             Done("p4e_farm_found", FarmSlotModule.AdminFoundResidence(target.ResidenceSlotId!, farmType, player.UniqueMultiplayerID));
+        }
+
+        private static readonly string[] PopulateFarmTypes =
+        {
+            "Standard", "Fishing", "Foraging", "Mining", "Combat", "FourCorners", "Ranching", "Beach"
+        };
+
+        private void OnPopulate(string[] args)
+        {
+            if (args.Length < 1 || !int.TryParse(args[0], out int targetCount) || targetCount is not (16 or 32 or 64))
+            {
+                Say("Uso: p4e_farm_populate <16|32|64>", LogLevel.Warn);
+                return;
+            }
+
+            if (context.Config.FarmSlotCount < targetCount)
+            {
+                context.Config.FarmSlotCount = targetCount;
+            }
+            FarmSlotModule.RefreshSlotLocationData();
+
+            int populated = 0;
+            for (int i = 1; i <= targetCount; i++)
+            {
+                if (PopulateResidenceSlot(i))
+                    populated++;
+            }
+
+            FarmSlotModule.RefreshSlotLocationData();
+            FarmSlotModule.EnsureAllPlazaPortals();
+            FarmSlotModule.BroadcastDoorsSync();
+            Done("p4e_farm_populate", $"Pobladas {populated}/{targetCount} residencias (con gallinero, cultivos y 2 anexos).");
+        }
+
+        private bool PopulateResidenceSlot(int index)
+        {
+            string doorId = $"Farm_Portal_{index:D2}";
+            string slotId = $"Pelican4Ever_Farm_{index:D2}";
+            DoorModel? door = FarmSlotModule.RegisteredDoors.FirstOrDefault(d => string.Equals(d.DoorId, doorId, StringComparison.OrdinalIgnoreCase));
+            if (door == null)
+                return false;
+
+            if (!context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? assignment) || assignment == null)
+            {
+                long ownerId = -9000000000000000000L - index;
+                string farmType = PopulateFarmTypes[(index - 1) % PopulateFarmTypes.Length];
+                PlayerRecord record = context.WorldState.GetOrCreatePlayer(ownerId, $"LabVecino_{index:D2}");
+                record.FarmSlotId = slotId;
+
+                assignment = new DoorAssignment
+                {
+                    DoorId = doorId,
+                    FarmSlotId = slotId,
+                    FarmType = farmType,
+                    OwnerId = ownerId,
+                    Policy = AccessPolicy.Public
+                };
+                context.WorldState.Doors[doorId] = assignment;
+            }
+
+            Farm? farm = FarmSlotModule.EnsureFarmSlotExists(slotId);
+            if (farm == null)
+                return false;
+
+            FarmSlotModule.ApplyFarmTemplate(farm, assignment.FarmType, regenerate: false, assignment.OwnerId);
+            FarmTypeModule.ApplyMapProperties(farm, assignment.FarmType);
+            FarmSlotModule.EnsureFarmSlotBuildings(farm, assignment);
+            farm.PublishOwnership(assignment.OwnerId, assignment.Policy, assignment.TenantId);
+
+            if (!farm.buildings.Any(b => b.buildingType.Value == "Coop"))
+            {
+                var coop = new Building("Coop", new Vector2(54f, 9f));
+                coop.parentLocationName.Value = farm.NameOrUniqueName;
+                farm.buildings.Add(coop);
+                coop.FinishConstruction(onGameStart: true);
+                coop.LoadFromBuildingData(coop.GetData(), forUpgrade: false, forConstruction: true);
+                coop.load();
+                coop.updateInteriorWarps();
+
+                if (coop.GetIndoors() is AnimalHouse animalHouse)
+                {
+                    animalHouse.adoptAnimal(new FarmAnimal("White Chicken", Game1.Multiplayer.getNewID(), assignment.OwnerId) { Name = $"Cluck{index:D2}A" });
+                    animalHouse.adoptAnimal(new FarmAnimal("Brown Chicken", Game1.Multiplayer.getNewID(), assignment.OwnerId) { Name = $"Peck{index:D2}B" });
+                }
+            }
+
+            for (int x = 40; x <= 49; x++)
+            {
+                for (int y = 12; y <= 13; y++)
+                {
+                    Vector2 tile = new(x, y);
+                    if (farm.terrainFeatures.TryGetValue(tile, out TerrainFeature? existing) && existing is HoeDirt existingDirt && existingDirt.crop != null)
+                        continue;
+
+                    farm.objects.Remove(tile);
+                    var dirt = new HoeDirt(0, farm);
+                    dirt.crop = new Crop("472", x, y, farm);
+                    farm.terrainFeatures[tile] = dirt;
+                }
+            }
+
+            foreach (AnnexSide side in ResidenceExits.FreeSides(door.Edge).Take(2))
+            {
+                string annexId = ServerWorldState.BuildAnnexId(slotId, side);
+                if (!context.WorldState.Annexes.TryGetValue(annexId, out AnnexAssignment? annex) || annex == null)
+                {
+                    annex = new AnnexAssignment
+                    {
+                        AnnexId = annexId,
+                        ResidenceSlotId = slotId,
+                        Side = side,
+                        TemplateId = assignment.FarmType,
+                        OwnerId = assignment.OwnerId,
+                        AcquiredAtUtc = DateTimeOffset.UtcNow,
+                        MapVersion = AnnexAssignment.CurrentMapVersion
+                    };
+                    context.WorldState.Annexes[annexId] = annex;
+                }
+                FarmSlotModule.EnsureAnnexLocation(annex, regenerate: false);
+            }
+
+            return true;
         }
 
         private void OnTeleport(string[] args)

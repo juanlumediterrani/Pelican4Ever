@@ -12,6 +12,9 @@ namespace Pelican4Ever.Models
         public const string ClaimPackageRequest = "MailOrder.ClaimPackageRequest";
         public const string ClaimPackageResult = "MailOrder.ClaimPackageResult";
         public const string OrderResult = "MailOrder.OrderResult";
+        public const string ToolUpgradeStarted = "MailOrder.ToolUpgradeStarted";
+        public const string ToolUpgradeDelivered = "MailOrder.ToolUpgradeDelivered";
+        public const string ToolUpgradeClearAck = "MailOrder.ToolUpgradeClearAck";
     }
 
     public static class MailPackageKeys
@@ -69,5 +72,21 @@ namespace Pelican4Ever.Models
         public bool Accepted { get; set; }
         public string OrderKind { get; set; } = string.Empty;
         public string Message { get; set; } = string.Empty;
+    }
+
+    public sealed class ToolUpgradeStartedPayload
+    {
+        public string QualifiedToolId { get; set; } = string.Empty;
+    }
+
+    public sealed class ToolUpgradeDeliveredPayload
+    {
+        public string QualifiedToolId { get; set; } = string.Empty;
+    }
+
+    public sealed class ToolUpgradeClearAckPayload
+    {
+        public string QualifiedToolId { get; set; } = string.Empty;
+        public bool Cleared { get; set; }
     }
 }

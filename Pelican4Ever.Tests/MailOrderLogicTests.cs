@@ -133,7 +133,8 @@ namespace Pelican4Ever.Tests
                 SchemaVersion = 6,
                 PendingMailItemOrders = null!,
                 PendingBuildingOrders = null!,
-                PendingAnimalOrders = null!
+                PendingAnimalOrders = null!,
+                PendingToolUpgradeClears = null!
             };
 
             bool migrated = state.Migrate();
@@ -143,6 +144,33 @@ namespace Pelican4Ever.Tests
             Assert.NotNull(state.PendingMailItemOrders);
             Assert.NotNull(state.PendingBuildingOrders);
             Assert.NotNull(state.PendingAnimalOrders);
+            Assert.NotNull(state.PendingToolUpgradeClears);
+        }
+
+        [Fact]
+        public void ToolUpgradeDeliveryLogic_PreventsDuplicateDeliveryAndStaleClientClear()
+        {
+            var pending = new Dictionary<long, PendingToolUpgradeClear>
+            {
+                [1001] = new() { PlayerId = 1001, QualifiedToolId = "(T)CopperAxe", DeliveredAtGameDay = 12 }
+            };
+
+            // Not ready yet
+            Assert.False(ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(1002, "(T)CopperAxe", daysLeftForUpgrade: 1, pending));
+            // Empty tool id
+            Assert.False(ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(1002, null, daysLeftForUpgrade: 0, pending));
+            // Ready and not yet delivered
+            Assert.True(ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(1002, "(T)CopperAxe", daysLeftForUpgrade: 0, pending));
+            // Already delivered to player 1001 and still awaiting client clear -> must not redeliver
+            Assert.False(ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(1001, "(T)CopperAxe", daysLeftForUpgrade: 0, pending));
+            // Different tool tier for player 1001 -> allowed
+            Assert.True(ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(1001, "(T)IronAxe", daysLeftForUpgrade: 0, pending));
+
+            // Client clear guards
+            Assert.True(ToolUpgradeDeliveryLogic.ShouldClearClientLocalTool("(T)CopperAxe", localDaysLeft: 0, "(T)CopperAxe"));
+            Assert.False(ToolUpgradeDeliveryLogic.ShouldClearClientLocalTool("(T)CopperAxe", localDaysLeft: 2, "(T)CopperAxe"));
+            Assert.False(ToolUpgradeDeliveryLogic.ShouldClearClientLocalTool("(T)IronAxe", localDaysLeft: 0, "(T)CopperAxe"));
+            Assert.False(ToolUpgradeDeliveryLogic.ShouldClearClientLocalTool(null, localDaysLeft: 0, "(T)CopperAxe"));
         }
     }
 }

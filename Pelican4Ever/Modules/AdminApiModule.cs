@@ -8,9 +8,12 @@ using System.Text.Json;
 using System.Threading;
 using Microsoft.Xna.Framework;
 using Pelican4Ever.Core.Admin;
+using Pelican4Ever.Core.Economy;
 using Pelican4Ever.Core.Players;
+using Pelican4Ever.Core.Security;
 using Pelican4Ever.Core.Time;
 using Pelican4Ever.Framework;
+using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
@@ -57,9 +60,10 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
-            ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
-            ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
-            ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
+            ctx.RawHelper.Events.GameLoop.GameLaunched += (_, _) => StartServer();
+            ctx.RawHelper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
+            ctx.RawHelper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
+            ctx.RawHelper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
 
             ctx.AddCommand(
                 "p4e_safe_restart",
@@ -70,7 +74,10 @@ namespace Pelican4Ever.Modules
         private void OnSaveLoaded(object? sender, SaveLoadedEventArgs e)
         {
             if (!Context.IsMainPlayer)
+            {
+                StopServer();
                 return;
+            }
 
             StartServer();
         }
@@ -78,7 +85,8 @@ namespace Pelican4Ever.Modules
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
         {
             ActionQueue.ClearPending();
-            StopServer();
+            // Mantener el servidor HTTP activo en pantalla de título y Lockdown para que /api/v1/host/health siga respondiendo.
+            StartServer();
         }
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
@@ -379,7 +387,7 @@ namespace Pelican4Ever.Modules
                     {
                         DailyRolloverModule.TriggerRolloverManual();
                         return true;
-                    });
+                    }, TimeSpan.FromSeconds(120));
                     WriteJson(res, new { success = true, message = "Rollover diario activado con éxito en el hilo principal." });
                 }
                 else if (method == "POST" && normPath == "/api/mines/reset")
@@ -436,6 +444,21 @@ namespace Pelican4Ever.Modules
                 case "GET /api/v1/host/festival":
                 {
                     HostFestivalDto dto = ExecuteOnGameThread(FestivalParticipationModule.GetHostFestivalSnapshot);
+                    WriteJson(res, dto);
+                    break;
+                }
+
+                case "GET /api/v1/host/probation":
+                {
+                    HostProbationResponseDto dto = ExecuteOnGameThread(BuildHostProbationDto);
+                    WriteJson(res, dto);
+                    break;
+                }
+
+                case "GET /api/v1/host/health":
+                {
+                    // Lectura directa de instantánea atómica fuera de MainThreadActionQueue (ADR-0010, TASK-2503).
+                    HostHealthDto dto = context!.HealthTracker.BuildDto();
                     WriteJson(res, dto);
                     break;
                 }
@@ -508,6 +531,62 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "POST /api/v1/host/chat":
+                {
+                    HostChatRequestDto? body = ReadJsonBody<HostChatRequestDto>(req);
+                    if (body == null || string.IsNullOrWhiteSpace(body.Message))
+                    {
+                        res.StatusCode = (int)HttpStatusCode.BadRequest;
+                        WriteJson(res, new { error = "El campo 'message' es obligatorio." });
+                        return;
+                    }
+
+                    MainThreadExecutionResult<bool> result = ExecuteWithThreadInfoOnGameThread(() =>
+                    {
+                        string author = SanitizeExternalChatText(body.Author, "Discord");
+                        string source = string.IsNullOrWhiteSpace(body.Source) ? "discord" : body.Source.Trim().ToLowerInvariant();
+                        string channel = string.IsNullOrWhiteSpace(body.Channel) ? "discord" : body.Channel.Trim().ToLowerInvariant();
+                        string message = SanitizeExternalChatText(body.Message, string.Empty);
+                        if (string.IsNullOrEmpty(message))
+                            return false;
+
+                        var payload = new ServerBroadcastPayload
+                        {
+                            Source = source,
+                            Author = author,
+                            Channel = channel,
+                            Message = message,
+                            ColorR = 114,
+                            ColorG = 137,
+                            ColorB = 218,
+                            IsCritical = false
+                        };
+
+                        if (Context.IsWorldReady)
+                        {
+                            if (context != null && Game1.IsMultiplayer)
+                            {
+                                context.Helper.Multiplayer.SendMessage(
+                                    payload,
+                                    ChatMessages.ServerBroadcast,
+                                    new[] { context.Manifest.UniqueID, "Pelican4Ever.Chat" });
+                            }
+
+                            Game1.chatBox?.addMessage($"[Discord] {author}: {payload.Message}", new Color(114, 137, 218));
+                        }
+
+                        return true;
+                    });
+
+                    WriteJson(res, new HostActionResultDto
+                    {
+                        Ok = result.Value,
+                        Message = result.Value ? "Mensaje externo difundido al chat." : "Mensaje externo vacío tras sanitizar.",
+                        ExecutedOnThreadId = result.ExecutedOnThreadId
+                    });
+                    break;
+                }
+
                 case "POST /api/v1/host/rest":
                 {
                     // El id se lee en el hilo del juego justo tras registrar el descanso: leído después,
@@ -539,7 +618,7 @@ namespace Pelican4Ever.Modules
                 case "POST /api/v1/host/checkpoint":
                 {
                     MainThreadExecutionResult<(bool Ok, string Message, long? EventId)> result =
-                        ExecuteWithThreadInfoOnGameThread(CheckpointModule.RequestFromHostApi);
+                        ExecuteWithThreadInfoOnGameThread(CheckpointModule.RequestFromHostApi, TimeSpan.FromSeconds(120));
 
                     WriteJson(res, new HostActionResultDto
                     {
@@ -617,14 +696,14 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static T ExecuteOnGameThread<T>(Func<T> action)
+        private static T ExecuteOnGameThread<T>(Func<T> action, TimeSpan? timeout = null)
         {
-            return ActionQueue.EnqueueAsync(action).GetAwaiter().GetResult();
+            return ActionQueue.EnqueueAsync(action, timeout).GetAwaiter().GetResult();
         }
 
-        private static MainThreadExecutionResult<T> ExecuteWithThreadInfoOnGameThread<T>(Func<T> action)
+        private static MainThreadExecutionResult<T> ExecuteWithThreadInfoOnGameThread<T>(Func<T> action, TimeSpan? timeout = null)
         {
-            return ActionQueue.EnqueueWithThreadInfoAsync(action).GetAwaiter().GetResult();
+            return ActionQueue.EnqueueWithThreadInfoAsync(action, timeout).GetAwaiter().GetResult();
         }
 
         private static SafeRestartStatusDto ApplySafeRestartOnMainThread(HostRestartRequestDto request)
@@ -701,12 +780,56 @@ namespace Pelican4Ever.Modules
             string normChannel = (channel ?? "both").Trim().ToLowerInvariant();
             if (normChannel is "chat" or "both")
             {
+                if (context != null && Game1.IsMultiplayer)
+                {
+                    bool isCritical = message.StartsWith("[Reinicio Controlado]", StringComparison.OrdinalIgnoreCase);
+                    context.Helper.Multiplayer.SendMessage(
+                        new ServerBroadcastPayload
+                        {
+                            Source = "system",
+                            Author = "Servidor",
+                            Channel = "system",
+                            Message = message,
+                            ColorR = 255,
+                            ColorG = 215,
+                            ColorB = 0,
+                            IsCritical = isCritical
+                        },
+                        ChatMessages.ServerBroadcast,
+                        new[] { context.Manifest.UniqueID, "Pelican4Ever.Chat" });
+                }
+
                 Game1.chatBox?.addMessage(message, new Color(255, 215, 0));
             }
             if (normChannel is "hud" or "both")
             {
                 Game1.addHUDMessage(new HUDMessage(message, HUDMessage.newQuest_type));
             }
+        }
+
+        private static string SanitizeExternalChatText(string? raw, string fallback)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+                return fallback;
+
+            var sb = new StringBuilder(raw.Length);
+            for (int i = 0; i < raw.Length; i++)
+            {
+                char c = raw[i];
+                if (char.IsSurrogate(c))
+                    continue;
+                if (c is '\r' or '\n' or '\t')
+                {
+                    sb.Append(' ');
+                    continue;
+                }
+                if (char.IsControl(c))
+                    continue;
+                sb.Append(c switch { '[' => '(', ']' => ')', _ => c });
+            }
+
+            string cleaned = sb.ToString().Trim();
+            return string.IsNullOrEmpty(cleaned) ? fallback : cleaned;
         }
 
         private static HostClockDto BuildHostClockDto()
@@ -817,6 +940,134 @@ namespace Pelican4Ever.Modules
             return response;
         }
 
+        private static HostProbationResponseDto BuildHostProbationDto()
+        {
+            var state = context!.WorldState;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            ProbationAndBlacklistLogic.PurgeExpiredTickets(state, now);
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            var onlineById = Context.IsWorldReady
+                ? Game1.getOnlineFarmers().ToDictionary(f => f.UniqueMultiplayerID)
+                : new Dictionary<long, Farmer>();
+
+            int used = ProbationAndBlacklistLogic.CountPutreActiveSlots(state, now);
+            var response = new HostProbationResponseDto
+            {
+                MaxSlots = ProbationAndBlacklistLogic.MaxConcurrentPutreSlots,
+                UsedSlots = used,
+                AvailableSlots = Math.Max(0, ProbationAndBlacklistLogic.MaxConcurrentPutreSlots - used),
+                CurrentGameDay = today
+            };
+
+            if (state.PutreTickets != null)
+            {
+                foreach (PutreAdmissionTicket t in state.PutreTickets.OrderBy(x => x.CreatedAtUtc))
+                {
+                    if (t == null)
+                        continue;
+
+                    response.Tickets.Add(new HostProbationTicketDto
+                    {
+                        DiscordUserId = t.DiscordUserId,
+                        Alias = t.Alias,
+                        CreatedAtUtc = t.CreatedAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                        ExpiresAtUtc = t.ExpiresAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    });
+                }
+            }
+
+            if (state.AuthorizedDevices != null)
+            {
+                foreach (AuthorizedDevice d in state.AuthorizedDevices.Values
+                    .Where(d => d != null &&
+                        (string.Equals(d.InvitedBy, "putre", StringComparison.OrdinalIgnoreCase) ||
+                         d.ProbationStage != ProbationStage.None))
+                    .OrderBy(d => d.CreatedAtUtc))
+                {
+                    PlayerRecord? rec = null;
+                    if (d.BoundPlayerId > 0)
+                        state.Players.TryGetValue(d.BoundPlayerId, out rec);
+                    rec ??= state.Players.Values.FirstOrDefault(p =>
+                        string.Equals(p.OwnerToken, d.Fingerprint, StringComparison.OrdinalIgnoreCase));
+
+                    long playerId = rec?.UniqueMultiplayerID ?? d.BoundPlayerId;
+                    onlineById.TryGetValue(playerId, out Farmer? onlineFarmer);
+                    bool isOnline = onlineFarmer != null;
+                    bool hasResidence = playerId > 0 && state.FindResidenceOf(playerId) != null;
+
+                    int goldToday = 0;
+                    if (rec?.GoldLedger?.Days != null && rec.GoldLedger.Days.TryGetValue(today, out DailyGoldEntry? gold) && gold != null)
+                    {
+                        long totalGold = gold.ClientIndividual + gold.HostIndividual + gold.ClientShared + gold.HostShared;
+                        goldToday = (int)Math.Clamp(totalGold, 0, int.MaxValue);
+                    }
+
+                    int xpToday = 0;
+                    if (rec?.SkillExperience?.GameDay == today && rec.SkillExperience.Skills != null)
+                    {
+                        long sumXp = rec.SkillExperience.Skills.Values.Where(s => s != null).Sum(s => Math.Max(0L, s!.GrantedXpToday));
+                        xpToday = (int)Math.Clamp(sumXp, 0, int.MaxValue);
+                    }
+
+                    long onlineSec = (rec?.Behavior?.TotalOnlineSeconds ?? 0) +
+                        (isOnline && playerId > 0 ? ProbationTelemetryModule.GetLiveSessionSeconds(playerId, now) : 0);
+
+                    string shortFp = d.Fingerprint.Length >= 12 ? d.Fingerprint[..12] : d.Fingerprint;
+                    response.Devices.Add(new HostProbationDeviceDto
+                    {
+                        Fingerprint = d.Fingerprint,
+                        ShortFingerprint = shortFp,
+                        Alias = d.Alias,
+                        DiscordUserId = d.DiscordUserId,
+                        Status = d.Status.ToString(),
+                        ProbationStage = d.ProbationStage.ToString(),
+                        InvitedBy = d.InvitedBy,
+                        ApprovedAtUtc = d.CreatedAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"),
+                        BoundPlayerId = playerId,
+                        PlayerName = rec?.PlayerName ?? d.Alias,
+                        IsOnline = isOnline,
+                        LocationName = isOnline ? (onlineFarmer?.currentLocation?.NameOrUniqueName ?? string.Empty) : string.Empty,
+                        HasResidence = hasResidence,
+                        TotalOnlineSeconds = onlineSec,
+                        ConnectCount = rec?.Behavior?.ConnectCount ?? 0,
+                        VisitorDeniedCount = rec?.Behavior?.VisitorDeniedCount ?? 0,
+                        LastVisitorDeniedSummary = rec?.Behavior?.LastVisitorDeniedSummary ?? string.Empty,
+                        ChatMessageCount = rec?.Behavior?.ChatMessageCount ?? 0,
+                        ChatFloodHits = rec?.Behavior?.ChatFloodHits ?? 0,
+                        ChatTagInjectionHits = rec?.Behavior?.ChatTagInjectionHits ?? 0,
+                        GoldEarnedToday = goldToday,
+                        TotalXpToday = xpToday,
+                        RolloversPassed = rec?.Behavior?.RolloversPassed ?? 0,
+                        RolloversPenalized = rec?.Behavior?.RolloversPenalized ?? 0
+                    });
+                }
+            }
+
+            if (state.Blacklist != null)
+            {
+                foreach (BlacklistEntry b in state.Blacklist.OrderByDescending(x => x.BlacklistedAtUtc))
+                {
+                    if (b == null)
+                        continue;
+
+                    string shortFp = b.Fingerprint.Length >= 12 ? b.Fingerprint[..12] : b.Fingerprint;
+                    response.Blacklist.Add(new HostBlacklistEntryDto
+                    {
+                        Fingerprint = b.Fingerprint,
+                        ShortFingerprint = shortFp,
+                        DiscordUserId = b.DiscordUserId,
+                        Alias = b.Alias,
+                        Reason = b.Reason,
+                        BlacklistedBy = b.BlacklistedBy,
+                        BlacklistedAtUtc = b.BlacklistedAtUtc.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+                    });
+                }
+            }
+
+            return response;
+        }
+
         /// <summary>
         /// Saciedad actual del jugador tras el vaciado continuo, calculada sin modificar su registro: una consulta de lectura
         /// no debe alterar el estado ni depender de quién la haga. Usa la energía máxima real del granjero, conectado o no.
@@ -845,10 +1096,14 @@ namespace Pelican4Ever.Modules
                 ? Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet()
                 : new HashSet<long>();
 
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            var queueSnapshot = ClientSecurityModule.Admission.GetQueueSnapshot();
+            var reservationSnapshot = ClientSecurityModule.Admission.GetReservationsSnapshot(nowUtc);
+
             var statusDto = new ServerStatusDto
             {
                 ServerVersion = context.Manifest.Version.ToString(),
-                RealTimeUtc = DateTime.UtcNow.ToString("o"),
+                RealTimeUtc = nowUtc.ToString("o"),
                 GameTimeOfDay = Context.IsWorldReady ? Game1.timeOfDay : 600,
                 TotalGameDays = today,
                 Season = Context.IsWorldReady && Game1.currentSeason != null ? Game1.currentSeason : "spring",
@@ -857,11 +1112,37 @@ namespace Pelican4Ever.Modules
                 IsNightHold = RealTimeClockModule.IsNightHold,
                 DedicatedHost = Game1.HasDedicatedHost,
                 OnlinePlayersCount = onlineIds.Count,
+                MaxConcurrentPlayers = context.Config.MaxConcurrentPlayers,
+                AdmissionQueueCapacity = context.Config.AdmissionQueueCapacity,
+                AdmissionQueueCount = queueSnapshot.Count,
+                ReservedSlotsCount = reservationSnapshot.Count,
+                IdleKickCount = IdleKickModule.TotalIdleKicks,
                 RegisteredPlayersCount = state.Players.Count,
                 OccupiedDoorsCount = state.Doors.Count,
                 TotalDoorsCount = FarmSlotModule.RegisteredDoors.Count,
                 ActiveMarketListingsCount = state.MarketListings.Count(l => !l.IsSold)
             };
+
+            foreach (var q in queueSnapshot)
+            {
+                string preview = q.IdentityKey.Length > 12 ? q.IdentityKey[..12] + "..." : q.IdentityKey;
+                statusDto.AdmissionQueue.Add(new QueuedEntryDto
+                {
+                    Position = q.Position,
+                    IdentityPreview = preview,
+                    WaitSeconds = Math.Max(0, (int)(nowUtc - q.EnqueuedAtUtc).TotalSeconds)
+                });
+            }
+
+            foreach (var r in reservationSnapshot)
+            {
+                string preview = r.IdentityKey.Length > 12 ? r.IdentityKey[..12] + "..." : r.IdentityKey;
+                statusDto.ReservedSlots.Add(new ReservedSlotDto
+                {
+                    IdentityPreview = preview,
+                    RemainingSeconds = Math.Max(0, (int)(r.ExpiresAtUtc - nowUtc).TotalSeconds)
+                });
+            }
 
             foreach (var p in state.Players.Values)
             {

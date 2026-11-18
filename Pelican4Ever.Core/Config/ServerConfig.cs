@@ -215,8 +215,23 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public List<string> RequiredClientMods { get; set; } = new();
 
-        /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations.</summary>
+        /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations (1..16, 32 o 64).</summary>
         public int FarmSlotCount { get; set; } = 4;
+
+        /// <summary>Máximo de jugadores simultáneos (clientes, sin contar al host) admitidos en partida (1..16).</summary>
+        public int MaxConcurrentPlayers { get; set; } = 16;
+
+        /// <summary>Plazas máximas en la cola de admisión cuando el servidor está lleno (0..32).</summary>
+        public int AdmissionQueueCapacity { get; set; } = 16;
+
+        /// <summary>Minutos de reserva de plaza tras una caída de red involuntaria (0..30; 0 la desactiva).</summary>
+        public int ReconnectGraceMinutes { get; set; } = 5;
+
+        /// <summary>Minutos de inactividad antes de expulsar cuando el servidor supera la mitad de su capacidad (0 lo desactiva).</summary>
+        public int IdleKickMinutes { get; set; } = 30;
+
+        /// <summary>Minutos de antelación del aviso por HUD antes de expulsar por inactividad.</summary>
+        public int IdleKickWarningMinutes { get; set; } = 2;
 
         /// <summary>Límite máximo de anexos adquiribles por cada residencia (por defecto 2, uno por cada salida libre).</summary>
         public int MaxAnnexesPerResidence { get; set; } = 2;
@@ -280,6 +295,19 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool HeadlessRendering { get; set; } = true;
 
+        /// <summary>
+        /// Resuelve automáticamente eventos, cinemáticas y diálogos bloqueantes en el host desatendido
+        /// (<see cref="AutoHostSaveName"/> configurado) para que no congelen checkpoints ni la limpieza de red
+        /// cuando no hay un agente operando al host.
+        /// </summary>
+        public bool AutoResolveHostEvents { get; set; } = true;
+
+        /// <summary>
+        /// Segundos de cortesía antes de resolver automáticamente un evento o diálogo bloqueante en el host
+        /// desatendido (1..120, por defecto 5).
+        /// </summary>
+        public int HostEventAutoResolveDelaySeconds { get; set; } = 5;
+
         // ─────────────────────── Checkpoints intradía (Épica 11) ───────────────────────
 
         /// <summary>
@@ -313,8 +341,23 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool CheckpointCloneFarmhands { get; set; } = true;
 
-        /// <summary>Días que se conservan las copias diarias del rollover. 0 (por defecto) = no se borra ninguna, como hasta ahora.</summary>
-        public int BackupRetentionDays { get; set; } = 0;
+        /// <summary>Días que se conservan las copias diarias del rollover. 0 = no se borra ninguna.</summary>
+        public int BackupRetentionDays { get; set; } = 14;
+
+        /// <summary>Versiones de Stardew Valley verificadas para arranque en producción (ADR-0010, TASK-2502).</summary>
+        public List<string> VerifiedGameVersions { get; set; } = new() { "1.6.15" };
+
+        /// <summary>Versión mínima exigida de SMAPI para arrancar sin Lockdown (ADR-0010, TASK-2502).</summary>
+        public string MinimumSmapiVersion { get; set; } = "4.1.0";
+
+        /// <summary>Permite arrancar en laboratorio con una versión del juego no incluida en <see cref="VerifiedGameVersions"/>.</summary>
+        public bool AllowUnverifiedGameVersion { get; set; } = false;
+
+        /// <summary>Nombres explícitos de parches críticos aceptados por el dueño para levantar un Lockdown concreto.</summary>
+        public List<string> LockdownOverride { get; set; } = new();
+
+        /// <summary>Segundos máximos sin tick del hilo principal antes de detener el pulso <c>WATCHDOG=1</c> (ADR-0010, TASK-2504).</summary>
+        public int HangThresholdSeconds { get; set; } = 120;
 
         /// <summary>Activación por módulo (clave = nombre del módulo). Los módulos ausentes se consideran activos.</summary>
         public Dictionary<string, bool> Modules { get; set; } = new();
@@ -422,8 +465,20 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(SkullCavernDescentBaseCost)} debe ser finito y no negativo.");
             if (!double.IsFinite(SkullCavernDescentDepthDivisor) || SkullCavernDescentDepthDivisor < 0)
                 errors.Add($"{nameof(SkullCavernDescentDepthDivisor)} debe ser finito y no negativo.");
-            if (FarmSlotCount is < 1 or > 16)
-                errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16.");
+            if (FarmSlotCount is not ((>= 1 and <= 16) or 32 or 64))
+                errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16, o ser 32 o 64.");
+            if (MaxConcurrentPlayers is < 1 or > 16)
+                errors.Add($"{nameof(MaxConcurrentPlayers)} debe estar entre 1 y 16.");
+            if (AdmissionQueueCapacity is < 0 or > 32)
+                errors.Add($"{nameof(AdmissionQueueCapacity)} debe estar entre 0 y 32.");
+            if (ReconnectGraceMinutes is < 0 or > 30)
+                errors.Add($"{nameof(ReconnectGraceMinutes)} debe estar entre 0 y 30.");
+            if (IdleKickMinutes < 0)
+                errors.Add($"{nameof(IdleKickMinutes)} no puede ser negativo.");
+            if (IdleKickWarningMinutes < 0)
+                errors.Add($"{nameof(IdleKickWarningMinutes)} no puede ser negativo.");
+            else if (IdleKickMinutes > 0 && IdleKickWarningMinutes >= IdleKickMinutes)
+                errors.Add($"{nameof(IdleKickWarningMinutes)} ({IdleKickWarningMinutes}) debe ser menor que {nameof(IdleKickMinutes)} ({IdleKickMinutes}).");
             if (MaxAnnexesPerResidence is < 0 or > 3)
                 errors.Add($"{nameof(MaxAnnexesPerResidence)} debe estar entre 0 y 3.");
             if (FirstAnnexPriceMultiplier < 0)
@@ -448,6 +503,12 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(CheckpointRetention)} no puede ser negativo.");
             if (BackupRetentionDays < 0)
                 errors.Add($"{nameof(BackupRetentionDays)} no puede ser negativo.");
+            if (HangThresholdSeconds < 0)
+                errors.Add($"{nameof(HangThresholdSeconds)} no puede ser negativo.");
+            if (!Pelican4Ever.Core.Admin.PatchHealthPolicy.TryParseNumericVersion(MinimumSmapiVersion, out _))
+                errors.Add($"{nameof(MinimumSmapiVersion)} debe tener formato de versión semántica (ej. '4.1.0'). Valor: '{MinimumSmapiVersion}'.");
+            if (!AllowUnverifiedGameVersion && (VerifiedGameVersions == null || !VerifiedGameVersions.Exists(v => !string.IsNullOrWhiteSpace(v))))
+                errors.Add($"{nameof(VerifiedGameVersions)} debe contener al menos una versión verificada salvo que {nameof(AllowUnverifiedGameVersion)} sea true.");
             if (PairingInviteTtlHours is < 1 or > 720)
                 errors.Add($"{nameof(PairingInviteTtlHours)} debe estar entre 1 y 720 horas. Valor: {PairingInviteTtlHours}.");
             foreach (string id in RequiredClientMods ?? new List<string>())
@@ -457,6 +518,8 @@ namespace Pelican4Ever.Core.Config
             }
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
                 errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
+            if (HostEventAutoResolveDelaySeconds is < 1 or > 120)
+                errors.Add($"{nameof(HostEventAutoResolveDelaySeconds)} debe estar entre 1 y 120 segundos. Valor: {HostEventAutoResolveDelaySeconds}.");
 
             return errors;
         }

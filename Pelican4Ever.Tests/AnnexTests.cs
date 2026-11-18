@@ -15,7 +15,7 @@ namespace Pelican4Ever.Tests
         public void FreeSides_For16PortalsInDoorsJson_ReturnsExactVanillaSidesThatDoNotReturnToHost()
         {
             var doors = DoorCatalogFixture.LoadDoors();
-            Assert.Equal(16, doors.Count);
+            Assert.Equal(64, doors.Count);
 
             foreach (var door in doors)
             {

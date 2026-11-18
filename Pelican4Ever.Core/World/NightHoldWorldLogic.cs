@@ -10,6 +10,8 @@ namespace Pelican4Ever.Core.World
     {
         public const int MinBubbleLifetimeMinutes = 60;
         public const int MaxBubbleLifetimeMinutes = 180;
+        public const double RealTimeBubbleSpawnChance = 0.25;
+        public const double RealTimeOrePanSpawnChance = 0.15;
 
         /// <summary>
         /// Determina si una burbuja de pesca debe expirar según los minutos transcurridos y una tirada aleatoria.
@@ -34,9 +36,21 @@ namespace Pelican4Ever.Core.World
         public static bool ShouldSpawnBubble(double roll) => roll < 0.5;
 
         /// <summary>
+        /// Probabilidad por tick real de 10 min de generar una burbuja al seleccionar directamente sobre agua pescable válida.
+        /// En tiempo real 1:1 (1 tick cada 10 min frente a 85 ticks/10 min en vanilla), evita tanto los desiertos de 0 burbujas
+        /// como la saturación continua de todos los mapas.
+        /// </summary>
+        public static bool ShouldSpawnRealTimeBubble(double roll) => roll < RealTimeBubbleSpawnChance;
+
+        /// <summary>
         /// Determina si debe generarse un punto de bateo de cobre (50 % de probabilidad nativa).
         /// </summary>
         public static bool ShouldSpawnOrePan(double roll) => roll < 0.5;
+
+        /// <summary>
+        /// Probabilidad por tick real de 10 min de generar un punto de bateo al muestrear casillas válidas de orilla.
+        /// </summary>
+        public static bool ShouldSpawnRealTimeOrePan(double roll) => roll < RealTimeOrePanSpawnChance;
 
         /// <summary>
         /// Determina si un punto de bateo de cobre existente debe disolverse (10 % de probabilidad nativa).

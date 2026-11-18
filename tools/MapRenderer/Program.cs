@@ -18,8 +18,10 @@ namespace MapRenderer;
 
 public static class Program
 {
-    private const string UnpackedMapsDir = "/home/dr4co/.local/share/Steam/steamapps/common/Stardew Valley/Content (unpacked)/Maps";
-    private const string AuditRoot = "/home/dr4co/src/pelican-minimaps/audit/render";
+    private static readonly string UnpackedMapsDir = Environment.GetEnvironmentVariable("UNPACKED_MAPS_DIR")
+        ?? "/home/dr4co/.local/share/Steam/steamapps/common/Stardew Valley/Content (unpacked)/Maps";
+    private static readonly string AuditRoot = Environment.GetEnvironmentVariable("AUDIT_ROOT")
+        ?? Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "audit", "render"));
 
     private static readonly Dictionary<string, Image<Rgba32>> ImageCache = new(StringComparer.OrdinalIgnoreCase);
 
@@ -241,10 +243,26 @@ public static class Program
 
     private static Map LoadTmxMap(string assetName)
     {
-        string fileName = assetName.Split('/').Last() + ".tmx";
-        string path = Path.Combine(UnpackedMapsDir, fileName);
-        if (!File.Exists(path)) throw new FileNotFoundException(path);
-        return TmxToMap(path, assetName);
+        string baseName = assetName.Split('/').Last();
+        string tmxPath = Path.Combine(UnpackedMapsDir, baseName + ".tmx");
+        if (File.Exists(tmxPath))
+            return TmxToMap(tmxPath, assetName);
+
+        string tbinPath = Path.Combine(UnpackedMapsDir, baseName + ".tbin");
+        if (File.Exists(tbinPath))
+        {
+            using var fs = File.OpenRead(tbinPath);
+            var map = xTile.Format.FormatManager.Instance.BinaryFormat.Load(fs);
+            map.Id = assetName;
+            foreach (var sheet in map.TileSheets)
+            {
+                string imgName = Path.GetFileNameWithoutExtension(sheet.ImageSource.Replace('\\', '/'));
+                sheet.ImageSource = Path.Combine(UnpackedMapsDir, imgName + ".png");
+            }
+            return map;
+        }
+
+        throw new FileNotFoundException(tmxPath);
     }
 
     private static Map TmxToMap(string tmxPath, string mapId)

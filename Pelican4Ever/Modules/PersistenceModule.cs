@@ -66,8 +66,13 @@ namespace Pelican4Ever.Modules
                     {
                         hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
                     }
+                    if (hostRecord.OfflineHealthAnchorUtc == DateTimeOffset.MinValue)
+                    {
+                        hostRecord.OfflineHealthAnchorUtc = DateTimeOffset.UtcNow;
+                    }
                 }
 
+                EconomyModule.PrepareFoodBuffsForSave(context);
                 context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
                 context.Monitor.Log($"ServerWorldState guardado en la partida maestra ({reason}).", LogLevel.Trace);
                 return true;

@@ -195,7 +195,8 @@ namespace Pelican4Ever.Core.World
 
             if (!inChain || !locationExists(dest))
             {
-                return new PlazaReturnTarget(HostPlazaLayout.HostFarm, 64, 16, 2, IsFallback: true);
+                var (anchorLoc, ax, ay, anchorFacing) = HostPlazaLayout.GetAnchorReturnTarget(dest);
+                return new PlazaReturnTarget(anchorLoc, ax, ay, anchorFacing, IsFallback: true);
             }
 
             SpatialWarpRouter.GetPlazaReturnCoordinates(edge, doorX, doorY, out int rx, out int ry, out int facing);

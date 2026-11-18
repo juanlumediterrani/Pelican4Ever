@@ -41,11 +41,13 @@ namespace Pelican4Ever.Modules
 
             PatchSafe(harmony, "AnimalHouse.adoptAnimal",
                 AccessTools.Method(typeof(AnimalHouse), nameof(AnimalHouse.adoptAnimal)),
-                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_AnimalHouse_AdoptAnimal)));
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_AnimalHouse_AdoptAnimal)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Integrity);
 
             PatchSafe(harmony, "AnimalHouse.isFull",
                 AccessTools.Method(typeof(AnimalHouse), nameof(AnimalHouse.isFull)),
-                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_AnimalHouse_IsFull)));
+                postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_AnimalHouse_IsFull)),
+                criticality: Pelican4Ever.Core.Admin.PatchCriticality.Integrity);
         }
 
         private static void ShowMarnieMailMenu()

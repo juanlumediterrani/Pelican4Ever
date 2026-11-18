@@ -27,8 +27,10 @@ simplificado** (`*.zh-CN.md`).
 | API de anfitrión | [ES](host-api.md) · [EN](host-api.en.md) · [中文](host-api.zh-CN.md) | API REST de anfitrión v1: rutas, autenticación, comandos remotos permitidos y sucesos |
 | ADR | [índice](adr/) · [EN](adr/README.en.md) · [中文](adr/README.zh-CN.md) | Registros de decisiones de arquitectura, cada uno en los tres idiomas |
 | Arquitectura | [ES](../architecture.md) · [EN](../architecture.en.md) · [中文](../architecture.zh-CN.md) | Arquitectura técnica del sistema |
-| Diseño de juego | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Diseño de juego |
-| Backlog | [ES](../backlog.md) | Hoja de ruta técnica: épicas, tareas y su resolución (**solo en español**: es un registro histórico de 1.700 líneas) |
+| Especificación del sistema (GSS) / Diseño | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Especificación general del sistema (`RF`/`RNF`), subsistemas y reglas del mundo |
+| Backlog técnico | [ES](../backlog.md) | Hoja de ruta de desarrollo: épicas, tareas y su resolución (**solo en español**) |
+| Pruebas vivas (agentes) | [ES](../live-agent-tests-backlog.md) | Batería de pruebas vivas y carga reproducibles por agentes autónomos (**solo en español**) |
+| Pruebas con jugadores | [ES](../test-users-tasks.md) | Calibración y verificaciones visuales o interactivas con jugadores humanos (**solo en español**) |
 | Cosmética del host | [ES](../agents/README.md) | Sprite del dragón y utilidades de pixel art (**solo en español**) |
 
 ## Panel web (fuera de `main` y `dev`)
@@ -48,11 +50,11 @@ git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
 ## Reglas de la casa
 
 - El juego es **Stardew Valley 1.6.15** con **SMAPI 4.1+**.
-- El mod se llama **Pelican 4Ever** (`Pelican4Ever.SVRTMP`), versión actual **0.2.0**.
+- El mod se llama **Pelican 4Ever** (`Pelican4Ever.SVRTMP`), versión actual **0.4.9**.
 - El servidor expone **un solo puerto público**: UDP `24642`. La API de anfitrión (`8085`) se
   queda en loopback.
-- `config.json` se **valida al arrancar**: si algo no cuadra, el mod no se registra. No hay modo
-  degradado.
+- `config.json` se **valida al arrancar**: si algo no cuadra, el mod no se registra (sin modo
+  degradado para configuración; para parches Harmony de `Experience`, ver [ADR-0010](adr/0010-fail-closed-health-and-backup-contract.md) propuesto).
 - El anfitrión es siempre un jugador local: **no existe modo servidor dedicado nativo**. La
   opción `DedicatedServerMode` no se usa en el código actual.
 - Las versiones del modpack que exige el servidor son **exactas** (no *major.minor*). La del

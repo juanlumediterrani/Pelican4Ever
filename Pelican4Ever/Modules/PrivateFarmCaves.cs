@@ -5,6 +5,7 @@ using System.Reflection.Emit;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Netcode;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
@@ -36,12 +37,18 @@ namespace Pelican4Ever.Modules
         {
             var readChoice = new HarmonyMethod(typeof(PrivateFarmCaves), nameof(Transpiler_ReadChoice));
             foreach (string method in new[] { "resetLocalState", nameof(FarmCave.UpdateWhenCurrentLocation), nameof(FarmCave.DayUpdate) })
-                context.Harmony.Patch(AccessTools.DeclaredMethod(typeof(FarmCave), method), transpiler: readChoice);
+                context.Patch($"FarmCave.{method}", "PrivateFarmCaves", PatchCriticality.Integrity, AccessTools.DeclaredMethod(typeof(FarmCave), method), transpiler: readChoice);
 
-            context.Harmony.Patch(
+            context.Patch(
+                "FarmCave.setUpMushroomHouse",
+                "PrivateFarmCaves",
+                PatchCriticality.Integrity,
                 AccessTools.DeclaredMethod(typeof(FarmCave), nameof(FarmCave.setUpMushroomHouse)),
                 transpiler: new HarmonyMethod(typeof(PrivateFarmCaves), nameof(Transpiler_PlaceMushroomEquipment)));
-            context.Harmony.Patch(
+            context.Patch(
+                "FarmCave.UpdateReadyFlag",
+                "PrivateFarmCaves",
+                PatchCriticality.Integrity,
                 AccessTools.DeclaredMethod(typeof(FarmCave), nameof(FarmCave.UpdateReadyFlag)),
                 prefix: new HarmonyMethod(typeof(PrivateFarmCaves), nameof(Prefix_UpdateReadyFlag)));
 

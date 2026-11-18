@@ -114,12 +114,72 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
+        /// Identificadores de herramientas inofensivas de mods compatibles (p. ej. redes de captura de Nature In The Valley)
+        /// permitidas a los visitantes incluso cuando <see cref="DoorAssignment.VisitorsCanEdit"/> es <c>false</c>.
+        /// </summary>
+        private static readonly HashSet<string> AllowedVisitorToolItemIds = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "NIVNet",
+            "NIVGoldNet",
+            "NIVJadeNet",
+            "NIVSaphNet"
+        };
+
+        /// <summary>
+        /// Indica si una herramienta externa (identificada sin acoplar ensamblados) es segura para su uso por visitantes.
+        /// </summary>
+        public static bool IsAllowedVisitorTool(string? toolTypeFullName, string? itemId)
+        {
+            if (!string.IsNullOrWhiteSpace(toolTypeFullName)
+                && toolTypeFullName.StartsWith("NatureInTheValley.NatInValey", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return !string.IsNullOrWhiteSpace(itemId) && AllowedVisitorToolItemIds.Contains(itemId);
+        }
+
+        /// <summary>
         /// Indica si la ubicación forma parte de la Plaza Central común (<c>Farm</c> o <c>Pelican4Ever_Bridge_*</c>),
         /// donde solo el anfitrión puede usar herramientas de trabajo, colocar objetos o abrir cofres/máquinas.
         /// </summary>
         public static bool IsProtectedPublicHub(string? locationName)
         {
             return HostPlazaLayout.IsPlazaLocation(locationName);
+        }
+
+        /// <summary>
+        /// Determina si el jugador local puede recuperar objetos de un granjero desconectado desde la caja
+        /// de objetos perdidos de la Casa del Alcalde (<c>ManorHouse</c>), omitiendo cabañas no cargadas
+        /// (p. ej. <c>Pelican4Ever_Farm_XX_Home</c> culleadas en clientes) y protegiendo residencias privadas ajenas.
+        /// </summary>
+        public static bool CanRetrieveOfflineFarmhandItems(
+            bool isMainPlayer,
+            bool isOnline,
+            bool isUnclaimedFarmhand,
+            bool isHomeLoadedAsCabin,
+            bool isInventoryLocked,
+            string? homeLocationName,
+            IReadOnlyDictionary<string, DoorAssignment>? doors,
+            long localPlayerId)
+        {
+            if (isOnline || isUnclaimedFarmhand || !isHomeLoadedAsCabin || isInventoryLocked)
+                return false;
+
+            if (isMainPlayer)
+                return true;
+
+            string? slotId = ResidenceSlotOf(homeLocationName);
+            if (slotId == null || doors == null)
+                return true;
+
+            foreach (DoorAssignment door in doors.Values)
+            {
+                if (string.Equals(door.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                    return CanEdit(door, localPlayerId);
+            }
+
+            return true;
         }
 
         /// <summary>Texto del estado de acceso para los diálogos.</summary>

@@ -18,9 +18,9 @@ namespace Pelican4Ever.Framework
     public sealed record SaveBackupResult(string FolderName, string FolderPath, int FileCount, long Bytes, DateTimeOffset CreatedUtc);
 
     /// <summary>
-    /// Copias verificadas de la partida actual (TASK-1605): las del rollover diario en <c>Pelican4Ever_Backups/</c> y
-    /// las de los checkpoints en <c>Pelican4Ever_Backups/checkpoints/</c>, con compresión opcional y rotación según
-    /// <see cref="BackupRetentionPolicy"/>. Solo toca copias de la partida cargada.
+    /// Copias verificadas de la partida actual (TASK-1605 / TASK-2505): las del rollover diario en <c>Pelican4Ever_Backups/</c> y
+    /// las de los checkpoints en <c>Pelican4Ever_Backups/checkpoints/</c>, con compresión opcional, manifiesto
+    /// <c>p4e-backup.json</c> y rotación según <see cref="BackupRetentionPolicy"/>. Solo toca copias de la partida cargada.
     /// </summary>
     public static class SaveBackupService
     {
@@ -35,11 +35,17 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Copia la carpeta de la partida actual y verifica cada archivo con SHA-256 (sobre el contenido sin comprimir).
-        /// La copia se escribe en <c>&lt;destino&gt;.partial</c> y solo se renombra al final, así que una copia a medias
-        /// nunca parece buena. Devuelve <c>null</c> y lo registra si algo falla.
+        /// Copia la carpeta de la partida actual, verifica cada archivo con SHA-256 (sobre el contenido sin comprimir)
+        /// y escribe el manifiesto <c>p4e-backup.json</c> antes de mover atómicamente <c>&lt;destino&gt;.partial</c>.
         /// </summary>
-        public static SaveBackupResult? Create(IMonitor monitor, BackupKind kind, bool compress)
+        public static SaveBackupResult? Create(
+            IMonitor monitor,
+            BackupKind kind,
+            bool compress,
+            int totalGameDays = 0,
+            string? gameDate = null,
+            string? modVersion = null,
+            string? gameVersion = null)
         {
             string? partial = null;
             try
@@ -62,15 +68,46 @@ namespace Pelican4Ever.Framework
                 Directory.CreateDirectory(partial);
 
                 long bytes = 0;
+                var manifestFiles = new List<BackupManifestFileEntry>(files.Length);
                 foreach (string file in files)
                 {
-                    string copy = Path.Combine(partial, Path.GetFileName(file) + (compress ? ".gz" : string.Empty));
+                    string copyFileName = Path.GetFileName(file) + (compress ? ".gz" : string.Empty);
+                    string copy = Path.Combine(partial, copyFileName);
                     byte[] sourceHash = compress ? CompressWithHash(file, copy) : CopyWithHash(file, copy);
                     byte[] copyHash = HashCopy(copy, compress);
                     if (!CryptographicOperations.FixedTimeEquals(sourceHash, copyHash))
                         throw new IOException($"La verificación SHA-256 falló para {Path.GetFileName(file)}.");
-                    bytes += new FileInfo(copy).Length;
+
+                    long copyBytes = new FileInfo(copy).Length;
+                    bytes += copyBytes;
+                    manifestFiles.Add(new BackupManifestFileEntry
+                    {
+                        RelativePath = copyFileName,
+                        Bytes = copyBytes,
+                        Sha256 = Convert.ToHexString(sourceHash).ToLowerInvariant()
+                    });
                 }
+
+                var manifest = new BackupManifest
+                {
+                    FormatVersion = BackupManifest.CurrentFormatVersion,
+                    Kind = kind == BackupKind.Checkpoint ? "Checkpoint" : "Daily",
+                    SaveFolderName = saveFolder,
+                    TotalGameDays = Math.Max(0, totalGameDays),
+                    GameDate = gameDate ?? string.Empty,
+                    CreatedUtc = created.ToString("O"),
+                    ModVersion = modVersion ?? string.Empty,
+                    GameVersion = gameVersion ?? string.Empty,
+                    Compressed = compress,
+                    Files = manifestFiles
+                };
+
+                IReadOnlyList<string> manifestErrors = BackupManifestLogic.Validate(manifest);
+                if (manifestErrors.Count > 0)
+                    throw new IOException($"Manifiesto p4e-backup.json inválido: {string.Join("; ", manifestErrors)}");
+
+                string manifestPath = Path.Combine(partial, BackupManifest.FileName);
+                File.WriteAllText(manifestPath, BackupManifestLogic.Serialize(manifest));
 
                 Directory.Move(partial, dest);
                 partial = null;

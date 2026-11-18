@@ -25,6 +25,16 @@ namespace Pelican4Ever.Framework
         /// </summary>
         private static readonly Dictionary<string, int> BubbleSpawnTicks = new(StringComparer.OrdinalIgnoreCase);
 
+        /// <summary>
+        /// Caché diaria de casillas candidatas para burbujas de pesca y bateo de minerales por ubicación.
+        /// Evita re-escanear mapas completos cada 10 minutos y garantiza selección uniforme sobre agua válida.
+        /// </summary>
+        private static readonly Dictionary<string, List<Point>> BubbleCandidateCache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, List<Point>> OrePanCandidateCache = new(StringComparer.OrdinalIgnoreCase);
+
+        private static readonly System.Reflection.FieldInfo? FishSplashPointTimeField =
+            AccessTools.Field(typeof(GameLocation), "fishSplashPointTime");
+
         private static readonly Action<GameLocation, bool>? TryToAddCrittersMethod =
             AccessTools.Method(typeof(GameLocation), "tryToAddCritters", new[] { typeof(bool) })
                 ?.CreateDelegate<Action<GameLocation, bool>>();
@@ -35,6 +45,28 @@ namespace Pelican4Ever.Framework
         public static void ResetForNewDay()
         {
             BubbleSpawnTicks.Clear();
+            BubbleCandidateCache.Clear();
+            OrePanCandidateCache.Clear();
+        }
+
+        /// <summary>
+        /// Sincroniza <c>fishSplashPointTime</c> al salir de NightHold (06:00) para que las burbujas
+        /// nocturnas activas no parezcan tener 370 minutos de antigüedad en el primer tick diurno.
+        /// </summary>
+        public static void SyncBubblesOnNightHoldExit()
+        {
+            if (!Context.IsMainPlayer || !Context.IsWorldReady || FishSplashPointTimeField == null)
+                return;
+
+            foreach (GameLocation location in Game1.locations)
+            {
+                if (location != null && location.IsOutdoors && !location.fishSplashPoint.Value.Equals(Point.Zero))
+                {
+                    FishSplashPointTimeField.SetValue(location, GameClockFallback(Game1.timeOfDay));
+                }
+            }
+
+            static int GameClockFallback(int timeOfDay) => timeOfDay >= 600 && timeOfDay < 2550 ? timeOfDay : 600;
         }
 
         /// <summary>
@@ -111,7 +143,7 @@ namespace Pelican4Ever.Framework
         {
             foreach (GameLocation location in Game1.locations)
             {
-                if (location?.map?.RequireLayer("Back") == null || !location.IsOutdoors)
+                if (location == null || !location.IsOutdoors || location.map?.GetLayer("Back") == null)
                     continue;
 
                 // Validación de elegibilidad en granjas
@@ -138,20 +170,23 @@ namespace Pelican4Ever.Framework
                     if (NightHoldWorldLogic.ShouldBubbleExpire(elapsedMinutes, random.NextDouble()))
                     {
                         location.fishSplashPoint.Value = Point.Zero;
+                        location.fishFrenzyFish.Value = "";
+                        FishSplashPointTimeField?.SetValue(location, 0);
                         BubbleSpawnTicks.Remove(locKey);
                         monitor.Log($"[NightHoldWorldSimulator] Burbuja de pesca expiró en {locKey} tras {elapsedMinutes} min.", LogLevel.Trace);
                     }
                 }
                 else
                 {
-                    // Sin burbuja: tirar probabilidad de spawn (50 %)
+                    // Sin burbuja: tirar probabilidad calibrada a tiempo real 1:1 y elegir casilla de agua válida
                     BubbleSpawnTicks.Remove(locKey);
-                    if (NightHoldWorldLogic.ShouldSpawnBubble(random.NextDouble()))
+                    if (NightHoldWorldLogic.ShouldSpawnRealTimeBubble(random.NextDouble()))
                     {
                         Point? point = TryFindWaterPoint(location, random);
                         if (point.HasValue)
                         {
                             location.fishSplashPoint.Value = point.Value;
+                            FishSplashPointTimeField?.SetValue(location, 600);
                             BubbleSpawnTicks[locKey] = tickIndex;
                             if (location.farmers.Any())
                             {
@@ -165,44 +200,114 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Busca una casilla de agua válida a distancia de caña (1 a 4 casillas de la orilla) con 2 intentos, réplica exacta de vanilla.
+        /// Selecciona una casilla de agua válida a distancia de caña (2 a 4 casillas de la orilla)
+        /// muestreando sobre las casillas elegibles del mapa para que el ritmo 1:1 real sea efectivo.
         /// </summary>
         public static Point? TryFindWaterPoint(GameLocation location, Random random)
         {
-            var back = location.map?.RequireLayer("Back");
-            if (back == null)
+            var candidates = GetOrBuildCandidates(location, BubbleCandidateCache, static (loc, x, y) =>
+                loc.isWaterTile(x, y)
+                && loc.doesTileHaveProperty(x, y, "NoFishing", "Back") == null
+                && FishingRod.distanceToLand(x, y, loc) is > 1 and < 5);
+
+            return PickOpenCandidate(location, candidates, random);
+        }
+
+        private static Point? TryFindOrePanPoint(GameLocation location, Random random)
+        {
+            var candidates = GetOrBuildCandidates(location, OrePanCandidateCache, static (loc, x, y) =>
+                loc.isWaterTile(x, y)
+                && !loc.hasTileAt(new Point(x, y), "Buildings")
+                && FishingRod.distanceToLand(x, y, loc, landMustBeAdjacentToWalkableTile: true) <= 1);
+
+            return PickOpenCandidate(location, candidates, random);
+        }
+
+        private static List<Point> GetOrBuildCandidates(
+            GameLocation location,
+            Dictionary<string, List<Point>> cache,
+            Func<GameLocation, int, int, bool> predicate)
+        {
+            string key = location.NameOrUniqueName;
+            if (cache.TryGetValue(key, out List<Point>? existing))
+                return existing;
+
+            var list = new List<Point>();
+            var back = location.map?.GetLayer("Back");
+            if (back != null)
+            {
+                for (int x = 0; x < back.LayerWidth; x++)
+                {
+                    for (int y = 0; y < back.LayerHeight; y++)
+                    {
+                        if (predicate(location, x, y))
+                            list.Add(new Point(x, y));
+                    }
+                }
+            }
+
+            cache[key] = list;
+            return list;
+        }
+
+        private static Point? PickOpenCandidate(GameLocation location, List<Point> candidates, Random random)
+        {
+            if (candidates.Count == 0)
                 return null;
 
-            for (int attempt = 0; attempt < 2; attempt++)
+            int directAttempts = Math.Min(16, candidates.Count);
+            for (int i = 0; i < directAttempts; i++)
             {
-                Point point = new(random.Next(0, back.LayerWidth), random.Next(0, back.LayerHeight));
-                if (!location.isOpenWater(point.X, point.Y) || location.doesTileHaveProperty(point.X, point.Y, "NoFishing", "Back") != null)
-                    continue;
+                Point p = candidates[random.Next(candidates.Count)];
+                if (location.isOpenWater(p.X, p.Y))
+                    return p;
+            }
 
-                int distance = FishingRod.distanceToLand(point.X, point.Y, location);
-                if (distance <= 1 || distance >= 5)
-                    continue;
-
-                return point;
+            // Fallback determinista por si hay nasas (crab pots) en varios puntos
+            int start = random.Next(candidates.Count);
+            for (int i = 0; i < candidates.Count; i++)
+            {
+                Point p = candidates[(start + i) % candidates.Count];
+                if (location.isOpenWater(p.X, p.Y))
+                    return p;
             }
 
             return null;
         }
 
         /// <summary>
-        /// Genera y expira puntos de bateo de cobre mediante la lógica nativa en ríos y lagos.
+        /// Genera y expira puntos de bateo de cobre en ríos y lagos a ritmo real 1:1.
         /// </summary>
         private static void SimulateOrePanning(Random random, IMonitor monitor)
         {
+            bool unlocked = Game1.MasterPlayer?.mailReceived?.Contains("ccFishTank") == true;
+
             foreach (GameLocation location in Game1.locations)
             {
-                if (location == null || !location.IsOutdoors || location is Beach || location.map?.RequireLayer("Back") == null)
+                if (location == null || !location.IsOutdoors || location is Beach || location.map?.GetLayer("Back") == null)
                     continue;
 
-                bool spawned = location.performOrePanTenMinuteUpdate(random);
-                if (spawned && location.farmers.Any() && !location.Equals(Game1.currentLocation))
+                if (!location.orePanPoint.Value.Equals(Point.Zero))
                 {
-                    location.playSound("slosh");
+                    if (NightHoldWorldLogic.ShouldOrePanExpire(random.NextDouble()))
+                    {
+                        location.orePanPoint.Value = Point.Zero;
+                    }
+                    continue;
+                }
+
+                if (!unlocked || !NightHoldWorldLogic.ShouldSpawnRealTimeOrePan(random.NextDouble()))
+                    continue;
+
+                Point? point = TryFindOrePanPoint(location, random);
+                if (point.HasValue)
+                {
+                    location.orePanPoint.Value = point.Value;
+                    if (location.farmers.Any())
+                    {
+                        location.playSound("slosh");
+                    }
+                    monitor.Log($"[NightHoldWorldSimulator] Nuevo punto de bateo en {location.NameOrUniqueName} en {point.Value}.", LogLevel.Trace);
                 }
             }
         }
@@ -221,42 +326,38 @@ namespace Pelican4Ever.Framework
             Farm mainFarm = Game1.getFarm();
             if (mainFarm != null && Game1.spawnMonstersAtNight)
             {
-                if (NightHoldWorldLogic.ShouldSpawnNightMonster(luck, random.NextDouble()))
-                {
-                    if (NightHoldWorldLogic.IsFlyingMonster(random.NextDouble()))
-                    {
-                        if (mainFarm.farmers.Any() || mainFarm.Equals(Game1.currentLocation))
-                            mainFarm.spawnFlyingMonstersOffScreen();
-                    }
-                    else
-                    {
-                        mainFarm.spawnGroundMonsterOffScreen();
-                    }
-                }
+                TrySpawnFarmMonster(mainFarm, luck, random);
             }
 
-            // 2. Residencias de combate (NightMonsters)
+            // 2. Residencias de combate (NightMonsters), independientemente del ajuste global de la granja principal
             foreach (GameLocation location in Game1.locations)
             {
                 if (location is Farm farm && !farm.Equals(mainFarm))
                 {
                     var behavior = FarmTypeModule.BehaviorOf(farm);
-                    if (behavior != null && behavior.NightMonsters && !Game1.spawnMonstersAtNight)
+                    if (behavior != null && behavior.NightMonsters)
                     {
-                        if (NightHoldWorldLogic.ShouldSpawnNightMonster(luck, random.NextDouble()))
-                        {
-                            if (NightHoldWorldLogic.IsFlyingMonster(random.NextDouble()))
-                            {
-                                if (farm.farmers.Any() || farm.Equals(Game1.currentLocation))
-                                    farm.spawnFlyingMonstersOffScreen();
-                            }
-                            else
-                            {
-                                farm.spawnGroundMonsterOffScreen();
-                            }
-                        }
+                        TrySpawnFarmMonster(farm, luck, random);
                     }
                 }
+            }
+        }
+
+        private static void TrySpawnFarmMonster(Farm farm, double luck, Random random)
+        {
+            if (!farm.farmers.Any() && !farm.Equals(Game1.currentLocation))
+                return;
+
+            if (!NightHoldWorldLogic.ShouldSpawnNightMonster(luck, random.NextDouble()))
+                return;
+
+            if (NightHoldWorldLogic.IsFlyingMonster(random.NextDouble()))
+            {
+                farm.spawnFlyingMonstersOffScreen();
+            }
+            else
+            {
+                farm.spawnGroundMonsterOffScreen();
             }
         }
 
@@ -270,7 +371,8 @@ namespace Pelican4Ever.Framework
         }
 
         /// <summary>
-        /// Añade fauna decorativa nocturna (búhos, murciélagos, ranas) a la pantalla de jugadores activos.
+        /// Añade fauna decorativa nocturna (búhos, murciélagos, ranas) si hay jugadores en el host.
+        /// Los clientes remotos invocan <see cref="TryAddClientCritters"/> porque <c>critters</c> es local.
         /// </summary>
         private static void SimulateCritters(IMonitor monitor)
         {
@@ -283,6 +385,17 @@ namespace Pelican4Ever.Framework
                 {
                     TryToAddCrittersMethod(location, false);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Invocado localmente en clientes durante NightHold para añadir fauna ambiental en pantalla.
+        /// </summary>
+        public static void TryAddClientCritters(GameLocation? location)
+        {
+            if (TryToAddCrittersMethod != null && location != null && location.IsOutdoors)
+            {
+                TryToAddCrittersMethod(location, true);
             }
         }
 

@@ -201,6 +201,17 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
+    /// Petición de mensaje externo (p. ej. Discord o agente) para <c>POST /api/v1/host/chat</c>.
+    /// </summary>
+    public sealed class HostChatRequestDto
+    {
+        public string Source { get; set; } = "discord";
+        public string Author { get; set; } = string.Empty;
+        public string Channel { get; set; } = "discord";
+        public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
     /// Petición de reinicio controlado para <c>POST /api/v1/host/restart</c> (TASK-804 / TASK-1608).
     /// </summary>
     public sealed class HostRestartRequestDto
@@ -283,6 +294,109 @@ namespace Pelican4Ever.Core.Admin
         public long? EventId { get; set; }
     }
 
+    /// <summary>Ticket activo en el protocolo de admisión de Putre.</summary>
+    public sealed class HostProbationTicketDto
+    {
+        public string DiscordUserId { get; set; } = string.Empty;
+        public string Alias { get; set; } = string.Empty;
+        public string CreatedAtUtc { get; set; } = string.Empty;
+        public string ExpiresAtUtc { get; set; } = string.Empty;
+    }
+
+    /// <summary>Estado conductual y de observación de un jugador admitido por Putre.</summary>
+    public sealed class HostProbationDeviceDto
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+        public string ShortFingerprint { get; set; } = string.Empty;
+        public string Alias { get; set; } = string.Empty;
+        public string DiscordUserId { get; set; } = string.Empty;
+        public string Status { get; set; } = string.Empty;
+        public string ProbationStage { get; set; } = string.Empty;
+        public string InvitedBy { get; set; } = string.Empty;
+        public string ApprovedAtUtc { get; set; } = string.Empty;
+        public long BoundPlayerId { get; set; }
+        public string PlayerName { get; set; } = string.Empty;
+        public bool IsOnline { get; set; }
+        public string LocationName { get; set; } = string.Empty;
+        public bool HasResidence { get; set; }
+        public long TotalOnlineSeconds { get; set; }
+        public int ConnectCount { get; set; }
+        public int VisitorDeniedCount { get; set; }
+        public string LastVisitorDeniedSummary { get; set; } = string.Empty;
+        public int ChatMessageCount { get; set; }
+        public int ChatFloodHits { get; set; }
+        public int ChatTagInjectionHits { get; set; }
+        public int GoldEarnedToday { get; set; }
+        public int TotalXpToday { get; set; }
+        public int RolloversPassed { get; set; }
+        public int RolloversPenalized { get; set; }
+    }
+
+    /// <summary>Entrada en lista negra devuelta por <c>GET /api/v1/host/probation</c>.</summary>
+    public sealed class HostBlacklistEntryDto
+    {
+        public string Fingerprint { get; set; } = string.Empty;
+        public string ShortFingerprint { get; set; } = string.Empty;
+        public string DiscordUserId { get; set; } = string.Empty;
+        public string Alias { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+        public string BlacklistedBy { get; set; } = string.Empty;
+        public string BlacklistedAtUtc { get; set; } = string.Empty;
+    }
+
+    /// <summary>Resumen de admisión, observación y lista negra para <c>GET /api/v1/host/probation</c>.</summary>
+    public sealed class HostProbationResponseDto
+    {
+        public int MaxSlots { get; set; } = 2;
+        public int UsedSlots { get; set; }
+        public int AvailableSlots { get; set; }
+        public int CurrentGameDay { get; set; }
+        public List<HostProbationTicketDto> Tickets { get; set; } = new();
+        public List<HostProbationDeviceDto> Devices { get; set; } = new();
+        public List<HostBlacklistEntryDto> Blacklist { get; set; } = new();
+    }
+
+    /// <summary>Detalle de un parche fallido en <c>GET /api/v1/host/health</c> (ADR-0010, TASK-2503).</summary>
+    public sealed class HostHealthPatchDto
+    {
+        public string Name { get; set; } = string.Empty;
+        public string Module { get; set; } = string.Empty;
+        public string Criticality { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    /// <summary>Resumen de estado de parches Harmony en <c>GET /api/v1/host/health</c>.</summary>
+    public sealed class HostHealthPatchesDto
+    {
+        public int Total { get; set; }
+        public List<HostHealthPatchDto> Failed { get; set; } = new();
+    }
+
+    /// <summary>Motivos de bloqueo y excepciones en <c>GET /api/v1/host/health</c>.</summary>
+    public sealed class HostHealthLockdownDto
+    {
+        public List<string> Reasons { get; set; } = new();
+        public List<string> Overridden { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Instantánea atómica de salud del host para <c>GET /api/v1/host/health</c> (servida sin pasar por
+    /// <see cref="MainThreadActionQueue"/>) (ADR-0010, TASK-2503).
+    /// </summary>
+    public sealed class HostHealthDto
+    {
+        public string Status { get; set; } = HostHealthStatus.Starting.ToString();
+        public string LastTickUtc { get; set; } = string.Empty;
+        public double SecondsSinceLastTick { get; set; }
+        public bool SaveLoaded { get; set; }
+        public HostHealthLockdownDto Lockdown { get; set; } = new();
+        public HostHealthPatchesDto Patches { get; set; } = new();
+        public string GameVersion { get; set; } = string.Empty;
+        public string SmapiVersion { get; set; } = string.Empty;
+        public string ModVersion { get; set; } = string.Empty;
+        public double UptimeSeconds { get; set; }
+    }
+
     /// <summary>
     /// Respuesta estándar de acciones de <c>/api/v1/host/*</c>.
     /// </summary>
@@ -314,6 +428,7 @@ namespace Pelican4Ever.Core.Admin
             new("POST", "/api/v1/host/festival/start",    MutatesGameState: true,  "Inicia la siguiente tanda del evento principal con los jugadores apuntados (/evento empezar)."),
             new("POST", "/api/v1/host/festival/ceremony", MutatesGameState: true,  "Inicia la ceremonia comunitaria en vivo (TASK-702) con los vecinos presentes en el recinto."),
             new("POST", "/api/v1/host/announce",          MutatesGameState: true,  "Envía un aviso global por chat y/o en pantalla (HUD) a los jugadores."),
+            new("POST", "/api/v1/host/chat",              MutatesGameState: true,  "Inyecta un mensaje externo (p. ej. Discord) en el chat de todos los jugadores conectados."),
             new("POST", "/api/v1/host/rest",              MutatesGameState: true,  "Registra el descanso diario del anfitrión sin desconectar la sesión (TASK-804)."),
             new("POST", "/api/v1/host/restart",           MutatesGameState: true,  "Programa o cancela un reinicio controlado del servidor con preaviso (TASK-804)."),
             new("POST", "/api/v1/host/checkpoint",        MutatesGameState: true,  "Ejecuta un checkpoint intradía en el hilo del juego y devuelve su resultado (TASK-1607)."),
@@ -321,7 +436,9 @@ namespace Pelican4Ever.Core.Admin
             new("GET",  "/api/v1/host/commands",          MutatesGameState: false, "Lista cerrada de comandos de consola de Pelican que se pueden ejecutar a distancia, con su riesgo."),
             new("POST", "/api/v1/host/command",           MutatesGameState: true,  "Ejecuta un comando de consola de la lista de permitidos y devuelve lo que escribe en el registro."),
             new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
-            new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico).")
+            new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico)."),
+            new("GET",  "/api/v1/host/probation",         MutatesGameState: false, "Cupo de admisión de Putre (2 máximo), tickets, jugadores en observación conductual y lista negra."),
+            new("GET",  "/api/v1/host/health",            MutatesGameState: false, "Salud atómica del host fuera del hilo del juego (Lockdown/Degraded/Ok, parches, versiones y latido de tick).")
         };
 
         /// <summary>

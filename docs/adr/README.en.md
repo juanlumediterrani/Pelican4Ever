@@ -14,7 +14,8 @@ replaced by another ADR. The table is the index; the detail is in each file.
 | [0007](0007-dispositivo-identidad-y-acceso-seguro.md) · [EN](0007-dispositivo-identidad-y-acceso-seguro.en.md) · [中文](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md) | Asymmetric identity per device (ECDSA P-256) and the `P4E\x02` challenge in Lidgren | Accepted | 2026-11-11 |
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | Rebalance for 1:1: daily experience curve, slower fishing, fewer ladders and an energy cost in the Skull Cavern | Proposed | 2026-11-14 |
 | [0009](0009-annex-vanilla-composition.md) | Annex generation with the "Bridge Maps" flow (`MapStudio` + canonical crop + verified classifiers) | Accepted | 2026-11-08 |
-| [0010](0010-scalable-residences-admission-queue.md) | Scalable residences (16/32/64) with 16 concurrent players, admission queue, idle kick and gates on the east edge of `Town` | Proposed | 2026-11-15 |
+| [0010](0010-fail-closed-health-and-backup-contract.md) · [EN](0010-fail-closed-health-and-backup-contract.en.md) · [中文](0010-fail-closed-health-and-backup-contract.zh-CN.md) | Fail-closed startup, host health (`/health` + watchdog), and backup contract with Putre | Proposed | 2026-11-16 |
+| [0010 (v0.5)](0010-scalable-residences-admission-queue.md) | Scalable residences (16/32/64) with 16 concurrent players, admission queue, idle kick and gates on the east edge of `Town` | Proposed | 2026-11-15 |
 | [0011](0011-extended-concurrency-interest-management.md) | Opt-in concurrency trials starting at 24 clients, with per-recipient residence replication and measured map capacities | Proposed | 2026-11-15 |
 
 ## How to read them

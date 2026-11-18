@@ -27,8 +27,10 @@ Chinese** (`*.zh-CN.md`).
 | Host API | [ES](host-api.md) · [EN](host-api.en.md) · [中文](host-api.zh-CN.md) | Host REST API v1: routes, authentication, allowed remote commands and events |
 | ADR | [index](adr/) · [EN](adr/README.en.md) · [中文](adr/README.zh-CN.md) | Architecture decision records, each one in the three languages |
 | Architecture | [ES](../architecture.md) · [EN](../architecture.en.md) · [中文](../architecture.zh-CN.md) | System architecture |
-| Game design | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Game design |
-| Backlog | [ES](../backlog.md) | Technical roadmap: epics, tasks and their resolution (**Spanish only**: it is a 1,700-line historical log) |
+| System specification (GSS) / Design | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | General system specification (`RF`/`RNF`), subsystems, and world rules |
+| Technical backlog | [ES](../backlog.md) | Development roadmap: epics, tasks, and their resolution (**Spanish only**) |
+| Live agent tests | [ES](../live-agent-tests-backlog.md) | Reproducible live and load test suite runnable by autonomous agents (**Spanish only**) |
+| Player playtests | [ES](../test-users-tasks.md) | Calibration and visual/interactive checks with human players (**Spanish only**) |
 | Host cosmetics | [ES](../agents/README.md) | Dragon sprite and pixel art utilities (**Spanish only**) |
 
 ## Web panel (not in `main` or `dev`)
@@ -49,11 +51,11 @@ git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
 ## House rules
 
 - The game is **Stardew Valley 1.6.15** with **SMAPI 4.1+**.
-- The mod is called **Pelican 4Ever** (`Pelican4Ever.SVRTMP`), current version **0.2.0**.
+- The mod is called **Pelican 4Ever** (`Pelican4Ever.SVRTMP`), current version **0.4.9**.
 - The server exposes **a single public port**: UDP `24642`. The host API (`8085`) stays on
   loopback.
 - `config.json` is **validated at startup**: if anything does not add up, the mod does not
-  register. There is no degraded mode.
+  register (no degraded mode for config; for `Experience` Harmony patches, see proposed [ADR-0010](adr/0010-fail-closed-health-and-backup-contract.en.md)).
 - The host is always a local player: **there is no native dedicated server mode**. The
   `DedicatedServerMode` option is not used in the current code.
 - The modpack versions the server requires are **exact** (not *major.minor*). The mod's own version

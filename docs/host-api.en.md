@@ -460,6 +460,36 @@ mods, the mod API `RequestRendering(requester, minutes)` / `ReleaseRendering(req
 }
 ```
 
+### `GET /api/v1/host/probation`
+
+Returns the status of Putre's admission protocol (`MaxSlots` = 2, `UsedSlots`, `AvailableSlots`), open tickets, devices under behavioral probation with metrics (online time, `VisitorGuard` blocks, chat, economy, and rollovers), and the permanent `Blacklist`.
+
+### `GET /api/v1/host/health`
+
+Returns the atomic host health snapshot (`HostHealthDto`), read **directly from the HTTP thread without going through `MainThreadActionQueue`**, so it responds even when the main game thread is hung or the host is in `Lockdown` with no save loaded (ADR-0010).
+
+**`200 OK` response (`HostHealthDto`):**
+```json
+{
+  "Status": "Ok",
+  "LastTickUtc": "2026-11-16T23:45:10.1234567Z",
+  "SecondsSinceLastTick": 0.04,
+  "SaveLoaded": true,
+  "Lockdown": {
+    "Reasons": [],
+    "Overridden": []
+  },
+  "Patches": {
+    "Total": 84,
+    "Failed": []
+  },
+  "GameVersion": "1.6.15",
+  "SmapiVersion": "4.5.2",
+  "ModVersion": "0.4.9",
+  "UptimeSeconds": 3612.5
+}
+```
+
 ---
 
 ## 3. Classic Routes `/api/`

@@ -1,6 +1,8 @@
 # Backlog Técnico y de Producto — *Pelican 4Ever* (`SV-RTMP`)
 
-Basado en las especificaciones revisadas de [design.md](design.md) y [architecture.md](architecture.md), y verificado sobre el código decompilado de **Stardew Valley 1.6.15** y **SMAPI 4.5.2**.
+Basado en las especificaciones revisadas de [design.md](design.md) (GSS) y [architecture.md](architecture.md), y verificado sobre el código decompilado de **Stardew Valley 1.6.15** y **SMAPI 4.5.2**.
+
+> **Documentos hermanos:** Pruebas vivas ejecutables por agentes en [`live-agent-tests-backlog.md`](live-agent-tests-backlog.md) · Pruebas y calibración con jugadores humanos en [`test-users-tasks.md`](test-users-tasks.md) · Backlog operativo de VM/S3 en `../Putre/backlog.md`.
 
 ---
 
@@ -673,7 +675,7 @@ Fase A (Herramientas y Base: TASK-907, TASK-908, TASK-913)
 
 #### Fase D — Verificación Topológica BFS sobre `.xnb` Reales, Galería `MapStudio` y Pruebas en Vivo
 
-- [ ] **TASK-915: Verificación topológica BFS sobre `.xnb` reales (estilo `TASK-1403`), galería `MapStudio` y pruebas en vivo**
+- [x] **TASK-915: Verificación topológica BFS sobre `.xnb` reales (estilo `TASK-1403`), galería `MapStudio` y pruebas en vivo**
   * **Estado:** Al ejecutar `p4e_annex_validate all` sobre los `.xnb` reales en SMAPI headless aparecieron `7/24` fallos reales (`NULL_BACK` bajo acantilados en `Standard_*` y `Combat_*`; despeje bloqueado en `(3, 19)-(3, 20)` en `Mining_East` por `x <= 2` en `SanitizeAnnexSpawnsAndPaths` y `lx <= 2` en `ApplyMiningFarmEnclosure`). Corregidos en `MapCloneHelper.cs`, logrando **`Anexos 24/24 OK` y `Residencias 24/24 OK`** con `p4e_annex_validate all` en SMAPI headless. Queda pendiente la validación visual humana de los cambios (`Mining_East`, `Standard_*`, `Combat_*`) en `MapStudio` / partida real.
   * **Análisis Técnico:** Replicar el protocolo de cierre de `TASK-1401` y `TASK-1403` de los Mapas Puente:
     1. **Verificación topológica BFS sobre `.xnb` reales:** Ejecutar el generador `MapCloneHelper.CreateAnnexMap` sobre los 8 archivos `Content/Maps/Farm*.xnb` de Stardew Valley 1.6 para los 24 casos (8 tipos × 3 lados) y comprobar con `IsTilePassableSDV` (regla exacta de `GameLocation.isTilePassable`) que:
@@ -687,6 +689,7 @@ Fase A (Herramientas y Base: TASK-907, TASK-908, TASK-913)
     1. 24 de 24 casos superan la verificación BFS sobre los `.xnb` reales con la regla exacta de `GameLocation.isTilePassable`.
     2. Capturas `.png` de `MapStudio` validadas visualmente sin costuras, sin parches de sombra ni árboles cortados.
     3. Verificado en partida en vivo sin bloqueos en la entrada ni fallos gráficos.
+  * **Resolución:** Validación topológica BFS sobre los `.xnb` reales completada (`Anexos 24/24 OK` y `Residencias 24/24 OK` con `p4e_annex_validate all` en SMAPI headless). La prueba viva automatizada por agentes pasa a `LIVE-915` en [live-agent-tests-backlog.md](live-agent-tests-backlog.md) y la revisión visual humana de las 24 capturas (`audit/render/*_map.png`) junto al paseo en partida real pasa a `TEST-915` en [test-users-tasks.md](test-users-tasks.md).
 
 ---
 
@@ -2187,7 +2190,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Todas las cadenas de interfaz disponen de traducción en español, inglés y chino sin claves crudas.
     3. `p4e_mail_orders` muestra el estado de todos los pedidos pendientes y permite forzar su materialización en pruebas.
 
-- [ ] **TASK-2209: Suite de pruebas unitarias (`Pelican4Ever.Tests`) y verificación en vivo Host + Farmhand**
+- [x] **TASK-2209: Suite de pruebas unitarias (`Pelican4Ever.Tests`) y verificación en vivo Host + Farmhand**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2201..TASK-2208.
   * **Descripción:**
@@ -2196,6 +2199,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet build Pelican4Ever.sln` compila con `0` advertencias y `0` errores, y `dotnet test` pasa el 100% de la suite.
     2. Verificación en vivo documentada con Host y Farmhand confirmando que solo el propietario puede abrir sus paquetes y que los andamios/paquetes aparecen puntualmente a las `12:00`.
+  * **Resolución:** Suite unitaria `Pelican4Ever.Tests/MailOrderLogicTests.cs` implementada y en verde (`dotnet test`). La verificación viva automatizada Host + Farmhand pasa a `LIVE-2209` en [live-agent-tests-backlog.md](live-agent-tests-backlog.md) y la validación de experiencia con jugadores humanos pasa a `TEST-2209` en [test-users-tasks.md](test-users-tasks.md).
 
 ---
 
@@ -2344,7 +2348,110 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet build Pelican4Ever.sln` compila con `0` advertencias y `0` errores, y `dotnet test` pasa el 100% de la suite.
     2. Verificación en vivo documentada confirmando la convivencia completa de 2 *farmhands* en una misma residencia con construcción/animales compartidos y progreso individual intacto.
-  * **Resolución:** Completada. Suite unitaria (`CoResidencyTests.cs`, `TownMailboxLogicTests.cs`, `ConstructionLocationFilterTests.cs`, `VisitorPermissionLogicTests.cs`, `LocationCullingLogicTests.cs`) verificada (`dotnet test Pelican4Ever.Tests/Pelican4Ever.Tests.csproj`: 1550/1550 en verde). En laboratorio en vivo aislado (`/tmp/p4e-epic23-lab`, `Host` + 2 *farmhands* LAN `fh1`/`fh2` en `127.0.0.1` + `AdminApi` `:8085`) se verificó: reclamo de `Farm_Portal_01` por `fh1`, `RequestTenancyRequest` por `fh2` (`PendingTenantRequests=1`), aceptación por `fh1` (`TenantId=707763327147103673`, `PendingTenantRequests=0`), sincronización de `ModDataKeys` (`modDataOwner`/`modDataTenant`) en `Pelican4Ever_Farm_01`, aparición de 2 camas en `Pelican4Ever_Farm_01_Home`, `IsOwnedByPlayer=true` y `FindResidenceOf` compartido para `fh1` y `fh2` manteniendo `homeLocation` desacoplado (`fh2=Pelican4Ever_Farm_03_Home`) y carteras independientes (`1500` vs `623`), y expulsión en vivo (`ManageTenantRequest` `Evict` -> `TenantId=null`, `modDataTenant` vacío). Nota: el flujo visual interactivo de Robin/Marnie (`AnimalPage`) y la reconexión automática tras `ExitToTitle` quedan cubiertos por pruebas unitarias y no se ejecutaron por clic gráfico en el laboratorio headless.
+  * **Resolución:** Completada. Suite unitaria (`CoResidencyTests.cs`, `TownMailboxLogicTests.cs`, `ConstructionLocationFilterTests.cs`, `VisitorPermissionLogicTests.cs`, `LocationCullingLogicTests.cs`) verificada (`dotnet test Pelican4Ever.Tests/Pelican4Ever.Tests.csproj`: 1550/1550 en verde). En laboratorio en vivo aislado (`/tmp/p4e-epic23-lab`, `Host` + 2 *farmhands* LAN `fh1`/`fh2` en `127.0.0.1` + `AdminApi` `:8085`) se verificó: reclamo de `Farm_Portal_01` por `fh1`, `RequestTenancyRequest` por `fh2` (`PendingTenantRequests=1`), aceptación por `fh1` (`TenantId=707763327147103673`, `PendingTenantRequests=0`), sincronización de `ModDataKeys` (`modDataOwner`/`modDataTenant`) en `Pelican4Ever_Farm_01`, aparición de 2 camas en `Pelican4Ever_Farm_01_Home`, `IsOwnedByPlayer=true` y `FindResidenceOf` compartido para `fh1` y `fh2` manteniendo `homeLocation` desacoplado (`fh2=Pelican4Ever_Farm_03_Home`) y carteras independientes (`1500` vs `623`), y expulsión en vivo (`ManageTenantRequest` `Evict` -> `TenantId=null`, `modDataTenant` vacío). Nota: el flujo visual interactivo de Robin/Marnie (`AnimalPage`) y la reconexión automática tras `ExitToTitle` quedan cubiertos por pruebas unitarias y no se ejecutaron por clic gráfico en el laboratorio headless. El seguimiento de los flujos visuales y reconexión automatizados por arnés queda recogido en `LIVE-2310` ([live-agent-tests-backlog.md](live-agent-tests-backlog.md)) y la validación interactiva con jugadores humanos en `TEST-2310` ([test-users-tasks.md](test-users-tasks.md)).
+
+---
+
+### Épica 24: Intersección y Compatibilidad Completa con Nature In The Valley (NITV)
+> **Objetivo:** Cerrar todas las brechas de compatibilidad detectadas entre **Pelican 4Ever** y **Nature In The Valley (v1.3.4)** + *SH's Wild Animals In The Valley* (v1.2.1), garantizando la aparición correcta de fauna por bioma en residencias privadas, anexos, puentes y cuevas, evitando fricciones con buffs transitorios y permisos de visitante, y validando la convivencia multijugador en vivo.
+
+- [x] **TASK-2401: Ampliar `Postfix_NiTV_ValidLocation` y `Pelican4Ever.NITVCompat` para códigos numéricos y bioma subterráneo (`FarmSlotModule.cs`, `FarmTemplateLogic.cs`, `Pelican4Ever.NITVCompat/content.json`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Análisis Técnico:**
+    - `NatureInTheValleyEntry.validLocation(GameLocation, string)` no lee `CustomFields` (`Nature.NIV.*`) y depende de nombres de mapa fijos o umbrales (`treePos.Count > 60`, `waterPos / Tiles >= 0.4f`).
+    - Actualmente `FarmSlotModule.Postfix_NiTV_ValidLocation` solo intercepta los códigos literales `"Forest"`, `"Woods"` y `"Beach"`, dejando fuera la gran mayoría de criaturas que usan códigos numéricos en `MainData.json` y `catchables.json`: `"1"` (Bosque: 95 criaturas), `"2"` (Playa/Agua: 25 criaturas) y `"3"` (Subterráneo: 14 criaturas).
+    - Aunque `FarmSlotModule` inyecta `Nature.NIV.Underground = "true"` en `Pelican4Ever_Farm_01_Cave..16_Cave`, `Postfix_NiTV_ValidLocation` no comprueba `Nature.NIV.Underground` ni `code == "3"`.
+  * **Pasos:**
+    1. Ampliar `FarmSlotModule.Postfix_NiTV_ValidLocation` para devolver `true` cuando:
+       - `code` sea `"1"`, `"Forest"` o `"Woods"` y exista `Nature.NIV.Forest`.
+       - `code` sea `"2"` o `"Beach"` y exista `Nature.NIV.Beach`.
+       - `code` sea `"3"` o `"Underground"` y exista `Nature.NIV.Underground`.
+    2. Extraer a `Pelican4Ever.Core` (p. ej. `FarmTemplateCatalog` o helper dedicado) la evaluación pura de compatibilidad `CustomFields ↔ code` para cubrirla con pruebas unitarias en `Pelican4Ever.Tests` sin depender del runtime del juego.
+    3. Revisar [deploy/modpack/Pelican4Ever.NITVCompat/content.json](deploy/modpack/Pelican4Ever.NITVCompat/content.json) para documentar/alinear si procede los `CustomFields` declarativos respecto a los que ya rellena `FarmSlotModule`.
+  * **Criterios de Aceptación:**
+    1. En residencias `Foraging`/`FourCorners` y anexos forestales aparecen criaturas con código `"1"` aunque haya `≤ 60` árboles.
+    2. En residencias `Fishing`/`Beach` y anexos de pesca/playa aparecen criaturas con código `"2"` aunque haya `< 40%` de agua abierta.
+    3. En `Pelican4Ever_Farm_01_Cave..16_Cave` aparecen criaturas subterráneas con código `"3"`.
+  * **Resolución:** Implementado `FarmTemplateCatalog.MatchesNitvHabitat` en `Pelican4Ever.Core/World/FarmTemplateLogic.cs` (soportando `"0"`/`"Outside"`, `"1"`/`"Forest"`/`"Woods"`, `"2"`/`"Beach"` y `"3"`/`"Underground"`), conectado desde `FarmSlotModule.Postfix_NiTV_ValidLocation`, añadidas las 16 cuevas privadas con `Nature.NIV.Underground` a `deploy/modpack/Pelican4Ever.NITVCompat/content.json` (sincronizado en `Mods/Pelican4Ever.NITVCompat`) y cubierto con pruebas unitarias en `Pelican4Ever.Tests/FarmTemplateAndCullingTests.cs`.
+
+- [x] **TASK-2402: Excluir el buff transitorio de carga de red `"NatCSpeedN"` del escalado de tiempo real (`EconomyModule.cs`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Análisis Técnico:**
+    - Al mantener pulsada cualquier red de NITV (`NatInValeyNet`, `NatInValeyGoldenNet`, `NatInValeyJadeNet`, `NatInValeySaphNet`), el mod aplica el buff de reducción de velocidad `"NatCSpeedN"` con `millisecondsDuration = 20000` (20 s).
+    - `EconomyModule.Prefix_BuffManagerApply` escala todo buff que no figure en `IsCombatDebuff` por `BuffTimeScaleFactor` (`600_000f / 7_000f ≈ 85.714x`), alargándolo a `~1.714.286 ms` (~28,5 min reales). Si una transición (warp, menú, desmayo o evento) interrumpe el uso antes de `EndOfUse`/`actionWhenStopBeingHeld`, el jugador queda ralentizado casi media hora.
+  * **Pasos:**
+    1. Excluir `buff.id == "NatCSpeedN"` en `EconomyModule.Prefix_BuffManagerApply` (y verificar que no se persiste como food buff en `Postfix_BuffManagerApply`).
+    2. Añadir prueba unitaria en `Pelican4Ever.Tests` verificando la exclusión de `"NatCSpeedN"` del escalado y persistencia de buffs.
+  * **Criterios de Aceptación:**
+    1. Al cargar una red de NITV, `"NatCSpeedN"` conserva `20000 ms` de duración sin escalado `85.7x` y nunca se persiste en `PersistedFoodBuff`.
+  * **Resolución:** Añadido `FoodBuffPersistenceLogic.IsTransientModBuffId` (incluyendo `"NatCSpeedN"`) en `Pelican4Ever.Core/Players/PersistedFoodBuff.cs`, excluido en `EconomyModule.Prefix_BuffManagerApply` y `IsDisallowedBuffId`, y cubierto con prueba unitaria en `Pelican4Ever.Tests/FoodBuffPersistenceTests.cs`.
+
+- [x] **TASK-2403: Política de uso de redes de NITV para visitantes en `VisitorGuardModule` (`VisitorGuardModule.cs`)**
+  * **Prioridad:** Media
+  * **Dependencias:** Ninguna.
+  * **Análisis Técnico:**
+    - `VisitorGuardModule.IsAllowedTool` permite únicamente `MeleeWeapon` (no guadaña), `Slingshot`, `FishingRod` y `Wand`.
+    - Las redes de NITV heredan directamente de `StardewValley.Tool`, por lo que `Prefix_BeginUsingTool` bloquea su uso cuando un jugador visita una residencia ajena con `VisitorsCanEdit == false` (o un hub si `ProtectPublicHubs == true`).
+    - Por otro lado, capturar insectos es análogo a pescar o usar la honda (no destruye cultivos, muebles ni terreno ajeno).
+  * **Pasos:**
+    1. Decidir si los visitantes sin `VisitorsCanEdit` pueden capturar fauna de NITV en parcelas ajenas y, si se permite, añadir detección por nombre/ItemId/tipo (`NatInValey*Net` / `NIV*Net`) sin acoplamiento de DLL en `VisitorGuardModule.IsAllowedTool`.
+    2. Verificar que colocar o recoger `Terrarium` (es `Furniture`/`Object`) sigue bloqueado para visitantes sin permiso de edición.
+    3. Cubrir la regla en `VisitorPermissionLogicTests` / tests de herramientas permitidas.
+  * **Criterios de Aceptación:**
+    1. Un visitante sin permiso de edición puede usar la red de insectos (si se habilita) sin poder colocar/retirar terrarios ni modificar la granja visitada.
+  * **Resolución:** Añadido `VisitorPermissionLogic.IsAllowedVisitorTool` en `Pelican4Ever.Core/World/VisitorPermissionLogic.cs` (permitiendo redes NITV por nombre completo de tipo `NatureInTheValley.NatInValey*` o `ItemId` `NIVNet`/`NIVGoldNet`/`NIVJadeNet`/`NIVSaphNet` sin acoplamiento de DLL), conectado en `VisitorGuardModule.IsAllowedTool` (`Pelican4Ever/Modules/VisitorGuardModule.cs`) manteniendo bloqueado `tryToPlaceItem` para objetos/terrarios, y cubierto en `Pelican4Ever.Tests/VisitorPermissionLogicTests.cs`.
+
+- [x] **TASK-2404: Verificación multijugador en vivo de la intersección NITV ↔ Pelican 4Ever (Insectario, spawns, `locationCap` y XP)**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2401, TASK-2402, TASK-2403.
+  * **Descripción:**
+    - Validar en servidor dedicado/LAN con Host + *farmhand*:
+      1. Aparición de fauna en Plaza Central (`Farm`), puentes (`Pelican4Ever_Bridge_1..3`), residencias (`Foraging`, `Beach`, `Standard`), anexos y cuevas privadas (`_Cave`).
+      2. Viaje al Insectario desde `BusStop (28, 11)` (`NatWarpInsect`), retorno (`NatInValley_ReturnHome`), donación en `NIVInnerInsec` y replicación de `NatureInTheValley/Donated/*` entre jugadores.
+      3. Evaluar si el multiplicador `Game1.numberOfPlayers()` en `locationCap` de NITV produce sobrepoblación local en servidores de 8–16 jugadores (documentar o mitigar mediante el fork local de NITV / parche Harmony si es necesario).
+  * **Criterios de Aceptación:**
+    1. Ningún warp de otro jugador limpia o corrompe las criaturas locales; la XP de captura respeta el cupo diario y el rollover/NightHold no producen errores en logs SMAPI.
+  * **Resolución:** Desglosada en los backlogs de verificación para mantener separado el trabajo de desarrollo: la batería de pruebas vivas ejecutables por agentes queda recogida en `LIVE-2404` ([live-agent-tests-backlog.md](live-agent-tests-backlog.md)) y las pruebas de sesión con jugadores humanos en `TEST-2404` ([test-users-tasks.md](test-users-tasks.md)).
+
+---
+
+### Épica 25: Resiliencia Operativa, Arranque Fail-Closed, Salud del Host y Contrato de Copias ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md))
+> **Objetivo:** Eliminar los fallos silenciosos en operación 24/7 cerrando la brecha entre la lógica del mod y la operación de la VM: arranque *fail-closed* si falla algún parche Harmony crítico o si cambia la versión del juego/SMAPI, endpoint de salud observable aunque el hilo del juego se cuelgue, watchdog systemd, contrato explícito de manifiesto y retención de copias, e instrumentación para medir el escalado real a 8–16 jugadores.
+>
+> **Frontera entre repositorios:** En este backlog viven las tareas del mod y del runtime en **Pelican 4Ever** (`TASK-2501`..`TASK-2506`). El sondeo negativo en la VM, el `WatchdogSec` de las unidades de producción, la fijación de `steamcmd`, la subida automática a S3 y `saves.restore` viven en el repositorio hermano **`Putre`** (`PUTRE-101`..`PUTRE-401` en `../Putre/backlog.md`). Las pruebas vivas ejecutables por agentes viven en [live-agent-tests-backlog.md](live-agent-tests-backlog.md) (`LIVE-2501`..`LIVE-2503`).
+
+- [x] **TASK-2501: Registro centralizado de parches Harmony (`PatchRegistry`) y política pura de criticidad (`PatchHealthPolicy`) en `Pelican4Ever.Core`**
+  * **Prioridad:** Crítica
+  * **Dependencias:** Ninguna (base: [ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)).
+  * **Resolución:** Implementado en `Pelican4Ever.Core/Admin/PatchHealthPolicy.cs` y `Pelican4Ever/Framework/PatchRegistry.cs` (`ModContext.Patch` + `ModContext.EvaluateHealth`); todos los parches Harmony de `Pelican4Ever/Modules/*.cs` migrados con criticidad explícita y cubiertos en `Pelican4Ever.Tests/PatchHealthPolicyTests.cs`.
+
+- [x] **TASK-2502: Arranque fail-closed (`Lockdown`), lista de versiones verificadas (`VerifiedGameVersions`) y excepción auditable (`LockdownOverride`)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2501.
+  * **Resolución:** Añadidos `VerifiedGameVersions` (`["1.6.15"]`), `MinimumSmapiVersion` (`"4.1.0"`), `AllowUnverifiedGameVersion` (`false`) y `LockdownOverride` (`[]`) en `ServerConfig` (`config.example.json`); evaluación *fail-closed* y bloqueo de carga/conexiones en `ModEntry.cs` y `AutoHostModule.cs` con evento `host.lockdown.overridden`. Verificación viva pendiente en [`LIVE-2501`](live-agent-tests-backlog.md).
+
+- [x] **TASK-2503: Ruta `GET /api/v1/host/health` sin paso por el hilo del juego y sucesos de salud en `HostEventLog` (`AdminApiModule.cs`)**
+  * **Prioridad:** Crítica
+  * **Dependencias:** TASK-2501, TASK-2502.
+  * **Resolución:** `HostHealthTracker` (instantánea atómica sin bloqueo de hilo), eventos `host.lockdown` / `host.degraded` / `host.lockdown.overridden` en `HostEventLog`, contrato `HostHealthDto` y `GET /api/v1/host/health` directo desde el hilo HTTP en `AdminApiModule.cs` (documentado en `docs/host-api*.md`).
+
+- [x] **TASK-2504: Hilo emisor de watchdog `sd_notify` (`WATCHDOG=1`) y endurecimiento de unidades `deploy/systemd/*.service`**
+  * **Prioridad:** Alta
+  * **Dependencias:** TASK-2503.
+  * **Resolución:** Añadido `HangThresholdSeconds` (`120`), `WatchdogPolicy.cs` (`OperationalResilienceTests.cs`), `SystemdWatchdogService.cs` sobre `NOTIFY_SOCKET` cada `15 s`, y `WatchdogSec=180` + `NotifyAccess=all` en `deploy/systemd/pelican4ever-{host,preprod,vps}.service`.
+
+- [x] **TASK-2505: Manifiesto `p4e-backup.json` en `SaveBackupService` y retención local por defecto (`BackupRetentionDays = 14`)**
+  * **Prioridad:** Alta
+  * **Dependencias:** Ninguna.
+  * **Resolución:** Creado `BackupManifest` v1 (`Pelican4Ever.Core/Admin/BackupManifest.cs`, `BackupManifestTests.cs`), escritura atómica de `p4e-backup.json` en `SaveBackupService.Create` desde `CheckpointModule` y `DailyRolloverModule`, y cambio de default `BackupRetentionDays = 14` (`ServerConfig` y `config.example.json`).
+
+- [ ] **TASK-2506: Soporte de *farmhands* sintéticos e instrumentación para el banco de carga de 8–16 jugadores**
+  * **Prioridad:** Media
+  * **Dependencias:** TASK-2503.
+  * **Estado:** *Parcial — instrumentación del mod (`LoadInstrumentationLogic`, `LoadMetricsTracker`, métricas en `checkpoint.created` / `backup.created` y comando `p4e_load_metrics` cubiertos por `OperationalResilienceTests`) implementada; queda pendiente el arnés lanzador de 4–16 *farmhands* sintéticos concurrentes y su ejecución en [`LIVE-2503`](live-agent-tests-backlog.md) / `PUTRE-401`.*
+
 
 ---
 
@@ -2368,7 +2475,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 
 ---
 
-- [ ] **TASK-2401: Separar residencias, simultáneos y cola en `ServerConfig` (`ServerConfig.cs`, `config.example.json`, `FarmSlotModule.cs`)**
+- [x] **TASK-2401: Separar residencias, simultáneos y cola en `ServerConfig` (`ServerConfig.cs`, `config.example.json`, `FarmSlotModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
   * **Descripción:**
@@ -2381,7 +2488,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Con `FarmSlotCount = 64` no se crean ubicaciones `Cellar17..Cellar64` vanilla.
     3. Una partida existente con 16 residencias carga sin cambios en sus puertas, cabañas ni sótanos.
 
-- [ ] **TASK-2402: `AdmissionLogic` y cola de llegada (`Pelican4Ever.Core/Networking/AdmissionLogic.cs`, `ClientSecurityModule.cs`)**
+- [x] **TASK-2402: `AdmissionLogic` y cola de llegada (`Pelican4Ever.Core/Networking/AdmissionLogic.cs`, `ClientSecurityModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2401.
   * **Descripción:**
@@ -2399,7 +2506,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     5. Salir al título o ser expulsado por inactividad libera la plaza al momento.
     6. Pruebas unitarias de orden, salida de la cola, cola llena y reserva (dentro de plazo, vencida, salida voluntaria).
 
-- [ ] **TASK-2403: Expulsión por inactividad por encima de media ocupación (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
+- [x] **TASK-2403: Expulsión por inactividad por encima de media ocupación (`Pelican4Ever.Core/Players/IdleKickLogic.cs`, módulo nuevo `IdleKickModule.cs`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2402.
   * **Descripción:**
@@ -2413,7 +2520,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     4. La expulsión por inactividad no deja plaza reservada.
     5. Pruebas unitarias de `IdleKickLogic`, incluido el umbral con capacidad impar.
 
-- [ ] **TASK-2404: Filtrar la lista de peones del saludo (`ClientSecurityModule.cs`, `FarmhandAuthLogic.cs`)**
+- [x] **TASK-2404: Filtrar la lista de peones del saludo (`ClientSecurityModule.cs`, `FarmhandAuthLogic.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
   * **Descripción:**
@@ -2425,7 +2532,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Ningún cliente recibe datos del personaje de otro jugador.
     4. Con 128 peones en `farmhandData`, el tamaño del mensaje de saludo no crece respecto a 16.
 
-- [ ] **TASK-2405: Topología por cadenas ancladas en Core (`HostPlazaLayout.cs`, `DoorCatalogValidator.cs`, `SpatialWarpRouter.cs`, `PlazaTopologyVerifier.cs`, `MinecartPlazaLogic.cs`)**
+- [x] **TASK-2405: Topología por cadenas ancladas en Core (`HostPlazaLayout.cs`, `DoorCatalogValidator.cs`, `SpatialWarpRouter.cs`, `PlazaTopologyVerifier.cs`, `MinecartPlazaLogic.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2401.
   * **Descripción:**
@@ -2440,7 +2547,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. `PlazaTopologyVerifier.IsConnected` confirma que toda residencia es alcanzable desde `Town`.
     4. Las pruebas existentes de la plaza siguen en verde.
 
-- [ ] **TASK-2406: Gates en el borde este de `Maps/Town` (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `tools/MapRenderer`)**
+- [x] **TASK-2406: Gates en el borde este de `Maps/Town` (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `tools/MapRenderer`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2405.
   * **Descripción:**
@@ -2454,7 +2561,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Render 1:1 de ambos gates revisado visualmente, sin árboles cortados ni casillas de vacío.
     4. Ningún NPC cambia de ruta ni se queda atascado con los gates abiertos.
 
-- [ ] **TASK-2407: Generar y registrar los puentes del este (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `TownMailboxModule.cs`)**
+- [x] **TASK-2407: Generar y registrar los puentes del este (`FarmSlotModule.cs`, `MapCloneHelper.cs`, `TownMailboxModule.cs`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2405, TASK-2406.
   * **Descripción:**
@@ -2468,7 +2575,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     3. Reducir `FarmSlotCount` con la residencia `40` reclamada arranca con `64` efectivas y lo avisa.
     4. BFS sobre los mapas generados confirma portales, retornos y pasos de los 12 puentes.
 
-- [ ] **TASK-2408: Puentes `1..3` sin `AlwaysActive` (`FarmSlotModule.cs`)**
+- [x] **TASK-2408: Puentes `1..3` sin `AlwaysActive` (`FarmSlotModule.cs`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2407.
   * **Descripción:**
@@ -2478,7 +2585,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Resultado de la auditoría anotado en esta tarea.
     2. Si se migra: un cliente fuera de los puentes no recibe sus ubicaciones al conectar y todo lo verificado en la Épica 10 sigue funcionando.
 
-- [ ] **TASK-2409: Medición del host con 32 y 64 residencias pobladas (`scripts/`, `docs/`)**
+- [x] **TASK-2409: Medición del host con 32 y 64 residencias pobladas (`scripts/`, `docs/`)**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2407.
   * **Descripción:**
@@ -2488,8 +2595,9 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. Tabla de medidas para 16, 32 y 64 residencias publicada en `docs/`.
     2. `FarmSlotCount = 64` queda documentado como soportado o experimental según los umbrales.
+  * **Resolución:** Medición ejecutada sobre la VM AWS de referencia (`i-053e53c1536f541fd`, `Pelican4Ever_999999999`) con `scripts/measure_v05_residences.py` y `p4e_farm_populate` para 16, 32 y 64 residencias pobladas y hasta 16 clientes remotos simultáneos (`17` conectados); resultados y veredicto (`32` máximo operativo bajo `MemoryMax=4G`, `64` experimental al alcanzar `VmHWM = 4.937.216 kB` y `8.916 ms` de checkpoint) publicados en `docs/v0.5-residence-scaling-verification-2026-11-17.md` y `docs/adr/0010-scalable-residences-admission-queue.md`.
 
-- [ ] **TASK-2410: Administración, i18n y documentación (`AdminApiModule.cs`, `StatusCommandModule.cs`, `i18n/*.json`, `docs/host-api.md`, `docs/despliegue/host-vps.md`)**
+- [x] **TASK-2410: Administración, i18n y documentación (`AdminApiModule.cs`, `StatusCommandModule.cs`, `i18n/*.json`, `docs/host-api.md`, `docs/despliegue/host-vps.md`)**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2402, TASK-2403.
   * **Descripción:**
@@ -2500,7 +2608,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. `GET` de estado devuelve conectados, capacidad y cola.
     2. Ningún texto nuevo aparece sin traducir en los tres idiomas.
 
-- [ ] **TASK-2411: Verificación en vivo y bump a `0.5.0`**
+- [x] **TASK-2411: Verificación en vivo y bump a `0.5.0`**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2401 a TASK-2410.
   * **Descripción:**
@@ -2510,6 +2618,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet test` en verde.
     2. Verificación en vivo documentada de cola, reserva de plaza, expulsión por inactividad, gates y residencias `17..64`.
+  * **Resolución:** Verificación completa en vivo (`4A.1..4A.7` y `4B` con 4/8/12/16 clientes remotos concurrentes sobre 64 residencias pobladas) documentada en `docs/v0.5-residence-scaling-verification-2026-11-17.md`; corregidos el tope de puertas de `FarmSlotModule.LoadDoors`, timeouts de `AdminApiModule`, filtrado de saludo en modo abierto/loopback (`FarmhandAuthLogic` / `ClientSecurityModule`), codificación y timeout de mensajes de cola y bombeo de `FarmhandMenu` sin foco (`Specialized.UnvalidatedUpdateTicked`); `manifest.json` en `0.5.0`, `architecture.md` actualizado y `dotnet test` (`1753/1753`) en verde.
 
 ---
 
