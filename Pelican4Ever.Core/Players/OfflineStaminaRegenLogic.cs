@@ -3,28 +3,33 @@ using System;
 namespace Pelican4Ever.Core.Players
 {
     /// <summary>
-    /// Lógica de recuperación gradual de energía mientras el jugador está desconectado.
-    /// Por defecto, la barra completa (100% MaxStamina) se recarga en 4 horas reales de desconexión.
+    /// Lógica de recuperación gradual de energía y salud mientras el jugador está desconectado.
+    /// Por defecto, la barra completa (100% MaxStamina y 100% maxHealth) se recarga en 4 horas reales de desconexión.
     /// </summary>
     public static class OfflineStaminaRegenLogic
     {
-        /// <summary>
-        /// Calcula la ganancia de estamina en función del tiempo transcurrido offline.
-        /// </summary>
-        public static float CalculateStaminaGain(
-            int maxStamina,
+        private static float CalculateLinearGain(
+            int maxValue,
             TimeSpan offlineDuration,
             float fullBarHours)
         {
-            if (maxStamina <= 0 || offlineDuration <= TimeSpan.Zero || fullBarHours <= 0f)
+            if (maxValue <= 0 || offlineDuration <= TimeSpan.Zero || fullBarHours <= 0f)
                 return 0f;
 
             double fullBarSeconds = fullBarHours * 3600.0;
             double fraction = offlineDuration.TotalSeconds / fullBarSeconds;
             fraction = Math.Clamp(fraction, 0.0, 1.0);
 
-            return (float)(maxStamina * fraction);
+            return (float)(maxValue * fraction);
         }
+
+        /// <summary>
+        /// Calcula la ganancia de estamina en función del tiempo transcurrido offline.
+        /// </summary>
+        public static float CalculateStaminaGain(
+            int maxStamina,
+            TimeSpan offlineDuration,
+            float fullBarHours) => CalculateLinearGain(maxStamina, offlineDuration, fullBarHours);
 
         /// <summary>
         /// Calcula el nuevo valor de estamina tras aplicar la ganancia offline, sin superar MaxStamina.
@@ -48,6 +53,42 @@ namespace Pelican4Ever.Core.Players
                 return currentStamina;
 
             return Math.Min((float)maxStamina, currentStamina + gained);
+        }
+
+        /// <summary>
+        /// Calcula la ganancia entera de salud en función del tiempo transcurrido offline.
+        /// </summary>
+        public static int CalculateHealthGain(
+            int maxHealth,
+            TimeSpan offlineDuration,
+            float fullBarHours)
+        {
+            float gain = CalculateLinearGain(maxHealth, offlineDuration, fullBarHours);
+            return gain <= 0f ? 0 : (int)Math.Round(gain, MidpointRounding.AwayFromZero);
+        }
+
+        /// <summary>
+        /// Calcula la nueva salud tras aplicar la ganancia offline, sin superar <paramref name="maxHealth"/>.
+        /// </summary>
+        public static int CalculateNewHealth(
+            int currentHealth,
+            int maxHealth,
+            TimeSpan offlineDuration,
+            float fullBarHours)
+        {
+            int gain = CalculateHealthGain(maxHealth, offlineDuration, fullBarHours);
+            return ApplyHealthGain(currentHealth, maxHealth, gain);
+        }
+
+        /// <summary>
+        /// Aplica una ganancia de salud a la salud actual sin superar <paramref name="maxHealth"/>.
+        /// </summary>
+        public static int ApplyHealthGain(int currentHealth, int maxHealth, int gained)
+        {
+            if (gained <= 0 || maxHealth <= 0 || currentHealth >= maxHealth)
+                return currentHealth;
+
+            return Math.Min(maxHealth, Math.Max(0, currentHealth) + gained);
         }
     }
 }

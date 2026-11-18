@@ -64,6 +64,9 @@ namespace Pelican4Ever.Modules
         private readonly Dictionary<string, int> lastRelayedTickByEvent = new(StringComparer.Ordinal);
         private int tickCounter;
 
+        /// <summary>Indica si el anfitrión está ejecutando un relevo temporal de evento /H.</summary>
+        public static bool IsRelayActive { get; private set; }
+
         public string Name => "HostEventRelay";
 
         public ModuleSide Side => ModuleSide.Both;
@@ -109,6 +112,7 @@ namespace Pelican4Ever.Modules
         private void OnReturnedToTitle(object? sender, ReturnedToTitleEventArgs e)
         {
             activeRelay = null;
+            IsRelayActive = false;
             lastRelayedTickByEvent.Clear();
             tickCounter = 0;
         }
@@ -207,6 +211,7 @@ namespace Pelican4Ever.Modules
             int returnFacing = Game1.player.FacingDirection;
 
             activeRelay = new PendingRelayState(matchedEventId, returnLocation, returnX, returnY, returnFacing);
+            IsRelayActive = true;
 
             context.Monitor.Log(
                 $"[HostEventRelay] Disparando evento /H '{matchedEventId}' en {payload.LocationName} ({payload.TileX},{payload.TileY}) por entrada del cliente {e.FromPlayerID}.",
@@ -506,6 +511,7 @@ namespace Pelican4Ever.Modules
             {
                 PendingRelayState finished = activeRelay;
                 activeRelay = null;
+                IsRelayActive = false;
 
                 if (!string.Equals(Game1.currentLocation?.NameOrUniqueName, finished.ReturnLocation, StringComparison.Ordinal))
                 {

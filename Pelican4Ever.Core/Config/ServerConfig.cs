@@ -295,6 +295,19 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public bool HeadlessRendering { get; set; } = true;
 
+        /// <summary>
+        /// Resuelve automáticamente eventos, cinemáticas y diálogos bloqueantes en el host desatendido
+        /// (<see cref="AutoHostSaveName"/> configurado) para que no congelen checkpoints ni la limpieza de red
+        /// cuando no hay un agente operando al host.
+        /// </summary>
+        public bool AutoResolveHostEvents { get; set; } = true;
+
+        /// <summary>
+        /// Segundos de cortesía antes de resolver automáticamente un evento o diálogo bloqueante en el host
+        /// desatendido (1..120, por defecto 5).
+        /// </summary>
+        public int HostEventAutoResolveDelaySeconds { get; set; } = 5;
+
         // ─────────────────────── Checkpoints intradía (Épica 11) ───────────────────────
 
         /// <summary>
@@ -505,6 +518,8 @@ namespace Pelican4Ever.Core.Config
             }
             if (RestartExitsProcess && string.IsNullOrEmpty(AutoHostSaveName))
                 errors.Add($"{nameof(RestartExitsProcess)} requiere {nameof(AutoHostSaveName)}: si no, el servidor relanzado se queda en la pantalla de título.");
+            if (HostEventAutoResolveDelaySeconds is < 1 or > 120)
+                errors.Add($"{nameof(HostEventAutoResolveDelaySeconds)} debe estar entre 1 y 120 segundos. Valor: {HostEventAutoResolveDelaySeconds}.");
 
             return errors;
         }

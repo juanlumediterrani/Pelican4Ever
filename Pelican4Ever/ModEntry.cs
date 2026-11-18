@@ -83,6 +83,7 @@ namespace Pelican4Ever
                 new AdminApiModule(),
                 new AutoHostModule(),
                 new HeadlessRenderModule(),
+                new HeadlessEventGuardModule(),
                 new ClientPetAdoptionModule(),
                 new ModToggleModule()
             );

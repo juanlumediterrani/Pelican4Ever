@@ -36,4 +36,46 @@ public class StalePeerContextTests
         Assert.False(StalePeerContext.Remove(peers, 10, isOnline: false));
         Assert.Empty(peers);
     }
+
+    [Fact]
+    public void ReconnectionRemovesContextWhenFarmerIsDisconnectingDuringEvent()
+    {
+        var stale = new object();
+        var peers = new Dictionary<long, object> { [10] = stale };
+        Assert.True(StalePeerContext.RemoveIfStale(
+            peers,
+            10,
+            inOnlineFarmers: true,
+            isDisconnecting: true,
+            hasActiveTransportConnection: false));
+        Assert.False(peers.ContainsKey(10));
+    }
+
+    [Fact]
+    public void ReconnectionRemovesGhostContextWithoutActiveTransport()
+    {
+        var ghost = new object();
+        var peers = new Dictionary<long, object> { [10] = ghost };
+        Assert.True(StalePeerContext.RemoveIfStale(
+            peers,
+            10,
+            inOnlineFarmers: true,
+            isDisconnecting: false,
+            hasActiveTransportConnection: false));
+        Assert.False(peers.ContainsKey(10));
+    }
+
+    [Fact]
+    public void DuplicateContextPreservesActivelyConnectedOnlinePlayer()
+    {
+        var active = new object();
+        var peers = new Dictionary<long, object> { [10] = active };
+        Assert.False(StalePeerContext.RemoveIfStale(
+            peers,
+            10,
+            inOnlineFarmers: true,
+            isDisconnecting: false,
+            hasActiveTransportConnection: true));
+        Assert.Same(active, peers[10]);
+    }
 }

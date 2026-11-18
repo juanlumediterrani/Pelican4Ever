@@ -269,6 +269,8 @@
   "clock.adjusted_hours": "[Clock] Adjusted {{sign}}{{hours}}h. New time: {{time}} (Total offset: {{offset}}h).",
   "clock.invalid_format": "[Clock] Invalid format. Valid examples: /time +2, /time -1, /time +30m, /time reset, /time set 14:00",
   "bed_logout.offline_rest": "Offline rest: +{{gained}} energy recovered.",
+  "bed_logout.offline_rest_health": "Offline rest: +{{health}} health recovered.",
+  "bed_logout.offline_rest_both": "Offline rest: +{{energy}} energy and +{{health}} health recovered.",
   "bed_logout.host_agent_active": "Rest recorded. Host agent mode active: server remains online.",
   "bed_logout.disconnecting": "Rest recorded. Disconnecting safely...",
   "rollover.warning_10min": "Notice: in 10 minutes the farm will be saved and connections closed for day rollover.",

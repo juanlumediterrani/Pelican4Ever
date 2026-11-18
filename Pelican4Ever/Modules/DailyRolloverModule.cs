@@ -167,6 +167,10 @@ namespace Pelican4Ever.Modules
                 if (farmer != null)
                 {
                     farmer.Stamina = SleepPolicy.WakeUpEnergy(outcome, farmer.MaxStamina, cfg.PenaltyEnergyFraction, farmer.Stamina);
+                    if (farmer.Stamina > 0f && farmer.exhausted.Value)
+                    {
+                        farmer.exhausted.Value = false;
+                    }
 
                     if (outcome == RolloverOutcome.Penalized)
                     {
@@ -180,9 +184,9 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
-                // Resetear contadores de comida y spa para el nuevo día y anclar el tiempo offline
+                // Resetear contadores de comida y spa para el nuevo día y actualizar anclas offline sin perder la de salud
                 record.EnsureDailyCounters(newDay);
-                record.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
+                record.UpdateOfflineAnchorsForRollover(outcome, DateTimeOffset.UtcNow);
             }
 
             worldState.LastRolloverGameDay = endedDay;

@@ -269,6 +269,8 @@
   "clock.adjusted_hours": "[时钟] 已调整 {{sign}}{{hours}} 小时。新时间：{{time}}（总偏移：{{offset}} 小时）。",
   "clock.invalid_format": "[时钟] 格式无效。有效示例：/time +2、/time -1、/time +30m、/time reset、/time set 14:00",
   "bed_logout.offline_rest": "离线休息：恢复 +{{gained}} 精力。",
+  "bed_logout.offline_rest_health": "离线休息：恢复 +{{health}} 生命值。",
+  "bed_logout.offline_rest_both": "离线休息：恢复 +{{energy}} 精力和 +{{health}} 生命值。",
   "bed_logout.host_agent_active": "休息已记录。主机代理模式已启用：服务器保持在线。",
   "bed_logout.disconnecting": "休息已记录。正在安全断开连接...",
   "rollover.warning_10min": "提示：10 分钟后农场将被保存，连接将关闭以进行日切。",

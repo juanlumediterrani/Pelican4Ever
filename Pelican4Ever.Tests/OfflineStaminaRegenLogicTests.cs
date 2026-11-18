@@ -136,5 +136,66 @@ namespace Pelican4Ever.Tests
             float result = OfflineStaminaRegenLogic.ApplyGain(currentStamina: -15f, maxStamina: 270, gained: 51f);
             Assert.Equal(36f, result);
         }
+
+        [Fact]
+        public void Health_OneHourOffline_RecoversQuarterOfMaxHealth()
+        {
+            int gain = OfflineStaminaRegenLogic.CalculateHealthGain(100, TimeSpan.FromHours(1), 4.0f);
+            Assert.Equal(25, gain);
+
+            int newHealth = OfflineStaminaRegenLogic.CalculateNewHealth(
+                currentHealth: 30,
+                maxHealth: 100,
+                offlineDuration: TimeSpan.FromHours(1),
+                fullBarHours: 4.0f);
+            Assert.Equal(55, newHealth);
+        }
+
+        [Fact]
+        public void Health_FourHoursOrMoreOffline_ClampsToMaxHealth()
+        {
+            int newHealth = OfflineStaminaRegenLogic.CalculateNewHealth(
+                currentHealth: 15,
+                maxHealth: 125,
+                offlineDuration: TimeSpan.FromHours(8),
+                fullBarHours: 4.0f);
+            Assert.Equal(125, newHealth);
+        }
+
+        [Fact]
+        public void Health_DisabledOrZeroDuration_YieldsZeroGain()
+        {
+            Assert.Equal(0, OfflineStaminaRegenLogic.CalculateHealthGain(100, TimeSpan.Zero, 4.0f));
+            Assert.Equal(0, OfflineStaminaRegenLogic.CalculateHealthGain(100, TimeSpan.FromHours(2), 0f));
+            Assert.Equal(45, OfflineStaminaRegenLogic.ApplyHealthGain(45, 100, 0));
+            Assert.Equal(100, OfflineStaminaRegenLogic.ApplyHealthGain(100, 100, 20));
+        }
+
+        [Fact]
+        public void UpdateOfflineAnchorsForRollover_PreservesHealthAnchorAndOnlyResetsStaminaWhenModified()
+        {
+            DateTimeOffset disconnectTime = new DateTimeOffset(2026, 11, 18, 1, 30, 0, TimeSpan.Zero);
+            DateTimeOffset rolloverTime = new DateTimeOffset(2026, 11, 18, 2, 0, 0, TimeSpan.Zero);
+
+            var rested = new PlayerRecord
+            {
+                LastSeenUtc = disconnectTime,
+                OfflineStaminaAnchorUtc = disconnectTime,
+                OfflineHealthAnchorUtc = disconnectTime
+            };
+            rested.UpdateOfflineAnchorsForRollover(RolloverOutcome.Rested, rolloverTime);
+            Assert.Equal(rolloverTime, rested.OfflineStaminaAnchorUtc);
+            Assert.Equal(disconnectTime, rested.OfflineHealthAnchorUtc);
+
+            var untouched = new PlayerRecord
+            {
+                LastSeenUtc = disconnectTime,
+                OfflineStaminaAnchorUtc = disconnectTime,
+                OfflineHealthAnchorUtc = DateTimeOffset.MinValue
+            };
+            untouched.UpdateOfflineAnchorsForRollover(RolloverOutcome.Untouched, rolloverTime);
+            Assert.Equal(disconnectTime, untouched.OfflineStaminaAnchorUtc);
+            Assert.Equal(disconnectTime, untouched.OfflineHealthAnchorUtc);
+        }
     }
 }

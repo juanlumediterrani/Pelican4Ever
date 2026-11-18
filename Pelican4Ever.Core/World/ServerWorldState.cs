@@ -117,7 +117,7 @@ namespace Pelican4Ever.Core.World
     {
         public const string SaveDataKey = "Pelican4Ever.ServerWorldState";
 
-        public const int CurrentSchemaVersion = 9;
+        public const int CurrentSchemaVersion = 10;
 
         public int SchemaVersion { get; set; } = CurrentSchemaVersion;
 
@@ -183,6 +183,9 @@ namespace Pelican4Ever.Core.World
 
         /// <summary>Pedidos de compra de animales por buzón pendientes de llegar a mediodía (TASK-2201).</summary>
         public List<PendingAnimalOrder> PendingAnimalOrders { get; set; } = new();
+
+        /// <summary>Mejoras de herramientas ya entregadas en paquete cuya limpieza en el cliente aún está pendiente de confirmación.</summary>
+        public Dictionary<long, PendingToolUpgradeClear> PendingToolUpgradeClears { get; set; } = new();
 
         /// <summary>Devuelve el registro del jugador, creándolo si no existe.</summary>
         public PlayerRecord GetOrCreatePlayer(long uniqueMultiplayerId, string name)
@@ -488,6 +491,14 @@ namespace Pelican4Ever.Core.World
                 changed = true;
             }
 
+            // v9 → v10: confirmación de limpieza en cliente tras entrega de mejoras de herramientas de Clint.
+            if (SchemaVersion < 10)
+            {
+                PendingToolUpgradeClears ??= new Dictionary<long, PendingToolUpgradeClear>();
+                SchemaVersion = 10;
+                changed = true;
+            }
+
             if (PendingMailItemOrders == null)
             {
                 PendingMailItemOrders = new List<PendingMailItemOrder>();
@@ -503,6 +514,12 @@ namespace Pelican4Ever.Core.World
             if (PendingAnimalOrders == null)
             {
                 PendingAnimalOrders = new List<PendingAnimalOrder>();
+                changed = true;
+            }
+
+            if (PendingToolUpgradeClears == null)
+            {
+                PendingToolUpgradeClears = new Dictionary<long, PendingToolUpgradeClear>();
                 changed = true;
             }
 

@@ -48,6 +48,7 @@ namespace Pelican4Ever.Core.Admin
         public const string HostLockdown = "host.lockdown";
         public const string HostDegraded = "host.degraded";
         public const string HostLockdownOverridden = "host.lockdown.overridden";
+        public const string HostEventResolved = "host.event.resolved";
     }
 
     /// <summary>

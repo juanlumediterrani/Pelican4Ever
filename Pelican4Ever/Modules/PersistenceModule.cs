@@ -66,6 +66,10 @@ namespace Pelican4Ever.Modules
                     {
                         hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.UtcNow;
                     }
+                    if (hostRecord.OfflineHealthAnchorUtc == DateTimeOffset.MinValue)
+                    {
+                        hostRecord.OfflineHealthAnchorUtc = DateTimeOffset.UtcNow;
+                    }
                 }
 
                 EconomyModule.PrepareFoodBuffsForSave(context);

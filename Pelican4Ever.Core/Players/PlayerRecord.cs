@@ -133,6 +133,29 @@ namespace Pelican4Ever.Core.Players
         /// <summary>Momento UTC desde el que se computa la regeneración de energía offline (se resetea al conectar o en Rollover).</summary>
         public DateTimeOffset OfflineStaminaAnchorUtc { get; set; } = DateTimeOffset.MinValue;
 
+        /// <summary>Momento UTC desde el que se computa la regeneración pasiva de salud offline (solo se consume al reconectar).</summary>
+        public DateTimeOffset OfflineHealthAnchorUtc { get; set; } = DateTimeOffset.MinValue;
+
+        /// <summary>
+        /// Actualiza las anclas offline tras procesar un rollover diario:
+        /// - Preserva <see cref="OfflineHealthAnchorUtc"/> (y la rellena desde la estamina/última vista si faltaba)
+        ///   para que la salud siga regenerando de forma continua aunque ocurra un cambio de día offline.
+        /// - Reinicia <see cref="OfflineStaminaAnchorUtc"/> únicamente cuando <see cref="SleepPolicy.WakeUpEnergy"/>
+        ///   reescribió la energía (<see cref="RolloverOutcome.Rested"/> o <see cref="RolloverOutcome.Penalized"/>).
+        /// </summary>
+        public void UpdateOfflineAnchorsForRollover(RolloverOutcome outcome, DateTimeOffset nowUtc)
+        {
+            if (OfflineHealthAnchorUtc == DateTimeOffset.MinValue)
+            {
+                OfflineHealthAnchorUtc = OfflineStaminaAnchorUtc != DateTimeOffset.MinValue
+                    ? OfflineStaminaAnchorUtc
+                    : LastSeenUtc;
+            }
+
+            if (outcome != RolloverOutcome.Untouched)
+                OfflineStaminaAnchorUtc = nowUtc;
+        }
+
         /// <summary>
         /// Último día de juego en el que el jugador estuvo activo ANTES de la ventana de madrugador.
         /// Permite distinguir a un madrugador recién conectado de quien lleva jugando toda la noche o abandonó su sesión previa.

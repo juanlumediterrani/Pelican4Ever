@@ -269,6 +269,8 @@
   "clock.adjusted_hours": "[Reloj] Ajustado {{sign}}{{hours}}h. Nueva hora: {{time}} (Offset total: {{offset}}h).",
   "clock.invalid_format": "[Reloj] Formato no válido. Ejemplos válidos: /time +2, /time -1, /time +30m, /time reset, /time set 14:00",
   "bed_logout.offline_rest": "Descanso offline: +{{gained}} energía recuperada.",
+  "bed_logout.offline_rest_health": "Descanso offline: +{{health}} salud recuperada.",
+  "bed_logout.offline_rest_both": "Descanso offline: +{{energy}} energía y +{{health}} salud recuperadas.",
   "bed_logout.host_agent_active": "Descanso registrado. Modo anfitrión agente activo: el servidor permanece en línea.",
   "bed_logout.disconnecting": "Descanso registrado. Desconectando de forma segura...",
   "rollover.warning_10min": "Aviso: en 10 minutos se guardará la granja y se cerrarán las conexiones para el cambio de fecha.",

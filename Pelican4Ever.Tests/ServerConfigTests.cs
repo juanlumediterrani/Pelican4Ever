@@ -104,14 +104,17 @@ public class ServerConfigTests
         Assert.Equal("4.1.0", config.MinimumSmapiVersion);
         Assert.False(config.AllowUnverifiedGameVersion);
         Assert.Empty(config.LockdownOverride);
+        Assert.True(config.AutoResolveHostEvents);
+        Assert.Equal(5, config.HostEventAutoResolveDelaySeconds);
         Assert.Empty(config.Validate());
 
-        var negative = new ServerConfig { CheckpointRetention = -1, BackupRetentionDays = -1, CheckpointMaxDurationMs = -1, HangThresholdSeconds = -1 };
+        var negative = new ServerConfig { CheckpointRetention = -1, BackupRetentionDays = -1, CheckpointMaxDurationMs = -1, HangThresholdSeconds = -1, HostEventAutoResolveDelaySeconds = 0 };
         var errors = negative.Validate();
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.CheckpointRetention)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.BackupRetentionDays)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.CheckpointMaxDurationMs)));
         Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.HangThresholdSeconds)));
+        Assert.Contains(errors, e => e.Contains(nameof(ServerConfig.HostEventAutoResolveDelaySeconds)));
     }
 
     [Fact]

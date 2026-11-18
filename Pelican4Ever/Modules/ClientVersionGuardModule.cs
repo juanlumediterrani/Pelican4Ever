@@ -2,8 +2,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Pelican4Ever.Core.Admin;
 using HarmonyLib;
+using Lidgren.Network;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Networking;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -75,10 +76,52 @@ namespace Pelican4Ever.Modules
                 return;
 
             var peers = (IDictionary)AccessTools.Property(__instance.GetType(), "Peers").GetValue(__instance)!;
-            bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == message.FarmerID);
-            if (StalePeerContext.Remove(peers, message.FarmerID, isOnline))
+            bool inOnlineFarmers = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == message.FarmerID);
+            var multiplayer = AccessTools.Field(typeof(Game1), "multiplayer")?.GetValue(null) as Multiplayer;
+            bool isDisconnecting = multiplayer != null && multiplayer.isDisconnecting(message.FarmerID);
+            bool hasActiveTransport = HasActiveTransportPeer(message.FarmerID);
+
+            if (StalePeerContext.RemoveIfStale(peers, message.FarmerID, inOnlineFarmers, isDisconnecting, hasActiveTransport))
+            {
                 Framework.ModContext.Current.Monitor.Log(
-                    $"[ClientVersionGuard] Contexto obsoleto eliminado para reconexión de {message.FarmerID}.", LogLevel.Debug);
+                    $"[ClientVersionGuard] Contexto obsoleto eliminado para reconexión de {message.FarmerID} (online={inOnlineFarmers}, disconnecting={isDisconnecting}, transport={hasActiveTransport}).",
+                    LogLevel.Debug);
+            }
+        }
+
+        private static bool HasActiveTransportPeer(long playerId)
+        {
+            if (Game1.server is not GameServer gs)
+                return true;
+
+            try
+            {
+                if (AccessTools.Field(typeof(GameServer), "servers")?.GetValue(gs) is not IEnumerable servers)
+                    return true;
+
+                bool sawLidgren = false;
+                foreach (object? srv in servers)
+                {
+                    if (srv is not LidgrenServer ls)
+                        continue;
+
+                    sawLidgren = true;
+                    if (AccessTools.Field(typeof(LidgrenServer), "peers")?.GetValue(ls) is Bimap<long, NetConnection> lidgrenPeers
+                        && lidgrenPeers.ContainsLeft(playerId))
+                    {
+                        NetConnection conn = lidgrenPeers.GetRight(playerId);
+                        if (conn != null && conn.Status == NetConnectionStatus.Connected)
+                            return true;
+                    }
+                }
+
+                // Si no hay LidgrenServer (p. ej. transporte Steam/GOG puro), no asumir fantasma.
+                return !sawLidgren;
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         private void OnPeerContextReceived(object? sender, PeerContextReceivedEventArgs e)

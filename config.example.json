@@ -82,6 +82,8 @@
   "AutoHostSaveName": "",
   "RestartExitsProcess": false,
   "HeadlessRendering": true,
+  "AutoResolveHostEvents": true,
+  "HostEventAutoResolveDelaySeconds": 5,
   "CheckpointIntervalMinutes": 0,
   "EnableTestCommands": false,
   "CheckpointDebugMode": false,

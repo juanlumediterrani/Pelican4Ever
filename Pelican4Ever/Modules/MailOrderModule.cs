@@ -125,6 +125,7 @@ namespace Pelican4Ever.Modules
             ResetLocalSessions();
             if (Context.IsMainPlayer)
             {
+                ReconcilePendingToolUpgradeClearsOnHost();
                 TryDeliverDueOrders();
                 BroadcastOrdersSync();
             }
@@ -143,6 +144,7 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer)
                 return;
 
+            ReconcilePendingToolUpgradeClearsOnHost();
             TryDeliverDueOrders();
             BroadcastOrdersSync();
         }
@@ -190,6 +192,11 @@ namespace Pelican4Ever.Modules
             if (Context.IsMainPlayer && Context.IsWorldReady)
             {
                 SendOrdersSyncTo(e.Peer.PlayerID);
+                if (context != null && context.WorldState.PendingToolUpgradeClears.TryGetValue(e.Peer.PlayerID, out PendingToolUpgradeClear? pending))
+                {
+                    ReconcilePendingToolUpgradeClearsOnHost();
+                    SendToolUpgradeDeliveredToClient(e.Peer.PlayerID, pending.QualifiedToolId, force: true, knownOnline: true);
+                }
             }
         }
 
@@ -738,6 +745,27 @@ namespace Pelican4Ever.Modules
                         {
                             Game1.addHUDMessage(new HUDMessage(res.Message, res.Accepted ? HUDMessage.newQuest_type : HUDMessage.error_type));
                         }
+                    }
+                    break;
+
+                case MailOrderMessages.ToolUpgradeStarted:
+                    if (Context.IsMainPlayer)
+                    {
+                        HandleToolUpgradeStartedOnHost(e.FromPlayerID, e.ReadAs<ToolUpgradeStartedPayload>());
+                    }
+                    break;
+
+                case MailOrderMessages.ToolUpgradeDelivered:
+                    if (!Context.IsMainPlayer && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
+                    {
+                        HandleToolUpgradeDeliveredOnClient(e.ReadAs<ToolUpgradeDeliveredPayload>());
+                    }
+                    break;
+
+                case MailOrderMessages.ToolUpgradeClearAck:
+                    if (Context.IsMainPlayer)
+                    {
+                        HandleToolUpgradeClearAckOnHost(e.FromPlayerID, e.ReadAs<ToolUpgradeClearAckPayload>());
                     }
                     break;
             }

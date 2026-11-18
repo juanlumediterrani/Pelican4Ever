@@ -65,6 +65,65 @@ namespace Pelican4Ever.Core.Economy
         public int DeliveryTimeOfDay { get; set; } = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay;
     }
 
+    /// <summary>
+    /// Registra una mejora de herramienta ya materializada en paquete cuyo estado local en el cliente
+    /// aún está pendiente de limpieza/confirmación, evitando entregas duplicadas tras desincronizaciones o reinicios.
+    /// </summary>
+    public sealed class PendingToolUpgradeClear
+    {
+        public long PlayerId { get; set; }
+        public string QualifiedToolId { get; set; } = string.Empty;
+        public int DeliveredAtGameDay { get; set; }
+    }
+
+    public static class ToolUpgradeDeliveryLogic
+    {
+        /// <summary>
+        /// Determina si procede empaquetar una herramienta mejorada en la granja del jugador.
+        /// Evita entregas repetidas mientras el cliente o <c>farmhandData</c> aún conservan la misma mejora pendiente de limpiar.
+        /// </summary>
+        public static bool ShouldDeliverToolUpgrade(
+            long playerId,
+            string? qualifiedToolId,
+            int daysLeftForUpgrade,
+            IReadOnlyDictionary<long, PendingToolUpgradeClear>? pendingClears)
+        {
+            if (string.IsNullOrWhiteSpace(qualifiedToolId) || daysLeftForUpgrade > 0)
+                return false;
+
+            if (pendingClears != null
+                && pendingClears.TryGetValue(playerId, out PendingToolUpgradeClear? pending)
+                && pending != null
+                && string.Equals(pending.QualifiedToolId, qualifiedToolId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Determina si el cliente local debe limpiar su <c>toolBeingUpgraded</c> tras la confirmación del host.
+        /// Nunca borra una mejora nueva (<paramref name="localDaysLeft"/> &gt; 0) ni de otro identificador distinto.
+        /// </summary>
+        public static bool ShouldClearClientLocalTool(
+            string? localQualifiedToolId,
+            int localDaysLeft,
+            string? expectedQualifiedToolId)
+        {
+            if (string.IsNullOrWhiteSpace(localQualifiedToolId) || localDaysLeft > 0)
+                return false;
+
+            if (!string.IsNullOrWhiteSpace(expectedQualifiedToolId)
+                && !string.Equals(localQualifiedToolId, expectedQualifiedToolId, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            return true;
+        }
+    }
+
     public static class MailOrderScheduleLogic
     {
         public const int DefaultDeliveryTimeOfDay = 1200;
