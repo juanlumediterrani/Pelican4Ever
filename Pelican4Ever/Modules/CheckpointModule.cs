@@ -350,6 +350,8 @@ namespace Pelican4Ever.Modules
             CheckpointMetadata? previousCheckpoint = context.WorldState.LastCheckpoint;
             try
             {
+                CommunityMarketModule.CompleteMarketDeposits();
+                CommunityMarketModule.CompleteObservedDeliveries();
                 int cloned = 0;
                 long estimatedCloneBytes = 0;
                 if (Game1.otherFarmers.Count > 0)
@@ -545,9 +547,19 @@ namespace Pelican4Ever.Modules
 
         private int CloneLiveFarmhandsIntoSaveData(out long estimatedCloneBytes)
         {
+            var roots = Game1.otherFarmers.Roots.ToList();
+            foreach (var pair in roots)
+            {
+                Farmer? farmer = pair.Value.TargetValue;
+                if (farmer == null || !float.IsFinite(farmer.Stamina)
+                    || farmer.experiencePoints.Any(xp => xp < 0)
+                    || farmer.Items.Any(item => item != null && item.Stack <= 0))
+                    throw new InvalidOperationException($"El granjero {pair.Key} contiene datos inválidos; se conserva el último checkpoint.");
+            }
+
             int cloned = 0;
             estimatedCloneBytes = 0L;
-            foreach (KeyValuePair<long, NetRoot<Farmer>> pair in Game1.otherFarmers.Roots.ToList())
+            foreach (KeyValuePair<long, NetRoot<Farmer>> pair in roots)
             {
                 if (pair.Value is not NetFarmerRoot root)
                     throw new InvalidOperationException($"No se puede clonar el farmhand {pair.Key}; se cancela el checkpoint.");

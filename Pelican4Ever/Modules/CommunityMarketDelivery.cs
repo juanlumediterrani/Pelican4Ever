@@ -77,6 +77,8 @@ namespace Pelican4Ever.Modules
                     context.Helper.Multiplayer.SendMessage(context.WorldState.MarketListings, MarketMessages.SyncMarketState,
                         new[] { context.Manifest.UniqueID }, new[] { e.FromPlayerID });
                     SendPendingDeliveries(e.FromPlayerID);
+                    foreach (MarketListing listing in context.WorldState.MarketListings.Where(l => l.SellerId == e.FromPlayerID && l.DepositSlot.HasValue))
+                        SendMarketDeposit(listing);
                 }
                 return true;
             }
@@ -84,17 +86,6 @@ namespace Pelican4Ever.Modules
             {
                 if (!Context.IsMainPlayer && Context.IsWorldReady && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
                     ReceiveDelivery(e.ReadAs<PendingMarketDelivery>());
-                return true;
-            }
-            if (e.Type == MarketMessages.DeliveryAcknowledgement)
-            {
-                if (Context.IsMainPlayer && Context.IsWorldReady)
-                {
-                    MarketDeliveryAcknowledgement reply = e.ReadAs<MarketDeliveryAcknowledgement>();
-                    if (!reply.Accepted && context.WorldState.PendingMarketDeliveries.TryGetValue(reply.DeliveryId, out PendingMarketDelivery? delivery)
-                        && delivery.PlayerId == e.FromPlayerID)
-                        RejectDelivery(delivery);
-                }
                 return true;
             }
             return false;
@@ -120,22 +111,17 @@ namespace Pelican4Ever.Modules
             // Una oferta rechazada nunca debe aplicarse después por un mensaje antiguo o un reintento.
             if (!accepted)
                 Game1.player.modData[key] = "0";
-            context.Helper.Multiplayer.SendMessage(new MarketDeliveryAcknowledgement
-            {
-                DeliveryId = delivery.DeliveryId, Accepted = accepted
-            }, MarketMessages.DeliveryAcknowledgement, new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
             if (!accepted)
                 Game1.addHUDMessage(new HUDMessage(I18n.Get("market.delivery_inventory_full"), HUDMessage.error_type));
         }
 
-        private static void CompleteObservedDeliveries()
+        internal static void CompleteObservedDeliveries()
         {
             if (context == null || !Context.IsWorldReady || !Context.IsMainPlayer) return;
             foreach (PendingMarketDelivery delivery in context.WorldState.PendingMarketDeliveries.Values.ToArray())
             {
                 Farmer? recipient = Game1.GetPlayer(delivery.PlayerId);
-                // Un ACK puede adelantarse al delta de inventario. Esperar al recibo sincronizado evita
-                // confirmar una compra cuyo inventario aún no aparecería en el siguiente checkpoint.
+                // Esperar al recibo sincronizado con el inventario antes de liquidar la compra.
                 if (recipient == null || !recipient.modData.TryGetValue(MarketDeliveryPolicy.ReceiptKey(delivery.DeliveryId), out string? receipt)) continue;
                 if (receipt == "0")
                 {

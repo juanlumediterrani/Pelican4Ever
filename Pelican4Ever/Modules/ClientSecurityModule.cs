@@ -1805,7 +1805,8 @@ namespace Pelican4Ever.Modules
                 Name,
                 PatchCriticality.Security,
                 AccessTools.Method(typeof(Client), nameof(Client.sendPlayerIntroduction)),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction)));
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction)),
+                finalizer: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Finalizer_Client_SendPlayerIntroduction)));
 
             // 2. Override de getUserID en las implementaciones concretas de Client (IP directa, Steam y GOG Galaxy).
             var patchedGetUserID = new HashSet<MethodBase>();
@@ -1930,6 +1931,8 @@ namespace Pelican4Ever.Modules
             if (Game1.player == null)
                 return;
 
+            Game1.player.modData[ClientVersionGuardModule.ProtocolKey] = ClientVersionGuardModule.ProtocolRevision;
+
             // Si el peón seleccionado ya tiene asignado nuestro token de cliente legado, lo preservamos
             // para permitir el juego transparente con servidores que aún no han completado la migración de ranura.
             if (!string.IsNullOrEmpty(ClientIdentity.CurrentToken) &&
@@ -1946,6 +1949,11 @@ namespace Pelican4Ever.Modules
             {
                 Game1.player.userID.Value = publicId;
             }
+        }
+
+        public static void Finalizer_Client_SendPlayerIntroduction()
+        {
+            Game1.player?.modData.Remove(ClientVersionGuardModule.ProtocolKey);
         }
 
         public static bool Prefix_Client_GetUserID(ref string __result)
@@ -2383,6 +2391,16 @@ namespace Pelican4Ever.Modules
             if (farmer?.Value == null)
             {
                 __instance.sendAvailableFarmhands(userId, connectionId, sendMessage);
+                return false;
+            }
+
+            bool compatible = farmer.Value.modData.TryGetValue(ClientVersionGuardModule.ProtocolKey, out string? protocol)
+                && protocol == ClientVersionGuardModule.ProtocolRevision;
+            farmer.Value.modData.Remove(ClientVersionGuardModule.ProtocolKey);
+            if (context?.Config.RequireClientMod == true && !compatible)
+            {
+                context.Monitor.Log("[ClientVersionGuard] Cliente rechazado: actualiza las DLL del mod y reinicia Stardew.", LogLevel.Warn);
+                DisconnectConnectionById(connectionId, "Se requiere actualizar Pelican 4Ever a la versión del servidor.");
                 return false;
             }
 

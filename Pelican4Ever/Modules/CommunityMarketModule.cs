@@ -29,6 +29,7 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
             RegisterDeliveries(ctx);
+            ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += (_, _) => CompleteMarketDeposits();
 
             ctx.Helper.Events.Input.ButtonPressed += OnButtonPressed;
             ctx.Helper.Events.GameLoop.GameLaunched += OnGameLaunched;
@@ -157,7 +158,7 @@ namespace Pelican4Ever.Modules
 
             long myId = Game1.player.UniqueMultiplayerID;
             List<MarketListing> activeListings = context.WorldState.MarketListings
-                .Where(l => !l.IsSold && l.SellerId != myId)
+                .Where(l => l.IsReserved && !l.IsSold && l.SellerId != myId)
                 .OrderByDescending(l => l.CreatedAtUtc)
                 .Take(5)
                 .ToList();
@@ -292,33 +293,24 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
+            int slot = Game1.player.Items.IndexOf(item);
+            if (slot < 0)
+                return;
             var payload = new CreateListingPayload
             {
+                RequestId = Guid.NewGuid().ToString("N"),
+                InventorySlot = slot,
                 ItemId = item.QualifiedItemId,
-                ItemDisplayName = item.DisplayName,
                 Stack = item.Stack,
                 Quality = item.Quality,
                 PriceGold = price
             };
 
-            // Retirar ítem del inventario del jugador
-            Game1.player.removeItemFromInventory(item);
-
             if (Context.IsMainPlayer)
-            {
-                HandleCreateListing(Game1.player.UniqueMultiplayerID, Game1.player.Name, payload);
-            }
+                HandleCreateListing(Game1.player.UniqueMultiplayerID, payload);
             else
-            {
-                context.Helper.Multiplayer.SendMessage(
-                    payload,
-                    MarketMessages.CreateListingRequest,
-                    new[] { context.Manifest.UniqueID },
-                    new[] { Game1.MasterPlayer.UniqueMultiplayerID }
-                );
-            }
-
-            Game1.addHUDMessage(new HUDMessage(I18n.Get("market.listing_published", new { item = payload.ItemDisplayName, price }), HUDMessage.newQuest_type));
+                context.Helper.Multiplayer.SendMessage(payload, MarketMessages.CreateListingRequest,
+                    new[] { context.Manifest.UniqueID }, new[] { Game1.MasterPlayer.UniqueMultiplayerID });
         }
 
         private static void ShowManageMyListingsMenu()
@@ -327,7 +319,7 @@ namespace Pelican4Ever.Modules
 
             long myId = Game1.player.UniqueMultiplayerID;
             List<MarketListing> myListings = context.WorldState.MarketListings
-                .Where(l => !l.IsSold && l.SellerId == myId)
+                .Where(l => l.IsReserved && !l.IsSold && l.SellerId == myId)
                 .ToList();
 
             if (myListings.Count == 0)
@@ -394,9 +386,7 @@ namespace Pelican4Ever.Modules
                     var payload = e.ReadAs<CreateListingPayload>();
                     if (payload != null)
                     {
-                        Farmer? seller = Game1.GetPlayer(e.FromPlayerID);
-                        string sellerName = seller?.Name ?? "Vecino";
-                        HandleCreateListing(e.FromPlayerID, sellerName, payload);
+                        HandleCreateListing(e.FromPlayerID, payload);
                     }
                 }
                 else if (e.Type == MarketMessages.BuyListingRequest)
@@ -417,6 +407,17 @@ namespace Pelican4Ever.Modules
                 }
             }
 
+            if (!Context.IsMainPlayer && Context.IsWorldReady && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
+            {
+                if (e.Type == MarketMessages.ReserveListing)
+                    ApplyMarketDeposit(e.ReadAs<MarketListing>());
+                else if (e.Type == MarketMessages.ListingRejected)
+                    ShowListingRejected();
+                else if (e.Type == MarketMessages.ListingPublished && e.ReadAs<MarketListing>() is { } listing
+                    && listing.SellerId == Game1.player.UniqueMultiplayerID)
+                    ShowListingPublished(listing);
+            }
+
             if (!Context.IsMainPlayer && Context.IsWorldReady && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID && e.Type == MarketMessages.SyncMarketState)
             {
                 var syncedList = e.ReadAs<List<MarketListing>>();
@@ -427,34 +428,12 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void HandleCreateListing(long sellerId, string sellerName, CreateListingPayload payload)
-        {
-            if (context == null) return;
-
-            var newListing = new MarketListing
-            {
-                SellerId = sellerId,
-                SellerName = sellerName,
-                ItemId = payload.ItemId,
-                ItemDisplayName = payload.ItemDisplayName,
-                Stack = payload.Stack,
-                Quality = payload.Quality,
-                PriceGold = payload.PriceGold,
-                CreatedAtUtc = DateTimeOffset.UtcNow,
-                IsSold = false
-            };
-
-            context.WorldState.MarketListings.Add(newListing);
-            BroadcastMarketSync();
-            context.Monitor.Log($"[CommunityMarketModule] Nueva oferta '{newListing.ItemDisplayName}' creada por {sellerName} ({sellerId}) por {newListing.PriceGold}g.", LogLevel.Info);
-        }
-
         private static void HandleBuyListing(long buyerId, string listingId)
         {
             if (context == null) return;
 
             MarketListing? listing = context.WorldState.MarketListings.FirstOrDefault(l => l.ListingId == listingId);
-            if (listing == null || listing.IsSold || HasPendingDelivery(listingId))
+            if (listing?.IsReserved != true || listing.IsSold || HasPendingDelivery(listingId))
                 return;
 
             Farmer? buyer = Game1.GetPlayer(buyerId);
@@ -507,7 +486,7 @@ namespace Pelican4Ever.Modules
             if (context == null) return;
 
             MarketListing? listing = context.WorldState.MarketListings.FirstOrDefault(l => l.ListingId == listingId);
-            if (listing == null || HasPendingDelivery(listingId)) return;
+            if (listing?.IsReserved != true || HasPendingDelivery(listingId)) return;
 
             var result = CommunityMarketLogic.CancelListing(listing, requesterId);
             if (result.Status != MarketTransactionStatus.Success)

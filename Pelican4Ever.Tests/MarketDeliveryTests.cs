@@ -9,6 +9,20 @@ namespace Pelican4Ever.Tests;
 public class MarketDeliveryTests
 {
     [Theory]
+    [InlineData(true, 20, true)]
+    [InlineData(false, 20, false)]
+    [InlineData(true, 25, false)]
+    [InlineData(true, 19, false)]
+    public void DepositRequiresTheObservedRemovalAndCannotBeConfirmedTwice(bool slotEmpty, int remaining, bool expected)
+    {
+        var listing = new MarketListing { DepositSlot = 3, DepositCountBefore = 25, Stack = 5 };
+        Assert.Equal(expected, CommunityMarketLogic.IsDepositObserved(listing, slotEmpty, remaining));
+
+        listing.IsReserved = true;
+        Assert.False(CommunityMarketLogic.IsDepositObserved(listing, true, 20));
+    }
+
+    [Theory]
     [InlineData(10, 10, false, true, MarketDeliveryDecision.Receive)]
     [InlineData(10, 10, false, false, MarketDeliveryDecision.InventoryFull)]
     [InlineData(10, 10, true, true, MarketDeliveryDecision.AlreadyReceived)]

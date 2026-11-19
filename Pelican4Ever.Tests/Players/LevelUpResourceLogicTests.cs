@@ -12,6 +12,21 @@ namespace Pelican4Ever.Tests.Players
             Assert.True(LevelUpResourceLogic.ShouldPreserveResources(showingEndOfNightStuff: false));
         }
 
+        [Theory]
+        [InlineData(1, 0, 32.5f, 270f, 270, 270, true)]
+        [InlineData(2, 1, -12f, 270f, 270, 270, true)]
+        [InlineData(1, 1, 32.5f, 270f, 270, 270, false)]
+        [InlineData(1, 0, 32.5f, 62.5f, 270, 270, false)]
+        [InlineData(1, 0, 32.5f, 304f, 270, 304, false)]
+        [InlineData(1, 0, 270f, 270f, 270, 270, false)]
+        public void RemoteRefill_RequiresACompletedLevelAndAJumpToFull(
+            int previousPending, int pending, float previousStamina, float stamina,
+            int previousMax, int max, bool expected)
+        {
+            Assert.Equal(expected, LevelUpResourceLogic.IsRemoteLevelUpRefill(
+                previousPending, pending, previousStamina, stamina, previousMax, max));
+        }
+
         [Fact]
         public void ResolveHealth_KeepsMissingHealth_WhenMaxHealthUnchanged()
         {

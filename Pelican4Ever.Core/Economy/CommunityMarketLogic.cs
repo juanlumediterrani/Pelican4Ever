@@ -30,6 +30,11 @@ namespace Pelican4Ever.Core.Economy
         public const int MinPrice = 1;
         public const int MaxPrice = 999999;
 
+        public static bool IsDepositObserved(MarketListing listing, bool slotEmpty, long currentCount) =>
+            listing.DepositSlot.HasValue && !listing.IsReserved && slotEmpty
+            && listing.Stack > 0 && listing.DepositCountBefore >= listing.Stack
+            && currentCount == listing.DepositCountBefore - listing.Stack;
+
         /// <summary>
         /// Comprueba si la baldosa pulsada en la ubicación actual corresponde a un punto de interacción del Mercado Vecinal.
         /// Se ubica en la Plaza Central de Pelican Town (fuente) o en la Plaza Central de la Granja Host.
