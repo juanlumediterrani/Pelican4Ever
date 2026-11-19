@@ -171,6 +171,40 @@ namespace Pelican4Ever.Tests
             Assert.Equal(100, OfflineStaminaRegenLogic.ApplyHealthGain(100, 100, 20));
         }
 
+        [Theory]
+        [InlineData(50f, 118f)]
+        [InlineData(250f, 270f)]
+        public void Reconnect_AppliesElapsedRecoveryToTheLocalBarAndPreservesItThroughLevelUp(float localStamina, float expectedStamina)
+        {
+            var reconnectedAt = new DateTimeOffset(2026, 11, 19, 12, 0, 0, TimeSpan.Zero);
+            var record = new PlayerRecord { LastSeenUtc = reconnectedAt.AddHours(-1) };
+
+            var recovery = OfflineStaminaRegenLogic.CalculateRecoveryGains(record, reconnectedAt, 270, 100, 4f);
+            float recoveredStamina = OfflineStaminaRegenLogic.ApplyGain(localStamina, 270, recovery.Stamina);
+            var beforeLevelUp = new LevelUpResourceLogic.ResourceSnapshot(Health: 60, MaxHealth: 100, Stamina: recoveredStamina);
+
+            Assert.Equal(expectedStamina, LevelUpResourceLogic.ResolveStamina(beforeLevelUp, 270));
+            Assert.Equal(25, recovery.Health);
+        }
+
+        [Fact]
+        public void Reconnect_UsesSeparateAnchorsAndKeepsTheShortReconnectThreshold()
+        {
+            var reconnectedAt = new DateTimeOffset(2026, 11, 19, 12, 0, 0, TimeSpan.Zero);
+            var record = new PlayerRecord
+            {
+                LastSeenUtc = reconnectedAt.AddHours(-4),
+                OfflineStaminaAnchorUtc = reconnectedAt.AddSeconds(-30),
+                OfflineHealthAnchorUtc = reconnectedAt.AddHours(-2)
+            };
+
+            var recovery = OfflineStaminaRegenLogic.CalculateRecoveryGains(record, reconnectedAt, 270, 100, 4f);
+
+            Assert.Equal(0, recovery.Stamina);
+            Assert.Equal(50, recovery.Health);
+            Assert.Equal(default, OfflineStaminaRegenLogic.CalculateRecoveryGains(new PlayerRecord(), reconnectedAt, 270, 100, 4f));
+        }
+
         [Fact]
         public void UpdateOfflineAnchorsForRollover_PreservesHealthAnchorAndOnlyResetsStaminaWhenModified()
         {

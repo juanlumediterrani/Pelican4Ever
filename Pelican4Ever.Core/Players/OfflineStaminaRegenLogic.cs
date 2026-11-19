@@ -8,6 +8,38 @@ namespace Pelican4Ever.Core.Players
     /// </summary>
     public static class OfflineStaminaRegenLogic
     {
+        public readonly record struct RecoveryGains(int Stamina, int Health);
+
+        /// <summary>Calcula cuánto puede recuperar el jugador al volver. Cada barra limita la ganancia al aplicarla.</summary>
+        public static RecoveryGains CalculateRecoveryGains(
+            PlayerRecord record,
+            DateTimeOffset nowUtc,
+            int maxStamina,
+            int maxHealth,
+            float fullBarHours)
+        {
+            DateTimeOffset staminaAnchor = record.OfflineStaminaAnchorUtc != DateTimeOffset.MinValue
+                ? record.OfflineStaminaAnchorUtc
+                : record.LastSeenUtc;
+            DateTimeOffset healthAnchor = record.OfflineHealthAnchorUtc != DateTimeOffset.MinValue
+                ? record.OfflineHealthAnchorUtc
+                : staminaAnchor;
+
+            TimeSpan staminaDuration = GetOfflineDuration(staminaAnchor, nowUtc);
+            TimeSpan healthDuration = GetOfflineDuration(healthAnchor, nowUtc);
+            return new RecoveryGains(
+                (int)Math.Round(CalculateStaminaGain(maxStamina, staminaDuration, fullBarHours)),
+                CalculateHealthGain(maxHealth, healthDuration, fullBarHours));
+        }
+
+        private static TimeSpan GetOfflineDuration(DateTimeOffset anchor, DateTimeOffset nowUtc)
+        {
+            TimeSpan duration = nowUtc - anchor;
+            return anchor != DateTimeOffset.MinValue && duration > TimeSpan.FromSeconds(30)
+                ? duration
+                : TimeSpan.Zero;
+        }
+
         private static float CalculateLinearGain(
             int maxValue,
             TimeSpan offlineDuration,
