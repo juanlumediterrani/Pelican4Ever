@@ -41,6 +41,7 @@ namespace Pelican4Ever.Modules
         private static bool hasCheckedLoginLevelUps;
         private static Point? lastPresentedLevel;
         private static readonly System.Reflection.FieldInfo? netStaminaField = AccessTools.Field(typeof(Farmer), "netStamina");
+        private static readonly Dictionary<long, (float Ceiling, long ExpiresAt)> restStaminaCeilings = new();
 
         public string Name => "BedLogout";
 
@@ -79,6 +80,7 @@ namespace Pelican4Ever.Modules
             pendingOfflineHealthGain = 0;
             pendingBedLogoutPayload = null;
             pendingRestConfirmation = null;
+            restStaminaCeilings.Clear();
             isBedLogoutPendingAfterLevels = false;
             isHostRestPendingAfterLevels = false;
             hasCheckedLoginLevelUps = false;
@@ -369,6 +371,8 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer || context == null)
                 return;
 
+            restStaminaCeilings.Remove(e.Peer.PlayerID);
+
             string playerName = Game1.GetPlayer(e.Peer.PlayerID)?.Name
                 ?? (context.WorldState.Players.TryGetValue(e.Peer.PlayerID, out var rec) ? rec.PlayerName : string.Empty);
 
@@ -378,6 +382,7 @@ namespace Pelican4Ever.Modules
                 record.LastSeenUtc = now;
                 record.OfflineStaminaAnchorUtc = now;
                 record.OfflineHealthAnchorUtc = now;
+
                 record.CurrentSessionStartUtc = DateTimeOffset.MinValue;
             }
 
@@ -434,6 +439,9 @@ namespace Pelican4Ever.Modules
                 record.LastActiveGameDay = restDay;
                 record.OfflineStaminaAnchorUtc = now;
                 record.OfflineHealthAnchorUtc = now;
+
+                if (netStaminaField?.GetValue(sleepingFarmer) is NetFloat stamina && float.IsFinite(stamina.TargetValue))
+                    restStaminaCeilings[playerId] = (stamina.TargetValue, Environment.TickCount64 + 10_000);
 
                 Point bedSpot = bed.GetBedSpot();
                 sleepingFarmer.lastSleepLocation.Value = locationName;
@@ -526,10 +534,16 @@ namespace Pelican4Ever.Modules
                     netStaminaField == null ? null : AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.processIncomingMessage)),
                     prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_RemoteFarmerDelta)),
                     postfix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Postfix_RemoteFarmerDelta)));
+                context.Patch(
+                    "Multiplayer.saveFarmhand (rest stamina)",
+                    Name,
+                    PatchCriticality.Integrity,
+                    AccessTools.Method(typeof(Multiplayer), "saveFarmhand", new[] { typeof(NetFarmerRoot) }),
+                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_SaveFarmhand)));
             }
         }
 
-        public readonly record struct RemoteStaminaSnapshot(Farmer Farmer, NetFloat StaminaField, int PendingLevels, float Stamina, int MaxStamina);
+        public readonly record struct RemoteStaminaSnapshot(NetFarmerRoot Root, int PendingLevels, float Stamina, int MaxStamina);
 
         public static void Prefix_RemoteFarmerDelta(IncomingMessage msg, out RemoteStaminaSnapshot? __state)
         {
@@ -540,33 +554,64 @@ namespace Pelican4Ever.Modules
                 || BinaryPrimitives.ReadInt64LittleEndian(msg.Data) != msg.FarmerID)
                 return;
 
-            Farmer? farmer = Game1.GetPlayer(msg.FarmerID, onlyOnline: true);
-            if (farmer == null || farmer == Game1.player
+            if (!Game1.otherFarmers.Roots.TryGetValue(msg.FarmerID, out var root) || root is not NetFarmerRoot farmerRoot
+                || farmerRoot.TargetValue is not Farmer farmer || farmer == Game1.player
                 || netStaminaField?.GetValue(farmer) is not NetFloat stamina)
                 return;
 
             // El paquete de Stardew contiene tanto la retirada del nivel pendiente como el relleno.
-            __state = new RemoteStaminaSnapshot(farmer, stamina, farmer.newLevels.Count, stamina.TargetValue, farmer.maxStamina.TargetValue);
+            __state = new RemoteStaminaSnapshot(farmerRoot, farmer.newLevels.Count, stamina.TargetValue, farmer.maxStamina.TargetValue);
         }
 
         public static void Postfix_RemoteFarmerDelta(RemoteStaminaSnapshot? __state)
         {
-            if (__state is not { } before)
+            if (__state is not { } before || before.Root.TargetValue is not Farmer farmer
+                || netStaminaField?.GetValue(farmer) is not NetFloat stamina)
                 return;
 
-            float receivedStamina = before.StaminaField.TargetValue;
+            float receivedStamina = stamina.TargetValue;
             bool invalidStamina = !float.IsFinite(receivedStamina);
             bool levelUpRefill = !Game1.showingEndOfNightStuff && LevelUpResourceLogic.IsRemoteLevelUpRefill(
-                before.PendingLevels, before.Farmer.newLevels.Count, before.Stamina, receivedStamina,
-                before.MaxStamina, before.Farmer.maxStamina.TargetValue);
-            if (!invalidStamina && !levelUpRefill)
+                before.PendingLevels, farmer.newLevels.Count, before.Stamina, receivedStamina,
+                before.MaxStamina, farmer.maxStamina.TargetValue);
+            if (invalidStamina || levelUpRefill)
+            {
+                RestoreRemoteStamina(stamina, before.Stamina);
+                context?.Monitor.Log($"[BedLogoutModule] Esfuerzo rechazado para {farmer.Name}: {receivedStamina:F1} → {before.Stamina:F1} ({(invalidStamina ? "valor inválido" : "relleno por nivel")}).", LogLevel.Info);
+            }
+
+            PreserveRestStamina(farmer);
+        }
+
+        public static void Prefix_SaveFarmhand(NetFarmerRoot farmhand) => PreserveRestStamina(farmhand.TargetValue);
+
+        internal static void PreserveRestStamina(Farmer? farmer)
+        {
+            if (context?.IsModEnabled != true || farmer == null
+                || !restStaminaCeilings.TryGetValue(farmer.UniqueMultiplayerID, out var rest))
                 return;
 
-            // Descarta también el objetivo de interpolación antes de guardar el granjero.
-            before.StaminaField.CancelInterpolation();
-            before.StaminaField.MarkClean();
-            before.StaminaField.Set(before.Stamina);
-            context?.Monitor.Log($"[BedLogoutModule] Esfuerzo rechazado para {before.Farmer.Name}: {receivedStamina:F1} → {before.Stamina:F1} ({(invalidStamina ? "valor inválido" : "relleno por nivel")}).", LogLevel.Info);
+            if (Environment.TickCount64 >= rest.ExpiresAt)
+            {
+                restStaminaCeilings.Remove(farmer.UniqueMultiplayerID);
+                return;
+            }
+
+            if (netStaminaField?.GetValue(farmer) is not NetFloat stamina)
+                return;
+
+            // Al salir, Stardew sincroniza una copia completa que puede volver a traer el relleno.
+            if (!float.IsFinite(stamina.TargetValue) || stamina.TargetValue > rest.Ceiling)
+                RestoreRemoteStamina(stamina, rest.Ceiling);
+            else if (stamina.TargetValue < rest.Ceiling)
+                restStaminaCeilings[farmer.UniqueMultiplayerID] = (stamina.TargetValue, rest.ExpiresAt);
+        }
+
+        private static void RestoreRemoteStamina(NetFloat stamina, float accepted)
+        {
+            stamina.CancelInterpolation();
+            stamina.MarkClean();
+            stamina.Set(accepted);
         }
 
         public static void Prefix_LevelUpPerk(out LevelUpResourceLogic.ResourceSnapshot? __state)

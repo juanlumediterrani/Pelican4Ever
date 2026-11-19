@@ -551,6 +551,7 @@ namespace Pelican4Ever.Modules
             foreach (var pair in roots)
             {
                 Farmer? farmer = pair.Value.TargetValue;
+                BedLogoutModule.PreserveRestStamina(farmer);
                 if (farmer == null || !float.IsFinite(farmer.Stamina)
                     || farmer.experiencePoints.Any(xp => xp < 0)
                     || farmer.Items.Any(item => item != null && item.Stack <= 0))
