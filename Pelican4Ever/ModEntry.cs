@@ -89,6 +89,7 @@ namespace Pelican4Ever
                 new ModToggleModule()
             );
 
+            ConcurrencyMetricsTracker.Initialize(context);
             EvaluateAndReportHealth(saveLoaded: false, emitEvents: true);
             context.SyncInitialActivationState();
 

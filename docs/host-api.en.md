@@ -490,6 +490,10 @@ Returns the atomic host health snapshot (`HostHealthDto`), read **directly from 
 }
 ```
 
+### `GET /api/v1/host/concurrency`
+
+Returns effective extended concurrency settings, per-map capacity and occupancy, and the latest 10-second telemetry window (`HostConcurrencyStatusDto`: messages and bytes by type and recipient split between host-generated and client rebroadcasts, transport upload/download, tick work median/p95/max, cadence, instrumentation overhead, root traversal, CPU, memory, and join timings). Optionally accepts `?instrumentation=on|off|reset` to toggle or reset capture in the lab.
+
 ---
 
 ## 3. Classic Routes `/api/`

@@ -113,6 +113,18 @@ public class HeadlessRenderTests
         var config = new ServerConfig();
 
         Assert.True(config.HeadlessRendering);
+        Assert.False(config.ClientLabHeadlessRendering);
         Assert.Empty(config.Validate());
+    }
+
+    [Fact]
+    public void ClientLabPolicy_RespectsFlag_WorldReady_MenuAndLease()
+    {
+        Assert.Equal(HostRenderReason.Attended, HostRenderPolicy.DecideClientLab(false, true, false, false));
+        Assert.Equal(HostRenderReason.WorldNotReady, HostRenderPolicy.DecideClientLab(true, false, false, false));
+        Assert.Equal(HostRenderReason.DrawRequiredMenu, HostRenderPolicy.DecideClientLab(true, true, true, false));
+        Assert.Equal(HostRenderReason.Lease, HostRenderPolicy.DecideClientLab(true, true, false, true));
+        Assert.Equal(HostRenderReason.Suppressed, HostRenderPolicy.DecideClientLab(true, true, false, false));
+        Assert.False(HostRenderPolicy.ShouldDraw(HostRenderPolicy.DecideClientLab(true, true, false, false)));
     }
 }

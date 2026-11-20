@@ -47,6 +47,10 @@ namespace Pelican4Ever.Models
         public const string RequestTenancyRequest = "RequestTenancyRequest";
         public const string ManageTenantRequest = "ManageTenantRequest";
         public const string FamilyEventAction = "FamilyEventAction";
+        public const string LocationEntryRequest = "LocationEntryRequest";
+        public const string LocationEntryResponse = "LocationEntryResponse";
+        public const string LocationEntryCancel = "LocationEntryCancel";
+        public const string LocationOccupancySync = "LocationOccupancySync";
     }
 
     public class PairingChallengePayload
@@ -170,5 +174,58 @@ namespace Pelican4Ever.Models
 
         /// <summary>Si las vagonetas omiten el requisito de la Sala de Calderas en el servidor.</summary>
         public bool BypassMinecartUnlockRequirement { get; set; }
+
+        /// <summary>Si la concurrencia ampliada y el aforo por mapa están activos en el servidor (ADR-0011).</summary>
+        public bool ExtendedConcurrency { get; set; }
+
+        /// <summary>Aforo por defecto por ubicación configurado en el host.</summary>
+        public int DefaultLocationCapacity { get; set; } = 16;
+
+        /// <summary>Aforos específicos por mapa configurados en el host.</summary>
+        public Dictionary<string, int> LocationCapacityOverrides { get; set; } = new();
+    }
+
+    public class LocationEntryRequestPayload
+    {
+        public long AttemptId { get; set; }
+        public string CurrentLocation { get; set; } = string.Empty;
+        public string TargetLocation { get; set; } = string.Empty;
+        public bool IsStructure { get; set; }
+        public int TileX { get; set; }
+        public int TileY { get; set; }
+        public int FacingDirection { get; set; }
+        public int Origin { get; set; }
+    }
+
+    public class LocationEntryResponsePayload
+    {
+        public long AttemptId { get; set; }
+        public bool Allowed { get; set; }
+        public string TargetLocation { get; set; } = string.Empty;
+        public string EffectiveTargetLocation { get; set; } = string.Empty;
+        public bool IsStructure { get; set; }
+        public int TileX { get; set; }
+        public int TileY { get; set; }
+        public int FacingDirection { get; set; }
+        public int OccupiedCount { get; set; }
+        public int Capacity { get; set; }
+        public int Exemption { get; set; }
+    }
+
+    public class LocationEntryCancelPayload
+    {
+        public long AttemptId { get; set; }
+    }
+
+    public class LocationOccupancyEntryDto
+    {
+        public int CurrentOccupants { get; set; }
+        public int ActiveReservations { get; set; }
+        public int Capacity { get; set; }
+    }
+
+    public class LocationOccupancySyncPayload
+    {
+        public Dictionary<string, LocationOccupancyEntryDto> Locations { get; set; } = new();
     }
 }

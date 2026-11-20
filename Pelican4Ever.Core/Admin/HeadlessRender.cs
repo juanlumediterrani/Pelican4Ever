@@ -55,6 +55,28 @@ namespace Pelican4Ever.Core.Admin
             return HostRenderReason.Suppressed;
         }
 
+        /// <summary>
+        /// Decisión pura para clientes sintéticos en modo laboratorio (<c>TASK-2602</c>): un cliente normal
+        /// dibuja siempre (<see cref="HostRenderReason.Attended"/>), y un cliente de laboratorio solo suprime el
+        /// dibujado con el mundo listo salvo menús que requieren dibujado o préstamo vigente.
+        /// </summary>
+        public static HostRenderReason DecideClientLab(
+            bool clientLabHeadlessEnabled,
+            bool worldReady,
+            bool drawRequiredMenuOpen,
+            bool hasActiveLease)
+        {
+            if (!clientLabHeadlessEnabled)
+                return HostRenderReason.Attended;
+            if (!worldReady)
+                return HostRenderReason.WorldNotReady;
+            if (drawRequiredMenuOpen)
+                return HostRenderReason.DrawRequiredMenu;
+            if (hasActiveLease)
+                return HostRenderReason.Lease;
+            return HostRenderReason.Suppressed;
+        }
+
         public static bool ShouldDraw(HostRenderReason reason) => reason != HostRenderReason.Suppressed;
     }
 

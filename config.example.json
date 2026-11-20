@@ -66,7 +66,12 @@
     "Pelican4Ever.NITVCompat"
   ],
   "FarmSlotCount": 16,
+  "ExtendedConcurrency": false,
   "MaxConcurrentPlayers": 16,
+  "DefaultLocationCapacity": 16,
+  "LocationCapacityOverrides": {},
+  "EnableConcurrencyInstrumentation": false,
+  "FarmerDeltaBroadcastPeriod": 3,
   "AdmissionQueueCapacity": 16,
   "ReconnectGraceMinutes": 5,
   "IdleKickMinutes": 30,

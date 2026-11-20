@@ -212,6 +212,7 @@
   "market.listing_withdrawn": "Oferta retirada. Se devolvió {{item}}.",
   "market.offline_profits": "Has recibido {{gold}}g por ventas en el Mercado Vecinal mientras estabas fuera.",
   "market.delivery_inventory_full": "No cabe el objeto del mercado. La oferta se conserva y el oro se devuelve.",
+  "market.listing_rejected": "El mercado no pudo verificar tu objeto. Comprueba tu inventario y vuelve a intentarlo.",
   "market.cannot_buy_own": "No puedes comprar tu propia oferta.",
   "market.already_sold": "No se puede retirar una oferta que ya ha sido vendida.",
   "market.invalid_item": "El objeto no es válido.",
@@ -274,6 +275,7 @@
   "bed_logout.offline_rest_both": "Descanso offline: +{{energy}} energía y +{{health}} salud recuperadas.",
   "bed_logout.host_agent_active": "Descanso registrado. Modo anfitrión agente activo: el servidor permanece en línea.",
   "bed_logout.disconnecting": "Descanso registrado. Desconectando de forma segura...",
+  "bed_logout.rejected": "El servidor no pudo confirmar tu descanso. Vuelve a intentarlo desde tu cama.",
   "rollover.warning_10min": "Aviso: en 10 minutos se guardará la granja y se cerrarán las conexiones para el cambio de fecha.",
   "rollover.closing_server": "Guardado confirmado. El servidor cerrará esta conexión para cambiar la fecha.",
   "rollover.disconnecting": "Guardado confirmado. Desconectando para el cambio de fecha.",
@@ -394,5 +396,9 @@
   "residence.marriage.need_residence": "Necesitas tener tu propia residencia reclamada en Pueblo Pelícano antes de casarte o invitar a alguien a vivir contigo.",
   "admission.queue_position": "Servidor lleno. Tu posición en la cola de espera: {{position}}/{{capacity}}.",
   "admission.queue_full": "El servidor y la cola de espera están llenos. Inténtalo más tarde.",
-  "idle.warning_hud": "Aviso de inactividad: serás desconectado en {{minutes}} min si no realizas ninguna acción."
+  "idle.warning_hud": "Aviso de inactividad: serás desconectado en {{minutes}} min si no realizas ninguna acción.",
+  "concurrency.location_full_hud": "{{location}} está lleno ahora mismo ({{current}}/{{capacity}}). Inténtalo más tarde.",
+  "concurrency.location_request_timeout_hud": "Se agotó la espera para entrar en {{location}}. Inténtalo de nuevo.",
+  "concurrency.bridge_full_redirect_home_hud": "{{bridge}} está lleno; regresando directamente a tu residencia.",
+  "concurrency.action_restricted_hud": "Esta acción está restringida temporalmente en {{location}}."
 }

@@ -397,6 +397,32 @@ namespace Pelican4Ever.Core.Admin
         public double UptimeSeconds { get; set; }
     }
 
+    /// <summary>Ocupación y aforo efectivo de una ubicación (TASK-2601 / TASK-2605).</summary>
+    public sealed class HostConcurrencyLocationDto
+    {
+        public string LocationName { get; set; } = string.Empty;
+        public int CurrentOccupants { get; set; }
+        public int ActiveReservations { get; set; }
+        public int Capacity { get; set; }
+    }
+
+    /// <summary>
+    /// Estado de concurrencia ampliada, aforos por mapa y última ventana de 10 s de telemetría
+    /// (<c>GET /api/v1/host/concurrency</c>, TASK-2601 / TASK-2603 / TASK-2605).
+    /// </summary>
+    public sealed class HostConcurrencyStatusDto
+    {
+        public bool ExtendedConcurrency { get; set; }
+        public int EffectiveMaxConcurrentPlayers { get; set; }
+        public int DefaultLocationCapacity { get; set; }
+        public Dictionary<string, int> LocationCapacityOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+        public int ConnectedClientsCount { get; set; }
+        public int FarmerDeltaBroadcastPeriod { get; set; }
+        public bool InstrumentationEnabled { get; set; }
+        public List<HostConcurrencyLocationDto> Locations { get; set; } = new();
+        public ConcurrencyWindowSnapshot LatestWindow { get; set; } = new();
+    }
+
     /// <summary>
     /// Respuesta estándar de acciones de <c>/api/v1/host/*</c>.
     /// </summary>
@@ -438,7 +464,8 @@ namespace Pelican4Ever.Core.Admin
             new("GET",  "/api/v1/host/render",            MutatesGameState: false, "Estado del dibujado del host (servidor sin dibujado) y préstamos vigentes."),
             new("POST", "/api/v1/host/render",            MutatesGameState: false, "Pide o retira un préstamo de dibujado con caducidad (Voyager, Putre, diagnóstico)."),
             new("GET",  "/api/v1/host/probation",         MutatesGameState: false, "Cupo de admisión de Putre (2 máximo), tickets, jugadores en observación conductual y lista negra."),
-            new("GET",  "/api/v1/host/health",            MutatesGameState: false, "Salud atómica del host fuera del hilo del juego (Lockdown/Degraded/Ok, parches, versiones y latido de tick).")
+            new("GET",  "/api/v1/host/health",            MutatesGameState: false, "Salud atómica del host fuera del hilo del juego (Lockdown/Degraded/Ok, parches, versiones y latido de tick)."),
+            new("GET",  "/api/v1/host/concurrency",       MutatesGameState: false, "Estado de concurrencia ampliada, aforos y ocupación por mapa, y ventana de 10 s de telemetría de red y tick (TASK-2601 / TASK-2603 / TASK-2605).")
         };
 
         /// <summary>

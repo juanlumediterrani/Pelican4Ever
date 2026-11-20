@@ -4,10 +4,12 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Pelican4Ever.Core.Admin;
+using Pelican4Ever.Core.Config;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
@@ -57,6 +59,101 @@ namespace Pelican4Ever.Modules
         private static string slotDataSignature = string.Empty;
         public static List<DoorModel> RegisteredDoors { get; private set; } = new();
 
+        /// <summary>Motor de aforo por mapa y reservas previas al fundido (ADR-0011, TASK-2605).</summary>
+        public static readonly LocationCapacityLogic LocationCapacity = new();
+
+        /// <summary>Seguimiento por receptor de copias completas y deltas para raíces residenciales (ADR-0011, TASK-2606).</summary>
+        public static readonly ResidenceRootSyncTracker ResidenceSyncTracker = new();
+
+        private static bool hostSyncedExtendedConcurrency;
+        private static int hostDefaultLocationCapacity = ServerConfig.DefaultMapCapacity;
+        private static readonly Dictionary<string, int> hostLocationCapacityOverrides = new(StringComparer.OrdinalIgnoreCase);
+        private static bool extendedConcurrencyServerPatchesApplied;
+        private static bool extendedConcurrencyClientPatchesApplied;
+
+        private sealed class PendingWarpAuthState
+        {
+            public long AttemptId;
+            public string TargetLocation = string.Empty;
+            public bool IsStructure;
+            public int TileX;
+            public int TileY;
+            public int FacingDirection;
+            public LocationEntryOrigin Origin;
+            public long SentAtMs;
+        }
+
+        private sealed class ForcedEntryOriginScope : IDisposable
+        {
+            private bool disposed;
+
+            public void Dispose()
+            {
+                if (disposed)
+                    return;
+                disposed = true;
+                if (forcedEntryOriginStack.Count > 0)
+                    forcedEntryOriginStack.Pop();
+            }
+        }
+
+        private static PendingWarpAuthState? pendingClientWarpAuth;
+        private static long nextWarpAttemptId;
+        private static long approvedWarpAttemptId;
+        private static string? approvedEffectiveTarget;
+        private static string? deniedWarpTarget;
+        private static int deniedWarpCooldownTicks;
+        private static readonly Dictionary<string, LocationOccupancyEntryDto> replicatedLocationOccupancy = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<long, string> lastObservedPlayerRoots = new();
+        private static readonly Dictionary<long, string> lastObservedPlayerLocations = new();
+        private static readonly Stack<LocationEntryOrigin> forcedEntryOriginStack = new();
+        private static int inReadActiveLocationDepth;
+        private static int lastOccupancySyncTick;
+        private static string lastOccupancySyncSignature = string.Empty;
+        private static MethodInfo? gameServerSendLocationMethod;
+        private static FieldInfo? game1MultiplayerField;
+
+        public static IDisposable BeginForcedEntryOrigin(LocationEntryOrigin origin)
+        {
+            forcedEntryOriginStack.Push(origin);
+            return new ForcedEntryOriginScope();
+        }
+
+        private static LocationEntryOrigin CurrentEntryOrigin()
+        {
+            return forcedEntryOriginStack.Count > 0
+                ? forcedEntryOriginStack.Peek()
+                : LocationEntryOrigin.Voluntary;
+        }
+
+        private static bool IsExtendedConcurrencyActive()
+        {
+            if (context == null)
+                return false;
+            return Context.IsMainPlayer ? context.Config.ExtendedConcurrency : hostSyncedExtendedConcurrency;
+        }
+
+        private static void ConfigureLocationCapacity()
+        {
+            if (context == null)
+                return;
+
+            if (Context.IsMainPlayer)
+            {
+                LocationCapacity.Configure(
+                    context.Config.ExtendedConcurrency,
+                    context.Config.DefaultLocationCapacity,
+                    context.Config.LocationCapacityOverrides);
+            }
+            else
+            {
+                LocationCapacity.Configure(
+                    hostSyncedExtendedConcurrency,
+                    hostDefaultLocationCapacity,
+                    hostLocationCapacityOverrides);
+            }
+        }
+
         public string Name => "FarmSlot";
 
         public ModuleSide Side => ModuleSide.Both;
@@ -89,9 +186,12 @@ namespace Pelican4Ever.Modules
                 ApplyNitvPatches(ctx.Harmony);
             };
 
+            ConfigureLocationCapacity();
+
             // Mensajes y sincronización multijugador (en host y peones)
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
+            ctx.Helper.Events.Multiplayer.PeerDisconnected += OnPeerDisconnected;
 
             ApplyHarmonyPatches(ctx.Harmony);
             new PrivateFarmCaves(ctx).Register();
@@ -1774,11 +1874,32 @@ namespace Pelican4Ever.Modules
                 // TASK-903: Asegurar ubicaciones de anexos adquiridos, sus mapas 40×32 y su propiedad/política heredada
                 EnsureAllAnnexLocations();
 
+                LocationCapacity.Clear();
+                ResidenceSyncTracker.Clear();
+                lastObservedPlayerRoots.Clear();
+                lastObservedPlayerLocations.Clear();
+                forcedEntryOriginStack.Clear();
+                lastOccupancySyncSignature = string.Empty;
+                ConfigureLocationCapacity();
+
                 // Sincronizar catálogo inicial de residencias y anexos con todos los peones
                 BroadcastDoorsSync();
             }
             else
             {
+                LocationCapacity.Clear();
+                ResidenceSyncTracker.Clear();
+                pendingClientWarpAuth = null;
+                approvedWarpAttemptId = 0;
+                approvedEffectiveTarget = null;
+                deniedWarpTarget = null;
+                deniedWarpCooldownTicks = 0;
+                replicatedLocationOccupancy.Clear();
+                lastObservedPlayerRoots.Clear();
+                lastObservedPlayerLocations.Clear();
+                forcedEntryOriginStack.Clear();
+                ConfigureLocationCapacity();
+
                 // Cliente: pedir al host el estado más actualizado de residencias
                 context?.Helper.Multiplayer.SendMessage(
                     string.Empty,
@@ -1839,6 +1960,22 @@ namespace Pelican4Ever.Modules
             welcomeNotified = false;
             pendingResidenceWakeSlotId = null;
             pendingEvictionCheck = false;
+            hostSyncedExtendedConcurrency = false;
+            hostDefaultLocationCapacity = ServerConfig.DefaultMapCapacity;
+            hostLocationCapacityOverrides.Clear();
+            pendingClientWarpAuth = null;
+            approvedWarpAttemptId = 0;
+            approvedEffectiveTarget = null;
+            deniedWarpTarget = null;
+            deniedWarpCooldownTicks = 0;
+            replicatedLocationOccupancy.Clear();
+            lastObservedPlayerRoots.Clear();
+            lastObservedPlayerLocations.Clear();
+            forcedEntryOriginStack.Clear();
+            lastOccupancySyncSignature = string.Empty;
+            LocationCapacity.Clear();
+            ResidenceSyncTracker.Clear();
+            ConfigureLocationCapacity();
             RefreshSlotLocationData();
         }
 
@@ -2421,8 +2558,26 @@ namespace Pelican4Ever.Modules
 
         private void OnPlayerWarped(object? sender, WarpedEventArgs e)
         {
-            if (!e.IsLocalPlayer || context == null)
+            if (!e.IsLocalPlayer || context == null || Game1.player == null)
                 return;
+
+            approvedWarpAttemptId = 0;
+            approvedEffectiveTarget = null;
+            if (IsExtendedConcurrencyActive())
+            {
+                string newLocName = e.NewLocation?.NameOrUniqueName ?? string.Empty;
+                if (!string.Equals(newLocName, deniedWarpTarget, StringComparison.OrdinalIgnoreCase))
+                {
+                    deniedWarpCooldownTicks = 0;
+                    deniedWarpTarget = null;
+                }
+
+                if (Context.IsMainPlayer)
+                {
+                    LocationCapacity.ConfirmArrival(Game1.player.UniqueMultiplayerID, newLocName, null, DateTimeOffset.UtcNow);
+                    TrackPlayerLocationObservation(Game1.player);
+                }
+            }
 
             EvictLocalPlayerIfUnauthorized();
 
@@ -2564,16 +2719,26 @@ namespace Pelican4Ever.Modules
                 : ResidenceInteriorLogic.BedPlacement;
 
             context?.Monitor.Log($"[FarmSlotModule] Residencia {home} no cargada al despertar; viajando a la cama.", LogLevel.Debug);
-            Game1.warpFarmer(home, wakeSpot.TargetX, wakeSpot.TargetY, false);
+            using (BeginForcedEntryOrigin(LocationEntryOrigin.DayRolloverWake))
+            {
+                Game1.warpFarmer(home, wakeSpot.TargetX, wakeSpot.TargetY, false);
+            }
         }
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
         {
-            if (!e.IsMultipleOf(4) || !Context.IsWorldReady || context == null)
+            if (!Context.IsWorldReady || context == null)
+                return;
+
+            TickConcurrencyWarpClientState();
+
+            if (!e.IsMultipleOf(4))
                 return;
 
             if (pendingEvictionCheck && !Game1.isWarping && !Game1.globalFade)
                 EvictLocalPlayerIfUnauthorized();
+
+            TickConcurrencyHostState();
 
             if (unclaimedCheckCooldown > 0)
             {
@@ -3768,6 +3933,23 @@ namespace Pelican4Ever.Modules
                         if (payload.FarmSlotCount > 0)
                             context.Config.FarmSlotCount = payload.FarmSlotCount;
                         context.Config.BypassMinecartUnlockRequirement = payload.BypassMinecartUnlockRequirement;
+
+                        hostSyncedExtendedConcurrency = payload.ExtendedConcurrency;
+                        hostDefaultLocationCapacity = payload.DefaultLocationCapacity > 0
+                            ? payload.DefaultLocationCapacity
+                            : ServerConfig.DefaultMapCapacity;
+                        hostLocationCapacityOverrides.Clear();
+                        if (payload.LocationCapacityOverrides != null)
+                        {
+                            foreach (var ov in payload.LocationCapacityOverrides)
+                            {
+                                if (!string.IsNullOrWhiteSpace(ov.Key))
+                                    hostLocationCapacityOverrides[ov.Key.Trim()] = ov.Value;
+                            }
+                        }
+                        ConfigureLocationCapacity();
+                        if (hostSyncedExtendedConcurrency)
+                            EnsureClientExtendedConcurrencyPatches();
                     }
 
                     context.WorldState.Doors.Clear();
@@ -3864,20 +4046,48 @@ namespace Pelican4Ever.Modules
                     EvictLocalPlayerIfUnauthorized();
                 }
             }
+            else if (e.Type == ModMessages.LocationEntryRequest && Context.IsMainPlayer)
+            {
+                HandleLocationEntryRequest(e.FromPlayerID, e.ReadAs<LocationEntryRequestPayload>());
+            }
+            else if (e.Type == ModMessages.LocationEntryResponse && !Context.IsMainPlayer
+                && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
+            {
+                HandleLocationEntryResponse(e.ReadAs<LocationEntryResponsePayload>());
+            }
+            else if (e.Type == ModMessages.LocationEntryCancel && Context.IsMainPlayer)
+            {
+                HandleLocationEntryCancel(e.FromPlayerID, e.ReadAs<LocationEntryCancelPayload>());
+            }
+            else if (e.Type == ModMessages.LocationOccupancySync && !Context.IsMainPlayer
+                && e.FromPlayerID == Game1.MasterPlayer?.UniqueMultiplayerID)
+            {
+                HandleLocationOccupancySync(e.ReadAs<LocationOccupancySyncPayload>());
+            }
+        }
+
+        private static SyncDoorsPayload BuildSyncDoorsPayload()
+        {
+            return new SyncDoorsPayload
+            {
+                Doors = new Dictionary<string, DoorAssignment>(context!.WorldState.Doors),
+                Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
+                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
+                FarmSlotCount = context.Config.FarmSlotCount,
+                BypassMinecartUnlockRequirement = context.Config.BypassMinecartUnlockRequirement,
+                ExtendedConcurrency = context.Config.ExtendedConcurrency,
+                DefaultLocationCapacity = context.Config.DefaultLocationCapacity,
+                LocationCapacityOverrides = new Dictionary<string, int>(
+                    context.Config.LocationCapacityOverrides ?? new(),
+                    StringComparer.OrdinalIgnoreCase)
+            };
         }
 
         public static void BroadcastDoorsSync()
         {
             if (context == null || !Context.IsMainPlayer) return;
 
-            var payload = new SyncDoorsPayload
-            {
-                Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
-                Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
-                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
-                FarmSlotCount = context.Config.FarmSlotCount,
-                BypassMinecartUnlockRequirement = context.Config.BypassMinecartUnlockRequirement
-            };
+            SyncDoorsPayload payload = BuildSyncDoorsPayload();
 
             context.Helper.Multiplayer.SendMessage(
                 payload,
@@ -3890,14 +4100,7 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || !Context.IsMainPlayer) return;
 
-            var payload = new SyncDoorsPayload
-            {
-                Doors = new Dictionary<string, DoorAssignment>(context.WorldState.Doors),
-                Annexes = new Dictionary<string, AnnexAssignment>(context.WorldState.Annexes),
-                Players = new Dictionary<long, PlayerRecord>(context.WorldState.Players),
-                FarmSlotCount = context.Config.FarmSlotCount,
-                BypassMinecartUnlockRequirement = context.Config.BypassMinecartUnlockRequirement
-            };
+            SyncDoorsPayload payload = BuildSyncDoorsPayload();
 
             context.Helper.Multiplayer.SendMessage(
                 payload,
@@ -4030,6 +4233,8 @@ namespace Pelican4Ever.Modules
 
             // Sincronizar inmediatamente a todos los peones
             BroadcastDoorsSync();
+            if (IsExtendedConcurrencyActive())
+                EnsurePeerSyncedWithResidenceSlot(playerId, slotId);
             return true;
         }
 
@@ -4169,6 +4374,8 @@ namespace Pelican4Ever.Modules
 
                     context.Monitor.Log($"[FarmSlotModule] Inquilino {targetPlayerId} aceptado en {doorId} ({door.FarmSlotId}) por propietario {actorPlayerId}.", LogLevel.Info);
                     BroadcastDoorsSync();
+                    if (IsExtendedConcurrencyActive())
+                        EnsurePeerSyncedWithResidenceSlot(targetPlayerId, door.FarmSlotId);
                     return true;
                 }
                 case TenantManageAction.Reject:
@@ -4327,7 +4534,10 @@ namespace Pelican4Ever.Modules
 
             Game1.activeClickableMenu?.exitThisMenu(false);
             Game1.player.Halt();
-            Game1.warpFarmer(targetLoc, tileX, tileY, facing);
+            using (BeginForcedEntryOrigin(LocationEntryOrigin.ResidenceEviction))
+            {
+                Game1.warpFarmer(targetLoc, tileX, tileY, facing);
+            }
             Game1.showRedMessage(I18n.Get("residence.evicted"));
             context.Monitor.Log($"[FarmSlotModule] Visitante {Game1.player.UniqueMultiplayerID} expulsado de '{currentName}' ({revokedDoor.FarmSlotId}) hacia {targetLoc} ({tileX}, {tileY}) por cambio de acceso.", LogLevel.Info);
         }
@@ -4412,6 +4622,8 @@ namespace Pelican4Ever.Modules
             }
 
             BroadcastDoorsSync();
+            if (IsExtendedConcurrencyActive())
+                EnsureInterestedPeersSyncedWithResidenceSlot(result.Assignment.ResidenceSlotId);
             return true;
         }
 
@@ -5193,6 +5405,12 @@ namespace Pelican4Ever.Modules
                 prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_GetChildrenCount)),
                 criticality: PatchCriticality.Integrity);
 
+            if (context?.Config.ExtendedConcurrency == true)
+            {
+                ApplyExtendedConcurrencyServerPatches(harmony);
+                ApplyExtendedConcurrencyClientPatches(harmony);
+            }
+
             context?.Monitor.Log("[FarmSlotModule] Parches Harmony registrados en PatchRegistry.", LogLevel.Trace);
         }
 
@@ -5902,6 +6120,19 @@ namespace Pelican4Ever.Modules
             {
                 return true;
             }
+
+            if (!ResolveFarmSlotWarpRedirections(ref locationRequest, ref tileX, ref tileY, ref facingDirectionAfterWarp))
+                return false;
+
+            if (!IsExtendedConcurrencyActive() || context == null || !Game1.IsMultiplayer)
+                return true;
+
+            return EvaluateLocationCapacityGate(ref locationRequest, ref tileX, ref tileY, ref facingDirectionAfterWarp);
+        }
+
+        private static bool ResolveFarmSlotWarpRedirections(ref LocationRequest locationRequest, ref int tileX, ref int tileY, ref int facingDirectionAfterWarp)
+        {
+            string targetLoc = locationRequest.Name;
 
             // Control de acceso continuo a granjas privadas instanciadas (Opción B: Bloqueo si está Locked)
             if (!locationRequest.IsStructure && targetLoc.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase))
@@ -7177,6 +7408,40 @@ namespace Pelican4Ever.Modules
                          ?? context.WorldState.FindAnnexById(location.NameOrUniqueName)?.OwnerId
                          ?? location.GetFarmOwnerId();
             long? tenantId = doorAssignment?.TenantId ?? location.GetFarmTenantId();
+
+            if (!Context.IsMainPlayer && IsExtendedConcurrencyActive())
+            {
+                if (inReadActiveLocationDepth > 0)
+                {
+                    __result = true;
+                    return;
+                }
+
+                long localId = Game1.player?.UniqueMultiplayerID ?? 0L;
+                string? slotOfLoc = LocationCullingLogic.TryResolveResidenceSlotId(
+                    location.NameOrUniqueName,
+                    location.Root?.Value?.NameOrUniqueName) ?? baseSlotId;
+
+                bool interested = (ownerId.HasValue && ownerId.Value == localId)
+                    || (tenantId.HasValue && tenantId.Value == localId)
+                    || location.farmers.Any(f => f != null && f.UniqueMultiplayerID == localId);
+
+                if (!interested && !string.IsNullOrEmpty(slotOfLoc))
+                {
+                    string? curSlot = LocationCullingLogic.TryResolveResidenceSlotId(
+                        Game1.player?.currentLocation?.NameOrUniqueName,
+                        Game1.player?.currentLocation?.Root?.Value?.NameOrUniqueName);
+                    string? reqSlot = LocationCullingLogic.TryResolveResidenceSlotId(Game1.locationRequest?.Name);
+                    string? appSlot = LocationCullingLogic.TryResolveResidenceSlotId(approvedEffectiveTarget);
+
+                    interested = string.Equals(curSlot, slotOfLoc, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(reqSlot, slotOfLoc, StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(appSlot, slotOfLoc, StringComparison.OrdinalIgnoreCase);
+                }
+
+                __result = interested;
+                return;
+            }
 
             var onlineFarmerIds = Game1.getOnlineFarmers().Select(f => f.UniqueMultiplayerID).ToHashSet();
 
@@ -8740,6 +9005,920 @@ namespace Pelican4Ever.Modules
             }
 
             return true;
+        }
+
+        // ── Concurrencia ampliada, aforo previo al fundido e interés residencial (TASK-2605 / TASK-2606) ──────────────────────────
+
+        private void OnPeerDisconnected(object? sender, PeerDisconnectedEventArgs e)
+        {
+            long peerId = e.Peer.PlayerID;
+            LocationCapacity.OnPlayerDisconnected(peerId);
+            ResidenceSyncTracker.OnPeerDisconnected(peerId);
+            lastObservedPlayerRoots.Remove(peerId);
+            lastObservedPlayerLocations.Remove(peerId);
+        }
+
+        private static Multiplayer? GetMultiplayerInstance()
+        {
+            game1MultiplayerField ??= AccessTools.Field(typeof(Game1), "multiplayer");
+            return game1MultiplayerField?.GetValue(null) as Multiplayer;
+        }
+
+        private static string GetLocationRootName(GameLocation? location)
+        {
+            if (location == null)
+                return string.Empty;
+
+            Multiplayer? mp = GetMultiplayerInstance();
+            GameLocation? rootLoc = mp?.locationRoot(location)?.Value ?? location.Root?.Value;
+            return rootLoc?.NameOrUniqueName ?? location.NameOrUniqueName ?? string.Empty;
+        }
+
+        private static string GetLocationLabelForHud(string? locationName)
+        {
+            if (string.IsNullOrWhiteSpace(locationName))
+                return string.Empty;
+
+            return GetPlazaLocationLabel(locationName);
+        }
+
+        private static (string? ResidenceSlotId, IReadOnlyCollection<string>? AnnexIds) GetPlayerResidenceSlotAndAnnexes(long playerId)
+        {
+            string? slotId = context?.WorldState.FindResidenceOf(playerId)?.FarmSlotId;
+            if (string.IsNullOrWhiteSpace(slotId) || context == null)
+                return (slotId, null);
+
+            var annexIds = new List<string>();
+            foreach (AnnexAssignment annex in context.WorldState.Annexes.Values)
+            {
+                if (string.Equals(annex.ResidenceSlotId, slotId, StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(annex.AnnexId))
+                {
+                    annexIds.Add(annex.AnnexId);
+                }
+            }
+            return (slotId, annexIds);
+        }
+
+        private static int CountLiveOccupantsForCapacity(string? locationName, long excludePlayerId)
+        {
+            if (string.IsNullOrWhiteSpace(locationName) || !Context.IsWorldReady)
+                return 0;
+
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            bool skipDedicatedHost = Game1.HasDedicatedHost;
+            int count = 0;
+
+            foreach (Farmer f in Game1.getOnlineFarmers())
+            {
+                if (f == null || f.UniqueMultiplayerID == excludePlayerId)
+                    continue;
+                if (skipDedicatedHost && f.UniqueMultiplayerID == hostId)
+                    continue;
+
+                string loc = f.currentLocation?.NameOrUniqueName ?? string.Empty;
+                if (string.Equals(loc, locationName, StringComparison.OrdinalIgnoreCase))
+                    count++;
+            }
+
+            return count;
+        }
+
+        private static Dictionary<string, int> CollectHostLiveOccupantsMap()
+        {
+            var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            if (!Context.IsWorldReady)
+                return counts;
+
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            foreach (Farmer f in Game1.getOnlineFarmers())
+            {
+                if (f == null || f.UniqueMultiplayerID == hostId)
+                    continue;
+
+                string loc = f.currentLocation?.NameOrUniqueName ?? string.Empty;
+                if (string.IsNullOrEmpty(loc))
+                    continue;
+
+                counts.TryGetValue(loc, out int prev);
+                counts[loc] = prev + 1;
+            }
+            return counts;
+        }
+
+        private static void TickConcurrencyWarpClientState()
+        {
+            if (deniedWarpCooldownTicks > 0)
+            {
+                deniedWarpCooldownTicks--;
+                if (deniedWarpCooldownTicks == 0)
+                    deniedWarpTarget = null;
+            }
+
+            if (pendingClientWarpAuth == null || context == null || Context.IsMainPlayer)
+                return;
+
+            long elapsedMs = Environment.TickCount64 - pendingClientWarpAuth.SentAtMs;
+            if (elapsedMs < 2500L)
+                return;
+
+            PendingWarpAuthState timedOut = pendingClientWarpAuth;
+            pendingClientWarpAuth = null;
+
+            long masterId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            if (masterId != 0L)
+            {
+                context.Helper.Multiplayer.SendMessage(
+                    new LocationEntryCancelPayload { AttemptId = timedOut.AttemptId },
+                    ModMessages.LocationEntryCancel,
+                    new[] { context.Manifest.UniqueID },
+                    new[] { masterId });
+            }
+
+            deniedWarpTarget = timedOut.TargetLocation;
+            deniedWarpCooldownTicks = 90;
+            HaltAndNudgeOffWarp();
+            Game1.addHUDMessage(new HUDMessage(
+                I18n.Get("concurrency.location_request_timeout_hud", new { location = GetLocationLabelForHud(timedOut.TargetLocation) }),
+                HUDMessage.error_type));
+        }
+
+        private static void TickConcurrencyHostState()
+        {
+            if (!Context.IsMainPlayer || !IsExtendedConcurrencyActive() || context == null || !Context.IsWorldReady)
+                return;
+
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            foreach (Farmer f in Game1.getOnlineFarmers())
+            {
+                if (f == null)
+                    continue;
+
+                string curLocName = f.currentLocation?.NameOrUniqueName ?? string.Empty;
+                if (!string.IsNullOrEmpty(curLocName))
+                    LocationCapacity.ConfirmArrival(f.UniqueMultiplayerID, curLocName, null, nowUtc);
+
+                TrackPlayerLocationObservation(f);
+            }
+
+            if (Game1.otherFarmers.Count > 0 && Game1.ticks - lastOccupancySyncTick >= 60)
+            {
+                BroadcastLocationOccupancySync(nowUtc);
+            }
+        }
+
+        private static void TrackPlayerLocationObservation(Farmer f)
+        {
+            long fid = f.UniqueMultiplayerID;
+            string curLocName = f.currentLocation?.NameOrUniqueName ?? string.Empty;
+            lastObservedPlayerLocations[fid] = curLocName;
+
+            string curRoot = GetLocationRootName(f.currentLocation);
+            if (lastObservedPlayerRoots.TryGetValue(fid, out string? prevRoot) &&
+                string.Equals(prevRoot, curRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            lastObservedPlayerRoots[fid] = curRoot;
+            if (!Context.IsMainPlayer || !IsExtendedConcurrencyActive())
+                return;
+
+            string? slotId = LocationCullingLogic.TryResolveResidenceSlotId(curLocName, curRoot);
+            if (!string.IsNullOrEmpty(slotId))
+                EnsurePeerSyncedWithResidenceSlot(fid, slotId);
+        }
+
+        private static void BroadcastLocationOccupancySync(DateTimeOffset nowUtc)
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return;
+
+            IReadOnlyList<LocationOccupancyInfo> snapshot = LocationCapacity.GetOccupancySnapshot(CollectHostLiveOccupantsMap(), nowUtc);
+            var payload = new LocationOccupancySyncPayload();
+            var sigParts = new List<string>(snapshot.Count);
+
+            foreach (LocationOccupancyInfo item in snapshot)
+            {
+                if (item.CurrentOccupants <= 0 && item.ActiveReservations <= 0)
+                    continue;
+
+                payload.Locations[item.LocationName] = new LocationOccupancyEntryDto
+                {
+                    CurrentOccupants = item.CurrentOccupants,
+                    ActiveReservations = item.ActiveReservations,
+                    Capacity = item.Capacity
+                };
+                sigParts.Add($"{item.LocationName}:{item.CurrentOccupants}:{item.ActiveReservations}:{item.Capacity}");
+            }
+
+            lastOccupancySyncTick = Game1.ticks;
+            string signature = string.Join(";", sigParts);
+            if (string.Equals(signature, lastOccupancySyncSignature, StringComparison.Ordinal))
+                return;
+
+            lastOccupancySyncSignature = signature;
+            context.Helper.Multiplayer.SendMessage(
+                payload,
+                ModMessages.LocationOccupancySync,
+                new[] { context.Manifest.UniqueID });
+        }
+
+        private static void ApplyDirectHomeRedirect(
+            string residenceSlotId,
+            ref LocationRequest locationRequest,
+            ref int tileX,
+            ref int tileY,
+            ref int facingDirectionAfterWarp)
+        {
+            DoorAssignment? assignment = context?.WorldState.Doors.Values
+                .FirstOrDefault(d => string.Equals(d.FarmSlotId, residenceSlotId, StringComparison.OrdinalIgnoreCase));
+            DoorModel? door = RegisteredDoors.FirstOrDefault(d => string.Equals(d.DefaultSlotId, residenceSlotId, StringComparison.OrdinalIgnoreCase));
+
+            if (door != null)
+            {
+                GetResidenceArrivalCoordinates(door, assignment?.FarmType, out tileX, out tileY, out facingDirectionAfterWarp);
+            }
+            else
+            {
+                var template = FarmTemplateCatalog.GetTemplate(assignment?.FarmType);
+                tileX = template.CabinTileX;
+                tileY = template.CabinTileY + 2;
+                facingDirectionAfterWarp = 2;
+            }
+
+            locationRequest = Game1.getLocationRequest(residenceSlotId);
+        }
+
+        private static bool EvaluateLocationCapacityGate(
+            ref LocationRequest locationRequest,
+            ref int tileX,
+            ref int tileY,
+            ref int facingDirectionAfterWarp)
+        {
+            if (context == null || Game1.player == null)
+                return true;
+
+            string targetName = locationRequest.Name ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(targetName))
+                return true;
+
+            string curLocName = Game1.currentLocation?.NameOrUniqueName ?? string.Empty;
+            if (!string.IsNullOrEmpty(curLocName) &&
+                string.Equals(curLocName, targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            LocationEntryOrigin origin = CurrentEntryOrigin();
+            if (origin != LocationEntryOrigin.Voluntary)
+                return true;
+
+            long localPlayerId = Game1.player.UniqueMultiplayerID;
+
+            if (Context.IsMainPlayer)
+            {
+                long attemptId = Interlocked.Increment(ref nextWarpAttemptId);
+                var (mySlot, myAnnexes) = GetPlayerResidenceSlotAndAnnexes(localPlayerId);
+                GameLocation? targetLocObj = locationRequest.Location ?? Game1.getLocationFromName(targetName, locationRequest.IsStructure);
+                string? targetRootName = targetLocObj != null ? GetLocationRootName(targetLocObj) : null;
+                int liveOccupants = CountLiveOccupantsForCapacity(targetName, localPlayerId);
+
+                LocationEntryDecision decision = LocationCapacity.TryRequestEntry(
+                    localPlayerId,
+                    targetName,
+                    attemptId,
+                    liveOccupants,
+                    DateTimeOffset.UtcNow,
+                    origin,
+                    curLocName,
+                    mySlot,
+                    myAnnexes,
+                    targetRootName,
+                    context.Config.FarmSlotCount);
+
+                if (!decision.Allowed)
+                {
+                    HaltAndNudgeOffWarp();
+                    Game1.addHUDMessage(new HUDMessage(
+                        I18n.Get("concurrency.location_full_hud", new
+                        {
+                            location = GetLocationLabelForHud(decision.TargetLocationName),
+                            current = decision.OccupiedCount,
+                            capacity = decision.Capacity
+                        }),
+                        HUDMessage.error_type));
+                    return false;
+                }
+
+                if (decision.Exemption == LocationEntryExemption.TransitBridgeToOwnResidence)
+                {
+                    ApplyDirectHomeRedirect(
+                        decision.EffectiveTargetLocationName,
+                        ref locationRequest,
+                        ref tileX,
+                        ref tileY,
+                        ref facingDirectionAfterWarp);
+                    Game1.addHUDMessage(new HUDMessage(
+                        I18n.Get("concurrency.bridge_full_redirect_home_hud", new { bridge = GetLocationLabelForHud(decision.TargetLocationName) }),
+                        HUDMessage.newQuest_type));
+                }
+
+                return true;
+            }
+
+            // Cliente remoto: si esta llamada corresponde a una entrada recién autorizada por el host, dejar continuar el fundido.
+            if (approvedWarpAttemptId != 0 &&
+                string.Equals(approvedEffectiveTarget, targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                approvedWarpAttemptId = 0;
+                return true;
+            }
+
+            if (deniedWarpCooldownTicks > 0 &&
+                string.Equals(deniedWarpTarget, targetName, StringComparison.OrdinalIgnoreCase))
+            {
+                HaltAndNudgeOffWarp();
+                return false;
+            }
+
+            if (pendingClientWarpAuth != null)
+            {
+                Game1.player.Halt();
+                Game1.player.completelyStopAnimatingOrDoingAction();
+                return false;
+            }
+
+            long clientAttemptId = Interlocked.Increment(ref nextWarpAttemptId);
+            pendingClientWarpAuth = new PendingWarpAuthState
+            {
+                AttemptId = clientAttemptId,
+                TargetLocation = targetName,
+                IsStructure = locationRequest.IsStructure,
+                TileX = tileX,
+                TileY = tileY,
+                FacingDirection = facingDirectionAfterWarp,
+                Origin = origin,
+                SentAtMs = Environment.TickCount64
+            };
+
+            Game1.player.Halt();
+            Game1.player.completelyStopAnimatingOrDoingAction();
+
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            if (hostId == 0L)
+            {
+                pendingClientWarpAuth = null;
+                return true;
+            }
+
+            context.Helper.Multiplayer.SendMessage(
+                new LocationEntryRequestPayload
+                {
+                    AttemptId = clientAttemptId,
+                    CurrentLocation = curLocName,
+                    TargetLocation = targetName,
+                    IsStructure = locationRequest.IsStructure,
+                    TileX = tileX,
+                    TileY = tileY,
+                    FacingDirection = facingDirectionAfterWarp,
+                    Origin = (int)origin
+                },
+                ModMessages.LocationEntryRequest,
+                new[] { context.Manifest.UniqueID },
+                new[] { hostId });
+
+            return false;
+        }
+
+        private static void HandleLocationEntryRequest(long fromPlayerId, LocationEntryRequestPayload? req)
+        {
+            if (req == null || context == null || !Context.IsMainPlayer)
+                return;
+
+            var (playerSlot, playerAnnexes) = GetPlayerResidenceSlotAndAnnexes(fromPlayerId);
+            GameLocation? targetLocObj = Game1.getLocationFromName(req.TargetLocation, req.IsStructure);
+            string? targetRootName = targetLocObj != null ? GetLocationRootName(targetLocObj) : null;
+            int liveOccupants = CountLiveOccupantsForCapacity(req.TargetLocation, fromPlayerId);
+            LocationEntryOrigin origin = Enum.IsDefined(typeof(LocationEntryOrigin), req.Origin)
+                ? (LocationEntryOrigin)req.Origin
+                : LocationEntryOrigin.Voluntary;
+
+            LocationEntryDecision decision = LocationCapacity.TryRequestEntry(
+                fromPlayerId,
+                req.TargetLocation,
+                req.AttemptId,
+                liveOccupants,
+                DateTimeOffset.UtcNow,
+                origin,
+                req.CurrentLocation,
+                playerSlot,
+                playerAnnexes,
+                targetRootName,
+                context.Config.FarmSlotCount);
+
+            if (decision.Allowed)
+            {
+                string? targetSlot = LocationCullingLogic.TryResolveResidenceSlotId(
+                    decision.EffectiveTargetLocationName,
+                    targetRootName);
+                if (!string.IsNullOrEmpty(targetSlot))
+                    EnsurePeerSyncedWithResidenceSlot(fromPlayerId, targetSlot);
+            }
+
+            context.Helper.Multiplayer.SendMessage(
+                new LocationEntryResponsePayload
+                {
+                    AttemptId = req.AttemptId,
+                    Allowed = decision.Allowed,
+                    TargetLocation = decision.TargetLocationName,
+                    EffectiveTargetLocation = decision.EffectiveTargetLocationName,
+                    IsStructure = req.IsStructure,
+                    TileX = req.TileX,
+                    TileY = req.TileY,
+                    FacingDirection = req.FacingDirection,
+                    OccupiedCount = decision.OccupiedCount,
+                    Capacity = decision.Capacity,
+                    Exemption = (int)decision.Exemption
+                },
+                ModMessages.LocationEntryResponse,
+                new[] { context.Manifest.UniqueID },
+                new[] { fromPlayerId });
+        }
+
+        private static void HandleLocationEntryResponse(LocationEntryResponsePayload? resp)
+        {
+            if (resp == null || Context.IsMainPlayer || pendingClientWarpAuth == null)
+                return;
+
+            if (resp.AttemptId != pendingClientWarpAuth.AttemptId)
+                return;
+
+            PendingWarpAuthState pending = pendingClientWarpAuth;
+            pendingClientWarpAuth = null;
+
+            if (resp.Allowed)
+            {
+                string effectiveTarget = string.IsNullOrWhiteSpace(resp.EffectiveTargetLocation)
+                    ? pending.TargetLocation
+                    : resp.EffectiveTargetLocation;
+                bool isStructure = resp.IsStructure;
+                int tx = resp.TileX;
+                int ty = resp.TileY;
+                int facing = resp.FacingDirection;
+                LocationRequest req;
+
+                if (resp.Exemption == (int)LocationEntryExemption.TransitBridgeToOwnResidence)
+                {
+                    req = Game1.getLocationRequest(effectiveTarget);
+                    ApplyDirectHomeRedirect(effectiveTarget, ref req, ref tx, ref ty, ref facing);
+                    isStructure = false;
+                    Game1.addHUDMessage(new HUDMessage(
+                        I18n.Get("concurrency.bridge_full_redirect_home_hud", new { bridge = GetLocationLabelForHud(resp.TargetLocation) }),
+                        HUDMessage.newQuest_type));
+                }
+                else
+                {
+                    req = Game1.getLocationRequest(effectiveTarget, isStructure);
+                }
+
+                approvedWarpAttemptId = resp.AttemptId;
+                approvedEffectiveTarget = effectiveTarget;
+                Game1.warpFarmer(req, tx, ty, facing);
+                return;
+            }
+
+            deniedWarpTarget = string.IsNullOrWhiteSpace(resp.TargetLocation)
+                ? pending.TargetLocation
+                : resp.TargetLocation;
+            deniedWarpCooldownTicks = 90;
+            HaltAndNudgeOffWarp();
+            Game1.addHUDMessage(new HUDMessage(
+                I18n.Get("concurrency.location_full_hud", new
+                {
+                    location = GetLocationLabelForHud(deniedWarpTarget),
+                    current = resp.OccupiedCount,
+                    capacity = resp.Capacity
+                }),
+                HUDMessage.error_type));
+        }
+
+        private static void HandleLocationEntryCancel(long fromPlayerId, LocationEntryCancelPayload? cancel)
+        {
+            if (cancel == null || !Context.IsMainPlayer)
+                return;
+
+            LocationCapacity.CancelReservation(fromPlayerId, cancel.AttemptId);
+        }
+
+        private static void HandleLocationOccupancySync(LocationOccupancySyncPayload? sync)
+        {
+            if (sync == null || Context.IsMainPlayer)
+                return;
+
+            replicatedLocationOccupancy.Clear();
+            if (sync.Locations == null)
+                return;
+
+            foreach (var kv in sync.Locations)
+            {
+                if (!string.IsNullOrWhiteSpace(kv.Key) && kv.Value != null)
+                    replicatedLocationOccupancy[kv.Key] = kv.Value;
+            }
+        }
+
+        private static void HaltAndNudgeOffWarp()
+        {
+            Farmer? p = Game1.player;
+            if (p == null)
+                return;
+
+            p.Halt();
+            p.completelyStopAnimatingOrDoingAction();
+
+            GameLocation? curLoc = Game1.currentLocation;
+            if (curLoc == null || curLoc.isCollidingWithWarpOrDoor(p.GetBoundingBox(), p) == null)
+                return;
+
+            Vector2 offset = p.FacingDirection switch
+            {
+                0 => new Vector2(0f, 16f),
+                1 => new Vector2(-16f, 0f),
+                2 => new Vector2(0f, -16f),
+                _ => new Vector2(16f, 0f)
+            };
+
+            Rectangle candidateBox = p.GetBoundingBox();
+            candidateBox.Offset((int)offset.X, (int)offset.Y);
+            if (!curLoc.isCollidingPosition(candidateBox, Game1.viewport, isFarmer: true, 0, glider: false, p))
+            {
+                p.Position += offset;
+            }
+        }
+
+        private static void ApplyExtendedConcurrencyServerPatches(Harmony harmony)
+        {
+            if (extendedConcurrencyServerPatchesApplied)
+                return;
+            extendedConcurrencyServerPatchesApplied = true;
+
+            PatchSafe(harmony, "GameServer.sendLocation",
+                AccessTools.Method(typeof(GameServer), "sendLocation", new[] { typeof(long), typeof(GameLocation), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GameServer_SendLocation)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Multiplayer.broadcastLocationMessage",
+                AccessTools.Method(typeof(Multiplayer), "broadcastLocationMessage", new[] { typeof(GameLocation), typeof(OutgoingMessage) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Multiplayer_BroadcastLocationMessage)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "GameServer.rebroadcastClientMessage",
+                AccessTools.Method(typeof(GameServer), "rebroadcastClientMessage", new[] { typeof(IncomingMessage), typeof(long) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_GameServer_RebroadcastClientMessage)),
+                criticality: PatchCriticality.Integrity);
+        }
+
+        private static void ApplyExtendedConcurrencyClientPatches(Harmony harmony)
+        {
+            if (extendedConcurrencyClientPatchesApplied)
+                return;
+            extendedConcurrencyClientPatchesApplied = true;
+
+            PatchSafe(harmony, "Multiplayer.readActiveLocation",
+                AccessTools.Method(typeof(Multiplayer), "readActiveLocation", new[] { typeof(IncomingMessage) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Multiplayer_ReadActiveLocation)),
+                finalizer: new HarmonyMethod(typeof(FarmSlotModule), nameof(Finalizer_Multiplayer_ReadActiveLocation)),
+                criticality: PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "Farmer.performPassoutWarp",
+                AccessTools.Method(typeof(Farmer), nameof(Farmer.performPassoutWarp), new[] { typeof(Farmer), typeof(string), typeof(Point), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Prefix_Farmer_PerformPassoutWarp)),
+                finalizer: new HarmonyMethod(typeof(FarmSlotModule), nameof(Finalizer_Farmer_PerformPassoutWarp)),
+                criticality: PatchCriticality.Integrity);
+        }
+
+        private static void EnsureClientExtendedConcurrencyPatches()
+        {
+            if (extendedConcurrencyClientPatchesApplied || context == null)
+                return;
+
+            ApplyExtendedConcurrencyClientPatches(context.Harmony);
+        }
+
+        public static void Prefix_Farmer_PerformPassoutWarp(Farmer who, out IDisposable? __state)
+        {
+            __state = who != null && who.IsLocalPlayer && IsExtendedConcurrencyActive()
+                ? BeginForcedEntryOrigin(LocationEntryOrigin.Passout)
+                : null;
+        }
+
+        public static Exception? Finalizer_Farmer_PerformPassoutWarp(Exception? __exception, IDisposable? __state)
+        {
+            __state?.Dispose();
+            return __exception;
+        }
+
+        public static void Prefix_Multiplayer_ReadActiveLocation()
+        {
+            inReadActiveLocationDepth++;
+        }
+
+        public static Exception? Finalizer_Multiplayer_ReadActiveLocation(Exception? __exception)
+        {
+            if (inReadActiveLocationDepth > 0)
+                inReadActiveLocationDepth--;
+            return __exception;
+        }
+
+        private static (
+            bool IsResidence,
+            string? ResidenceSlotId,
+            long? OwnerId,
+            long? TenantId,
+            HashSet<long> OccupantsInRootTree,
+            HashSet<long> PeersWithAuthorizedEntry)
+            ResolveResidenceInterestForRoot(string? locationName, string? rootName)
+        {
+            var emptyOcc = new HashSet<long>();
+            var emptyRes = new HashSet<long>();
+
+            string? slotId = LocationCullingLogic.TryResolveResidenceSlotId(locationName, rootName);
+            if (string.IsNullOrEmpty(slotId) || context == null)
+                return (false, null, null, null, emptyOcc, emptyRes);
+
+            DoorAssignment? door = context.WorldState.Doors.Values
+                .FirstOrDefault(d => string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase));
+            AnnexAssignment? annex = !string.IsNullOrEmpty(locationName)
+                ? context.WorldState.FindAnnexById(locationName)
+                : null;
+
+            long? ownerId = door?.OwnerId ?? annex?.OwnerId;
+            long? tenantId = door?.TenantId;
+
+            if ((!ownerId.HasValue || !tenantId.HasValue) && Game1.getLocationFromName(slotId) is GameLocation slotLoc)
+            {
+                ownerId ??= slotLoc.GetFarmOwnerId();
+                tenantId ??= slotLoc.GetFarmTenantId();
+            }
+
+            long currentDay = Game1.MasterPlayer?.stats.DaysPlayed ?? 0;
+            foreach (Farmer f in Game1.getOnlineFarmers())
+            {
+                if (f == null)
+                    continue;
+
+                long fId = f.UniqueMultiplayerID;
+                string? curSlot = f.currentLocation != null
+                    ? LocationCullingLogic.TryResolveResidenceSlotId(
+                        f.currentLocation.NameOrUniqueName,
+                        GetLocationRootName(f.currentLocation))
+                    : null;
+
+                if (!string.IsNullOrEmpty(curSlot) &&
+                    string.Equals(curSlot, slotId, StringComparison.OrdinalIgnoreCase))
+                {
+                    emptyOcc.Add(fId);
+                    continue;
+                }
+
+                // En el instante de conexión (`sendLocation` antes de aparecer el personaje en mapa),
+                // conservar interés sobre su punto de reaparición autorizado dentro de esa residencia.
+                if (f.currentLocation == null)
+                {
+                    string? spawnLoc = !string.IsNullOrWhiteSpace(f.disconnectLocation.Value) && f.disconnectDay.Value == currentDay
+                        ? f.disconnectLocation.Value
+                        : f.lastSleepLocation.Value;
+                    string? spawnSlot = LocationCullingLogic.TryResolveResidenceSlotId(spawnLoc);
+                    if (!string.IsNullOrEmpty(spawnSlot) &&
+                        string.Equals(spawnSlot, slotId, StringComparison.OrdinalIgnoreCase) &&
+                        (door == null || VisitorPermissionLogic.CanEnter(door, fId)))
+                    {
+                        emptyOcc.Add(fId);
+                    }
+                }
+            }
+
+            HashSet<long> reservedPeers = LocationCapacity.GetPeersWithReservationForResidence(slotId, DateTimeOffset.UtcNow);
+            return (true, slotId, ownerId, tenantId, emptyOcc, reservedPeers);
+        }
+
+        private static void SendLocationSnapshotToPeer(long peerId, GameLocation rootLocation, bool forceCurrent = false)
+        {
+            if (!Context.IsMainPlayer || Game1.server == null || rootLocation == null || peerId == 0L)
+                return;
+
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            if (peerId == hostId || !Game1.otherFarmers.ContainsKey(peerId))
+                return;
+
+            gameServerSendLocationMethod ??= AccessTools.Method(
+                typeof(GameServer),
+                "sendLocation",
+                new[] { typeof(long), typeof(GameLocation), typeof(bool) });
+            gameServerSendLocationMethod?.Invoke(Game1.server, new object[] { peerId, rootLocation, forceCurrent });
+        }
+
+        private static void EnsurePeerSyncedWithResidenceSlot(long peerId, string? residenceSlotId)
+        {
+            if (!Context.IsMainPlayer || !IsExtendedConcurrencyActive() || string.IsNullOrWhiteSpace(residenceSlotId) || peerId == 0L)
+                return;
+
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            if (peerId == hostId || !Game1.otherFarmers.ContainsKey(peerId))
+                return;
+
+            var syncedRoots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (GameLocation loc in Game1.locations)
+            {
+                if (loc == null)
+                    continue;
+
+                string rootName = GetLocationRootName(loc);
+                string? locSlot = LocationCullingLogic.TryResolveResidenceSlotId(loc.NameOrUniqueName, rootName);
+                if (!string.Equals(locSlot, residenceSlotId, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                GameLocation rootLoc = GetMultiplayerInstance()?.locationRoot(loc)?.Value ?? loc.Root?.Value ?? loc;
+                string canonicalRootName = rootLoc.NameOrUniqueName;
+                if (!syncedRoots.Add(canonicalRootName))
+                    continue;
+
+                if (ResidenceSyncTracker.NeedsFullSnapshotBeforeDeltas(peerId, canonicalRootName))
+                    SendLocationSnapshotToPeer(peerId, rootLoc, forceCurrent: false);
+            }
+        }
+
+        private static void EnsureInterestedPeersSyncedWithResidenceSlot(string? residenceSlotId)
+        {
+            if (!Context.IsMainPlayer || !IsExtendedConcurrencyActive() || string.IsNullOrWhiteSpace(residenceSlotId))
+                return;
+
+            var interest = ResolveResidenceInterestForRoot(residenceSlotId, residenceSlotId);
+            if (!interest.IsResidence)
+                return;
+
+            var interested = LocationCullingLogic.FilterInterestedPeers(
+                Game1.otherFarmers.Keys,
+                excludeSenderPeerId: null,
+                interest.OwnerId,
+                interest.TenantId,
+                interest.OccupantsInRootTree,
+                interest.PeersWithAuthorizedEntry);
+
+            foreach (long pid in interested)
+                EnsurePeerSyncedWithResidenceSlot(pid, residenceSlotId);
+        }
+
+        public static bool Prefix_GameServer_SendLocation(long peer, GameLocation location, bool force_current)
+        {
+            if (!Context.IsMainPlayer || !IsExtendedConcurrencyActive() || location == null)
+                return true;
+
+            string rootName = GetLocationRootName(location);
+            var interest = ResolveResidenceInterestForRoot(location.NameOrUniqueName, rootName);
+            if (!interest.IsResidence)
+                return true;
+
+            if (force_current ||
+                LocationCullingLogic.ShouldPeerReceiveResidenceRoot(
+                    peer,
+                    interest.OwnerId,
+                    interest.TenantId,
+                    interest.OccupantsInRootTree,
+                    interest.PeersWithAuthorizedEntry))
+            {
+                ResidenceSyncTracker.RecordFullSync(peer, rootName);
+                return true;
+            }
+
+            ConcurrencyMetricsTracker.RecordFilteredResidenceSend(1);
+            return false;
+        }
+
+        public static bool Prefix_Multiplayer_BroadcastLocationMessage(GameLocation loc, OutgoingMessage message)
+        {
+            if (Game1.IsClient || !Context.IsMainPlayer || !IsExtendedConcurrencyActive() || loc == null || Game1.server == null)
+                return true;
+
+            string rootName = GetLocationRootName(loc);
+            var interest = ResolveResidenceInterestForRoot(loc.NameOrUniqueName, rootName);
+            if (!interest.IsResidence)
+                return true;
+
+            var candidatePeers = Game1.otherFarmers.Keys.ToList();
+            if (candidatePeers.Count == 0)
+            {
+                ResidenceSyncTracker.RecordDeltaBroadcast(rootName, Array.Empty<long>());
+                return false;
+            }
+
+            var interestedPeers = LocationCullingLogic.FilterInterestedPeers(
+                candidatePeers,
+                excludeSenderPeerId: null,
+                interest.OwnerId,
+                interest.TenantId,
+                interest.OccupantsInRootTree,
+                interest.PeersWithAuthorizedEntry);
+
+            ResidenceSyncTracker.InvalidateRootForAbsentPeers(rootName, interestedPeers);
+
+            GameLocation rootLoc = GetMultiplayerInstance()?.locationRoot(loc)?.Value ?? loc.Root?.Value ?? loc;
+            foreach (long pid in interestedPeers)
+            {
+                if (ResidenceSyncTracker.NeedsFullSnapshotBeforeDeltas(pid, rootName))
+                    SendLocationSnapshotToPeer(pid, rootLoc, forceCurrent: false);
+
+                Game1.server.sendMessage(pid, message);
+            }
+
+            ResidenceSyncTracker.RecordDeltaBroadcast(rootName, interestedPeers);
+
+            int skipped = candidatePeers.Count - interestedPeers.Count;
+            if (skipped > 0)
+                ConcurrencyMetricsTracker.RecordFilteredResidenceSend(skipped);
+
+            return false;
+        }
+
+        public static bool Prefix_GameServer_RebroadcastClientMessage(IncomingMessage message, long peerID)
+        {
+            if (!Context.IsMainPlayer || !IsExtendedConcurrencyActive() || Game1.server == null || message == null)
+                return true;
+
+            if (peerID != Multiplayer.AllPlayers || (message.MessageType != 6 && message.MessageType != 7))
+                return true;
+
+            byte[]? rawData = message.Data;
+            if (rawData == null || rawData.Length == 0)
+                return true;
+
+            string locName;
+            bool isStructure;
+            try
+            {
+                using var ms = new MemoryStream(rawData, writable: false);
+                using var reader = new BinaryReader(ms);
+                isStructure = reader.ReadByte() != 0;
+                locName = reader.ReadString();
+            }
+            catch
+            {
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(locName))
+                return true;
+
+            GameLocation? locObj = Game1.getLocationFromName(locName, isStructure);
+            string rootName = locObj != null ? GetLocationRootName(locObj) : locName;
+            var interest = ResolveResidenceInterestForRoot(locName, rootName);
+            if (!interest.IsResidence)
+                return true;
+
+            var candidatePeers = Game1.otherFarmers.Keys.Where(k => k != message.FarmerID).ToList();
+            if (candidatePeers.Count == 0)
+            {
+                ResidenceSyncTracker.RecordDeltaBroadcast(rootName, Array.Empty<long>());
+                return false;
+            }
+
+            var interestedPeers = LocationCullingLogic.FilterInterestedPeers(
+                candidatePeers,
+                excludeSenderPeerId: message.FarmerID,
+                interest.OwnerId,
+                interest.TenantId,
+                interest.OccupantsInRootTree,
+                interest.PeersWithAuthorizedEntry);
+
+            ResidenceSyncTracker.InvalidateRootForAbsentPeers(rootName, interestedPeers);
+
+            var outgoing = new OutgoingMessage(message);
+            ConcurrencyMetricsTracker.BeginRebroadcastScope();
+            try
+            {
+                foreach (long pid in interestedPeers)
+                {
+                    if (locObj != null && ResidenceSyncTracker.NeedsFullSnapshotBeforeDeltas(pid, rootName))
+                    {
+                        GameLocation rootLoc = GetMultiplayerInstance()?.locationRoot(locObj)?.Value ?? locObj.Root?.Value ?? locObj;
+                        SendLocationSnapshotToPeer(pid, rootLoc, forceCurrent: false);
+                    }
+
+                    Game1.server.sendMessage(pid, outgoing);
+                }
+            }
+            finally
+            {
+                ConcurrencyMetricsTracker.EndRebroadcastScope();
+            }
+
+            ResidenceSyncTracker.RecordDeltaBroadcast(rootName, interestedPeers);
+
+            int skipped = candidatePeers.Count - interestedPeers.Count;
+            if (skipped > 0)
+                ConcurrencyMetricsTracker.RecordFilteredResidenceSend(skipped);
+
+            return false;
         }
     }
 }

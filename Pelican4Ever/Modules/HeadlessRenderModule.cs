@@ -37,6 +37,7 @@ namespace Pelican4Ever.Modules
         private static HostRenderReason lastReason = HostRenderReason.WorldNotReady;
         private static bool initialized;
         private static bool leaseActive;
+        private static bool envClientLabHeadless;
 
         // Fecha del juego vista en el último tick: los sucesos pueden registrarse desde otros hilos y Game1 no es seguro fuera
         // del hilo del juego.
@@ -45,11 +46,15 @@ namespace Pelican4Ever.Modules
 
         public string Name => "HeadlessRender";
 
-        public ModuleSide Side => ModuleSide.Host;
+        public ModuleSide Side => ModuleSide.Both;
 
         public void Register(ModContext ctx)
         {
             context = ctx;
+            string? envRaw = Environment.GetEnvironmentVariable("P4E_CLIENT_LAB_HEADLESS");
+            envClientLabHeadless = string.Equals(envRaw, "1", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(envRaw, "true", StringComparison.OrdinalIgnoreCase);
+
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.AddCommand(
                 Command,
@@ -107,8 +112,28 @@ namespace Pelican4Ever.Modules
 
         private static void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
         {
-            if (context == null || !Context.IsMainPlayer && Context.IsWorldReady)
+            if (context == null)
                 return;
+
+            if (!Context.IsMainPlayer && Context.IsWorldReady)
+            {
+                bool clientLabEnabled = context.Config.ClientLabHeadlessRendering || envClientLabHeadless;
+                if (!clientLabEnabled)
+                    return;
+
+                if (e.IsMultipleOf(60))
+                    leaseActive = Leases.HasActive(DateTime.UtcNow);
+
+                HostRenderReason clientReason = HostRenderPolicy.DecideClientLab(
+                    clientLabHeadlessEnabled: true,
+                    worldReady: true,
+                    drawRequiredMenuOpen: Game1.activeClickableMenu is SaveGameMenu,
+                    hasActiveLease: leaseActive);
+
+                if (!HostRenderPolicy.ShouldDraw(clientReason))
+                    GameRunner.instance?.SuppressDraw();
+                return;
+            }
 
             if (Context.IsWorldReady)
             {

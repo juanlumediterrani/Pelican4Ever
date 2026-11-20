@@ -472,6 +472,10 @@ Voyager、Putre 或某个诊断流程）。每位申请者最多持有一个：�
 }
 ```
 
+### `GET /api/v1/host/concurrency`
+
+返回扩展并发的有效配置、各地图人数上限与占用情况，以及最近一个 10 秒遥测窗口（`HostConcurrencyStatusDto`：按消息类型和接收方统计的载荷与来源区分、传输层流量、tick 耗时中位数/p95/最大值、帧间隔、采集自身开销、网络根遍历与序列化、CPU、内存和进入游戏耗时）。可选 `?instrumentation=on|off|reset` 用于在实验环境中开关或重置采集。
+
 ---
 
 ## 3. 经典路由 `/api/`

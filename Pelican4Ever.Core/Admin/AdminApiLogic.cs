@@ -19,6 +19,9 @@ namespace Pelican4Ever.Core.Admin
         public bool DedicatedHost { get; set; }
         public int OnlinePlayersCount { get; set; }
         public int MaxConcurrentPlayers { get; set; }
+        public bool ExtendedConcurrency { get; set; }
+        public int DefaultLocationCapacity { get; set; }
+        public Dictionary<string, int> LocationCapacityOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
         public int AdmissionQueueCapacity { get; set; }
         public int AdmissionQueueCount { get; set; }
         public int ReservedSlotsCount { get; set; }

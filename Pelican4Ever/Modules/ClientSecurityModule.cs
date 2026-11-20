@@ -108,9 +108,10 @@ namespace Pelican4Ever.Modules
             // Inicializar o verificar identidad del cliente local
             ClientIdentity.Initialize(ctx.Helper);
             Admission.Configure(
-                ctx.Config.MaxConcurrentPlayers,
+                ctx.Config.EffectiveMaxConcurrentPlayers,
                 ctx.Config.AdmissionQueueCapacity,
-                ctx.Config.ReconnectGraceMinutes);
+                ctx.Config.ReconnectGraceMinutes,
+                ctx.Config.ExtendedConcurrency);
 
             // Eventos de ciclo de vida y multijugador
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
@@ -175,9 +176,11 @@ namespace Pelican4Ever.Modules
             pendingUnclaimedOffers.Clear();
             Admission.ClearAll();
             Admission.Configure(
-                context.Config.MaxConcurrentPlayers,
+                context.Config.EffectiveMaxConcurrentPlayers,
                 context.Config.AdmissionQueueCapacity,
-                context.Config.ReconnectGraceMinutes);
+                context.Config.ReconnectGraceMinutes,
+                context.Config.ExtendedConcurrency);
+            ApplyMultiplayerConcurrencySettings();
 
             LoadAndMergePairingSidecar();
             ClientPairingLogic.EnsureExistingClaimsAuthorized(context.WorldState, DateTimeOffset.UtcNow);
@@ -1805,7 +1808,8 @@ namespace Pelican4Ever.Modules
                 Name,
                 PatchCriticality.Security,
                 AccessTools.Method(typeof(Client), nameof(Client.sendPlayerIntroduction)),
-                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction)));
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_Client_SendPlayerIntroduction)),
+                finalizer: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Finalizer_Client_SendPlayerIntroduction)));
 
             // 2. Override de getUserID en las implementaciones concretas de Client (IP directa, Steam y GOG Galaxy).
             var patchedGetUserID = new HashSet<MethodBase>();
@@ -1847,6 +1851,7 @@ namespace Pelican4Ever.Modules
                 Name,
                 PatchCriticality.Integrity,
                 AccessTools.Method(typeof(LidgrenServer), nameof(LidgrenServer.initialize)),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_LidgrenServer_Initialize)),
                 transpiler: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Transpile_LidgrenServer_Initialize)));
             allOk &= ctx.Patch(
                 "Server.onDisconnect",
@@ -1930,6 +1935,8 @@ namespace Pelican4Ever.Modules
             if (Game1.player == null)
                 return;
 
+            Game1.player.modData[ClientVersionGuardModule.ProtocolKey] = ClientVersionGuardModule.ProtocolRevision;
+
             // Si el peón seleccionado ya tiene asignado nuestro token de cliente legado, lo preservamos
             // para permitir el juego transparente con servidores que aún no han completado la migración de ranura.
             if (!string.IsNullOrEmpty(ClientIdentity.CurrentToken) &&
@@ -1946,6 +1953,11 @@ namespace Pelican4Ever.Modules
             {
                 Game1.player.userID.Value = publicId;
             }
+        }
+
+        public static void Finalizer_Client_SendPlayerIntroduction()
+        {
+            Game1.player?.modData.Remove(ClientVersionGuardModule.ProtocolKey);
         }
 
         public static bool Prefix_Client_GetUserID(ref string __result)
@@ -2067,7 +2079,28 @@ namespace Pelican4Ever.Modules
         {
             if (context == null)
                 return vanillaMax;
-            return Math.Max(1, context.Config.MaxConcurrentPlayers + context.Config.AdmissionQueueCapacity);
+            return Math.Max(1, context.Config.EffectiveMaxConcurrentPlayers + context.Config.AdmissionQueueCapacity);
+        }
+
+        public static void Postfix_LidgrenServer_Initialize()
+        {
+            ApplyMultiplayerConcurrencySettings();
+        }
+
+        private static void ApplyMultiplayerConcurrencySettings()
+        {
+            if (context == null)
+                return;
+
+            Multiplayer? multiplayer = AccessTools.Field(typeof(Game1), "multiplayer")?.GetValue(null) as Multiplayer;
+            if (multiplayer == null)
+                return;
+
+            multiplayer.playerLimit = context.Config.EffectiveMaxConcurrentPlayers;
+            if (context.Config.ExtendedConcurrency)
+            {
+                multiplayer.farmerDeltaBroadcastPeriod = context.Config.FarmerDeltaBroadcastPeriod;
+            }
         }
 
         public static IEnumerable<CodeInstruction> Transpile_LidgrenServer_Initialize(IEnumerable<CodeInstruction> instructions)
@@ -2233,6 +2266,7 @@ namespace Pelican4Ever.Modules
             string connectionId,
             Action<OutgoingMessage> sendMessage)
         {
+            ConcurrencyMetricsTracker.MarkConnectionHandshakeStart(connectionId);
             SyncServerTokensFromWorldState();
 
             string verifiedFingerprint = string.Empty;
@@ -2386,7 +2420,18 @@ namespace Pelican4Ever.Modules
                 return false;
             }
 
+            bool compatible = farmer.Value.modData.TryGetValue(ClientVersionGuardModule.ProtocolKey, out string? protocol)
+                && protocol == ClientVersionGuardModule.ProtocolRevision;
+            farmer.Value.modData.Remove(ClientVersionGuardModule.ProtocolKey);
+            if (context?.Config.RequireClientMod == true && !compatible)
+            {
+                context.Monitor.Log("[ClientVersionGuard] Cliente rechazado: actualiza las DLL del mod y reinicia Stardew.", LogLevel.Warn);
+                DisconnectConnectionById(connectionId, "Se requiere actualizar Pelican 4Ever a la versión del servidor.");
+                return false;
+            }
+
             long farmhandId = farmer.Value.UniqueMultiplayerID;
+            ConcurrencyMetricsTracker.BindConnectionToPlayer(connectionId, farmhandId);
             if (!Game1.netWorldState.Value.farmhandData.TryGetValue(farmhandId, out Farmer? serverFarmer) || serverFarmer == null)
             {
                 context?.Monitor.Log($"[ClientSecurity] El peón {farmhandId} pedido por la conexión {connectionId} ya no existe; se reenvía la lista.", LogLevel.Warn);

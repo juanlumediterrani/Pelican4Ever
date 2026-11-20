@@ -21,6 +21,8 @@ namespace Pelican4Ever.Modules
     /// </summary>
     public sealed class ClientVersionGuardModule : Framework.IModule
     {
+        internal const string ProtocolKey = "Pelican4Ever/ClientProtocol";
+        internal const string ProtocolRevision = "1";
         private Framework.ModContext context = null!;
         private static byte modContextMessageType;
 
@@ -162,7 +164,8 @@ namespace Pelican4Ever.Modules
                 return $"no tiene instalado {context.Manifest.Name}.";
 
             ISemanticVersion hostVersion = context.Manifest.Version;
-            if (mod.Version.MajorVersion != hostVersion.MajorVersion || mod.Version.MinorVersion != hostVersion.MinorVersion)
+            if (mod.Version.MajorVersion != hostVersion.MajorVersion || mod.Version.MinorVersion != hostVersion.MinorVersion
+                || mod.Version.PatchVersion < hostVersion.PatchVersion)
                 return $"versión incompatible ({mod.Version}; el servidor usa {hostVersion}).";
 
             if (requiredMods.Count > 0)

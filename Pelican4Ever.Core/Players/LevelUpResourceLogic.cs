@@ -16,6 +16,18 @@ namespace Pelican4Ever.Core.Players
         /// </summary>
         public static bool ShouldPreserveResources(bool showingEndOfNightStuff) => !showingEndOfNightStuff;
 
+        /// <summary>Detecta el relleno de nivel en una actualización de granjero recibida por el host.</summary>
+        public static bool IsRemoteLevelUpRefill(
+            int previousPendingLevels, int pendingLevels, float previousStamina, float stamina,
+            int previousMaxStamina, int maxStamina)
+        {
+            return pendingLevels < previousPendingLevels
+                && maxStamina > 0
+                && maxStamina == previousMaxStamina
+                && stamina > previousStamina
+                && stamina >= maxStamina;
+        }
+
         /// <summary>
         /// Calcula la vida resultante tras aplicar el perk de nivel o profesión sin curar vida faltante.
         /// Si aumentó <c>maxHealth</c> (Combate/Luchador/Defensor), suma únicamente ese incremento.

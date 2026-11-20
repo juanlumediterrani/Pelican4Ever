@@ -212,6 +212,7 @@
   "market.listing_withdrawn": "Listing withdrawn. {{item}} was returned.",
   "market.offline_profits": "You received {{gold}}g from Community Market sales while you were away.",
   "market.delivery_inventory_full": "No inventory space for the market item. Listing is preserved and gold was refunded.",
+  "market.listing_rejected": "The market could not verify your item. Check your inventory and try again.",
   "market.cannot_buy_own": "You cannot buy your own listing.",
   "market.already_sold": "Cannot withdraw a listing that has already been sold.",
   "market.invalid_item": "The item is not valid.",
@@ -274,6 +275,7 @@
   "bed_logout.offline_rest_both": "Offline rest: +{{energy}} energy and +{{health}} health recovered.",
   "bed_logout.host_agent_active": "Rest recorded. Host agent mode active: server remains online.",
   "bed_logout.disconnecting": "Rest recorded. Disconnecting safely...",
+  "bed_logout.rejected": "The host could not confirm your rest. Try again from your bed.",
   "rollover.warning_10min": "Notice: in 10 minutes the farm will be saved and connections closed for day rollover.",
   "rollover.closing_server": "Save confirmed. The server will close this connection to change the date.",
   "rollover.disconnecting": "Save confirmed. Disconnecting for day rollover.",
@@ -394,5 +396,9 @@
   "residence.marriage.need_residence": "You need your own claimed residence in Pelican Town before getting married or inviting a roommate.",
   "admission.queue_position": "Server is full. Your queue position: {{position}}/{{capacity}}.",
   "admission.queue_full": "The server and waiting queue are full. Please try again later.",
-  "idle.warning_hud": "Idle warning: you will be disconnected in {{minutes}} min if you remain inactive."
+  "idle.warning_hud": "Idle warning: you will be disconnected in {{minutes}} min if you remain inactive.",
+  "concurrency.location_full_hud": "{{location}} is currently full ({{current}}/{{capacity}}). Please try again later.",
+  "concurrency.location_request_timeout_hud": "Timed out waiting for entry authorization to {{location}}. Please try again.",
+  "concurrency.bridge_full_redirect_home_hud": "{{bridge}} is currently full; returning you directly to your residence.",
+  "concurrency.action_restricted_hud": "This action is temporarily restricted in {{location}}."
 }

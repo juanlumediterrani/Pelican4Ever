@@ -176,7 +176,11 @@ namespace Pelican4Ever.Core.Localization
             ["door.Farm_Portal_13.description"] = "Parcela 13 (Puente 3 - Norte Izquierda)",
             ["door.Farm_Portal_14.description"] = "Parcela 14 (Puente 3 - Norte Derecha)",
             ["door.Farm_Portal_15.description"] = "Parcela 15 (Puente 3 - Sur Izquierda)",
-            ["door.Farm_Portal_16.description"] = "Parcela 16 (Puente 3 - Sur Derecha)"
+            ["door.Farm_Portal_16.description"] = "Parcela 16 (Puente 3 - Sur Derecha)",
+            ["concurrency.location_full_hud"] = "{{location}} está lleno ahora mismo ({{current}}/{{capacity}}). Inténtalo más tarde.",
+            ["concurrency.location_request_timeout_hud"] = "Se agotó la espera para entrar en {{location}}. Inténtalo de nuevo.",
+            ["concurrency.bridge_full_redirect_home_hud"] = "{{bridge}} está lleno; regresando directamente a tu residencia.",
+            ["concurrency.action_restricted_hud"] = "Esta acción está restringida temporalmente en {{location}}."
         };
 
         public string Get(string key)

@@ -6,6 +6,7 @@ namespace Pelican4Ever.Core.Players
     /// </summary>
     public class BedLogoutPayload
     {
+        public string? RequestId { get; set; }
         public int GameDay { get; set; }
         public string LocationName { get; set; } = string.Empty;
         public int BedTileX { get; set; }

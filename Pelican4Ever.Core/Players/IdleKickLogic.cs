@@ -33,17 +33,28 @@ namespace Pelican4Ever.Core.Players
         public int MaxConcurrentPlayers { get; private set; }
         public int IdleKickMinutes { get; private set; }
         public int IdleKickWarningMinutes { get; private set; }
+        public bool ExtendedConcurrency { get; private set; }
 
-        public IdleKickLogic(int maxConcurrentPlayers = 16, int idleKickMinutes = 30, int idleKickWarningMinutes = 2)
+        public IdleKickLogic(
+            int maxConcurrentPlayers = 16,
+            int idleKickMinutes = 30,
+            int idleKickWarningMinutes = 2,
+            bool extendedConcurrency = false)
         {
-            Configure(maxConcurrentPlayers, idleKickMinutes, idleKickWarningMinutes);
+            Configure(maxConcurrentPlayers, idleKickMinutes, idleKickWarningMinutes, extendedConcurrency);
         }
 
-        public void Configure(int maxConcurrentPlayers, int idleKickMinutes, int idleKickWarningMinutes)
+        public void Configure(
+            int maxConcurrentPlayers,
+            int idleKickMinutes,
+            int idleKickWarningMinutes,
+            bool extendedConcurrency = false)
         {
             lock (_sync)
             {
-                MaxConcurrentPlayers = Math.Clamp(maxConcurrentPlayers, 1, 16);
+                ExtendedConcurrency = extendedConcurrency;
+                int maxAllowed = extendedConcurrency ? 64 : 16;
+                MaxConcurrentPlayers = Math.Clamp(maxConcurrentPlayers, 1, maxAllowed);
                 IdleKickMinutes = Math.Max(0, idleKickMinutes);
                 IdleKickWarningMinutes = Math.Max(0, idleKickWarningMinutes);
                 if (IdleKickMinutes > 0 && IdleKickWarningMinutes >= IdleKickMinutes)

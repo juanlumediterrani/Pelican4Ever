@@ -86,20 +86,34 @@ namespace Pelican4Ever.Core.Networking
         private readonly List<QueueEntry> _queue = new();
         private readonly object _sync = new();
 
+        public const int BaseMaxConcurrentPlayers = 16;
+        public const int ExtendedMaxConcurrentPlayers = 64;
+
         public int MaxConcurrentPlayers { get; private set; }
         public int QueueCapacity { get; private set; }
         public int ReconnectGraceMinutes { get; private set; }
+        public bool ExtendedConcurrency { get; private set; }
 
-        public AdmissionLogic(int maxConcurrentPlayers = 16, int queueCapacity = 16, int reconnectGraceMinutes = 5)
+        public AdmissionLogic(
+            int maxConcurrentPlayers = BaseMaxConcurrentPlayers,
+            int queueCapacity = 16,
+            int reconnectGraceMinutes = 5,
+            bool extendedConcurrency = false)
         {
-            Configure(maxConcurrentPlayers, queueCapacity, reconnectGraceMinutes);
+            Configure(maxConcurrentPlayers, queueCapacity, reconnectGraceMinutes, extendedConcurrency);
         }
 
-        public void Configure(int maxConcurrentPlayers, int queueCapacity, int reconnectGraceMinutes)
+        public void Configure(
+            int maxConcurrentPlayers,
+            int queueCapacity,
+            int reconnectGraceMinutes,
+            bool extendedConcurrency = false)
         {
             lock (_sync)
             {
-                MaxConcurrentPlayers = Math.Clamp(maxConcurrentPlayers, 1, 16);
+                ExtendedConcurrency = extendedConcurrency;
+                int maxAllowed = extendedConcurrency ? ExtendedMaxConcurrentPlayers : BaseMaxConcurrentPlayers;
+                MaxConcurrentPlayers = Math.Clamp(maxConcurrentPlayers, 1, maxAllowed);
                 QueueCapacity = Math.Clamp(queueCapacity, 0, 32);
                 ReconnectGraceMinutes = Math.Clamp(reconnectGraceMinutes, 0, 30);
             }

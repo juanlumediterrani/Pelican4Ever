@@ -21,6 +21,65 @@ namespace Pelican4Ever.Modules
             this.context = context;
             context.AddCommand("p4e_status", "Muestra el estado de Pelican 4Ever (reloj, calendario, jugadores).", OnStatus);
             context.AddCommand("p4e_load_metrics", "Muestra métricas de guardado/serialización y criaturas NITV (TASK-2506).", OnLoadMetrics);
+            context.AddCommand("p4e_concurrency", "Muestra o controla telemetría de concurrencia y aforo por mapa: p4e_concurrency [status|on|off|reset|occupancy]", OnConcurrency);
+        }
+
+        private void OnConcurrency(string command, string[] args)
+        {
+            IMonitor log = context.Monitor;
+            string arg = args.Length > 0 ? args[0].Trim().ToLowerInvariant() : "status";
+            if (arg == "on")
+            {
+                Framework.ConcurrencyMetricsTracker.SetEnabled(true);
+                log.Log("[Concurrency] Instrumentación de concurrencia ACTIVADA.", LogLevel.Info);
+                return;
+            }
+            if (arg == "off")
+            {
+                Framework.ConcurrencyMetricsTracker.SetEnabled(false);
+                log.Log("[Concurrency] Instrumentación de concurrencia DESACTIVADA.", LogLevel.Info);
+                return;
+            }
+            if (arg == "reset")
+            {
+                Framework.ConcurrencyMetricsTracker.Reset();
+                log.Log("[Concurrency] Ventana de telemetría reiniciada.", LogLevel.Info);
+                return;
+            }
+
+            var snap = Framework.ConcurrencyMetricsTracker.GetLatestOrCurrentSnapshot();
+            log.Log(
+                $"=== Concurrencia Pelican 4Ever (Extended={context.Config.ExtendedConcurrency}, Limite={context.Config.EffectiveMaxConcurrentPlayers}, " +
+                $"DefaultMapCap={context.Config.DefaultLocationCapacity}, FarmerDeltaPeriod={context.Config.FarmerDeltaBroadcastPeriod}, " +
+                $"Instrumentación={(Framework.ConcurrencyMetricsTracker.IsEnabled ? "ON" : "OFF")}) ===",
+                LogLevel.Info);
+
+            if (arg != "occupancy")
+            {
+                log.Log(
+                    $"  Ventana ({snap.WindowDurationSeconds:F1}s, clientes={snap.ConnectedClientsCount}): " +
+                    $"tick[p50={snap.TickMedianMs:F2}ms, p95={snap.TickP95Ms:F2}ms, max={snap.TickMaxMs:F2}ms], " +
+                    $"cadencia[p50={snap.TickCadenceMedianMs:F2}ms, p95={snap.TickCadenceP95Ms:F2}ms], " +
+                    $"overhead={snap.InstrumentationOverheadMs:F2}ms ({snap.InstrumentationOverheadPercent:F2}%)",
+                    LogLevel.Info);
+                log.Log(
+                    $"  Red: payload={snap.PayloadTotalMessages} msgs ({snap.PayloadTotalBytes} B, {snap.PayloadBytesPerSecond:F0} B/s) | " +
+                    $"transporteUp={snap.TransportBytesUp} B ({snap.TransportBytesUpPerSecond:F0} B/s) | " +
+                    $"type0={snap.Type0FarmerDeltaBytes} B, type6={snap.Type6LocationDeltaBytes} B, type3={snap.Type3LocationIntroBytes} B | " +
+                    $"filtrados={snap.RootSync.ResidenceDeltasFilteredOutCount}",
+                    LogLevel.Info);
+                log.Log(
+                    $"  Raíces: updateRoots={snap.RootSync.UpdateRootsCalls} ({snap.RootSync.UpdateRootsTotalMs:F1}ms, max={snap.RootSync.UpdateRootsMaxMs:F2}ms), " +
+                    $"locDeltas={snap.RootSync.BroadcastLocationDeltasCalls} ({snap.RootSync.BroadcastLocationDeltasTotalMs:F1}ms, locs={snap.RootSync.LocationsSerializedCount}, bytes={snap.RootSync.LocationsSerializedBytes}) | " +
+                    $"CPU={snap.CpuUsagePercent:F1}%, RSS={snap.WorkingSetBytes / (1024 * 1024)} MiB",
+                    LogLevel.Info);
+            }
+
+            if (snap.LocationOccupancy.Count > 0)
+            {
+                string occ = string.Join(", ", snap.LocationOccupancy.OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}={kv.Value}"));
+                log.Log($"  Ocupación por mapa: {occ}", LogLevel.Info);
+            }
         }
 
         private void OnLoadMetrics(string command, string[] args)
@@ -88,7 +147,7 @@ namespace Pelican4Ever.Modules
             long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0;
             int onlineClients = Game1.getOnlineFarmers().Count(f => f != null && f.UniqueMultiplayerID != hostId);
 
-            log.Log($"Conectados (clientes): {onlineClients}/{config.MaxConcurrentPlayers} | Cola: {queueSnapshot.Count}/{config.AdmissionQueueCapacity} | Reservas: {reservations.Count} | Expulsiones por inactividad: {IdleKickModule.TotalIdleKicks}", LogLevel.Info);
+            log.Log($"Conectados (clientes): {onlineClients}/{config.EffectiveMaxConcurrentPlayers} (Extended={config.ExtendedConcurrency}) | Cola: {queueSnapshot.Count}/{config.AdmissionQueueCapacity} | Reservas: {reservations.Count} | Expulsiones por inactividad: {IdleKickModule.TotalIdleKicks}", LogLevel.Info);
             if (queueSnapshot.Count > 0)
             {
                 foreach (var q in queueSnapshot)

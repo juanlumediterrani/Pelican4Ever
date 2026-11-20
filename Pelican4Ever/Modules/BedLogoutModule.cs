@@ -1,8 +1,10 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Netcode;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Players;
 using Pelican4Ever.Core.World;
@@ -11,6 +13,8 @@ using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Locations;
 using StardewValley.Menus;
+using StardewValley.Network;
+using StardewValley.Objects;
 
 namespace Pelican4Ever.Modules
 {
@@ -26,13 +30,18 @@ namespace Pelican4Ever.Modules
         private static int pendingOfflineStaminaGain = 0;
         private static int pendingOfflineHealthGain = 0;
         public const string BedLogoutMessageType = "BedLogoutRequest";
+        private const string BedLogoutResultMessageType = "BedLogoutResult";
+        private const string OfflineStaminaMessageType = "OfflineStaminaRestored";
         public const string OfflineRecoveryMessageType = "OfflineRecoveryRestored";
 
         private static BedLogoutPayload? pendingBedLogoutPayload;
+        private static string? pendingRestConfirmation;
         private static bool isBedLogoutPendingAfterLevels;
         private static bool isHostRestPendingAfterLevels;
         private static bool hasCheckedLoginLevelUps;
         private static Point? lastPresentedLevel;
+        private static readonly System.Reflection.FieldInfo? netStaminaField = AccessTools.Field(typeof(Farmer), "netStamina");
+        private static readonly Dictionary<long, (float Ceiling, long ExpiresAt)> restStaminaCeilings = new();
 
         public string Name => "BedLogout";
 
@@ -42,7 +51,7 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
 
-            // Escuchamos mensajes multijugador en ambos lados (Host para BedLogout, Cliente para OfflineStaminaRestored)
+            // El host recibe solicitudes de descanso y el cliente recibe las ganancias offline.
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.GameLoop.UpdateTicked += OnUpdateTicked;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
@@ -70,6 +79,8 @@ namespace Pelican4Ever.Modules
             pendingOfflineStaminaGain = 0;
             pendingOfflineHealthGain = 0;
             pendingBedLogoutPayload = null;
+            pendingRestConfirmation = null;
+            restStaminaCeilings.Clear();
             isBedLogoutPendingAfterLevels = false;
             isHostRestPendingAfterLevels = false;
             hasCheckedLoginLevelUps = false;
@@ -256,79 +267,6 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static DateTimeOffset ResolveAnchor(DateTimeOffset preferred, DateTimeOffset fallback, DateTimeOffset lastSeen)
-        {
-            if (preferred != DateTimeOffset.MinValue)
-                return preferred;
-            if (fallback != DateTimeOffset.MinValue)
-                return fallback;
-            return lastSeen;
-        }
-
-        private readonly record struct OfflineRecoveryComputation(
-            float NewStamina,
-            int StaminaGainedInt,
-            TimeSpan StaminaOfflineDuration,
-            int NewHealth,
-            int HealthGained,
-            TimeSpan HealthOfflineDuration);
-
-        private static OfflineRecoveryComputation ComputeOfflineRecovery(PlayerRecord record, Farmer farmer, DateTimeOffset nowUtc)
-        {
-            float fullBarHours = context?.Config.OfflineRegenFullBarHours ?? 0f;
-            DateTimeOffset staminaAnchor = ResolveAnchor(record.OfflineStaminaAnchorUtc, DateTimeOffset.MinValue, record.LastSeenUtc);
-            DateTimeOffset healthAnchor = ResolveAnchor(record.OfflineHealthAnchorUtc, staminaAnchor, record.LastSeenUtc);
-
-            float newStamina = farmer.Stamina;
-            int staminaGainedInt = 0;
-            TimeSpan offlineStamina = TimeSpan.Zero;
-            if (staminaAnchor != DateTimeOffset.MinValue)
-            {
-                offlineStamina = nowUtc - staminaAnchor;
-                if (offlineStamina > TimeSpan.FromSeconds(30))
-                {
-                    float calculated = OfflineStaminaRegenLogic.CalculateNewStamina(
-                        currentStamina: farmer.Stamina,
-                        maxStamina: farmer.MaxStamina,
-                        offlineDuration: offlineStamina,
-                        fullBarHours: fullBarHours);
-                    float gained = calculated - farmer.Stamina;
-                    if (gained > 0.5f)
-                    {
-                        newStamina = calculated;
-                        staminaGainedInt = (int)Math.Round(gained);
-                    }
-                }
-            }
-
-            int newHealth = farmer.health;
-            int healthGained = 0;
-            TimeSpan offlineHealth = TimeSpan.Zero;
-            if (healthAnchor != DateTimeOffset.MinValue)
-            {
-                offlineHealth = nowUtc - healthAnchor;
-                if (offlineHealth > TimeSpan.FromSeconds(30))
-                {
-                    int calculatedHealth = OfflineStaminaRegenLogic.CalculateNewHealth(
-                        currentHealth: farmer.health,
-                        maxHealth: farmer.maxHealth,
-                        offlineDuration: offlineHealth,
-                        fullBarHours: fullBarHours);
-                    healthGained = Math.Max(0, calculatedHealth - farmer.health);
-                    if (healthGained > 0)
-                        newHealth = calculatedHealth;
-                }
-            }
-
-            return new OfflineRecoveryComputation(
-                newStamina,
-                staminaGainedInt,
-                offlineStamina,
-                newHealth,
-                healthGained,
-                offlineHealth);
-        }
-
         private void OnHostSaveLoaded(object? sender, StardewModdingAPI.Events.SaveLoadedEventArgs e)
         {
             if (!Context.IsMainPlayer || context == null || context.Config.OfflineRegenFullBarHours <= 0)
@@ -342,15 +280,13 @@ namespace Pelican4Ever.Modules
                 return;
 
             DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
-            var recovery = ComputeOfflineRecovery(hostRecord, Game1.player, nowUtc);
+            var recovery = OfflineStaminaRegenLogic.CalculateRecoveryGains(
+                hostRecord, nowUtc, Game1.player.MaxStamina, Game1.player.maxHealth, context.Config.OfflineRegenFullBarHours);
             hostRecord.OfflineStaminaAnchorUtc = DateTimeOffset.MinValue;
             hostRecord.OfflineHealthAnchorUtc = DateTimeOffset.MinValue;
             hostRecord.LastSeenUtc = nowUtc;
 
-            if (recovery.StaminaGainedInt > 0 || recovery.HealthGained > 0)
-            {
-                ApplyOfflineRecoveryToLocalPlayer(recovery.StaminaGainedInt, recovery.HealthGained);
-            }
+            ApplyOfflineRecoveryToLocalPlayer(recovery.Stamina, recovery.Health);
         }
 
         private void OnPeerConnected(object? sender, StardewModdingAPI.Events.PeerConnectedEventArgs e)
@@ -358,9 +294,12 @@ namespace Pelican4Ever.Modules
             if (!Context.IsMainPlayer || context == null)
                 return;
 
-            // Al conectar un jugador, marcamos su actividad en el día actual
-            string playerName = Game1.GetPlayer(e.Peer.PlayerID)?.Name ?? string.Empty;
-            var player = context.WorldState.GetOrCreatePlayer(e.Peer.PlayerID, playerName);
+            long playerId = e.Peer.PlayerID;
+            Farmer? farmer = Game1.GetPlayer(playerId, onlyOnline: true);
+            if (farmer == null)
+                return;
+
+            var player = context.WorldState.GetOrCreatePlayer(playerId, farmer.Name);
 
             DateTime localNow = Core.Time.ServerTime.LocalNow(context.Config.TimeZoneId);
             TimeSpan dayStart = context.Config.ParsedCalendarDayChangeTime;
@@ -373,11 +312,12 @@ namespace Pelican4Ever.Modules
             }
 
             // Aplicar recuperación gradual de estamina y salud durante su tiempo desconectado (GAP-07 / Offline Regen)
-            ApplyOfflineRecovery(player, e.Peer.PlayerID);
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+            SendOfflineRecovery(player, farmer, nowUtc);
 
-            player.CurrentSessionStartUtc = DateTimeOffset.UtcNow;
+            player.CurrentSessionStartUtc = nowUtc;
             player.LastActiveGameDay = Game1.Date.TotalDays;
-            player.LastSeenUtc = DateTimeOffset.UtcNow;
+            player.LastSeenUtc = nowUtc;
             player.OfflineStaminaAnchorUtc = DateTimeOffset.MinValue;
             player.OfflineHealthAnchorUtc = DateTimeOffset.MinValue;
             player.EnsureDailyCounters(Game1.Date.TotalDays);
@@ -395,45 +335,34 @@ namespace Pelican4Ever.Modules
                 });
         }
 
-        private static void ApplyOfflineRecovery(PlayerRecord player, long playerId)
+        private static void SendOfflineRecovery(PlayerRecord player, Farmer farmer, DateTimeOffset nowUtc)
         {
             if (context == null || context.Config.OfflineRegenFullBarHours <= 0)
                 return;
 
-            Farmer? farmer = Game1.GetPlayer(playerId);
-            if (farmer == null)
-                return;
+            var recovery = OfflineStaminaRegenLogic.CalculateRecoveryGains(
+                player, nowUtc, farmer.MaxStamina, farmer.maxHealth, context.Config.OfflineRegenFullBarHours);
+            string[] modIds = { context.Manifest.UniqueID };
+            long[] playerIds = { farmer.UniqueMultiplayerID };
 
-            var recovery = ComputeOfflineRecovery(player, farmer, DateTimeOffset.UtcNow);
-            if (recovery.StaminaGainedInt > 0)
+            // El granjero local aplica la energía sobre su barra y sincroniza su NetFloat con el host.
+            // El mensaje original también permite que los clientes 0.5.0 reciban su recuperación.
+            if (recovery.Stamina > 0)
             {
-                farmer.Stamina = recovery.NewStamina;
-                context.Monitor.Log($"[BedLogoutModule] Jugador {player.PlayerName} ({playerId}) descansó {recovery.StaminaOfflineDuration.TotalMinutes:F1}m offline: +{recovery.StaminaGainedInt} energía ({recovery.NewStamina:F0}/{farmer.MaxStamina}).", LogLevel.Info);
+                context.Helper.Multiplayer.SendMessage(recovery.Stamina, OfflineStaminaMessageType, modIds, playerIds);
             }
 
-            if (farmer.Stamina > 0f && farmer.exhausted.Value)
+            int restoredHealth = OfflineStaminaRegenLogic.ApplyHealthGain(farmer.health, farmer.maxHealth, recovery.Health);
+            int healthGained = restoredHealth - farmer.health;
+            if (healthGained > 0)
             {
-                farmer.exhausted.Value = false;
+                farmer.health = restoredHealth;
+                context.Helper.Multiplayer.SendMessage(new OfflineRecoveryPayload { HealthGained = healthGained }, OfflineRecoveryMessageType, modIds, playerIds);
             }
 
-            if (recovery.HealthGained > 0)
+            if (recovery.Stamina > 0 || healthGained > 0)
             {
-                farmer.health = recovery.NewHealth;
-                context.Monitor.Log($"[BedLogoutModule] Jugador {player.PlayerName} ({playerId}) descansó {recovery.HealthOfflineDuration.TotalMinutes:F1}m offline: +{recovery.HealthGained} salud ({recovery.NewHealth}/{farmer.maxHealth}).", LogLevel.Info);
-            }
-
-            if (recovery.StaminaGainedInt > 0 || recovery.HealthGained > 0)
-            {
-                context.Helper.Multiplayer.SendMessage(
-                    message: new OfflineRecoveryPayload
-                    {
-                        StaminaGained = recovery.StaminaGainedInt,
-                        HealthGained = recovery.HealthGained
-                    },
-                    messageType: OfflineRecoveryMessageType,
-                    modIDs: new[] { context.Manifest.UniqueID },
-                    playerIDs: new[] { playerId }
-                );
+                context.Monitor.Log($"[BedLogoutModule] Recuperación offline enviada a {player.PlayerName} ({farmer.UniqueMultiplayerID}): hasta +{recovery.Stamina} energía y +{healthGained} salud.", LogLevel.Trace);
             }
         }
 
@@ -441,6 +370,8 @@ namespace Pelican4Ever.Modules
         {
             if (!Context.IsMainPlayer || context == null)
                 return;
+
+            restStaminaCeilings.Remove(e.Peer.PlayerID);
 
             string playerName = Game1.GetPlayer(e.Peer.PlayerID)?.Name
                 ?? (context.WorldState.Players.TryGetValue(e.Peer.PlayerID, out var rec) ? rec.PlayerName : string.Empty);
@@ -451,6 +382,7 @@ namespace Pelican4Ever.Modules
                 record.LastSeenUtc = now;
                 record.OfflineStaminaAnchorUtc = now;
                 record.OfflineHealthAnchorUtc = now;
+
                 record.CurrentSessionStartUtc = DateTimeOffset.MinValue;
             }
 
@@ -475,33 +407,48 @@ namespace Pelican4Ever.Modules
             if (Context.IsMainPlayer && e.Type == BedLogoutMessageType)
             {
                 long playerId = e.FromPlayerID;
-                BedLogoutPayload? payload = null;
-                try
+                string? requestId = e.ReadAs<BedLogoutPayload>()?.RequestId;
+                if (!Guid.TryParseExact(requestId, "N", out _))
+                    return;
+
+                Farmer? sleepingFarmer = Game1.GetPlayer(playerId, onlyOnline: true);
+                if (!Context.IsWorldReady || sleepingFarmer?.currentLocation is not FarmHouse home)
                 {
-                    payload = e.ReadAs<BedLogoutPayload>();
-                }
-                catch
-                {
-                    // Compatibilidad hacia atrás si un cliente envía un formato previo
+                    SendBedLogoutResult(playerId, requestId!, false);
+                    return;
                 }
 
-                int restDay = payload?.GameDay > 0 ? payload.GameDay : Game1.Date.TotalDays;
-                var record = context.WorldState.GetOrCreatePlayer(playerId, string.Empty);
+                string locationName = home.NameOrUniqueName;
+                string? residence = context.WorldState.FindResidenceOf(playerId)?.FarmSlotId;
+                bool canSleepHere = residence != null
+                    ? locationName == residence + "_Home"
+                    : home.owner?.UniqueMultiplayerID == playerId;
+                Point tile = sleepingFarmer.TilePoint;
+                BedFurniture? bed = BedFurniture.GetBedAtTile(home, tile.X, tile.Y);
+                if (!canSleepHere || bed == null || bed.bedType == BedFurniture.BedType.Child)
+                {
+                    context.Monitor.Log($"[BedLogoutModule] Descanso rechazado para {playerId}: cama no válida en su residencia.", LogLevel.Warn);
+                    SendBedLogoutResult(playerId, requestId!, false);
+                    return;
+                }
+
+                int restDay = Game1.Date.TotalDays;
+                var record = context.WorldState.GetOrCreatePlayer(playerId, sleepingFarmer.Name);
                 DateTimeOffset now = DateTimeOffset.UtcNow;
                 record.RestedOnGameDay = restDay;
                 record.LastActiveGameDay = restDay;
                 record.OfflineStaminaAnchorUtc = now;
                 record.OfflineHealthAnchorUtc = now;
 
-                Farmer? sleepingFarmer = Game1.GetPlayer(playerId);
-                if (sleepingFarmer != null && payload != null && !string.IsNullOrEmpty(payload.LocationName))
-                {
-                    sleepingFarmer.lastSleepLocation.Value = payload.LocationName;
-                    sleepingFarmer.lastSleepPoint.Value = new Point(payload.BedTileX, payload.BedTileY);
-                    sleepingFarmer.disconnectLocation.Value = payload.LocationName;
-                    sleepingFarmer.disconnectPosition.Value = new Vector2(payload.PositionX, payload.PositionY);
-                    sleepingFarmer.disconnectDay.Value = restDay;
-                }
+                if (netStaminaField?.GetValue(sleepingFarmer) is NetFloat stamina && float.IsFinite(stamina.TargetValue))
+                    restStaminaCeilings[playerId] = (stamina.TargetValue, Environment.TickCount64 + 10_000);
+
+                Point bedSpot = bed.GetBedSpot();
+                sleepingFarmer.lastSleepLocation.Value = locationName;
+                sleepingFarmer.lastSleepPoint.Value = bedSpot;
+                sleepingFarmer.disconnectLocation.Value = locationName;
+                sleepingFarmer.disconnectPosition.Value = new Vector2(bedSpot.X, bedSpot.Y) * Game1.tileSize;
+                sleepingFarmer.disconnectDay.Value = restDay;
 
                 try
                 {
@@ -511,43 +458,39 @@ namespace Pelican4Ever.Modules
                 {
                     context.Monitor.Log($"[BedLogoutModule] Error al guardar ServerWorldState tras descanso del jugador {playerId}: {ex}", LogLevel.Warn);
                 }
-                context.Monitor.Log($"[BedLogoutModule] Descanso registrado para jugador {playerId} en día {restDay} (loc: {payload?.LocationName ?? "n/a"}).", LogLevel.Info);
+                context.Monitor.Log($"[BedLogoutModule] Descanso registrado para jugador {playerId} en día {restDay} (loc: {locationName}).", LogLevel.Info);
+                SendBedLogoutResult(playerId, requestId!, true);
                 return;
             }
 
-            // En el Cliente: aplicar recuperación de energía y salud offline al volver
-            if (!Context.IsMainPlayer && e.Type == OfflineRecoveryMessageType)
+            if (Context.IsMainPlayer || context.Helper.Multiplayer.GetConnectedPlayer(e.FromPlayerID)?.IsHost != true)
+                return;
+
+            // Aplicar en UpdateTicked, cuando la carga del granjero local haya terminado.
+            if (e.Type == BedLogoutResultMessageType)
+            {
+                var result = e.ReadAs<BedLogoutResult>();
+                if (pendingRestConfirmation == null || result?.RequestId != pendingRestConfirmation)
+                    return;
+
+                pendingRestConfirmation = null;
+                if (result.Accepted)
+                    DisconnectAfterRest();
+                else
+                    ShowRestRejected();
+            }
+            else if (e.Type == OfflineRecoveryMessageType)
             {
                 var recovery = e.ReadAs<OfflineRecoveryPayload>();
-                if (recovery != null && (recovery.StaminaGained > 0 || recovery.HealthGained > 0))
+                if (recovery != null)
                 {
-                    if (Context.IsWorldReady && Game1.player != null)
-                    {
-                        ApplyOfflineRecoveryToLocalPlayer(recovery.StaminaGained, recovery.HealthGained);
-                    }
-                    else
-                    {
-                        pendingOfflineStaminaGain += Math.Max(0, recovery.StaminaGained);
-                        pendingOfflineHealthGain += Math.Max(0, recovery.HealthGained);
-                    }
+                    pendingOfflineStaminaGain += Math.Max(0, recovery.StaminaGained);
+                    pendingOfflineHealthGain += Math.Max(0, recovery.HealthGained);
                 }
-                return;
             }
-
-            if (!Context.IsMainPlayer && e.Type == "OfflineStaminaRestored")
+            else if (e.Type == OfflineStaminaMessageType)
             {
-                int gained = e.ReadAs<int>();
-                if (gained > 0)
-                {
-                    if (Context.IsWorldReady && Game1.player != null)
-                    {
-                        ApplyOfflineRecoveryToLocalPlayer(gained, 0);
-                    }
-                    else
-                    {
-                        pendingOfflineStaminaGain += gained;
-                    }
-                }
+                pendingOfflineStaminaGain += Math.Max(0, e.ReadAs<int>());
             }
         }
 
@@ -581,6 +524,94 @@ namespace Pelican4Ever.Modules
                 AccessTools.Method(typeof(LevelUpMenu), nameof(LevelUpMenu.getLevelPerk), new[] { typeof(int), typeof(int) }),
                 prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_LevelUpPerk)),
                 postfix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Postfix_LevelUpPerk)));
+
+            if (Context.IsMainPlayer)
+            {
+                context.Patch(
+                    "Multiplayer.processIncomingMessage (level-up stamina)",
+                    Name,
+                    PatchCriticality.Integrity,
+                    netStaminaField == null ? null : AccessTools.Method(typeof(Multiplayer), nameof(Multiplayer.processIncomingMessage)),
+                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_RemoteFarmerDelta)),
+                    postfix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Postfix_RemoteFarmerDelta)));
+                context.Patch(
+                    "Multiplayer.saveFarmhand (rest stamina)",
+                    Name,
+                    PatchCriticality.Integrity,
+                    AccessTools.Method(typeof(Multiplayer), "saveFarmhand", new[] { typeof(NetFarmerRoot) }),
+                    prefix: new HarmonyMethod(typeof(BedLogoutModule), nameof(Prefix_SaveFarmhand)));
+            }
+        }
+
+        public readonly record struct RemoteStaminaSnapshot(NetFarmerRoot Root, int PendingLevels, float Stamina, int MaxStamina);
+
+        public static void Prefix_RemoteFarmerDelta(IncomingMessage msg, out RemoteStaminaSnapshot? __state)
+        {
+            __state = null;
+            if (msg.MessageType != Multiplayer.farmerDelta
+                || context?.IsModEnabled != true || !Context.IsMainPlayer || !Context.IsWorldReady
+                || msg.Data.Length < sizeof(long)
+                || BinaryPrimitives.ReadInt64LittleEndian(msg.Data) != msg.FarmerID)
+                return;
+
+            if (!Game1.otherFarmers.Roots.TryGetValue(msg.FarmerID, out var root) || root is not NetFarmerRoot farmerRoot
+                || farmerRoot.TargetValue is not Farmer farmer || farmer == Game1.player
+                || netStaminaField?.GetValue(farmer) is not NetFloat stamina)
+                return;
+
+            // El paquete de Stardew contiene tanto la retirada del nivel pendiente como el relleno.
+            __state = new RemoteStaminaSnapshot(farmerRoot, farmer.newLevels.Count, stamina.TargetValue, farmer.maxStamina.TargetValue);
+        }
+
+        public static void Postfix_RemoteFarmerDelta(RemoteStaminaSnapshot? __state)
+        {
+            if (__state is not { } before || before.Root.TargetValue is not Farmer farmer
+                || netStaminaField?.GetValue(farmer) is not NetFloat stamina)
+                return;
+
+            float receivedStamina = stamina.TargetValue;
+            bool invalidStamina = !float.IsFinite(receivedStamina);
+            bool levelUpRefill = !Game1.showingEndOfNightStuff && LevelUpResourceLogic.IsRemoteLevelUpRefill(
+                before.PendingLevels, farmer.newLevels.Count, before.Stamina, receivedStamina,
+                before.MaxStamina, farmer.maxStamina.TargetValue);
+            if (invalidStamina || levelUpRefill)
+            {
+                RestoreRemoteStamina(stamina, before.Stamina);
+                context?.Monitor.Log($"[BedLogoutModule] Esfuerzo rechazado para {farmer.Name}: {receivedStamina:F1} → {before.Stamina:F1} ({(invalidStamina ? "valor inválido" : "relleno por nivel")}).", LogLevel.Info);
+            }
+
+            PreserveRestStamina(farmer);
+        }
+
+        public static void Prefix_SaveFarmhand(NetFarmerRoot farmhand) => PreserveRestStamina(farmhand.TargetValue);
+
+        internal static void PreserveRestStamina(Farmer? farmer)
+        {
+            if (context?.IsModEnabled != true || farmer == null
+                || !restStaminaCeilings.TryGetValue(farmer.UniqueMultiplayerID, out var rest))
+                return;
+
+            if (Environment.TickCount64 >= rest.ExpiresAt)
+            {
+                restStaminaCeilings.Remove(farmer.UniqueMultiplayerID);
+                return;
+            }
+
+            if (netStaminaField?.GetValue(farmer) is not NetFloat stamina)
+                return;
+
+            // Al salir, Stardew sincroniza una copia completa que puede volver a traer el relleno.
+            if (!float.IsFinite(stamina.TargetValue) || stamina.TargetValue > rest.Ceiling)
+                RestoreRemoteStamina(stamina, rest.Ceiling);
+            else if (stamina.TargetValue < rest.Ceiling)
+                restStaminaCeilings[farmer.UniqueMultiplayerID] = (stamina.TargetValue, rest.ExpiresAt);
+        }
+
+        private static void RestoreRemoteStamina(NetFloat stamina, float accepted)
+        {
+            stamina.CancelInterpolation();
+            stamina.MarkClean();
+            stamina.Set(accepted);
         }
 
         public static void Prefix_LevelUpPerk(out LevelUpResourceLogic.ResourceSnapshot? __state)
@@ -664,15 +695,14 @@ namespace Pelican4Ever.Modules
                 }
                 string locationName = __instance.NameOrUniqueName;
 
-                Game1.player.lastSleepLocation.Value = locationName;
-                Game1.player.lastSleepPoint.Value = bedSpot;
-                Game1.player.disconnectLocation.Value = locationName;
-                Game1.player.disconnectPosition.Value = Game1.player.Position;
-                Game1.player.disconnectDay.Value = Game1.Date.TotalDays;
-
                 // Si es el propio Host quien duerme en la cama (TASK-804)
                 if (Context.IsMainPlayer)
                 {
+                    Game1.player.lastSleepLocation.Value = locationName;
+                    Game1.player.lastSleepPoint.Value = bedSpot;
+                    Game1.player.disconnectLocation.Value = locationName;
+                    Game1.player.disconnectPosition.Value = Game1.player.Position;
+                    Game1.player.disconnectDay.Value = Game1.Date.TotalDays;
                     if (context.Config.AgentHost)
                     {
                         ExecuteHostRest();
@@ -740,16 +770,53 @@ namespace Pelican4Ever.Modules
 
         private static void ExecuteClientBedLogout(BedLogoutPayload payload)
         {
-            if (context == null) return;
+            if (context == null || pendingRestConfirmation != null)
+                return;
+
+            long hostId = Game1.MasterPlayer.UniqueMultiplayerID;
+            var hostMod = context.Helper.Multiplayer.GetConnectedPlayer(hostId)?.Mods
+                .FirstOrDefault(mod => mod.ID == context.Manifest.UniqueID);
+            bool expectsConfirmation = hostMod?.Version.IsOlderThan("0.5.2") == false;
+            string requestId = Guid.NewGuid().ToString("N");
+            payload.RequestId = requestId;
+            if (expectsConfirmation)
+                pendingRestConfirmation = requestId;
 
             // Cliente granjero: enviar mensaje al Host para registrar el descanso y salir al título
             context.Helper.Multiplayer.SendMessage(
                 message: payload,
                 messageType: BedLogoutMessageType,
                 modIDs: new[] { context.Manifest.UniqueID },
-                playerIDs: new[] { Game1.MasterPlayer.UniqueMultiplayerID }
+                playerIDs: new[] { hostId }
             );
 
+            if (!expectsConfirmation)
+            {
+                DisconnectAfterRest();
+                return;
+            }
+
+            DelayedAction.functionAfterDelay(() =>
+            {
+                if (pendingRestConfirmation != requestId)
+                    return;
+                pendingRestConfirmation = null;
+                ShowRestRejected();
+            }, 5000);
+        }
+
+        private static void SendBedLogoutResult(long playerId, string requestId, bool accepted)
+        {
+            if (context != null)
+                context.Helper.Multiplayer.SendMessage(new BedLogoutResult { RequestId = requestId, Accepted = accepted },
+                    BedLogoutResultMessageType, new[] { context.Manifest.UniqueID }, new[] { playerId });
+        }
+
+        private static void ShowRestRejected() =>
+            Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.rejected"), HUDMessage.error_type));
+
+        private static void DisconnectAfterRest()
+        {
             Game1.addHUDMessage(new HUDMessage(I18n.Get("bed_logout.disconnecting"), HUDMessage.newQuest_type));
 
             // Salir al menú principal limpiamente tras 1.5s
@@ -757,6 +824,12 @@ namespace Pelican4Ever.Modules
             {
                 Game1.ExitToTitle();
             }, 1500);
+        }
+
+        public sealed class BedLogoutResult
+        {
+            public string RequestId { get; set; } = string.Empty;
+            public bool Accepted { get; set; }
         }
 
         public sealed class OfflineRecoveryPayload

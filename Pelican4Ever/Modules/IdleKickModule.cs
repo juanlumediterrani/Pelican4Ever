@@ -45,9 +45,10 @@ namespace Pelican4Ever.Modules
         {
             context = ctx;
             Logic.Configure(
-                ctx.Config.MaxConcurrentPlayers,
+                ctx.Config.EffectiveMaxConcurrentPlayers,
                 ctx.Config.IdleKickMinutes,
-                ctx.Config.IdleKickWarningMinutes);
+                ctx.Config.IdleKickWarningMinutes,
+                ctx.Config.ExtendedConcurrency);
 
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.GameLoop.ReturnedToTitle += OnReturnedToTitle;
@@ -68,9 +69,10 @@ namespace Pelican4Ever.Modules
             if (context != null)
             {
                 Logic.Configure(
-                    context.Config.MaxConcurrentPlayers,
+                    context.Config.EffectiveMaxConcurrentPlayers,
                     context.Config.IdleKickMinutes,
-                    context.Config.IdleKickWarningMinutes);
+                    context.Config.IdleKickWarningMinutes,
+                    context.Config.ExtendedConcurrency);
             }
         }
 

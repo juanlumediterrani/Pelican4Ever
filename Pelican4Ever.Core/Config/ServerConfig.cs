@@ -215,11 +215,43 @@ namespace Pelican4Ever.Core.Config
         /// </summary>
         public List<string> RequiredClientMods { get; set; } = new();
 
+        /// <summary>Tope base de clientes simultáneos sin activar <see cref="ExtendedConcurrency"/>.</summary>
+        public const int BaseMaxConcurrentPlayers = 16;
+
+        /// <summary>Tope experimental de clientes simultáneos con <see cref="ExtendedConcurrency"/> activo (ADR-0011).</summary>
+        public const int ExtendedMaxConcurrentPlayers = 64;
+
+        /// <summary>Aforo por defecto de entradas voluntarias por mapa (ADR-0011).</summary>
+        public const int DefaultMapCapacity = 16;
+
         /// <summary>Número de huecos de granja (= puertas reclamables) declarados en Data/Locations (1..16, 32 o 64).</summary>
         public int FarmSlotCount { get; set; } = 4;
 
-        /// <summary>Máximo de jugadores simultáneos (clientes, sin contar al host) admitidos en partida (1..16).</summary>
-        public int MaxConcurrentPlayers { get; set; } = 16;
+        /// <summary>Habilita concurrencia ampliada por encima de 16 clientes y control de aforo por mapa (ADR-0011, requiere reinicio).</summary>
+        public bool ExtendedConcurrency { get; set; } = false;
+
+        /// <summary>Máximo de jugadores simultáneos (clientes, sin contar al host) admitidos en partida (1..16, o 1..64 con <see cref="ExtendedConcurrency"/>).</summary>
+        public int MaxConcurrentPlayers { get; set; } = BaseMaxConcurrentPlayers;
+
+        /// <summary>Aforo por defecto de entradas voluntarias por ubicación cuando <see cref="ExtendedConcurrency"/> está activo (1..64).</summary>
+        public int DefaultLocationCapacity { get; set; } = DefaultMapCapacity;
+
+        /// <summary>Ajustes explícitos de aforo por nombre de ubicación (tienen precedencia sobre <see cref="DefaultLocationCapacity"/>).</summary>
+        public Dictionary<string, int> LocationCapacityOverrides { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>Activa la captura periódica en ventanas de 10 s de telemetría de red y tick (TASK-2601).</summary>
+        public bool EnableConcurrencyInstrumentation { get; set; } = false;
+
+        /// <summary>Cadencia en ticks de difusión de deltas de jugador (<c>farmerDeltaBroadcastPeriod</c>: 3 o 6) con concurrencia ampliada.</summary>
+        public int FarmerDeltaBroadcastPeriod { get; set; } = 3;
+
+        /// <summary>Suprime el dibujado en clientes de laboratorio en partida cuando es true (TASK-2602).</summary>
+        public bool ClientLabHeadlessRendering { get; set; } = false;
+
+        /// <summary>Capacidad efectiva de clientes simultáneos aplicada a transporte, admisión e inactividad.</summary>
+        public int EffectiveMaxConcurrentPlayers => ExtendedConcurrency
+            ? Math.Clamp(MaxConcurrentPlayers, 1, ExtendedMaxConcurrentPlayers)
+            : Math.Clamp(MaxConcurrentPlayers, 1, BaseMaxConcurrentPlayers);
 
         /// <summary>Plazas máximas en la cola de admisión cuando el servidor está lleno (0..32).</summary>
         public int AdmissionQueueCapacity { get; set; } = 16;
@@ -467,8 +499,23 @@ namespace Pelican4Ever.Core.Config
                 errors.Add($"{nameof(SkullCavernDescentDepthDivisor)} debe ser finito y no negativo.");
             if (FarmSlotCount is not ((>= 1 and <= 16) or 32 or 64))
                 errors.Add($"{nameof(FarmSlotCount)} debe estar entre 1 y 16, o ser 32 o 64.");
-            if (MaxConcurrentPlayers is < 1 or > 16)
-                errors.Add($"{nameof(MaxConcurrentPlayers)} debe estar entre 1 y 16.");
+            int maxAllowedPlayers = ExtendedConcurrency ? ExtendedMaxConcurrentPlayers : BaseMaxConcurrentPlayers;
+            if (MaxConcurrentPlayers < 1 || MaxConcurrentPlayers > maxAllowedPlayers)
+                errors.Add($"{nameof(MaxConcurrentPlayers)} debe estar entre 1 y {maxAllowedPlayers}{(ExtendedConcurrency ? string.Empty : $" (activa {nameof(ExtendedConcurrency)} para superar {BaseMaxConcurrentPlayers})")}.");
+            if (DefaultLocationCapacity < 1 || DefaultLocationCapacity > ExtendedMaxConcurrentPlayers)
+                errors.Add($"{nameof(DefaultLocationCapacity)} debe estar entre 1 y {ExtendedMaxConcurrentPlayers}.");
+            if (LocationCapacityOverrides != null)
+            {
+                foreach (var entry in LocationCapacityOverrides)
+                {
+                    if (string.IsNullOrWhiteSpace(entry.Key))
+                        errors.Add($"{nameof(LocationCapacityOverrides)} contiene un nombre de ubicación vacío.");
+                    else if (entry.Value < 1 || entry.Value > ExtendedMaxConcurrentPlayers)
+                        errors.Add($"{nameof(LocationCapacityOverrides)}['{entry.Key}'] debe estar entre 1 y {ExtendedMaxConcurrentPlayers}.");
+                }
+            }
+            if (FarmerDeltaBroadcastPeriod is not (3 or 6))
+                errors.Add($"{nameof(FarmerDeltaBroadcastPeriod)} debe ser 3 o 6. Valor: {FarmerDeltaBroadcastPeriod}.");
             if (AdmissionQueueCapacity is < 0 or > 32)
                 errors.Add($"{nameof(AdmissionQueueCapacity)} debe estar entre 0 y 32.");
             if (ReconnectGraceMinutes is < 0 or > 30)

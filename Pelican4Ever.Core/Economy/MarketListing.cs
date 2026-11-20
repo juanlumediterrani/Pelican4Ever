@@ -27,6 +27,12 @@ namespace Pelican4Ever.Core.Economy
 
         public bool IsSold { get; set; }
 
+        public bool IsReserved { get; set; }
+
+        public int? DepositSlot { get; set; }
+
+        public long DepositCountBefore { get; set; }
+
         public long? BuyerId { get; set; }
 
         public string? BuyerName { get; set; }

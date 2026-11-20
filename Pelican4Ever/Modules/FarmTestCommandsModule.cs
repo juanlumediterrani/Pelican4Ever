@@ -359,7 +359,10 @@ namespace Pelican4Ever.Modules
                 return;
             }
 
-            Game1.warpFarmer(location, tile.X, tile.Y, facing);
+            using (FarmSlotModule.BeginForcedEntryOrigin(LocationEntryOrigin.AdminTeleport))
+            {
+                Game1.warpFarmer(location, tile.X, tile.Y, facing);
+            }
             Say($"{player.Name} -> {location} ({tile.X}, {tile.Y}).", LogLevel.Info);
         }
 
@@ -540,7 +543,10 @@ namespace Pelican4Ever.Modules
                 case MsgWarp when fromHost:
                 {
                     WarpPayload p = e.ReadAs<WarpPayload>();
-                    Game1.warpFarmer(p.Location, p.X, p.Y, p.Facing);
+                    using (FarmSlotModule.BeginForcedEntryOrigin(LocationEntryOrigin.AdminTeleport))
+                    {
+                        Game1.warpFarmer(p.Location, p.X, p.Y, p.Facing);
+                    }
                     Reply($"{Game1.player.Name} -> {p.Location} ({p.X}, {p.Y}).");
                     break;
                 }

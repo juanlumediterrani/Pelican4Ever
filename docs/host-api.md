@@ -457,6 +457,10 @@ Devuelve la instantánea atómica de salud del host (`HostHealthDto`), leída **
 }
 ```
 
+### `GET /api/v1/host/concurrency`
+
+Devuelve la configuración efectiva de concurrencia ampliada, los aforos y ocupación por mapa, y la última ventana de 10 s de telemetría (`HostConcurrencyStatusDto`: mensajes y bytes por tipo y receptor separando origen del host frente a reenvío, tráfico de transporte, mediana/p95/máximo del trabajo de tick, cadencia, sobrecoste de captura, recorrido de raíces, CPU, memoria y tiempos de entrada). Acepta opcionalmente `?instrumentation=on|off|reset` para controlar la captura en laboratorio.
+
 ---
 
 ## 3. Rutas clásicas `/api/`

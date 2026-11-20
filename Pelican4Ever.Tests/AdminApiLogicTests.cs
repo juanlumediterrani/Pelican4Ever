@@ -406,5 +406,21 @@ namespace Pelican4Ever.Tests
             Assert.True(validToken.Allowed);
             Assert.Equal(200, validToken.StatusCode);
         }
+
+        [Fact]
+        public void HostApiCatalog_IncludesConcurrencyRouteWithReadAuthParity()
+        {
+            HostApiRouteSpec? route = HostApiCatalog.MatchRoute("GET", "/api/v1/host/concurrency");
+            Assert.NotNull(route);
+            Assert.False(route!.MutatesGameState);
+
+            ApiAccessCheckResult noToken = AdminApiLogic.CheckAccess("/api/v1/host/concurrency", null, null, "custom_secure_token_999");
+            Assert.False(noToken.Allowed);
+            Assert.Equal(401, noToken.StatusCode);
+
+            ApiAccessCheckResult validToken = AdminApiLogic.CheckAccess("/api/v1/host/concurrency", "Bearer custom_secure_token_999", null, "custom_secure_token_999");
+            Assert.True(validToken.Allowed);
+            Assert.Equal(200, validToken.StatusCode);
+        }
     }
 }

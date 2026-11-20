@@ -463,6 +463,14 @@ namespace Pelican4Ever.Modules
                     break;
                 }
 
+                case "GET /api/v1/host/concurrency":
+                {
+                    string? instrParam = req.QueryString["instrumentation"];
+                    HostConcurrencyStatusDto dto = ExecuteOnGameThread(() => BuildHostConcurrencyDto(instrParam));
+                    WriteJson(res, dto);
+                    break;
+                }
+
                 case "POST /api/v1/host/festival/start":
                 {
                     MainThreadExecutionResult<(bool Started, string Message, long? EventId)> result =
@@ -1088,6 +1096,50 @@ namespace Pelican4Ever.Modules
             return (int)Math.Round(satiety);
         }
 
+        private static HostConcurrencyStatusDto BuildHostConcurrencyDto(string? instrumentationAction)
+        {
+            if (!string.IsNullOrWhiteSpace(instrumentationAction))
+            {
+                string mode = instrumentationAction.Trim().ToLowerInvariant();
+                if (mode is "on" or "true" or "1")
+                    ConcurrencyMetricsTracker.SetEnabled(true);
+                else if (mode is "off" or "false" or "0")
+                    ConcurrencyMetricsTracker.SetEnabled(false);
+                else if (mode == "reset")
+                    ConcurrencyMetricsTracker.Reset();
+            }
+
+            ConcurrencyWindowSnapshot window = ConcurrencyMetricsTracker.GetLatestOrCurrentSnapshot();
+            long hostId = Game1.MasterPlayer?.UniqueMultiplayerID ?? 0L;
+            int connectedClients = Context.IsWorldReady
+                ? Game1.getOnlineFarmers().Count(f => f != null && f.UniqueMultiplayerID != hostId)
+                : 0;
+
+            var locations = FarmSlotModule.LocationCapacity
+                .GetOccupancySnapshot(window.LocationOccupancy, DateTimeOffset.UtcNow)
+                .Select(info => new HostConcurrencyLocationDto
+                {
+                    LocationName = info.LocationName,
+                    CurrentOccupants = info.CurrentOccupants,
+                    ActiveReservations = info.ActiveReservations,
+                    Capacity = info.Capacity
+                })
+                .ToList();
+
+            return new HostConcurrencyStatusDto
+            {
+                ExtendedConcurrency = context!.Config.ExtendedConcurrency,
+                EffectiveMaxConcurrentPlayers = context.Config.EffectiveMaxConcurrentPlayers,
+                DefaultLocationCapacity = context.Config.DefaultLocationCapacity,
+                LocationCapacityOverrides = new Dictionary<string, int>(context.Config.LocationCapacityOverrides ?? new(), StringComparer.OrdinalIgnoreCase),
+                ConnectedClientsCount = connectedClients,
+                FarmerDeltaBroadcastPeriod = context.Config.FarmerDeltaBroadcastPeriod,
+                InstrumentationEnabled = ConcurrencyMetricsTracker.IsEnabled,
+                Locations = locations,
+                LatestWindow = window
+            };
+        }
+
         private static ServerStatusDto BuildLegacyStatusDto()
         {
             var state = context!.WorldState;
@@ -1112,7 +1164,10 @@ namespace Pelican4Ever.Modules
                 IsNightHold = RealTimeClockModule.IsNightHold,
                 DedicatedHost = Game1.HasDedicatedHost,
                 OnlinePlayersCount = onlineIds.Count,
-                MaxConcurrentPlayers = context.Config.MaxConcurrentPlayers,
+                MaxConcurrentPlayers = context.Config.EffectiveMaxConcurrentPlayers,
+                ExtendedConcurrency = context.Config.ExtendedConcurrency,
+                DefaultLocationCapacity = context.Config.DefaultLocationCapacity,
+                LocationCapacityOverrides = new Dictionary<string, int>(context.Config.LocationCapacityOverrides ?? new(), StringComparer.OrdinalIgnoreCase),
                 AdmissionQueueCapacity = context.Config.AdmissionQueueCapacity,
                 AdmissionQueueCount = queueSnapshot.Count,
                 ReservedSlotsCount = reservationSnapshot.Count,
