@@ -213,6 +213,111 @@ namespace Pelican4Ever.Core.Security
         }
 
         /// <summary>
+        /// Aprueba directamente un dispositivo observado recientemente por su huella ECDSA (sin requerir
+        /// invitación previa ni ticket de Discord), útil cuando comparte IP o aún no tiene peón asignado.
+        /// </summary>
+        public static bool ApproveObservedDevice(
+            ServerWorldState state,
+            string fingerprintPrefix,
+            string? aliasOverride,
+            IReadOnlyCollection<UnpairedHandshakeObservation> observations,
+            DateTimeOffset nowUtc,
+            out AuthorizedDevice? approvedDevice,
+            out string message)
+        {
+            approvedDevice = null;
+            if (state == null)
+                throw new ArgumentNullException(nameof(state));
+
+            string cleanFp = (fingerprintPrefix ?? string.Empty).Trim().ToLowerInvariant();
+            if (!ProbationAndBlacklistLogic.IsValidFingerprintPrefix(cleanFp))
+            {
+                message = "La huella debe tener al menos 8 caracteres hexadecimales (ej. 12 caracteres).";
+                return false;
+            }
+
+            List<UnpairedHandshakeObservation> matches = (observations ?? Array.Empty<UnpairedHandshakeObservation>())
+                .Where(o =>
+                    o != null &&
+                    (nowUtc - o.ObservedAtUtc) <= ProbationAndBlacklistLogic.UnpairedObservationTtl &&
+                    o.Fingerprint.StartsWith(cleanFp, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(o => o.Fingerprint, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(x => x.ObservedAtUtc).First())
+                .ToList();
+
+            if (matches.Count == 0)
+            {
+                message = $"No se encontró ninguna solicitud pendiente ni conexión ECDSA reciente para '{cleanFp}'.";
+                return false;
+            }
+
+            if (matches.Count > 1)
+            {
+                message = $"El prefijo '{cleanFp}' coincide con varios dispositivos recientes; especifica más caracteres.";
+                return false;
+            }
+
+            UnpairedHandshakeObservation match = matches[0];
+            if (ProbationAndBlacklistLogic.IsBlacklisted(state, match.Fingerprint, null, out BlacklistEntry? bl))
+            {
+                message = $"El dispositivo está en lista negra ({bl?.Reason ?? "sin motivo"}). Retira la lista negra primero con p4e_blacklist_remove.";
+                return false;
+            }
+
+            if (ServerDeviceRegistry.IsDeviceAuthorized(state, match.Fingerprint, out AuthorizedDevice? existing) && existing != null)
+            {
+                approvedDevice = existing;
+                string shortExisting = match.Fingerprint.Length >= 12 ? match.Fingerprint[..12] : match.Fingerprint;
+                message = $"El dispositivo '{existing.Alias}' (huella: {shortExisting}) ya está autorizado.";
+                return true;
+            }
+
+            ClientPairingLogic.PurgeExpiredInvites(state, nowUtc);
+            PurgeExpiredEnrollments(state, nowUtc);
+
+            PairingInvite? unclaimedInvite = ClientPairingLogic.FindUnclaimedInviteForIp(state, match.RemoteIp, nowUtc, match.Fingerprint);
+            string alias;
+            if (!string.IsNullOrWhiteSpace(aliasOverride) && ProbationAndBlacklistLogic.IsValidAlias(aliasOverride))
+            {
+                alias = aliasOverride.Trim();
+            }
+            else if (unclaimedInvite != null && !string.IsNullOrWhiteSpace(unclaimedInvite.Alias))
+            {
+                alias = unclaimedInvite.Alias.Trim();
+            }
+            else
+            {
+                string prefix8 = match.Fingerprint.Length >= 8 ? match.Fingerprint[..8] : match.Fingerprint;
+                alias = $"Jugador_{prefix8}";
+            }
+
+            approvedDevice = ServerDeviceRegistry.RegisterOrUpdateDevice(
+                state,
+                match.PublicKeyBase64,
+                alias,
+                boundPlayerId: 0,
+                ip: match.RemoteIp,
+                nowUtc: nowUtc);
+
+            state.PendingEnrollments?.Remove(match.Fingerprint);
+            string normIp = ClientPairingLogic.NormalizeIp(match.RemoteIp);
+            if (state.PairingInvites != null && !string.IsNullOrEmpty(normIp))
+            {
+                state.PairingInvites.RemoveAll(i =>
+                    i != null &&
+                    string.Equals(ClientPairingLogic.NormalizeIp(i.AllowedIp), normIp, StringComparison.OrdinalIgnoreCase) &&
+                    (string.Equals(i.Alias, alias, StringComparison.OrdinalIgnoreCase) ||
+                     (unclaimedInvite != null &&
+                      string.Equals(unclaimedInvite.Alias, alias, StringComparison.OrdinalIgnoreCase) &&
+                      string.Equals(i.Code, unclaimedInvite.Code, StringComparison.OrdinalIgnoreCase))));
+            }
+
+            string shortFp = match.Fingerprint.Length >= 12 ? match.Fingerprint[..12] : match.Fingerprint;
+            message = $"¡Dispositivo '{approvedDevice.Alias}' (huella: {shortFp}) aprobado correctamente!";
+            return true;
+        }
+
+        /// <summary>
         /// Rechaza o cancela una solicitud de alta pendiente.
         /// No altera inventarios, peones ni residencias.
         /// </summary>

@@ -107,6 +107,13 @@ namespace Pelican4Ever.Modules
 
             // Inicializar o verificar identidad del cliente local
             ClientIdentity.Initialize(ctx.Helper);
+            if (!string.IsNullOrEmpty(ClientIdentity.DeviceFingerprint))
+            {
+                string shortFp = ClientIdentity.DeviceFingerprint.Length >= 12
+                    ? ClientIdentity.DeviceFingerprint[..12]
+                    : ClientIdentity.DeviceFingerprint;
+                ctx.Monitor.Log($"[ClientSecurity] Huella ECDSA del dispositivo: {shortFp} (completa en data/device_key.json).", LogLevel.Info);
+            }
             Admission.Configure(
                 ctx.Config.MaxConcurrentPlayers,
                 ctx.Config.AdmissionQueueCapacity,
@@ -802,6 +809,29 @@ namespace Pelican4Ever.Modules
                 }
             }
 
+            var pendingFps = new HashSet<string>(
+                pending?.Select(p => p.Fingerprint) ?? Enumerable.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var recentObs = GetRecentUnpairedObservationsSnapshot(now)
+                .Where(o => !pendingFps.Contains(o.Fingerprint) && !ServerDeviceRegistry.IsDeviceAuthorized(context.WorldState, o.Fingerprint, out _))
+                .OrderByDescending(o => o.ObservedAtUtc)
+                .ToList();
+            context.Monitor.Log($"Conexiones ECDSA recientes sin autorizar (últimos 15 min) ({recentObs.Count}):", LogLevel.Info);
+            if (recentObs.Count == 0)
+            {
+                context.Monitor.Log("  (ninguna)", LogLevel.Info);
+            }
+            else
+            {
+                foreach (var obs in recentObs)
+                {
+                    string shortFp = obs.Fingerprint.Length >= 12 ? obs.Fingerprint[..12] : obs.Fingerprint;
+                    context.Monitor.Log(
+                        $"  - Huella: {shortFp}... | IP: {obs.RemoteIp} | Visto: {obs.ObservedAtUtc:HH:mm:ss} UTC",
+                        LogLevel.Info);
+                }
+            }
+
             if (recentConnectionAttempts.Count > 0)
             {
                 context.Monitor.Log($"Intentos recientes bloqueados ({recentConnectionAttempts.Count}):", LogLevel.Info);
@@ -863,6 +893,31 @@ namespace Pelican4Ever.Modules
                 LogLevel.Info);
         }
 
+        private static void FinishPairApprove(AuthorizedDevice? device, string message, string flushTag)
+        {
+            if (context == null)
+                return;
+
+            SavePairingSidecar();
+            PersistenceModule.FlushToSaveData(context, flushTag);
+
+            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
+            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
+            AdminApiModule.EventLog.Append(
+                HostEventTypes.PlayerPaired,
+                today,
+                time,
+                message,
+                new Dictionary<string, object?>
+                {
+                    ["alias"] = device?.Alias,
+                    ["fingerprint"] = device?.Fingerprint,
+                    ["boundPlayerId"] = device?.BoundPlayerId
+                });
+
+            context.Monitor.Log(message, LogLevel.Info);
+        }
+
         private void OnConsolePairApprove(string command, string[] args)
         {
             if (context == null) return;
@@ -880,74 +935,79 @@ namespace Pelican4Ever.Modules
             }
 
             string target = args[0].Trim();
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+
             if (args.Length > 1)
             {
-                // Si se especifica peón o nombre, crear respaldo verificable y migrar explícitamente
-                string? sidecarPath = GetPairingSidecarPath();
-                if (!string.IsNullOrEmpty(sidecarPath))
-                {
-                    if (DeviceMigrationLogic.CreateVerifiableBackup(sidecarPath, context.WorldState, DateTimeOffset.UtcNow, out VerifiableBackupResult? backup, out string? backupErr))
-                    {
-                        context.Monitor.Log($"[ClientSecurity] Copia de seguridad verificada: {Path.GetFileName(backup?.BackupPath)} (SHA-256: {backup?.Sha256Checksum[..12]}...).", LogLevel.Info);
-                    }
-                    else
-                    {
-                        context.Monitor.Log($"[ClientSecurity] Error creando respaldo verificable previo a migración: {backupErr}", LogLevel.Warn);
-                    }
-                }
+                string secondArg = args[1].Trim();
+                bool targetPlayerExists = long.TryParse(secondArg, out long parsedPlayerId)
+                    ? context.WorldState.Players.ContainsKey(parsedPlayerId)
+                    : context.WorldState.Players.Values.Any(p =>
+                        p != null && string.Equals(p.PlayerName, secondArg, StringComparison.OrdinalIgnoreCase));
 
-                if (!DeviceMigrationLogic.MigratePlayer(context.WorldState, target, args[1].Trim(), DateTimeOffset.UtcNow, out AuthorizedDevice? dev, out PlayerRecord? rec, out string migMsg))
+                if (targetPlayerExists)
                 {
-                    context.Monitor.Log(migMsg, LogLevel.Warn);
+                    // Si se especifica peón existente, crear respaldo verificable y migrar explícitamente
+                    string? sidecarPath = GetPairingSidecarPath();
+                    if (!string.IsNullOrEmpty(sidecarPath))
+                    {
+                        if (DeviceMigrationLogic.CreateVerifiableBackup(sidecarPath, context.WorldState, now, out VerifiableBackupResult? backup, out string? backupErr))
+                        {
+                            context.Monitor.Log($"[ClientSecurity] Copia de seguridad verificada: {Path.GetFileName(backup?.BackupPath)} (SHA-256: {backup?.Sha256Checksum[..12]}...).", LogLevel.Info);
+                        }
+                        else
+                        {
+                            context.Monitor.Log($"[ClientSecurity] Error creando respaldo verificable previo a migración: {backupErr}", LogLevel.Warn);
+                        }
+                    }
+
+                    if (!DeviceMigrationLogic.MigratePlayer(context.WorldState, target, secondArg, now, out AuthorizedDevice? dev, out PlayerRecord? rec, out string migMsg))
+                    {
+                        context.Monitor.Log(migMsg, LogLevel.Warn);
+                        return;
+                    }
+
+                    SyncServerTokensFromWorldState();
+                    FinishPairApprove(dev, migMsg, "PairApproveMigrate");
                     return;
                 }
 
-                SavePairingSidecar();
-                PersistenceModule.FlushToSaveData(context, "PairApproveMigrate");
-                SyncServerTokensFromWorldState();
-
-                int todayMig = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
-                int timeMig = Context.IsWorldReady ? Game1.timeOfDay : 600;
-                AdminApiModule.EventLog.Append(
-                    HostEventTypes.PlayerPaired,
-                    todayMig,
-                    timeMig,
-                    migMsg,
-                    new Dictionary<string, object?>
-                    {
-                        ["alias"] = dev?.Alias,
-                        ["fingerprint"] = dev?.Fingerprint,
-                        ["boundPlayerId"] = dev?.BoundPlayerId
-                    });
-
-                context.Monitor.Log(migMsg, LogLevel.Info);
-                return;
-            }
-
-            if (!DeviceEnrollmentLogic.ApproveEnrollment(context.WorldState, target, 0, DateTimeOffset.UtcNow, out AuthorizedDevice? device, out string message))
-            {
-                context.Monitor.Log(message, LogLevel.Warn);
-                return;
-            }
-
-            SavePairingSidecar();
-            PersistenceModule.FlushToSaveData(context, "PairApprove");
-
-            int today = Context.IsWorldReady && Game1.Date != null ? Game1.Date.TotalDays : 0;
-            int time = Context.IsWorldReady ? Game1.timeOfDay : 600;
-            AdminApiModule.EventLog.Append(
-                HostEventTypes.PlayerPaired,
-                today,
-                time,
-                message,
-                new Dictionary<string, object?>
+                var pendingMatch = DeviceEnrollmentLogic.FindPendingEnrollment(context.WorldState, target);
+                if (pendingMatch != null && string.Equals(pendingMatch.Alias, secondArg, StringComparison.OrdinalIgnoreCase))
                 {
-                    ["alias"] = device?.Alias,
-                    ["fingerprint"] = device?.Fingerprint,
-                    ["boundPlayerId"] = device?.BoundPlayerId
-                });
+                    if (!DeviceEnrollmentLogic.ApproveEnrollment(context.WorldState, target, 0, now, out AuthorizedDevice? pendingDev, out string pendingMsg))
+                    {
+                        context.Monitor.Log(pendingMsg, LogLevel.Warn);
+                        return;
+                    }
+                    FinishPairApprove(pendingDev, pendingMsg, "PairApprove");
+                    return;
+                }
 
-            context.Monitor.Log(message, LogLevel.Info);
+                var observations = GetRecentUnpairedObservationsSnapshot(now);
+                if (DeviceEnrollmentLogic.ApproveObservedDevice(context.WorldState, target, secondArg, observations, now, out AuthorizedDevice? obsDev, out string obsMsg))
+                {
+                    FinishPairApprove(obsDev, obsMsg, "PairApproveObserved");
+                    return;
+                }
+
+                context.Monitor.Log(
+                    $"No existe ningún peón llamado '{secondArg}' para migrar y no pudo aprobarse '{target}': {obsMsg}",
+                    LogLevel.Warn);
+                return;
+            }
+
+            if (!DeviceEnrollmentLogic.ApproveEnrollment(context.WorldState, target, 0, now, out AuthorizedDevice? device, out string message))
+            {
+                var observations = GetRecentUnpairedObservationsSnapshot(now);
+                if (!DeviceEnrollmentLogic.ApproveObservedDevice(context.WorldState, target, null, observations, now, out device, out message))
+                {
+                    context.Monitor.Log(message, LogLevel.Warn);
+                    return;
+                }
+            }
+
+            FinishPairApprove(device, message, "PairApprove");
         }
 
         private void OnConsoleMigratePlayer(string command, string[] args)
@@ -1590,9 +1650,13 @@ namespace Pelican4Ever.Modules
             return false;
         }
 
-        private static bool HasValidEarlyProof(string connectionId, string remoteIp, out string verifiedToken)
+        private static bool HasValidEarlyProof(string connectionId, string remoteIp, out string verifiedToken) =>
+            HasValidEarlyProof(connectionId, remoteIp, out verifiedToken, out _);
+
+        private static bool HasValidEarlyProof(string connectionId, string remoteIp, out string verifiedToken, out bool alreadyHandled)
         {
             verifiedToken = string.Empty;
+            alreadyHandled = false;
             if (context == null)
                 return false;
 
@@ -1605,6 +1669,8 @@ namespace Pelican4Ever.Modules
                 if (ProbationAndBlacklistLogic.IsBlacklisted(context.WorldState, fingerprint, null, out BlacklistEntry? blEntry))
                 {
                     context.Monitor.Log($"[ClientSecurity] Dispositivo bloqueado por lista negra ({fpShortLog}...) desde IP {remoteIp}: {blEntry?.Reason}", LogLevel.Warn);
+                    alreadyHandled = true;
+                    RecordConnectionAttempt(remoteIp, fingerprint, $"Bloqueado (lista negra: {fpShortLog})", logWarn: false);
                     DisconnectConnectionById(connectionId, "Access permanently denied (blacklisted). Only the server owner can revoke it.");
                     return false;
                 }
@@ -1622,6 +1688,9 @@ namespace Pelican4Ever.Modules
 
                 if (!isAuthorized)
                 {
+                    DateTimeOffset obsNow = DateTimeOffset.UtcNow;
+                    RecordUnpairedObservation(fingerprint, pubKeySpki, remoteIp, obsNow);
+
                     context.WorldState.PendingEnrollments ??= new Dictionary<string, DeviceEnrollmentRequest>(StringComparer.OrdinalIgnoreCase);
                     if (context.WorldState.PendingEnrollments.TryGetValue(fingerprint, out var existingEnroll))
                     {
@@ -1630,11 +1699,13 @@ namespace Pelican4Ever.Modules
                         SavePairingSidecar();
                         string existingShort = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
                         context.Monitor.Log($"[ClientSecurity] Solicitud de alta pendiente reiterada para '{existingEnroll.Alias}' (huella: {existingShort}...) desde IP {remoteIp}.", LogLevel.Info);
+                        alreadyHandled = true;
+                        RecordConnectionAttempt(remoteIp, fingerprint, $"Solicitud pendiente: {existingEnroll.Alias} ({existingShort})", logWarn: false);
                         DisconnectConnectionById(connectionId, $"Dispositivo registrado para aprobación. Huella: {existingShort}. Solicita al propietario que apruebe tu acceso en Discord.");
                         return false;
                     }
 
-                    var activeInvite = ClientPairingLogic.FindUnclaimedInviteForIp(context.WorldState, remoteIp, DateTimeOffset.UtcNow, fingerprint);
+                    var activeInvite = ClientPairingLogic.FindUnclaimedInviteForIp(context.WorldState, remoteIp, obsNow, fingerprint);
                     if (activeInvite != null)
                     {
                         var enroll = new DeviceEnrollmentRequest
@@ -1644,7 +1715,7 @@ namespace Pelican4Ever.Modules
                             Alias = activeInvite.Alias,
                             RemoteIp = ClientPairingLogic.NormalizeIp(remoteIp),
                             InviteCode = activeInvite.Code,
-                            RequestedAtUtc = DateTimeOffset.UtcNow,
+                            RequestedAtUtc = obsNow,
                             ExpiresAtUtc = activeInvite.ExpiresAtUtc,
                             Attempts = 1
                         };
@@ -1653,30 +1724,36 @@ namespace Pelican4Ever.Modules
                         SavePairingSidecar();
                         string shortFp = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
                         context.Monitor.Log($"[ClientSecurity] Solicitud de alta registrada para '{activeInvite.Alias}' (huella: {shortFp}...) desde IP {remoteIp}.", LogLevel.Info);
+                        alreadyHandled = true;
+                        RecordConnectionAttempt(remoteIp, fingerprint, $"Solicitud pendiente: {activeInvite.Alias} ({shortFp})", logWarn: false);
                         DisconnectConnectionById(connectionId, $"Dispositivo registrado para aprobación. Huella: {shortFp}. Solicita al propietario que apruebe tu acceso en Discord.");
                         return false;
                     }
 
                     string fpShort = fingerprint.Length >= 12 ? fingerprint[..12] : fingerprint;
-                    if (ClientPairingLogic.FindActiveInviteForIp(context.WorldState, remoteIp, DateTimeOffset.UtcNow) != null)
+                    if (ClientPairingLogic.FindActiveInviteForIp(context.WorldState, remoteIp, obsNow) != null)
                     {
                         context.Monitor.Log($"[ClientSecurity] Dispositivo válido con huella {fpShort}... pero todas las invitaciones para IP {remoteIp} están reservadas por otras solicitudes pendientes.", LogLevel.Info);
+                        alreadyHandled = true;
+                        RecordConnectionAttempt(remoteIp, fingerprint, $"Invitaciones de IP reservadas ({fpShort})", logWarn: false);
                         DisconnectConnectionById(connectionId, "Todas las invitaciones para tu IP están reservadas por otras solicitudes pendientes. Pide al propietario que apruebe o cree otra invitación en Discord.");
                         return false;
                     }
 
-                    DateTimeOffset obsNow = DateTimeOffset.UtcNow;
-                    RecordUnpairedObservation(fingerprint, pubKeySpki, remoteIp, obsNow);
                     ProbationAndBlacklistLogic.PurgeExpiredTickets(context.WorldState, obsNow);
                     if ((context.WorldState.PutreTickets?.Count ?? 0) > 0)
                     {
                         context.Monitor.Log($"[ClientSecurity] Dispositivo con solicitud Putre observada: huella {fpShort}... desde IP {remoteIp}.", LogLevel.Info);
+                        alreadyHandled = true;
+                        RecordConnectionAttempt(remoteIp, fingerprint, $"Observado para #pelican-gate ({fpShort})", logWarn: false);
                         DisconnectConnectionById(connectionId, $"Active admission request. Your fingerprint is: {fpShort} — Paste it in Discord (#pelican-gate).");
                         return false;
                     }
 
                     context.Monitor.Log($"[ClientSecurity] Dispositivo válido con huella {fpShort}... pero no autorizado ni con invitación activa.", LogLevel.Info);
-                    DisconnectConnectionById(connectionId, "Servidor protegido por lista blanca. Solicita una invitación al propietario en Discord.");
+                    alreadyHandled = true;
+                    RecordConnectionAttempt(remoteIp, fingerprint, $"Bloqueado (huella {fpShort} sin invitación)", logWarn: false);
+                    DisconnectConnectionById(connectionId, $"Servidor protegido por lista blanca. Huella: {fpShort}. Solicita una invitación al propietario o usa #pelican-gate en Discord.");
                     return false;
                 }
 
@@ -1784,7 +1861,10 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private static void RecordBlockedAttempt(string remoteIp, string? token)
+        private static void RecordBlockedAttempt(string remoteIp, string? token) =>
+            RecordConnectionAttempt(remoteIp, token, "Bloqueado (IP sin invitación ni dispositivo emparejado)", logWarn: true);
+
+        private static void RecordConnectionAttempt(string remoteIp, string? token, string outcome, bool logWarn)
         {
             string ip = string.IsNullOrWhiteSpace(remoteIp) ? "desconocida" : remoteIp;
             DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -1794,13 +1874,13 @@ namespace Pelican4Ever.Modules
                 RemoteIp = ip,
                 MaskedToken = PlayerAuthLogic.MaskToken(token),
                 TimestampUtc = now,
-                Outcome = "Bloqueado (IP sin invitación ni dispositivo emparejado)"
+                Outcome = outcome
             });
 
             while (recentConnectionAttempts.Count > MaxRecentAttempts)
                 recentConnectionAttempts.RemoveAt(0);
 
-            if (!lastBlockedLogByIp.TryGetValue(ip, out DateTimeOffset lastLog) || (now - lastLog).TotalSeconds >= 60)
+            if (logWarn && (!lastBlockedLogByIp.TryGetValue(ip, out DateTimeOffset lastLog) || (now - lastLog).TotalSeconds >= 60))
             {
                 lastBlockedLogByIp[ip] = now;
                 context?.Monitor.Log(
@@ -1937,6 +2017,26 @@ namespace Pelican4Ever.Modules
                 PatchCriticality.Experience,
                 AccessTools.Constructor(typeof(FarmhandMenu), new[] { typeof(Client) }),
                 postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_Ctor)));
+
+            // 8. Mostrar el motivo real y huella ECDSA en cliente cuando el servidor rechaza la conexión
+            allOk &= ctx.Patch(
+                "LidgrenClient.clientRemotelyDisconnected",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(LidgrenClient), "clientRemotelyDisconnected", new[] { typeof(NetConnectionStatus), typeof(string) }),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_LidgrenClient_ClientRemotelyDisconnected)));
+            allOk &= ctx.Patch(
+                "FarmhandMenu.getStatusText",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(FarmhandMenu), "getStatusText", Type.EmptyTypes),
+                postfix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Postfix_FarmhandMenu_GetStatusText)));
+            allOk &= ctx.Patch(
+                "LoadGameMenu.drawStatusText",
+                Name,
+                PatchCriticality.Experience,
+                AccessTools.Method(typeof(LoadGameMenu), "drawStatusText", new[] { typeof(SpriteBatch) }),
+                prefix: new HarmonyMethod(typeof(ClientSecurityModule), nameof(Prefix_LoadGameMenu_DrawStatusText)));
 
             if (allOk)
                 ctx.Monitor.Log("[ClientSecurityModule] Parches Harmony de seguridad y posesión aplicados correctamente.", LogLevel.Trace);
@@ -2272,10 +2372,13 @@ namespace Pelican4Ever.Modules
 
                 if (requireWhitelistForConn)
                 {
-                    if (!HasValidEarlyProof(connectionId, remoteIp, out verifiedFingerprint))
+                    if (!HasValidEarlyProof(connectionId, remoteIp, out verifiedFingerprint, out bool alreadyHandled))
                     {
-                        RecordBlockedAttempt(remoteIp, userId);
-                        DisconnectConnectionById(connectionId, "Acceso denegado: debes contar con un cliente actualizado y dispositivo autorizado.");
+                        if (!alreadyHandled)
+                        {
+                            RecordBlockedAttempt(remoteIp, userId);
+                            DisconnectConnectionById(connectionId, "Acceso denegado: debes contar con un cliente actualizado y dispositivo autorizado.");
+                        }
                         return false;
                     }
 
@@ -2439,10 +2542,13 @@ namespace Pelican4Ever.Modules
 
                 if (context.Config.RequirePairingWhitelist && !isLoopback)
                 {
-                    if (!HasValidEarlyProof(connectionId, remoteIp, out string verifiedFingerprint))
+                    if (!HasValidEarlyProof(connectionId, remoteIp, out string verifiedFingerprint, out bool alreadyHandled))
                     {
-                        context.Monitor.Log("[ClientSecurity] Rechazado intento de selección de ranura sin prueba de posesión de clave válida.", LogLevel.Warn);
-                        DisconnectConnectionById(connectionId, "No se ha verificado la identidad del dispositivo.");
+                        if (!alreadyHandled)
+                        {
+                            context.Monitor.Log("[ClientSecurity] Rechazado intento de selección de ranura sin prueba de posesión de clave válida.", LogLevel.Warn);
+                            DisconnectConnectionById(connectionId, "No se ha verificado la identidad del dispositivo.");
+                        }
                         return false;
                     }
 
@@ -2567,6 +2673,45 @@ namespace Pelican4Ever.Modules
 
                 return Score(a).CompareTo(Score(b));
             });
+        }
+
+        public static void Postfix_LidgrenClient_ClientRemotelyDisconnected(LidgrenClient __instance, NetConnectionStatus status, string message)
+        {
+            _ = status;
+            if (__instance == null || string.IsNullOrWhiteSpace(message))
+                return;
+            if (string.Equals(message, Multiplayer.kicked, StringComparison.Ordinal) ||
+                string.Equals(message, "Timed out", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (!string.Equals(__instance.connectionMessage, message, StringComparison.Ordinal))
+            {
+                __instance.connectionMessage = message;
+                context?.Monitor.Log($"[ClientSecurity] Desconectado por el servidor: {message}", LogLevel.Alert);
+            }
+        }
+
+        public static void Postfix_FarmhandMenu_GetStatusText(FarmhandMenu __instance, ref string __result)
+        {
+            if (__instance?.client != null && __instance.client.timedOut && !string.IsNullOrWhiteSpace(__instance.client.connectionMessage))
+            {
+                __result = __instance.client.connectionMessage;
+            }
+        }
+
+        public static bool Prefix_LoadGameMenu_DrawStatusText(LoadGameMenu __instance, SpriteBatch b)
+        {
+            if (__instance is FarmhandMenu fh && fh.client != null && fh.client.timedOut && !string.IsNullOrWhiteSpace(fh.client.connectionMessage))
+            {
+                string wrapped = Game1.parseText(fh.client.connectionMessage, Game1.dialogueFont, Math.Max(320, __instance.width - 96));
+                Vector2 size = Game1.dialogueFont.MeasureString(wrapped);
+                Vector2 pos = new Vector2(
+                    __instance.xPositionOnScreen + (__instance.width - size.X) / 2f,
+                    __instance.yPositionOnScreen + (__instance.height - size.Y) / 2f);
+                Utility.drawTextWithShadow(b, wrapped, Game1.dialogueFont, pos, Game1.textColor);
+                return false;
+            }
+            return true;
         }
     }
 }

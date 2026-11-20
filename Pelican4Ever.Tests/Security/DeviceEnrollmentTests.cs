@@ -402,5 +402,135 @@ namespace Pelican4Ever.Tests.Security
             Assert.True(ServerDeviceRegistry.IsDeviceAuthorized(state, key1.GetFingerprint(), out _));
             Assert.True(ServerDeviceRegistry.IsDeviceAuthorized(state, key2.GetFingerprint(), out _));
         }
+
+        [Fact]
+        public void ApproveObservedDevice_ByShortFingerprint_WithAndWithoutAliasOverride_AuthorizesAndPreservesOtherIpInvites()
+        {
+            var state = new ServerWorldState();
+            using var key1 = DeviceKeyPair.Generate();
+            using var key2 = DeviceKeyPair.Generate();
+            string sameIp = "83.44.12.34";
+
+            ClientPairingLogic.CreateInvite(state, "OtroJugador", sameIp, TimeSpan.FromHours(72), BaseTime, "OTR111");
+            ClientPairingLogic.CreateInvite(state, "Dr4co", sameIp, TimeSpan.FromHours(72), BaseTime.AddSeconds(1), "DRC222");
+
+            var obs = new[]
+            {
+                new UnpairedHandshakeObservation
+                {
+                    Fingerprint = key1.GetFingerprint(),
+                    PublicKeyBase64 = key1.GetPublicKeyBase64(),
+                    RemoteIp = sameIp,
+                    ObservedAtUtc = BaseTime.AddMinutes(1)
+                },
+                new UnpairedHandshakeObservation
+                {
+                    Fingerprint = key2.GetFingerprint(),
+                    PublicKeyBase64 = key2.GetPublicKeyBase64(),
+                    RemoteIp = sameIp,
+                    ObservedAtUtc = BaseTime.AddMinutes(2)
+                }
+            };
+
+            // 1. Con aliasOverride explícito "Dr4co": autoriza key1, consume solo DRC222 y conserva OTR111
+            bool ok1 = DeviceEnrollmentLogic.ApproveObservedDevice(
+                state,
+                key1.GetFingerprint()[..12],
+                "Dr4co",
+                obs,
+                BaseTime.AddMinutes(3),
+                out var dev1,
+                out string msg1);
+
+            Assert.True(ok1, msg1);
+            Assert.Equal("Dr4co", dev1!.Alias);
+            Assert.Equal(0, dev1.BoundPlayerId);
+            Assert.True(ServerDeviceRegistry.IsDeviceAuthorized(state, key1.GetFingerprint(), out _));
+            Assert.Single(state.PairingInvites);
+            Assert.Equal("OTR111", state.PairingInvites[0].Code);
+
+            // 2. Sin aliasOverride: toma la invitación libre OTR111 ("OtroJugador") y la consume
+            bool ok2 = DeviceEnrollmentLogic.ApproveObservedDevice(
+                state,
+                key2.GetFingerprint()[..12],
+                null,
+                obs,
+                BaseTime.AddMinutes(4),
+                out var dev2,
+                out string msg2);
+
+            Assert.True(ok2, msg2);
+            Assert.Equal("OtroJugador", dev2!.Alias);
+            Assert.Empty(state.PairingInvites);
+        }
+
+        [Fact]
+        public void ApproveObservedDevice_RejectsBlacklistedExpiredAndAmbiguous()
+        {
+            var state = new ServerWorldState();
+            using var key = DeviceKeyPair.Generate();
+            string fp = key.GetFingerprint();
+
+            var expiredObs = new[]
+            {
+                new UnpairedHandshakeObservation
+                {
+                    Fingerprint = fp,
+                    PublicKeyBase64 = key.GetPublicKeyBase64(),
+                    RemoteIp = "83.44.12.34",
+                    ObservedAtUtc = BaseTime.AddMinutes(-20)
+                }
+            };
+
+            Assert.False(DeviceEnrollmentLogic.ApproveObservedDevice(state, fp[..12], "Dr4co", expiredObs, BaseTime, out _, out _));
+
+            var freshObs = new[]
+            {
+                new UnpairedHandshakeObservation
+                {
+                    Fingerprint = fp,
+                    PublicKeyBase64 = key.GetPublicKeyBase64(),
+                    RemoteIp = "83.44.12.34",
+                    ObservedAtUtc = BaseTime.AddMinutes(-1)
+                }
+            };
+
+            state.Blacklist.Add(new BlacklistEntry
+            {
+                Fingerprint = fp,
+                Alias = "BadGuy",
+                Reason = "Test",
+                BlacklistedBy = "putre",
+                BlacklistedAtUtc = BaseTime
+            });
+
+            Assert.False(DeviceEnrollmentLogic.ApproveObservedDevice(state, fp[..12], "Dr4co", freshObs, BaseTime, out _, out string blMsg));
+            Assert.Contains("lista negra", blMsg, StringComparison.OrdinalIgnoreCase);
+
+            // Prefijo ambiguo (dos huellas distintas con mismo prefijo de 8 caracteres)
+            var stateClean = new ServerWorldState();
+            using var kA = DeviceKeyPair.Generate();
+            using var kB = DeviceKeyPair.Generate();
+            var ambigObs = new[]
+            {
+                new UnpairedHandshakeObservation
+                {
+                    Fingerprint = "deadbeef00001111" + kA.GetFingerprint()[16..],
+                    PublicKeyBase64 = kA.GetPublicKeyBase64(),
+                    RemoteIp = "83.44.12.34",
+                    ObservedAtUtc = BaseTime
+                },
+                new UnpairedHandshakeObservation
+                {
+                    Fingerprint = "deadbeef00002222" + kB.GetFingerprint()[16..],
+                    PublicKeyBase64 = kB.GetPublicKeyBase64(),
+                    RemoteIp = "83.44.12.34",
+                    ObservedAtUtc = BaseTime
+                }
+            };
+
+            Assert.False(DeviceEnrollmentLogic.ApproveObservedDevice(stateClean, "deadbeef0000", null, ambigObs, BaseTime.AddSeconds(10), out _, out string ambMsg));
+            Assert.Contains("varios", ambMsg, StringComparison.OrdinalIgnoreCase);
+        }
     }
 }
