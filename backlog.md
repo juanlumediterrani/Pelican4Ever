@@ -2619,3 +2619,19 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. `dotnet test` en verde.
     2. Verificación en vivo documentada de cola, reserva de plaza, expulsión por inactividad, gates y residencias `17..64`.
   * **Resolución:** Verificación completa en vivo (`4A.1..4A.7` y `4B` con 4/8/12/16 clientes remotos concurrentes sobre 64 residencias pobladas) documentada en `docs/v0.5-residence-scaling-verification-2026-11-17.md`; corregidos el tope de puertas de `FarmSlotModule.LoadDoors`, timeouts de `AdminApiModule`, filtrado de saludo en modo abierto/loopback (`FarmhandAuthLogic` / `ClientSecurityModule`), codificación y timeout de mensajes de cola y bombeo de `FarmhandMenu` sin foco (`Specialized.UnvalidatedUpdateTicked`); `manifest.json` en `0.5.0`, `architecture.md` actualizado y `dotnet test` (`1753/1753`) en verde.
+
+---
+
+### Interoperabilidad con Corazón Pelican
+
+- [x] **CP-601: Respetar `modData["CorazonPelican.Control"]` en `WorldLifeModule` y `RealTimeClockModule`**
+  * **Prioridad:** Baja (P3)
+  * **Dependencias:** Ninguna (tarea espejo de `Corazón Pelican` · `CP-601`).
+  * **Descripción:**
+    - Añadir la clave de contrato `NpcShopkeeperLogic.CorazonPelicanControlKey = "CorazonPelican.Control"` en `Pelican4Ever.Core/World/NpcShopkeeperLogic.cs`.
+    - Evitar que el *micro-wandering* (`NpcShopkeeperLogic.CanMicroWander` / `WorldLifeModule.cs`), `WorldLifeModule.Prefix_CheckSchedule` y `RealTimeClockModule.CatchUpSchedule` muevan o corten la ruta externa (`!NPCSchedule`) de cualquier `NPC` reclamado por Corazón Pelican.
+    - Cubrir en `Pelican4Ever.Tests` que un `NPC` con `isExternallyControlled = true` no recibe destinos de *micro-wandering*.
+  * **Criterios de aceptación:**
+    1. Test `NpcShopkeeperLogicTests.CanMicroWander_BlocksExternallyControlledNpc_CorazonPelican` en verde (`"Forest"`, `"Town"`, `"Saloon"`, `"Club"`).
+    2. Contrato `modData["CorazonPelican.Control"]` documentado sin dependencias directas hacia Corazón Pelican.
+  * **Resolución:** Implementado en `cp-601-micro-wandering` (`fe76df7`, `4766210`) e integrado en `main` (`be875dc`) sin advertencias ni errores (`dotnet test` en verde).
