@@ -147,5 +147,24 @@ namespace Pelican4Ever.Tests
             );
             Assert.True(canWander);
         }
+
+        [Fact]
+        public void CanMicroWander_BlocksExternallyControlledNpc_CorazonPelican()
+        {
+            Assert.Equal("CorazonPelican.Control", NpcShopkeeperLogic.CorazonPelicanControlKey);
+            bool canWander = NpcShopkeeperLogic.CanMicroWander(
+                npcName: "Leah",
+                locationName: "Forest",
+                timeOfDay: 1400,
+                isOutdoors: true,
+                isDoingRouteAnimation: false,
+                isSleeping: false,
+                isSitting: false,
+                hasActivity: false,
+                isEmoting: false,
+                isExternallyControlled: true
+            );
+            Assert.False(canWander);
+        }
     }
 }
