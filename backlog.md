@@ -2655,13 +2655,14 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Test en `HostEventGuardLogicTests` verificando que esos diálogos/cartas devuelven `HostEventGuardActionKind.None` mientras los eventos vanilla desatendidos siguen desbloqueándose.
   * **Resolución:** `HostEventGuardLogic.IsExternalControlledMenu` y `IsExternalModDialogueOrLetter` en `Pelican4Ever.Core/Server/HostEventGuardLogic.cs` + `HeadlessEventGuardModule.cs` (`CorazonPelican.DialogoActivo`, `CorazonPelican.Control`, `CorazonPelican.Prorroga.`); cubierto por `HostEventGuardLogicTests.ExternalModDialogueAndProrrogaLetter_AreNeverDismissed_CP605` (`1828/1828` superados).
 
-- [ ] **TASK-2603 (`CP-608`): Exponer `IsNightHold()` en `IPelicanApi` (`PelicanApi.cs`)**
+- [x] **TASK-2603 (`CP-608`): Exponer `IsNightHold()` en `IPelicanApi` (`PelicanApi.cs`)**
   * **Prioridad:** Media (P2)
   * **Dependencias:** Ninguna (apoyo a `Corazón Pelican` · `CP-608`).
   * **Descripción:**
     - Añadir en `PelicanApi` (`Pelican4Ever.SVRTMP`) consultas de solo lectura `IsNightHold()` y estado de rollover en curso (`DailyRolloverModule.IsBusy`) para que mods consumidores adapten su reloj interno entre `01:50` y `06:00` reales sin leer configuración privada de Pelican.
   * **Criterios de aceptación:**
     1. `PelicanApi` expone `IsNightHold()` coherente con `RealTimeClockModule.IsNightHold` y compila sin advertencias.
+  * **Resolución:** Añadidos `IsNightHold()` y `IsRolloverBusy()` en `Pelican4Ever/PelicanApi.cs` (`0` advertencias, `1828/1828` superados).
 
 - [ ] **TASK-2604 (`CP-610`): Visibilidad de NPCs omitidos por `CorazonPelican.Control` en `CatchUpVillagerSchedules` / `p4e_time`**
   * **Prioridad:** Baja (P3)

@@ -72,6 +72,12 @@ namespace Pelican4Ever
         /// <summary>Si el host está dibujando ahora.</summary>
         public bool IsHostDrawing() => HeadlessRenderModule.GetStatus().Drawing;
 
+        /// <summary>Indica si el reloj real de Pelican 4Ever está en tramo nocturno congelado (NightHold, 01:50–06:00).</summary>
+        public bool IsNightHold() => RealTimeClockModule.IsNightHold;
+
+        /// <summary>Indica si hay una secuencia de rollover diario en curso.</summary>
+        public bool IsRolloverBusy() => DailyRolloverModule.IsBusy;
+
         /// <summary>
         /// Registra un callback síncrono invocado antes de <c>SaveGame.Save()</c> en checkpoints y rollovers
         /// donde SMAPI no dispara <c>GameLoop.Saving</c> (TASK-2601 / CP-604).
