@@ -2636,7 +2636,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     2. Contrato `modData["CorazonPelican.Control"]` documentado sin dependencias directas hacia Corazón Pelican.
   * **Resolución:** Implementado en `cp-601-micro-wandering` (`fe76df7`, `4766210`) e integrado en `main` (`be875dc`) sin advertencias ni errores (`dotnet test` en verde).
 
-- [ ] **TASK-2601 (`CP-604`): Hook previo a `SaveGame.Save()` en `CheckpointModule` y `DailyRolloverModule` (`PelicanApi`)**
+- [x] **TASK-2601 (`CP-604`): Hook previo a `SaveGame.Save()` en `CheckpointModule` y `DailyRolloverModule` (`PelicanApi`)**
   * **Prioridad:** Alta (P1)
   * **Dependencias:** `CP-601` (espejo de `Corazón Pelican` · `CP-604`).
   * **Descripción:**
@@ -2644,6 +2644,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     - Permitir que mods consumidores (como Corazón Pelican) vuelquen su `SaveData` sin acoplar Pelican 4Ever a ningún mod concreto.
   * **Criterios de aceptación:**
     1. Test en `Pelican4Ever.Tests` que verifica que el hook se invoca antes de guardar en checkpoint/rollover.
+  * **Resolución:** `PreSaveHookRegistry` en `Pelican4Ever.Core/Admin/PreSaveHookRegistry.cs`, invocado desde `PersistenceModule.FlushToSaveData` cuando `reason != "Saving"`, y expuesto vía `PelicanApi.RegisterPreSaveHook`/`UnregisterPreSaveHook`; cubierto por `PreSaveHookRegistryTests` (`1827/1827` superados).
 
 - [ ] **TASK-2602 (`CP-605`): `HeadlessEventGuardModule` respeta diálogos y cartas activos de mods externos (`CorazonPelican.Prorroga.*`)**
   * **Prioridad:** Alta (P1)

@@ -1,4 +1,5 @@
 using System;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.World;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -10,6 +11,8 @@ namespace Pelican4Ever.Modules
     public sealed class PersistenceModule : Framework.IModule
     {
         private Framework.ModContext context = null!;
+
+        public static PreSaveHookRegistry PreSaveHooks { get; } = new();
 
         public string Name => "Persistence";
 
@@ -59,6 +62,12 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                if (!string.Equals(reason, "Saving", StringComparison.Ordinal))
+                {
+                    PreSaveHooks.InvokeAll(ex =>
+                        context.Monitor.Log($"Error en hook pre-guardado ({reason}): {ex.Message}", LogLevel.Warn));
+                }
+
                 if (Game1.player != null && context.WorldState.Players.TryGetValue(Game1.player.UniqueMultiplayerID, out var hostRecord))
                 {
                     hostRecord.LastSeenUtc = DateTimeOffset.UtcNow;

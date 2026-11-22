@@ -71,5 +71,14 @@ namespace Pelican4Ever
 
         /// <summary>Si el host está dibujando ahora.</summary>
         public bool IsHostDrawing() => HeadlessRenderModule.GetStatus().Drawing;
+
+        /// <summary>
+        /// Registra un callback síncrono invocado antes de <c>SaveGame.Save()</c> en checkpoints y rollovers
+        /// donde SMAPI no dispara <c>GameLoop.Saving</c> (TASK-2601 / CP-604).
+        /// </summary>
+        public void RegisterPreSaveHook(Action callback) => PersistenceModule.PreSaveHooks.Register(callback);
+
+        /// <summary>Retira un callback previamente registrado con <see cref="RegisterPreSaveHook"/>.</summary>
+        public void UnregisterPreSaveHook(Action callback) => PersistenceModule.PreSaveHooks.Unregister(callback);
     }
 }
