@@ -1776,6 +1776,11 @@ namespace Pelican4Ever.Modules
 
                 // Sincronizar catálogo inicial de residencias y anexos con todos los peones
                 BroadcastDoorsSync();
+
+                if (Game1.player != null)
+                {
+                    TryPlaceHostAgentSafelyInHome(Game1.player);
+                }
             }
             else
             {
@@ -6382,6 +6387,33 @@ namespace Pelican4Ever.Modules
             return cabin;
         }
 
+        private static bool TryPlaceHostAgentSafelyInHome(Farmer who)
+        {
+            if (!who.IsMainPlayer || context?.Config.AgentHost != true)
+                return false;
+            if (Game1.getLocationFromName("FarmHouse") is not FarmHouse mainHome)
+                return false;
+
+            bool currentlyInHome = ReferenceEquals(who.currentLocation, mainHome)
+                || string.Equals(who.currentLocation?.NameOrUniqueName, mainHome.NameOrUniqueName, StringComparison.OrdinalIgnoreCase);
+            Point curTile = who.TilePoint;
+            bool safeTile = currentlyInHome
+                && curTile.X > 0 && curTile.X < 11
+                && curTile.Y > 0 && curTile.Y < 11
+                && !ResidenceInteriorLogic.IsInBedFootprint(curTile.X, curTile.Y, ResidenceInteriorLogic.BedPlacement.TargetX, ResidenceInteriorLogic.BedPlacement.TargetY)
+                && mainHome.isTilePassable(new xTile.Dimensions.Location(curTile.X, curTile.Y), Game1.viewport)
+                && BedFurniture.GetBedAtTile(mainHome, curTile.X, curTile.Y) == null;
+            (int targetX, int targetY) = ResidenceInteriorLogic.ResolveHostAgentWakeTile(currentlyInHome, curTile.X, curTile.Y, safeTile);
+
+            who.currentLocation = mainHome;
+            who.Position = new Vector2(targetX * 64f, targetY * 64f);
+            if (who == Game1.player)
+            {
+                Game1.currentLocation = mainHome;
+            }
+            return true;
+        }
+
         public static bool Prefix_ApplyWakeUpPosition(Farmer who)
         {
             try
@@ -6389,24 +6421,8 @@ namespace Pelican4Ever.Modules
                 SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount);
 
                 // Anfitrión agente: despierta y permanece dentro de FarmHouse fuera de la cama, nunca en el porche ni en bedSpot.
-                if (who.IsMainPlayer && context?.Config.AgentHost == true && Game1.getLocationFromName("FarmHouse") is FarmHouse mainHome)
+                if (TryPlaceHostAgentSafelyInHome(who))
                 {
-                    bool currentlyInHome = ReferenceEquals(who.currentLocation, mainHome)
-                        || string.Equals(who.currentLocation?.NameOrUniqueName, mainHome.NameOrUniqueName, StringComparison.OrdinalIgnoreCase);
-                    Point curTile = who.TilePoint;
-                    bool safeTile = currentlyInHome
-                        && curTile.X > 0 && curTile.X < 11
-                        && curTile.Y > 0 && curTile.Y < 11
-                        && mainHome.isTilePassable(new xTile.Dimensions.Location(curTile.X, curTile.Y), Game1.viewport)
-                        && BedFurniture.GetBedAtTile(mainHome, curTile.X, curTile.Y) == null;
-                    (int targetX, int targetY) = ResidenceInteriorLogic.ResolveHostAgentWakeTile(currentlyInHome, curTile.X, curTile.Y, safeTile);
-
-                    who.currentLocation = mainHome;
-                    who.Position = new Vector2(targetX * 64f, targetY * 64f);
-                    if (who == Game1.player)
-                    {
-                        Game1.currentLocation = mainHome;
-                    }
                     return false;
                 }
 
