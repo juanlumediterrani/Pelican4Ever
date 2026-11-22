@@ -231,5 +231,21 @@ namespace Pelican4Ever.Tests
             Assert.Equal(disconnectTime, untouched.OfflineStaminaAnchorUtc);
             Assert.Equal(disconnectTime, untouched.OfflineHealthAnchorUtc);
         }
+
+        [Fact]
+        public void HostIdleRecovery_InsideHome_AccumulatesAfterOneMinuteAndAdvancesAnchor()
+        {
+            var anchor = new DateTimeOffset(2026, 11, 22, 6, 0, 0, TimeSpan.Zero);
+
+            // Antes de 1 minuto no aplica redondeos repetidos ni mueve el ancla
+            var tooEarly = OfflineStaminaRegenLogic.CalculateHostIdleRecovery(anchor, anchor.AddSeconds(45), 270, 100, 4.0f);
+            Assert.Equal((0, 0, anchor), (tooEarly.StaminaGained, tooEarly.HealthGained, tooEarly.NextAnchorUtc));
+
+            // A los 10 minutos recupera floor(270 * 10/240) = 11 estamina y floor(100 * 10/240) = 4 salud
+            var afterTenMin = OfflineStaminaRegenLogic.CalculateHostIdleRecovery(anchor, anchor.AddMinutes(10), 270, 100, 4.0f);
+            Assert.Equal(11, afterTenMin.StaminaGained);
+            Assert.Equal(4, afterTenMin.HealthGained);
+            Assert.Equal(anchor.AddMinutes(10), afterTenMin.NextAnchorUtc);
+        }
     }
 }

@@ -13,6 +13,38 @@ namespace Pelican4Ever.Core.World
         // Posiciones mejoradas, espaciosas y alineadas con la Farmhouse vanilla
         public static readonly FurnitureTargetCoordinate BedPlacement = new("Bed", 9, 8, 0);
         public static readonly FurnitureTargetCoordinate TenantBedPlacement = new("TenantBed", 7, 8, 0);
+        public const int HostAgentSafeWakeX = 5;
+        public const int HostAgentSafeWakeY = 9;
+        public const int FarmHouseDoorInteriorX = 3;
+        public const int FarmHouseDoorInteriorY = 11;
+        public const int FarmHouseExitWarpY = 12;
+
+        /// <summary>Indica si una casilla cae dentro de la huella estándar 2×3 de una cama.</summary>
+        public static bool IsInBedFootprint(int tileX, int tileY, int bedX, int bedY, int width = 2, int height = 3)
+        {
+            return tileX >= bedX && tileX < bedX + width && tileY >= bedY && tileY < bedY + height;
+        }
+
+        /// <summary>
+        /// Determina la casilla interior segura para despertar o mantener al anfitrión agente en <c>FarmHouse</c>
+        /// sin pisar la cama ni la salida.
+        /// </summary>
+        public static (int X, int Y) ResolveHostAgentWakeTile(
+            bool currentlyInFarmHouse,
+            int currentX,
+            int currentY,
+            bool currentTileSafe)
+        {
+            if (currentlyInFarmHouse
+                && currentTileSafe
+                && !IsInBedFootprint(currentX, currentY, BedPlacement.TargetX, BedPlacement.TargetY)
+                && !(currentX == FarmHouseDoorInteriorX && currentY >= FarmHouseDoorInteriorY))
+            {
+                return (currentX, currentY);
+            }
+
+            return (HostAgentSafeWakeX, HostAgentSafeWakeY);
+        }
         public static readonly FurnitureTargetCoordinate DiningTablePlacement = new("Table", 5, 6, 0);
         public static readonly FurnitureTargetCoordinate DiningChairPlacement = new("Chair", 4, 6, 1);
         public static readonly FurnitureTargetCoordinate TvPlacement = new("TV", 1, 4, 0);

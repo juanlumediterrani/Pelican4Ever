@@ -112,5 +112,28 @@ namespace Pelican4Ever.Tests
                 occupied.Add(kvp.Value);
             }
         }
+
+        [Fact]
+        public void ResolveHostAgentWakeTile_NeverLandsOnBedOrExitDoor()
+        {
+            // Fuera de casa -> coloca en la casilla segura (5, 9)
+            Assert.Equal((5, 9), ResidenceInteriorLogic.ResolveHostAgentWakeTile(false, 64, 15, true));
+
+            // Dentro de casa sobre el bedSpot (10, 9) -> mueve a (5, 9)
+            Assert.Equal((5, 9), ResidenceInteriorLogic.ResolveHostAgentWakeTile(true, 10, 9, true));
+
+            // Dentro de casa en el umbral de salida (3, 11) -> mueve a (5, 9)
+            Assert.Equal((5, 9), ResidenceInteriorLogic.ResolveHostAgentWakeTile(true, 3, 11, true));
+
+            // Dentro de casa en casilla segura distinta (6, 9) -> la conserva
+            Assert.Equal((6, 9), ResidenceInteriorLogic.ResolveHostAgentWakeTile(true, 6, 9, true));
+
+            // Casilla segura de reposo no solapa la cama ni el pasillo de puerta
+            Assert.False(ResidenceInteriorLogic.IsInBedFootprint(
+                ResidenceInteriorLogic.HostAgentSafeWakeX,
+                ResidenceInteriorLogic.HostAgentSafeWakeY,
+                ResidenceInteriorLogic.BedPlacement.TargetX,
+                ResidenceInteriorLogic.BedPlacement.TargetY));
+        }
     }
 }

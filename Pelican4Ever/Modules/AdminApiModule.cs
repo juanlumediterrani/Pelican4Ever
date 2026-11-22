@@ -907,6 +907,8 @@ namespace Pelican4Ever.Modules
             {
                 bool isOnline = onlineFarmers.TryGetValue(p.UniqueMultiplayerID, out Farmer? farmer);
                 var residence = state.FindResidenceOf(p.UniqueMultiplayerID);
+                bool isAgentHost = p.UniqueMultiplayerID == hostId && context!.Config.AgentHost;
+                bool isInHome = isAgentHost && isOnline && farmer?.currentLocation is StardewValley.Locations.FarmHouse;
 
                 response.Players.Add(new HostPlayerDetailDto
                 {
@@ -921,7 +923,7 @@ namespace Pelican4Ever.Modules
                     ResidenceDoorId = residence?.DoorId ?? string.Empty,
                     ResidenceFarmType = residence?.FarmType ?? string.Empty,
                     InFestival = inFestivalIds.Contains(p.UniqueMultiplayerID),
-                    SleepState = SleepPolicy.GetState(p, today, isOnline).ToString(),
+                    SleepState = SleepPolicy.GetState(p, today, isOnline, isAgentHost, isInHome).ToString(),
                     LastActiveGameDay = p.LastActiveGameDay,
                     RestedOnGameDay = p.RestedOnGameDay,
                     LastOutcome = p.LastOutcome.ToString(),
@@ -1144,15 +1146,19 @@ namespace Pelican4Ever.Modules
                 });
             }
 
+            long hostId = Context.IsWorldReady && Game1.MasterPlayer != null ? Game1.MasterPlayer.UniqueMultiplayerID : 0;
             foreach (var p in state.Players.Values)
             {
                 bool isOnline = onlineIds.Contains(p.UniqueMultiplayerID);
+                bool isAgentHost = p.UniqueMultiplayerID == hostId && context!.Config.AgentHost;
+                Farmer? farmer = isAgentHost && isOnline ? Game1.MasterPlayer : null;
+                bool isInHome = isAgentHost && isOnline && farmer?.currentLocation is StardewValley.Locations.FarmHouse;
                 statusDto.Players.Add(new PlayerStatusDto
                 {
                     Id = p.UniqueMultiplayerID,
                     Name = p.PlayerName,
                     IsOnline = isOnline,
-                    SleepState = SleepPolicy.GetState(p, today, isOnline).ToString(),
+                    SleepState = SleepPolicy.GetState(p, today, isOnline, isAgentHost, isInHome).ToString(),
                     FarmSlotId = p.FarmSlotId ?? "—",
                     SatietyUsed = ProjectedSatietyPoints(p, null),
                     PendingMarketGold = p.PendingMarketGold

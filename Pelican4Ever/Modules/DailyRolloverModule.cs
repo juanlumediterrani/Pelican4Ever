@@ -138,9 +138,16 @@ namespace Pelican4Ever.Modules
             {
                 var record = kvp.Value;
                 DailyEconomyTelemetry.Record(context, record, endedDay);
+                Farmer? farmer = Game1.GetPlayer(record.UniqueMultiplayerID);
                 bool isOnline = Game1.getOnlineFarmers().Any(f => f.UniqueMultiplayerID == record.UniqueMultiplayerID);
+                bool isAgentHost = farmer != null && farmer.IsMainPlayer && cfg.AgentHost;
+                bool isInHome = isAgentHost && farmer!.currentLocation is FarmHouse;
                 bool isEarlyRiser = isOnline && SleepPolicy.IsEarlyRiser(record, endedDay, localNow, cfg.ParsedCalendarDayChangeTime, cfg.EarlyMorningGraceMinutes);
-                RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline, isEarlyRiser);
+                RolloverOutcome outcome = SleepPolicy.Evaluate(record, endedDay, isOnline, isEarlyRiser, isAgentHost, isInHome);
+                if (isAgentHost && isInHome && outcome == RolloverOutcome.Rested && record.RestedOnGameDay < endedDay)
+                {
+                    record.RestedOnGameDay = endedDay;
+                }
                 SleepPolicy.Commit(record, outcome);
 
                 record.Behavior ??= new Pelican4Ever.Core.Security.PlayerBehaviorMetrics();
@@ -163,7 +170,6 @@ namespace Pelican4Ever.Modules
                 }
 
                 // Si el jugador está conectado o en la partida, ajustar energía y aplicar gasto médico si fue penalizado
-                Farmer? farmer = Game1.GetPlayer(record.UniqueMultiplayerID);
                 if (farmer != null)
                 {
                     farmer.Stamina = SleepPolicy.WakeUpEnergy(outcome, farmer.MaxStamina, cfg.PenaltyEnergyFraction, farmer.Stamina);
@@ -174,7 +180,7 @@ namespace Pelican4Ever.Modules
 
                     if (outcome == RolloverOutcome.Penalized)
                     {
-                        int fee = SleepPolicy.MedicalFee(farmer.Money, cfg.PenaltyGoldPercent, cfg.PenaltyGoldCap);
+                        int fee = SleepPolicy.MedicalFee(farmer.Money, cfg.PenaltyGoldPercent, cfg.PenaltyGoldCap, isAgentHost);
                         if (fee > 0)
                         {
                             int newMoney = Math.Max(0, farmer.Money - fee);

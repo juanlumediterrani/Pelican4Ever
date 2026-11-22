@@ -136,6 +136,44 @@ public class SleepPolicyTests
         Assert.Equal(135, SleepPolicy.WakeUpEnergy(RolloverOutcome.Penalized, 270, 0.5f, 12));
         Assert.Equal(12, SleepPolicy.WakeUpEnergy(RolloverOutcome.Untouched, 270, 0.5f, 12));
     }
+
+    [Fact]
+    public void AgentHost_InHomeWithoutBed_IsRestedAndExemptFromMedicalFee()
+    {
+        var host = new PlayerRecord { LastActiveGameDay = Today, RestedOnGameDay = Today - 1 };
+
+        RolloverOutcome outcome = SleepPolicy.Evaluate(
+            host, Today, isOnline: true, isEarlyRiser: false, isAgentHost: true, isInHome: true);
+
+        Assert.Equal(RolloverOutcome.Rested, outcome);
+        Assert.Equal(SleepState.Rested, SleepPolicy.GetState(host, Today, isOnline: true, isAgentHost: true, isInHome: true));
+        Assert.Equal(0, SleepPolicy.MedicalFee(500, 0.10f, 1000, isAgentHost: true));
+        Assert.Equal(270, SleepPolicy.WakeUpEnergy(outcome, 270, 0.5f, 80));
+    }
+
+    [Fact]
+    public void AgentHost_IdleServerNotActiveToday_IsUntouched()
+    {
+        var host = new PlayerRecord { LastActiveGameDay = -1, RestedOnGameDay = -1 };
+
+        RolloverOutcome outcome = SleepPolicy.Evaluate(
+            host, Today, isOnline: true, isEarlyRiser: false, isAgentHost: true, isInHome: false);
+
+        Assert.Equal(RolloverOutcome.Untouched, outcome);
+        Assert.Equal(0, SleepPolicy.MedicalFee(297, 0.10f, 1000, isAgentHost: true));
+    }
+
+    [Fact]
+    public void AgentHost_ActiveOutsideHome_IsPenalizedOnEnergyWithoutGoldFee()
+    {
+        var host = new PlayerRecord { LastActiveGameDay = Today, RestedOnGameDay = Today - 1 };
+
+        RolloverOutcome outcome = SleepPolicy.Evaluate(
+            host, Today, isOnline: true, isEarlyRiser: false, isAgentHost: true, isInHome: false);
+
+        Assert.Equal(RolloverOutcome.Penalized, outcome);
+        Assert.Equal(0, SleepPolicy.MedicalFee(500, 0.10f, 1000, isAgentHost: true));
+    }
 }
 
 public class SatietyBudgetTests

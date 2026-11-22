@@ -63,6 +63,7 @@ namespace Pelican4Ever.Modules
                 ctx.Helper.Events.Multiplayer.PeerConnected += OnPeerConnected;
                 ctx.Helper.Events.Multiplayer.PeerDisconnected += OnPeerDisconnected;
                 ctx.Helper.Events.GameLoop.SaveLoaded += OnHostSaveLoaded;
+                ctx.Helper.Events.GameLoop.OneSecondUpdateTicked += OnHostIdleRecoverySecond;
             }
 
             ApplyHarmonyPatches(ctx.Harmony);
@@ -72,6 +73,68 @@ namespace Pelican4Ever.Modules
         {
             hasCheckedLoginLevelUps = false;
             lastPresentedLevel = null;
+        }
+
+        private void OnHostIdleRecoverySecond(object? sender, StardewModdingAPI.Events.OneSecondUpdateTickedEventArgs e)
+        {
+            if (context == null || !Context.IsWorldReady || !Context.IsMainPlayer || !context.Config.AgentHost || Game1.player == null)
+                return;
+            if (context.Config.OfflineRegenFullBarHours <= 0)
+                return;
+
+            Farmer player = Game1.player;
+            var record = context.WorldState.GetOrCreatePlayer(player.UniqueMultiplayerID, player.Name);
+            DateTimeOffset nowUtc = DateTimeOffset.UtcNow;
+
+            bool inSafeIdleHome = player.currentLocation is FarmHouse
+                && !player.UsingTool
+                && !player.isMoving()
+                && !Game1.isFestival()
+                && Game1.activeClickableMenu == null
+                && !HeadlessRenderModule.Leases.HasActive(nowUtc.UtcDateTime);
+
+            if (!inSafeIdleHome)
+            {
+                record.OfflineStaminaAnchorUtc = DateTimeOffset.MinValue;
+                record.OfflineHealthAnchorUtc = DateTimeOffset.MinValue;
+                return;
+            }
+
+            if (record.OfflineStaminaAnchorUtc == DateTimeOffset.MinValue)
+            {
+                record.OfflineStaminaAnchorUtc = nowUtc;
+                record.OfflineHealthAnchorUtc = nowUtc;
+                return;
+            }
+
+            if (player.Stamina >= player.MaxStamina && player.health >= player.maxHealth)
+            {
+                record.OfflineStaminaAnchorUtc = nowUtc;
+                record.OfflineHealthAnchorUtc = nowUtc;
+                return;
+            }
+
+            var step = OfflineStaminaRegenLogic.CalculateHostIdleRecovery(
+                record.OfflineStaminaAnchorUtc,
+                nowUtc,
+                player.MaxStamina,
+                player.maxHealth,
+                context.Config.OfflineRegenFullBarHours);
+
+            if (step.StaminaGained > 0)
+            {
+                player.Stamina = OfflineStaminaRegenLogic.ApplyGain(player.Stamina, player.MaxStamina, step.StaminaGained);
+                if (player.Stamina > 0 && player.exhausted.Value)
+                    player.exhausted.Value = false;
+            }
+
+            if (step.HealthGained > 0)
+            {
+                player.health = OfflineStaminaRegenLogic.ApplyHealthGain(player.health, player.maxHealth, step.HealthGained);
+            }
+
+            record.OfflineStaminaAnchorUtc = step.NextAnchorUtc;
+            record.OfflineHealthAnchorUtc = step.NextAnchorUtc;
         }
 
         private void OnReturnedToTitle(object? sender, StardewModdingAPI.Events.ReturnedToTitleEventArgs e)

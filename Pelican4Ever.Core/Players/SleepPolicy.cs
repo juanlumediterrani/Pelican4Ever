@@ -8,9 +8,14 @@ namespace Pelican4Ever.Core.Players
     public static class SleepPolicy
     {
         /// <summary>Estado visible del jugador en el día de juego <paramref name="currentGameDay"/>.</summary>
-        public static SleepState GetState(PlayerRecord player, int currentGameDay, bool isOnline)
+        public static SleepState GetState(
+            PlayerRecord player,
+            int currentGameDay,
+            bool isOnline,
+            bool isAgentHost = false,
+            bool isInHome = false)
         {
-            if (player.RestedOnGameDay == currentGameDay)
+            if (player.RestedOnGameDay == currentGameDay || (isAgentHost && isInHome))
                 return SleepState.Rested;
 
             if (isOnline || player.LastActiveGameDay == currentGameDay)
@@ -71,19 +76,32 @@ namespace Pelican4Ever.Core.Players
         /// <summary>
         /// Evalúa el Rollover que cierra el día de juego <paramref name="endingGameDay"/>.
         /// <list type="bullet">
-        /// <item>Descansó ese día → <see cref="RolloverOutcome.Rested"/>.</item>
+        /// <item>Descansó ese día (o el anfitrión agente permanece dentro de su casa) → <see cref="RolloverOutcome.Rested"/>.</item>
         /// <item>Madrugador en ventana de gracia previa al rollover → <see cref="RolloverOutcome.Rested"/>.</item>
+        /// <item>Anfitrión agente sin actividad jugada ese día → <see cref="RolloverOutcome.Untouched"/>.</item>
         /// <item>Jugó ese día (o sigue conectado) sin descansar → <see cref="RolloverOutcome.Penalized"/>.</item>
         /// <item>No jugó ese día → <see cref="RolloverOutcome.Untouched"/> (nunca se penaliza dos veces).</item>
         /// </list>
         /// </summary>
-        public static RolloverOutcome Evaluate(PlayerRecord player, int endingGameDay, bool isOnline, bool isEarlyRiser = false)
+        public static RolloverOutcome Evaluate(
+            PlayerRecord player,
+            int endingGameDay,
+            bool isOnline,
+            bool isEarlyRiser = false,
+            bool isAgentHost = false,
+            bool isInHome = false)
         {
             if (player.RestedOnGameDay == endingGameDay)
                 return RolloverOutcome.Rested;
 
+            if (isAgentHost && isInHome)
+                return RolloverOutcome.Rested;
+
             if (isEarlyRiser)
                 return RolloverOutcome.Rested;
+
+            if (isAgentHost && player.LastActiveGameDay != endingGameDay)
+                return RolloverOutcome.Untouched;
 
             if (isOnline || player.LastActiveGameDay == endingGameDay)
                 return RolloverOutcome.Penalized;
@@ -98,10 +116,10 @@ namespace Pelican4Ever.Core.Players
                 player.LastOutcome = outcome;
         }
 
-        /// <summary>Gasto médico por no dormir: porcentaje del oro con tope.</summary>
-        public static int MedicalFee(int gold, float percent, int cap)
+        /// <summary>Gasto médico por no dormir: porcentaje del oro con tope (exento en anfitrión agente).</summary>
+        public static int MedicalFee(int gold, float percent, int cap, bool isAgentHost = false)
         {
-            if (gold <= 0)
+            if (isAgentHost || gold <= 0)
                 return 0;
 
             return Math.Min(cap, (int)Math.Floor(gold * percent));

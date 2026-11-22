@@ -6388,6 +6388,28 @@ namespace Pelican4Ever.Modules
             {
                 SanitizePlayerOrphanedBridgeLocation(who, context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount);
 
+                // Anfitrión agente: despierta y permanece dentro de FarmHouse fuera de la cama, nunca en el porche ni en bedSpot.
+                if (who.IsMainPlayer && context?.Config.AgentHost == true && Game1.getLocationFromName("FarmHouse") is FarmHouse mainHome)
+                {
+                    bool currentlyInHome = ReferenceEquals(who.currentLocation, mainHome)
+                        || string.Equals(who.currentLocation?.NameOrUniqueName, mainHome.NameOrUniqueName, StringComparison.OrdinalIgnoreCase);
+                    Point curTile = who.TilePoint;
+                    bool safeTile = currentlyInHome
+                        && curTile.X > 0 && curTile.X < 11
+                        && curTile.Y > 0 && curTile.Y < 11
+                        && mainHome.isTilePassable(new xTile.Dimensions.Location(curTile.X, curTile.Y), Game1.viewport)
+                        && BedFurniture.GetBedAtTile(mainHome, curTile.X, curTile.Y) == null;
+                    (int targetX, int targetY) = ResidenceInteriorLogic.ResolveHostAgentWakeTile(currentlyInHome, curTile.X, curTile.Y, safeTile);
+
+                    who.currentLocation = mainHome;
+                    who.Position = new Vector2(targetX * 64f, targetY * 64f);
+                    if (who == Game1.player)
+                    {
+                        Game1.currentLocation = mainHome;
+                    }
+                    return false;
+                }
+
                 // 1. Identificar si el jugador reside en una parcela asignada en WorldState (propietario o inquilino)
                 DoorAssignment? assignment = context?.WorldState?.FindResidenceOf(who.UniqueMultiplayerID);
 

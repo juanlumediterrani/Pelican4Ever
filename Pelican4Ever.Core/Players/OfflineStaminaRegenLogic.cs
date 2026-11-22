@@ -9,6 +9,33 @@ namespace Pelican4Ever.Core.Players
     public static class OfflineStaminaRegenLogic
     {
         public readonly record struct RecoveryGains(int Stamina, int Health);
+        public readonly record struct HostIdleRecoveryResult(int StaminaGained, int HealthGained, DateTimeOffset NextAnchorUtc);
+
+        /// <summary>
+        /// Calcula recuperación incremental para el anfitrión agente mientras reposa quieto dentro de su casa
+        /// (sin desconectarse ni usar la cama), aplicando la misma tasa por hora que la recuperación offline.
+        /// </summary>
+        public static HostIdleRecoveryResult CalculateHostIdleRecovery(
+            DateTimeOffset anchorUtc,
+            DateTimeOffset nowUtc,
+            int maxStamina,
+            int maxHealth,
+            float fullBarHours)
+        {
+            if (fullBarHours <= 0f || anchorUtc == DateTimeOffset.MinValue || nowUtc <= anchorUtc)
+                return new HostIdleRecoveryResult(0, 0, nowUtc);
+
+            TimeSpan elapsed = nowUtc - anchorUtc;
+            if (elapsed < TimeSpan.FromMinutes(1))
+                return new HostIdleRecoveryResult(0, 0, anchorUtc);
+
+            int stamina = Math.Max(0, (int)Math.Floor(CalculateLinearGain(maxStamina, elapsed, fullBarHours)));
+            int health = Math.Max(0, (int)Math.Floor(CalculateLinearGain(maxHealth, elapsed, fullBarHours)));
+            if (stamina <= 0 && health <= 0)
+                return new HostIdleRecoveryResult(0, 0, anchorUtc);
+
+            return new HostIdleRecoveryResult(stamina, health, nowUtc);
+        }
 
         /// <summary>Calcula cuánto puede recuperar el jugador al volver. Cada barra limita la ganancia al aplicarla.</summary>
         public static RecoveryGains CalculateRecoveryGains(
