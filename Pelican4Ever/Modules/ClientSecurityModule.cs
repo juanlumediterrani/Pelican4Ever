@@ -1705,6 +1705,24 @@ namespace Pelican4Ever.Modules
 
             try
             {
+                if (Game1.server is GameServer gs &&
+                    AccessTools.Field(typeof(GameServer), "servers")?.GetValue(gs) is IEnumerable servers)
+                {
+                    foreach (object? obj in servers)
+                    {
+                        if (obj is Server srv)
+                        {
+                            string? userId = srv.getUserId(playerId);
+                            string normId = ClientPairingLogic.NormalizeIp(userId);
+                            if (!string.IsNullOrEmpty(normId))
+                            {
+                                playerRemoteIps[playerId] = normId;
+                                return normId;
+                            }
+                        }
+                    }
+                }
+
                 string? raw = Game1.server?.getUserName(playerId);
                 string norm = ClientPairingLogic.NormalizeIp(raw);
                 if (!string.IsNullOrEmpty(norm))

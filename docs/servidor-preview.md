@@ -110,6 +110,7 @@ Esta es una fase de pruebas: lo que reportes alimenta el backlog. Lo que convien
 | **Mercado vecinal** | Compra y venta de cosechas y productos artesanales, con cobro aunque el comprador estuviera desconectado |
 | **Chat** | `/g` global, `/l` por proximidad, `/w` susurros privados |
 | **Fauna de NITV** | Animales e insectos en las 16 residencias, en la plaza y en los puentes (requiere el pack de compatibilidad) |
+| **Insectario** | Cada personaje lleva su colección de Nature In The Valley y Wild Animals y reclama cada recompensa una vez, al cumplir sus requisitos con sus propias donaciones. |
 | **Mascotas** | Recogida y adopción de mascotas desde la pestaña **Animales** del cliente |
 
 ---

@@ -355,6 +355,26 @@ namespace Pelican4Ever.Modules
                 choices.Add(new Response("PendingStatus", I18n.Get("mailbox.menu.view_pending", new { count = pendingCount })));
             }
 
+            string? slotId = VisitorPermissionLogic.ResidenceSlotOf(location.NameOrUniqueName);
+            DoorAssignment? assignment = !string.IsNullOrWhiteSpace(slotId)
+                ? context?.WorldState.Doors.Values.FirstOrDefault(d => string.Equals(d.FarmSlotId, slotId, StringComparison.OrdinalIgnoreCase))
+                : null;
+            DoorModel? door = assignment != null
+                ? FarmSlotModule.RegisteredDoors.FirstOrDefault(d => string.Equals(d.DoorId, assignment.DoorId, StringComparison.OrdinalIgnoreCase))
+                : null;
+
+            if (assignment != null && door != null)
+            {
+                if (assignment.OwnerId == myId)
+                {
+                    choices.Add(new Response("Tenancy", TownMailboxModule.BuildTenancyMenuLabel(assignment)));
+                }
+                else if (assignment.TenantId == myId)
+                {
+                    choices.Add(new Response("LeaveTenancy", I18n.Get("mailbox.menu.leave_tenancy")));
+                }
+            }
+
             choices.Add(new Response("Cancel", I18n.Get("dialog.cancel")));
 
             QuestionDialog.Ask(
@@ -373,6 +393,14 @@ namespace Pelican4Ever.Modules
                     else if (answer == "PendingStatus")
                     {
                         ShowPendingOrdersDialog();
+                    }
+                    else if (answer == "Tenancy" && assignment != null && door != null)
+                    {
+                        TownMailboxModule.ShowTenancyManagementDialog(door, assignment);
+                    }
+                    else if (answer == "LeaveTenancy" && door != null)
+                    {
+                        TownMailboxModule.ConfirmLeaveTenancy(door);
                     }
                 }
             );

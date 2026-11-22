@@ -15,6 +15,7 @@ public class ServerConfigTests
         Assert.Equal(new TimeSpan(2, 0, 0), config.ParsedCalendarDayChangeTime);
         Assert.Equal(new TimeSpan(1, 50, 0), config.ParsedNightHoldStart);
         Assert.Equal(DayOfWeek.Monday, config.ParsedCalendarEpoch.DayOfWeek);
+        Assert.True(config.HideClientIpInChat);
     }
 
     [Theory]

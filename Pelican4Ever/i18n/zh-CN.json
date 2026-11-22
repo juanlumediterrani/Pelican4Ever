@@ -366,6 +366,7 @@
   "mailbox.tenancy.request_sent": "已向 {{owner}} 发送合租申请。",
   "mailbox.tenancy.request_cancelled": "已取消你的合租申请。",
   "mailbox.tenancy.evict": "解除合租（{{tenant}}）",
+  "mailbox.tenancy.evict_confirm": "确定要解除 {{tenant}} 的合租资格吗？",
   "mailbox.tenancy.active_prompt": "当前房客：{{tenant}}。要执行什么操作？",
   "mailbox.tenancy.evicted": "已解除 {{tenant}} 的合租资格。",
   "mailbox.tenancy.applicant_entry": "申请：{{name}}",

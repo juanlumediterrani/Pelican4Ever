@@ -1,6 +1,9 @@
 using System;
 using System.Linq;
+using System.Reflection;
+using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Chat;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
@@ -8,6 +11,7 @@ using StardewModdingAPI;
 using StardewModdingAPI.Events;
 using StardewValley;
 using StardewValley.Menus;
+using StardewValley.Network;
 
 namespace Pelican4Ever.Modules
 {
@@ -18,6 +22,7 @@ namespace Pelican4Ever.Modules
     {
         private static ModContext? context;
         private static bool commandsRegistered;
+        private static readonly FieldInfo? MultiplayerField = AccessTools.Field(typeof(Game1), "multiplayer");
 
         public string Name => "ChatChannel";
 
@@ -30,6 +35,47 @@ namespace Pelican4Ever.Modules
             ctx.Helper.Events.GameLoop.GameLaunched += OnGameLaunched;
             ctx.Helper.Events.GameLoop.SaveLoaded += OnSaveLoaded;
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
+
+            ApplyPrivacyPatches(ctx);
+        }
+
+        private void ApplyPrivacyPatches(ModContext ctx)
+        {
+            ctx.Patch(
+                "LidgrenServer.getUserName",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(LidgrenServer), nameof(LidgrenServer.getUserName), new[] { typeof(long) }),
+                postfix: new HarmonyMethod(typeof(ChatChannelModule), nameof(Postfix_LidgrenServer_GetUserName)));
+
+            ctx.Patch(
+                "ChatBox.formattedUserNameLong",
+                Name,
+                PatchCriticality.Security,
+                AccessTools.Method(typeof(ChatBox), nameof(ChatBox.formattedUserNameLong), new[] { typeof(Farmer) }),
+                postfix: new HarmonyMethod(typeof(ChatChannelModule), nameof(Postfix_ChatBox_FormattedUserNameLong)));
+        }
+
+        private static void Postfix_LidgrenServer_GetUserName(ref string? __result)
+        {
+            if (context == null || !context.IsModEnabled || !context.Config.HideClientIpInChat)
+                return;
+
+            if (!string.IsNullOrEmpty(__result))
+                __result = string.Empty;
+        }
+
+        private static void Postfix_ChatBox_FormattedUserNameLong(Farmer? farmer, ref string __result)
+        {
+            if (farmer == null || context == null || !context.IsModEnabled || !context.Config.HideClientIpInChat)
+                return;
+
+            var multiplayer = MultiplayerField?.GetValue(null) as Multiplayer;
+            string? userName = multiplayer?.getUserName(farmer.UniqueMultiplayerID);
+            if (ChatIdentityPrivacyLogic.IsIpAddressLabel(userName))
+            {
+                __result = ChatBox.formattedUserName(farmer);
+            }
         }
 
         private void OnGameLaunched(object? sender, GameLaunchedEventArgs e)

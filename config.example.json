@@ -55,6 +55,7 @@
   "RequirePairingWhitelist": true,
   "PairingInviteTtlHours": 72,
   "ProtectPublicHubs": false,
+  "HideClientIpInChat": true,
   "RequiredClientMods": [
     "Pathoschild.ContentPatcher",
     "spacechase0.SpaceCore",

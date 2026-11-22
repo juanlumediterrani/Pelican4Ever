@@ -48,7 +48,7 @@
 
 1. **1:1 clock with no punitive night pass-out:** One real day equals one game day; night owls can play during `NightHold` (`2550`) without losing their day to the clock or blocking the `02:00 AM` rollover.
 2. **Strict Host authority with verified clients:** All shared or sensitive persistent state lives in `ServerWorldState` on the Host. Clients provide local UI and cryptographic device identity.
-3. **Individual progression inside a community world:** Community Center, Museum, Joja, mine floors, and the NITV Insectarium are shared; gold, `Shipping Bin`, satiety, skills, mail, packages, and NPC relationships remain individual (even between co-residents).
+3. **Individual progression inside a community world:** The Community Center, Museum, Joja, and mine floors are shared. Gold, the `Shipping Bin`, satiety, skills, mail, packages, NPC relationships, and Insectarium progression are individual (even between co-residents).
 4. **30–90 minute session cadence:** Offline energy recovery, 4-hour continuous satiety drain, seated "Well-Fed" recovery, and selective throttling of calendar-unbounded activities ([ADR-0008](docs/adr/0008-skill-economy-rebalance.en.md)) favor frequent sessions over endless grinding.
 5. **Fail-closed, agent-observable 24/7 operation:** The server must never fail silently when patches break or the game thread hangs; unsafe states must lock closed or expose health off the game thread so `Putre` can alert or restart automatically.
 
@@ -96,9 +96,12 @@
 | :--- | :--- |
 | **Economy & Shipping Bins** | **Individual** (`team.useSeparateWallets = true`, `personalShippingBin`), including between co-residents. |
 | **Plot, House, Buildings & Animals** | **Individual per plot** (`Pelican4Ever_Farm_01..16`), shared solely between that plot's `OwnerId` and `TenantId`. |
-| **Community Center / Museum / Joja / Insectarium (NITV)** | **Shared (community)** across the whole server. |
+| **Community Center / Museum / Joja** | **Shared (community)** across the whole server. |
+| **Insectarium (NITV and Wild Animals)** | **Individual** catches, donations, visible collection, unlocks, and rewards. Each character can donate the same species and claim each reward once after meeting its requirements through their own donations. |
 | **Mine Elevator, Mail, Packages & XP** | **Individual** per player. Mine floors are shared; mine reward chests are personal. |
 | **NPC Relationships** | **Individual** per player, with no decay during `Offline_*`. |
+
+The host and every client need the Pelican 4Ever build that includes this change. Existing saves retain the old shared donations in the map data. Since those records have no donor identity, each character starts their personal collection with their own donations. Prior claims stay recorded on the character. Old claims were keyed by item, so any rewards matching a previously claimed item count as claimed.
 
 ### 4.4. Central Plaza, Residences, Annexes, Co-Residency, and Mailbox
 

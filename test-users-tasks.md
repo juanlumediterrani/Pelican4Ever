@@ -63,4 +63,5 @@ Tareas de verificación y calibración que requieren partidas reales con **vario
 - [ ] **TEST-2404: Captura cooperativa de fauna NITV, viaje al Insectario y donaciones en sesión multijugador** *(movida desde `TASK-2404` en [backlog.md](backlog.md); ver prueba automatizada en [`LIVE-2404`](live-agent-tests-backlog.md))*
   * **Alcance:**
     1. Jugar una sesión con varios clientes usando las redes de *Nature In The Valley* en Plaza Central (`Farm`), puentes (`Pelican4Ever_Bridge_1..3`), residencias (`Foraging`, `Beach`, `Standard`), anexos y cuevas privadas (`_Cave`), incluso en parcelas ajenas sin permiso de edición.
-    2. Viajar al Insectario desde `BusStop (28, 11)`, donar ejemplares en `NIVInnerInsec` y confirmar que los demás jugadores ven las donaciones replicadas sin fallos visuales y que la densidad percibida de fauna resulta agradable.
+    2. Viajar al Insectario desde `BusStop (28, 11)` y valorar la densidad de fauna.
+    3. Donar la misma especie con dos personajes en `NIVInnerInsec`. Comprobar que cada uno ve su propia donación en la colección y puede recoger la recompensa una vez. Repetir con el osezno (`BearCub`) de Wild Animals y verificar el peluche de oso.

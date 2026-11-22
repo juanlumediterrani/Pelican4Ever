@@ -2409,7 +2409,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Descripción:**
     - Validar en servidor dedicado/LAN con Host + *farmhand*:
       1. Aparición de fauna en Plaza Central (`Farm`), puentes (`Pelican4Ever_Bridge_1..3`), residencias (`Foraging`, `Beach`, `Standard`), anexos y cuevas privadas (`_Cave`).
-      2. Viaje al Insectario desde `BusStop (28, 11)` (`NatWarpInsect`), retorno (`NatInValley_ReturnHome`), donación en `NIVInnerInsec` y replicación de `NatureInTheValley/Donated/*` entre jugadores.
+      2. Viaje al Insectario desde `BusStop (28, 11)` (`NatWarpInsect`), retorno (`NatInValley_ReturnHome`), donación en `NIVInnerInsec` y verificación del progreso personal entre jugadores.
       3. Evaluar si el multiplicador `Game1.numberOfPlayers()` en `locationCap` de NITV produce sobrepoblación local en servidores de 8–16 jugadores (documentar o mitigar mediante el fork local de NITV / parche Harmony si es necesario).
   * **Criterios de Aceptación:**
     1. Ningún warp de otro jugador limpia o corrompe las criaturas locales; la XP de captura respeta el cupo diario y el rollover/NightHold no producen errores en logs SMAPI.

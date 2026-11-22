@@ -366,6 +366,7 @@
   "mailbox.tenancy.request_sent": "Solicitud de inquilino enviada a {{owner}}.",
   "mailbox.tenancy.request_cancelled": "Has cancelado tu solicitud de inquilino.",
   "mailbox.tenancy.evict": "Expulsar inquilino ({{tenant}})",
+  "mailbox.tenancy.evict_confirm": "¿Seguro que quieres expulsar a {{tenant}} de tu residencia?",
   "mailbox.tenancy.active_prompt": "Inquilino actual: {{tenant}}. ¿Qué deseas hacer?",
   "mailbox.tenancy.evicted": "Has finalizado el inquilinato de {{tenant}}.",
   "mailbox.tenancy.applicant_entry": "Solicitud: {{name}}",

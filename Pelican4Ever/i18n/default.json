@@ -366,6 +366,7 @@
   "mailbox.tenancy.request_sent": "Tenancy request sent to {{owner}}.",
   "mailbox.tenancy.request_cancelled": "You cancelled your tenancy request.",
   "mailbox.tenancy.evict": "Remove tenant ({{tenant}})",
+  "mailbox.tenancy.evict_confirm": "Are you sure you want to remove {{tenant}} as a tenant from your residence?",
   "mailbox.tenancy.active_prompt": "Current tenant: {{tenant}}. What would you like to do?",
   "mailbox.tenancy.evicted": "You ended {{tenant}}'s tenancy.",
   "mailbox.tenancy.applicant_entry": "Request: {{name}}",

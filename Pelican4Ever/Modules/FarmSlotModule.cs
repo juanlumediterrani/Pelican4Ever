@@ -4104,6 +4104,9 @@ namespace Pelican4Ever.Modules
             if (context == null || !Context.IsMainPlayer || playerId == 0 || string.IsNullOrWhiteSpace(doorId))
                 return false;
 
+            if (Game1.MasterPlayer != null && playerId == Game1.MasterPlayer.UniqueMultiplayerID)
+                return false;
+
             if (!context.WorldState.Doors.TryGetValue(doorId, out DoorAssignment? door) || door.OwnerId == 0)
                 return false;
 
@@ -4122,6 +4125,8 @@ namespace Pelican4Ever.Modules
 
             if (context.WorldState.FindResidenceOf(playerId) != null)
                 return false;
+
+            context.WorldState.GetOrCreatePlayer(playerId, Game1.GetPlayer(playerId)?.Name ?? string.Empty);
 
             if (!door.PendingTenantRequests.Add(playerId))
                 return true;
@@ -4150,6 +4155,8 @@ namespace Pelican4Ever.Modules
                     if (door.TenantId.HasValue && door.TenantId.Value != 0)
                         return false;
                     if (targetPlayerId == 0 || targetPlayerId == door.OwnerId)
+                        return false;
+                    if (Game1.MasterPlayer != null && targetPlayerId == Game1.MasterPlayer.UniqueMultiplayerID)
                         return false;
                     if (context.WorldState.FindResidenceOf(targetPlayerId) != null)
                         return false;
@@ -4426,6 +4433,9 @@ namespace Pelican4Ever.Modules
             if (Game1.currentLocation == null)
                 return;
 
+            if (Game1.activeClickableMenu != null || Game1.dialogueUp || Game1.eventUp || Game1.player.UsingTool)
+                return;
+
             string curLoc = Game1.currentLocation.NameOrUniqueName;
             Vector2 targetTile = e.Cursor.GrabTile;
 
@@ -4461,15 +4471,16 @@ namespace Pelican4Ever.Modules
                 }
             }
 
+            // El buzón exterior contiguo lo gestiona exclusivamente TownMailboxModule (correo, pedidos y co-residencia).
             DoorModel? door = RegisteredDoors.FirstOrDefault(d =>
                 IsDoorActiveForCurrentConfig(d)
                 && string.Equals(string.IsNullOrWhiteSpace(d.LocationName) ? "Farm" : d.LocationName, curLoc, StringComparison.OrdinalIgnoreCase)
-                && (IsInOpeningOrBorder(d, (int)targetTile.X, (int)targetTile.Y)
-                    || ((d.MailboxTileX ?? (d.TownTileX + 1)) == (int)targetTile.X && (d.MailboxTileY ?? d.TownTileY) == (int)targetTile.Y)));
+                && IsInOpeningOrBorder(d, (int)targetTile.X, (int)targetTile.Y));
 
             if (door != null)
             {
                 InteractWithResidentialDoor(door);
+                context.Helper.Input.Suppress(e.Button);
                 return;
             }
 
@@ -4628,6 +4639,35 @@ namespace Pelican4Ever.Modules
                         else if (whichAnswer == "Policy")
                         {
                             ShowPolicySelectionDialog(assignment.FarmSlotId);
+                        }
+                    }
+                );
+            }
+            else if (assignment.TenantId == myId)
+            {
+                string ownerName = I18n.Get("common.neighbor");
+                if (worldState.Players.TryGetValue(assignment.OwnerId, out var ownerRec) && !string.IsNullOrEmpty(ownerRec.PlayerName))
+                    ownerName = ownerRec.PlayerName;
+
+                Response[] choices = new[]
+                {
+                    new Response("Enter", I18n.Get("residence.door.enter")),
+                    new Response("LeaveTenancy", I18n.Get("mailbox.menu.leave_tenancy")),
+                    new Response("Cancel", I18n.Get("dialog.cancel"))
+                };
+
+                QuestionDialog.Ask(
+                    I18n.Get("mailbox.tenant_prompt", new { description = GetDoorDescription(door), owner = ownerName }),
+                    choices,
+                    (who, whichAnswer) =>
+                    {
+                        if (whichAnswer == "Enter")
+                        {
+                            WarpToFarm(assignment.FarmSlotId);
+                        }
+                        else if (whichAnswer == "LeaveTenancy")
+                        {
+                            TownMailboxModule.ConfirmLeaveTenancy(door);
                         }
                     }
                 );
@@ -7503,6 +7543,8 @@ namespace Pelican4Ever.Modules
                 postfix: new HarmonyMethod(typeof(FarmSlotModule), nameof(Postfix_NiTV_ValidLocation)),
                 criticality: PatchCriticality.Experience,
                 optional: true);
+            if (context != null)
+                NitvProgression.Apply(context, nitvEntryType);
         }
 
         public static bool Prefix_NiTV_OnWarp(WarpedEventArgs eventArgs)

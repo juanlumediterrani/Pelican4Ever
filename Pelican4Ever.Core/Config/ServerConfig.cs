@@ -208,6 +208,12 @@ namespace Pelican4Ever.Core.Config
         public bool ProtectPublicHubs { get; set; } = false;
 
         /// <summary>
+        /// Si es true (por defecto), oculta las direcciones IP de los clientes en los avisos de chat
+        /// (conexión, desconexión y <c>/list</c>) y evita enviarlas en los paquetes de introducción de jugadores.
+        /// </summary>
+        public bool HideClientIpInChat { get; set; } = true;
+
+        /// <summary>
         /// Resto del modpack que debe tener cada cliente (UniqueID de SMAPI), además de Pelican 4Ever. La versión exigida es
         /// la que tiene instalada el host, exacta: actualizar un mod en el servidor cambia la exigencia sin tocar este
         /// fichero. Un ID que el host no tenga instalado se ignora con un aviso. Vacío (por defecto) = solo Pelican 4Ever.

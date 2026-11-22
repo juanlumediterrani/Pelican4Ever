@@ -62,7 +62,8 @@ Este documento agrupa las **pruebas de integración y carga en vivo sobre el jue
     2. Validar aparición de criaturas con códigos `"0"`, `"1"` (`Forest`/`Foraging`/`FourCorners` aunque haya `<= 60` árboles), `"2"` (`Fishing`/`Beach` aunque haya `< 40%` agua) y `"3"` (`Pelican4Ever_Farm_01_Cave..16_Cave`).
     3. Simular carga de red (`NatInValeyNet`) seguida de warp interrumpido: verificar que `"NatCSpeedN"` conserva duración de `20000 ms` sin escalarse `85.7x` ni guardarse en `PersistedFoodBuff`.
     4. Visitar una parcela ajena con `VisitorsCanEdit = false`: confirmar que el visitante puede usar la red NITV para capturar fauna pero tiene bloqueado colocar/retirar `Terrarium`.
-    5. Viajar al Insectario desde `BusStop (28, 11)` (`NatWarpInsect`), retornar (`NatInValley_ReturnHome`), donar un ejemplar en `NIVInnerInsec` y confirmar la replicación de `NatureInTheValley/Donated/*` entre Host y *farmhands*, además de medir conteo de `NatCreature` frente a `locationCap * numberOfPlayers()`.
+    5. Viajar al Insectario desde `BusStop (28, 11)` (`NatWarpInsect`), retornar (`NatInValley_ReturnHome`) y medir el conteo de `NatCreature` frente a `locationCap * numberOfPlayers()`.
+    6. Donar la misma especie de NITV y después una de Wild Animals con dos personajes. Antes de la segunda donación, comprobar que solo el primer personaje ve ese avance en la colección y puede cobrar la recompensa correspondiente. Cobrar con ambos, volver a abrir el menú de premios y comprobar que se agotó para cada uno. Repetir la comprobación tras reconectar y tras un checkpoint con recarga del host.
   * **Criterios de aceptación:**
     1. Biomas `0..3` generan fauna esperada sin errores en SMAPI tras warps de otros jugadores, rollover y `NightHold`.
     2. `"NatCSpeedN"` no queda pegado ~28,5 min, las redes funcionan en visitas sin permiso de edición (manteniendo terrarios bloqueados), y queda documentada la medición real de `locationCap`.

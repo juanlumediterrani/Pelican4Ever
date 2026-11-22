@@ -48,7 +48,7 @@
 
 1. **Reloj 1:1 sin desmayo punitivo en madrugada:** Un día real equivale a un día de juego; los jugadores noctámbulos pueden jugar en `NightHold` (`2550`) sin perder su jornada por reloj ni bloquear el cambio de fecha de las `02:00 AM`.
 2. **Autoridad estricta en el Host con cliente verificado:** Todo estado persistente compartido o sensible vive en `ServerWorldState` en el Host. Los clientes aportan interfaz local y su identidad criptográfica de dispositivo.
-3. **Progreso individual dentro de un mundo comunitario:** El Centro Cívico, Museo, Joja, pisos mineros e Insectario son comunitarios; el dinero, `Shipping Bin`, saciedad, habilidades, correo, paquetes y relaciones con NPCs son individuales (incluso entre co-residentes).
+3. **Progreso individual dentro de un mundo comunitario:** El Centro Cívico, el Museo, Joja y los pisos mineros son comunitarios. El dinero, `Shipping Bin`, la saciedad, las habilidades, el correo, los paquetes, las relaciones con NPCs y el progreso del Insectario son individuales (incluso entre co-residentes).
 4. **Ritmo de sesiones de 30–90 minutos:** La combinación de energía regenerable offline, saciedad con vaciado continuo de 4 horas, *«Bien comido»* sentado y freno selectivo de actividades no acotadas por calendario ([ADR-0008](docs/adr/0008-skill-economy-rebalance.md)) recompensa sesiones frecuentes frente al farmeo infinito.
 5. **Operación 24/7 *fail-closed* y observable por agentes:** El servidor no debe degradarse en silencio ante roturas de parches o bloqueos del hilo de juego; toda anomalía debe detener la exposición insegura o exponerse fuera del hilo principal para que `Putre` alerte o reinicie automáticamente.
 
@@ -96,9 +96,12 @@
 | :--- | :--- |
 | **Economía y Cajas de Envío** | **Individual** (`team.useSeparateWallets = true`, `personalShippingBin`), incluso entre co-residentes. |
 | **Parcela, Casa, Edificios y Animales** | **Individual por parcela** (`Pelican4Ever_Farm_01..16`), compartida únicamente entre `OwnerId` y `TenantId` de esa parcela. |
-| **Centro Cívico / Museo / Joja / Insectario (NITV)** | **Compartido (comunitario)** para todo el servidor. |
+| **Centro Cívico / Museo / Joja** | **Compartido (comunitario)** para todo el servidor. |
+| **Insectario (NITV y Wild Animals)** | **Individual** en capturas, donaciones, colección visible, desbloqueos y recompensas. Cada personaje puede donar la misma especie y reclamar una vez cada recompensa que desbloquee con sus propias donaciones. |
 | **Ascensor de las Minas, Correo, Paquetes y XP** | **Individual** por jugador. Los pisos de mina son compartidos; los cofres de recompensa de mina son personales. |
 | **Relaciones con NPCs** | **Individual** por jugador, sin decaimiento en estado `Offline_*`. |
+
+El anfitrión y cada cliente deben ejecutar la versión de Pelican 4Ever que incluye este cambio. En partidas existentes, el historial compartido de donaciones de NITV se conserva en el mapa como registro antiguo. Como ese historial carece de autoría, cada personaje empieza su registro personal donando sus propios ejemplares. Las recompensas ya cobradas siguen registradas en el personaje. Los cobros antiguos se identificaban por objeto, por lo que se consideran cobrados los premios que coincidan con ese objeto.
 
 ### 4.4. Plaza Central, Residencias, Anexos, Co-Residencia y Buzón
 
