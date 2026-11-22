@@ -155,6 +155,9 @@ namespace Pelican4Ever.Modules
 
         public static void Prefix_CheckSchedule(NPC __instance, int timeOfDay)
         {
+            if (__instance is null || __instance.modData.ContainsKey(NpcShopkeeperLogic.CorazonPelicanControlKey))
+                return;
+
             // Si el NPC tiene un controlador casual de micro-deambular (no una ruta oficial de horario),
             // cancelarlo de inmediato para que checkSchedule no posponga su ruta al mostrador / destino
             if (__instance.controller != null && !__instance.controller.NPCSchedule)
@@ -368,6 +371,8 @@ namespace Pelican4Ever.Modules
                         || npc.Sprite?.CurrentAnimation != null;
                     bool isEmoting = npc.isEmoting;
 
+                    bool isExternallyControlled = npc.modData.ContainsKey(NpcShopkeeperLogic.CorazonPelicanControlKey);
+
                     if (!NpcShopkeeperLogic.CanMicroWander(
                         npc.Name,
                         locName,
@@ -377,7 +382,8 @@ namespace Pelican4Ever.Modules
                         isSleeping,
                         isSitting,
                         hasActivity,
-                        isEmoting))
+                        isEmoting,
+                        isExternallyControlled))
                     {
                         // Si es un tendero de servicio o el NPC no es apto para deambular,
                         // retirar ancla y restaurar velocidad normal si estaba alterada

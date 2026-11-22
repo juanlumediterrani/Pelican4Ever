@@ -276,7 +276,10 @@ namespace Pelican4Ever.Modules
 
         private static bool CatchUpSchedule(NPC npc, int timeOfDay)
         {
-            if (npc.Schedule == null || npc.ignoreScheduleToday || npc.IsInvisible)
+            if (npc.Schedule == null
+                || npc.ignoreScheduleToday
+                || npc.IsInvisible
+                || npc.modData.ContainsKey(Core.World.NpcShopkeeperLogic.CorazonPelicanControlKey))
                 return false;
 
             // Si la hora retrocede antes del primer tramo, el aldeano vuelve a su posición de la mañana

@@ -35,6 +35,12 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
+        /// Clave de contrato entre Pelican 4Ever y Corazón Pelican en <c>NPC.modData</c>:
+        /// mientras exista, Corazón Pelican gobierna al NPC y <c>WorldLifeModule</c> no le asigna micro-deambular.
+        /// </summary>
+        public const string CorazonPelicanControlKey = "CorazonPelican.Control";
+
+        /// <summary>
         /// Determina si un aldeano es apto para micro-deambular (Micro-Wandering).
         /// </summary>
         public static bool CanMicroWander(
@@ -46,8 +52,13 @@ namespace Pelican4Ever.Core.World
             bool isSleeping,
             bool isSitting,
             bool hasActivity,
-            bool isEmoting)
+            bool isEmoting,
+            bool isExternallyControlled = false)
         {
+            // Si otro mod (p. ej. Corazón Pelican vía modData["CorazonPelican.Control"]) gobierna al NPC
+            if (isExternallyControlled)
+                return false;
+
             // Si está durmiendo, sentado, gesticulando, con actividad o realizando animación de fin de ruta
             if (isDoingRouteAnimation || isSleeping || isSitting || hasActivity || isEmoting)
                 return false;
