@@ -44,6 +44,8 @@ namespace Pelican4Ever.Core.Economy
         public int TargetBuildingTileY { get; set; }
         public bool IsHouseUpgrade { get; set; }
         public int HouseUpgradeLevel { get; set; }
+        public int GoldPaid { get; set; }
+        public List<MailOrderItemLine> MaterialsPaid { get; set; } = new();
         public int CreatedAtGameDay { get; set; }
         public int DeliveryGameDay { get; set; }
         public int DeliveryTimeOfDay { get; set; } = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay;
@@ -175,6 +177,29 @@ namespace Pelican4Ever.Core.Economy
                 return false;
 
             return currentTimeOfDay >= deliveryTimeOfDay;
+        }
+    }
+
+    public static class RolloverOrderReconciliationLogic
+    {
+        /// <summary>
+        /// Determina durante el rollover hacia <paramref name="newGameDay"/> si un pedido cuyo mediodía
+        /// de entrega (<paramref name="deliveryGameDay"/>) ya quedó atrás quedó vencido/huérfano.
+        /// </summary>
+        public static bool IsOverdueForRollover(int deliveryGameDay, int newGameDay)
+        {
+            return deliveryGameDay < newGameDay;
+        }
+
+        /// <summary>
+        /// Calcula los días de obra restantes tras haberse perdido la entrega de las 12:00 en
+        /// <paramref name="deliveryGameDay"/> al alcanzar el rollover hacia <paramref name="newGameDay"/>.
+        /// </summary>
+        public static int ComputeRemainingBuildDaysAfterMissedDelivery(int buildDays, int deliveryGameDay, int newGameDay)
+        {
+            int normalizedBuildDays = Math.Max(1, buildDays);
+            int elapsedNights = Math.Max(0, newGameDay - deliveryGameDay);
+            return Math.Max(0, normalizedBuildDays - elapsedNights);
         }
     }
 

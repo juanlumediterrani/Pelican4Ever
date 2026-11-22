@@ -172,5 +172,142 @@ namespace Pelican4Ever.Core.World
                 && locationName.StartsWith(LocationCullingLogic.FarmPrefix, StringComparison.OrdinalIgnoreCase)
                 && string.Equals(buildingType, "Farmhouse", StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>
+        /// Extrae el nivel de mapa de una ruta de <c>FarmHouse</c> (<c>Maps\FarmHouse</c> → 0,
+        /// <c>FarmHouse1</c> → 1, <c>FarmHouse2</c> → 2), ignorando el sufijo <c>_marriage</c>.
+        /// </summary>
+        public static int? ParseFarmHouseMapUpgradeLevel(string? mapPath)
+        {
+            if (string.IsNullOrWhiteSpace(mapPath))
+                return null;
+
+            string normalized = mapPath.Replace('/', '\\').Trim();
+            int slash = normalized.LastIndexOf('\\');
+            string leaf = slash >= 0 ? normalized.Substring(slash + 1) : normalized;
+            if (leaf.EndsWith("_marriage", StringComparison.OrdinalIgnoreCase))
+                leaf = leaf.Substring(0, leaf.Length - "_marriage".Length);
+
+            if (string.Equals(leaf, "FarmHouse", StringComparison.OrdinalIgnoreCase))
+                return 0;
+            if (string.Equals(leaf, "FarmHouse1", StringComparison.OrdinalIgnoreCase))
+                return 1;
+            if (string.Equals(leaf, "FarmHouse2", StringComparison.OrdinalIgnoreCase))
+                return 2;
+
+            return null;
+        }
+
+        /// <summary>
+        /// Determina si Robin debe mostrar su menú completo de carpintería (tienda, construir, renovar)
+        /// aunque el jugador tenga una ampliación de vivienda en curso o pendiente por buzón, evitando que
+        /// vanilla le encierre únicamente en la tienda de materiales.
+        /// </summary>
+        public static bool ShouldAllowCarpenterMenuDuringHouseUpgrade(
+            bool keepRobinInCarpentryShop,
+            int daysUntilHouseUpgrade,
+            bool hasPendingMailHouseUpgrade,
+            bool isBuildingUnderConstruction)
+        {
+            if (isBuildingUnderConstruction)
+                return false;
+
+            if (!keepRobinInCarpentryShop)
+                return false;
+
+            return daysUntilHouseUpgrade >= 0 || hasPendingMailHouseUpgrade;
+        }
+
+        /// <summary>
+        /// Plan de reconciliación nocturna (rollover) para la vivienda de un jugador.
+        /// </summary>
+        public readonly record struct HouseUpgradeReconciliationPlan(
+            int NextDaysUntilHouseUpgrade,
+            int TargetFarmerUpgradeLevel,
+            bool ShouldCompleteUpgrade,
+            bool NeedsOwnerRebind,
+            bool NeedsCabinUpgradeSync,
+            bool NeedsObjectShift,
+            int ShiftFromLevel);
+
+        /// <summary>
+        /// Evalúa durante el rollover si la ampliación de casa del jugador avanzó, quedó atascada en 0
+        /// o quedó desincronizada respecto al interior (<c>Cabin</c>) de su residencia.
+        /// </summary>
+        public static HouseUpgradeReconciliationPlan EvaluateHouseUpgradeReconciliation(
+            int farmerHouseUpgradeLevel,
+            int daysUntilHouseUpgrade,
+            bool hasCabin,
+            int cabinUpgradeLevel,
+            int cabinDisplayedLevel,
+            int? cabinMapLevel,
+            bool cabinHasOwner,
+            bool cabinOwnerMatchesFarmer)
+        {
+            int clampedFarmerLevel = Math.Clamp(farmerHouseUpgradeLevel, 0, 3);
+            int nextDays = daysUntilHouseUpgrade;
+            int targetLevel = clampedFarmerLevel;
+            bool shouldComplete = false;
+
+            if (daysUntilHouseUpgrade > 0)
+            {
+                nextDays = daysUntilHouseUpgrade - 1;
+                if (nextDays <= 0)
+                {
+                    nextDays = -1;
+                    if (clampedFarmerLevel < 3)
+                    {
+                        targetLevel = clampedFarmerLevel + 1;
+                        shouldComplete = true;
+                    }
+                }
+            }
+            else if (daysUntilHouseUpgrade == 0)
+            {
+                // Recuperar ampliaciones atascadas en 0 días pendientes (ni avanzaban ni liberaban a Robin)
+                nextDays = -1;
+                if (clampedFarmerLevel < 3)
+                {
+                    targetLevel = clampedFarmerLevel + 1;
+                    shouldComplete = true;
+                }
+            }
+            else if (daysUntilHouseUpgrade < -1)
+            {
+                nextDays = -1;
+            }
+
+            bool needsOwnerRebind = hasCabin && (!cabinHasOwner || !cabinOwnerMatchesFarmer);
+
+            if (!hasCabin)
+            {
+                return new HouseUpgradeReconciliationPlan(
+                    NextDaysUntilHouseUpgrade: nextDays,
+                    TargetFarmerUpgradeLevel: targetLevel,
+                    ShouldCompleteUpgrade: shouldComplete,
+                    NeedsOwnerRebind: false,
+                    NeedsCabinUpgradeSync: false,
+                    NeedsObjectShift: false,
+                    ShiftFromLevel: 0);
+            }
+
+            int expectedMapTier = Math.Min(2, targetLevel);
+            int actualMapTier = cabinMapLevel ?? Math.Clamp(cabinDisplayedLevel, 0, 2);
+            bool mapBehind = actualMapTier < expectedMapTier;
+            bool displayedBehind = cabinDisplayedLevel < targetLevel;
+            bool cabinLevelBehind = cabinUpgradeLevel < targetLevel;
+
+            bool needsCabinSync = targetLevel > 0 && (shouldComplete || mapBehind || displayedBehind || cabinLevelBehind);
+            bool needsObjectShift = targetLevel > 0 && (mapBehind || cabinDisplayedLevel < targetLevel) && actualMapTier < expectedMapTier;
+
+            return new HouseUpgradeReconciliationPlan(
+                NextDaysUntilHouseUpgrade: nextDays,
+                TargetFarmerUpgradeLevel: targetLevel,
+                ShouldCompleteUpgrade: shouldComplete,
+                NeedsOwnerRebind: needsOwnerRebind,
+                NeedsCabinUpgradeSync: needsCabinSync,
+                NeedsObjectShift: needsObjectShift,
+                ShiftFromLevel: Math.Clamp(actualMapTier, 0, 2));
+        }
     }
 }

@@ -732,27 +732,7 @@ namespace Pelican4Ever.Modules
                     DoorAssignment? door = context.WorldState.FindResidenceOf(uid);
                     Cabin? home = ResolveFarmerCabin(farmer, door);
 
-                    if (farmer.daysUntilHouseUpgrade.Value > 0)
-                    {
-                        farmer.daysUntilHouseUpgrade.Value--;
-                        if (farmer.daysUntilHouseUpgrade.Value <= 0)
-                        {
-                            int nextLevel = farmer.HouseUpgradeLevel + 1;
-                            home?.moveObjectsForHouseUpgrade(nextLevel);
-                            farmer.HouseUpgradeLevel = nextLevel;
-                            farmer.daysUntilHouseUpgrade.Value = -1;
-                            home?.setMapForUpgradeLevel(nextLevel);
-                            if (nextLevel >= 3)
-                            {
-                                farmer.craftingRecipes.TryAdd("Cask", 0);
-                                if (home != null && door != null && !string.IsNullOrEmpty(door.FarmSlotId))
-                                {
-                                    FarmSlotModule.EnsureSlotCellar(door.FarmSlotId, home, door);
-                                }
-                            }
-                            farmer.autoGenerateActiveDialogueEvent("houseUpgrade_" + nextLevel);
-                        }
-                    }
+                    ReconcileFarmerHouseUpgradeOnRollover(farmer, door, home, decrementDays: true);
 
                     farmer.questLog.RemoveWhere(quest =>
                     {
@@ -839,6 +819,36 @@ namespace Pelican4Ever.Modules
                     }
                 }
 
+                // 5. Reconciliación de rollover para créditos/pedidos perdidos u orfanatos:
+                //    - MasterPlayer con daysUntilHouseUpgrade atascado en 0
+                //    - Pedidos de buzón vencidos (obras, ampliaciones de casa, paquetes, animales)
+                //    - Herramientas de Clint vencidas (< 0 días) sin entregar
+                if (Game1.MasterPlayer != null && Game1.MasterPlayer.daysUntilHouseUpgrade.Value == 0)
+                {
+                    FarmHouse? masterHome = Utility.getHomeOfFarmer(Game1.MasterPlayer);
+                    if (Game1.MasterPlayer.HouseUpgradeLevel < 3)
+                    {
+                        ApplyFarmerHouseUpgradeDirectOnHost(Game1.MasterPlayer, Game1.MasterPlayer.HouseUpgradeLevel + 1, masterHome);
+                    }
+                    else
+                    {
+                        Game1.MasterPlayer.daysUntilHouseUpgrade.Value = -1;
+                    }
+                }
+
+                var (buildingsCredited, itemsCredited, animalsCredited, orphanRefunds) =
+                    MailOrderModule.ReconcileOverdueOrdersForRolloverOnHost(Game1.Date.TotalDays);
+                int toolsCredited = MailOrderModule.ReconcileOrphanedToolUpgradesForRolloverOnHost();
+                Game1.netWorldState?.Value?.UpdateUnderConstruction();
+
+                if (buildingsCredited > 0 || itemsCredited > 0 || animalsCredited > 0 || orphanRefunds > 0 || toolsCredited > 0)
+                {
+                    worldStateDirty = true;
+                    context.Monitor.Log(
+                        $"[DailyRolloverModule] Reconciliación de rollover completada: obras={buildingsCredited}, paquetes={itemsCredited}, animales={animalsCredited}, herramientas={toolsCredited}, reembolsos={orphanRefunds}.",
+                        LogLevel.Info);
+                }
+
                 if (worldStateDirty)
                 {
                     context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
@@ -850,7 +860,146 @@ namespace Pelican4Ever.Modules
             }
         }
 
-        private Cabin? ResolveFarmerCabin(Farmer farmer, DoorAssignment? door)
+        internal static void ApplyFarmerHouseUpgradeDirectOnHost(Farmer farmer, int targetLevel, FarmHouse? explicitHome = null)
+        {
+            if (farmer == null || context == null)
+                return;
+
+            int clampedTarget = Math.Clamp(targetLevel, 0, 3);
+            DoorAssignment? door = context.WorldState.FindResidenceOf(farmer.UniqueMultiplayerID);
+            FarmHouse? home = explicitHome ?? (farmer.IsMainPlayer
+                ? Utility.getHomeOfFarmer(farmer)
+                : ResolveFarmerCabin(farmer, door));
+
+            if (home is Cabin cabin && door != null && door.OwnerId == farmer.UniqueMultiplayerID)
+            {
+                RebindCabinOwnerIfNeeded(cabin, farmer);
+            }
+
+            int? mapLevel = ResidenceUpgradeLogic.ParseFarmHouseMapUpgradeLevel(home?.mapPath.Value);
+            int fallbackLevel = home != null && home.synchronizedDisplayedLevel.Value >= 0
+                ? home.synchronizedDisplayedLevel.Value
+                : farmer.HouseUpgradeLevel;
+            int currentTier = mapLevel ?? Math.Clamp(fallbackLevel, 0, 2);
+
+            if (home != null && clampedTarget > currentTier)
+            {
+                farmer.HouseUpgradeLevel = currentTier;
+                home.moveObjectsForHouseUpgrade(clampedTarget);
+            }
+
+            farmer.HouseUpgradeLevel = clampedTarget;
+            farmer.daysUntilHouseUpgrade.Value = -1;
+
+            if (home != null)
+            {
+                home.setMapForUpgradeLevel(clampedTarget);
+            }
+
+            if (clampedTarget >= 3)
+            {
+                farmer.craftingRecipes.TryAdd("Cask", 0);
+                if (home is Cabin slotCabin && door != null && !string.IsNullOrEmpty(door.FarmSlotId))
+                {
+                    FarmSlotModule.EnsureSlotCellar(door.FarmSlotId, slotCabin, door);
+                }
+            }
+
+            farmer.autoGenerateActiveDialogueEvent("houseUpgrade_" + clampedTarget);
+        }
+
+        private static void ReconcileFarmerHouseUpgradeOnRollover(Farmer farmer, DoorAssignment? door, Cabin? home, bool decrementDays)
+        {
+            if (farmer == null)
+                return;
+
+            int effectiveDays = decrementDays ? farmer.daysUntilHouseUpgrade.Value : (farmer.daysUntilHouseUpgrade.Value > 0 ? farmer.daysUntilHouseUpgrade.Value + 1 : farmer.daysUntilHouseUpgrade.Value);
+            int? cabinMapLevel = ResidenceUpgradeLogic.ParseFarmHouseMapUpgradeLevel(home?.mapPath.Value);
+            bool cabinHasOwner = home?.HasOwner ?? false;
+            bool cabinOwnerMatches = home != null && cabinHasOwner && home.OwnerId == farmer.UniqueMultiplayerID;
+            int cabinDisplayedLevel = home != null
+                ? (home.synchronizedDisplayedLevel.Value >= 0
+                    ? home.synchronizedDisplayedLevel.Value
+                    : (cabinMapLevel ?? home.upgradeLevel))
+                : 0;
+
+            var plan = ResidenceUpgradeLogic.EvaluateHouseUpgradeReconciliation(
+                farmerHouseUpgradeLevel: farmer.HouseUpgradeLevel,
+                daysUntilHouseUpgrade: effectiveDays,
+                hasCabin: home != null,
+                cabinUpgradeLevel: home?.upgradeLevel ?? 0,
+                cabinDisplayedLevel: cabinDisplayedLevel,
+                cabinMapLevel: cabinMapLevel,
+                cabinHasOwner: cabinHasOwner,
+                cabinOwnerMatchesFarmer: cabinOwnerMatches);
+
+            if (home != null && door != null && door.OwnerId == farmer.UniqueMultiplayerID && plan.NeedsOwnerRebind)
+            {
+                RebindCabinOwnerIfNeeded(home, farmer);
+                context.Monitor.Log($"[DailyRolloverModule] Reasignado propietario de {home.NameOrUniqueName} a {farmer.Name} ({farmer.UniqueMultiplayerID}) durante rollover.", LogLevel.Info);
+            }
+
+            if (farmer.daysUntilHouseUpgrade.Value != plan.NextDaysUntilHouseUpgrade)
+            {
+                if (farmer.daysUntilHouseUpgrade.Value == 0 && plan.ShouldCompleteUpgrade)
+                {
+                    context.Monitor.Log($"[DailyRolloverModule] Ampliación de casa atascada en 0 días para {farmer.Name}; acreditando nivel {plan.TargetFarmerUpgradeLevel}.", LogLevel.Warn);
+                }
+                farmer.daysUntilHouseUpgrade.Value = plan.NextDaysUntilHouseUpgrade;
+            }
+
+            if (home != null && plan.NeedsCabinUpgradeSync)
+            {
+                if (plan.NeedsObjectShift)
+                {
+                    farmer.HouseUpgradeLevel = plan.ShiftFromLevel;
+                    home.moveObjectsForHouseUpgrade(plan.TargetFarmerUpgradeLevel);
+                }
+
+                farmer.HouseUpgradeLevel = plan.TargetFarmerUpgradeLevel;
+                home.setMapForUpgradeLevel(plan.TargetFarmerUpgradeLevel);
+
+                if (!plan.ShouldCompleteUpgrade)
+                {
+                    context.Monitor.Log($"[DailyRolloverModule] Interior de residencia {home.NameOrUniqueName} resincronizado al nivel {plan.TargetFarmerUpgradeLevel} para {farmer.Name}.", LogLevel.Info);
+                }
+            }
+            else if (farmer.HouseUpgradeLevel != plan.TargetFarmerUpgradeLevel)
+            {
+                farmer.HouseUpgradeLevel = plan.TargetFarmerUpgradeLevel;
+            }
+
+            if (plan.TargetFarmerUpgradeLevel >= 3)
+            {
+                farmer.craftingRecipes.TryAdd("Cask", 0);
+                if (home != null && door != null && !string.IsNullOrEmpty(door.FarmSlotId))
+                {
+                    FarmSlotModule.EnsureSlotCellar(door.FarmSlotId, home, door);
+                }
+            }
+
+            if (plan.ShouldCompleteUpgrade)
+            {
+                farmer.autoGenerateActiveDialogueEvent("houseUpgrade_" + plan.TargetFarmerUpgradeLevel);
+            }
+        }
+
+        private static void RebindCabinOwnerIfNeeded(Cabin cabin, Farmer farmer)
+        {
+            if (cabin == null || farmer == null)
+                return;
+
+            if (!cabin.HasOwner || cabin.owner.isUnclaimedFarmhand)
+            {
+                cabin.AssignFarmhand(farmer);
+            }
+            else if (cabin.OwnerId == farmer.UniqueMultiplayerID && !ReferenceEquals(cabin.owner, farmer))
+            {
+                cabin.farmhandReference.Value = farmer;
+            }
+        }
+
+        private static Cabin? ResolveFarmerCabin(Farmer farmer, DoorAssignment? door)
         {
             if (door != null && door.OwnerId == farmer.UniqueMultiplayerID && !string.IsNullOrEmpty(door.FarmSlotId))
             {

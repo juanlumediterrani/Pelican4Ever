@@ -7276,9 +7276,12 @@ namespace Pelican4Ever.Modules
         {
             if (cabin == null) return;
 
-            RepositionResidenceFurniture(cabin);
-            EnsureStarterDecorations(cabin);
-            RepositionStarterChests(cabin);
+            if (cabin.upgradeLevel <= 0)
+            {
+                RepositionResidenceFurniture(cabin);
+                EnsureStarterDecorations(cabin);
+                RepositionStarterChests(cabin);
+            }
             EnsureTenantBed(cabin);
             RefreshResidenceFurnitureDrawPositions(cabin);
         }
@@ -8210,6 +8213,15 @@ namespace Pelican4Ever.Modules
             {
                 if (!EnsureLocalPlayerOwnsResidenceForHouseholdAction(isMarriageAction: false))
                 {
+                    __result = true;
+                    return false;
+                }
+
+                if (Game1.player != null
+                    && (Game1.player.daysUntilHouseUpgrade.Value >= 0
+                        || MailOrderModule.HasPendingHouseUpgradeFor(Game1.player.UniqueMultiplayerID)))
+                {
+                    Game1.drawObjectDialogue(I18n.Get("mailbox.orders.house_upgrade_already_pending"));
                     __result = true;
                     return false;
                 }

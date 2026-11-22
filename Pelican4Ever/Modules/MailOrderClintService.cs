@@ -270,61 +270,108 @@ namespace Pelican4Ever.Modules
                 if (farmer == null || farmer.toolBeingUpgraded.Value == null || farmer.daysLeftForToolUpgrade.Value > 0)
                     continue;
 
-                long farmerId = farmer.UniqueMultiplayerID;
-                string qualifiedToolId = farmer.toolBeingUpgraded.Value.QualifiedItemId;
+                DeliverCompletedToolUpgradeForFarmerOnHost(farmer);
+            }
+        }
 
-                if (!ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(
-                        farmerId,
-                        qualifiedToolId,
-                        farmer.daysLeftForToolUpgrade.Value,
-                        context.WorldState.PendingToolUpgradeClears))
+        internal static int ReconcileOrphanedToolUpgradesForRolloverOnHost()
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return 0;
+
+            int delivered = 0;
+            foreach (Farmer farmer in Game1.getAllFarmers())
+            {
+                if (farmer == null || farmer.isUnclaimedFarmhand || farmer.toolBeingUpgraded.Value == null)
+                    continue;
+
+                // daysLeftForToolUpgrade == 0 acaba de madurar hoy y saldrá a las 12:00;
+                // < 0 indica que ya venció su mediodía anterior sin entregarse.
+                if (farmer.daysLeftForToolUpgrade.Value < 0)
                 {
-                    ClearHostFarmerToolUpgrade(farmer, qualifiedToolId);
-                    SendToolUpgradeDeliveredToClient(farmerId, qualifiedToolId);
-                    continue;
+                    if (DeliverCompletedToolUpgradeForFarmerOnHost(farmer))
+                        delivered++;
                 }
+            }
 
-                Farm? farm = ResolvePlayerResidenceFarm(farmerId);
-                if (farm == null)
-                    continue;
-
-                if (HasUnclaimedToolUpgradePackage(farm, farmerId, qualifiedToolId))
+            if (context.WorldState.PendingToolUpgradeClears.Count > 0)
+            {
+                foreach (PendingToolUpgradeClear pending in context.WorldState.PendingToolUpgradeClears.Values.ToList())
                 {
-                    ClearHostFarmerToolUpgrade(farmer, qualifiedToolId);
-                    RecordPendingClientClearAndNotify(farmerId, qualifiedToolId);
-                    continue;
+                    Farmer? farmer = Game1.GetPlayer(pending.PlayerId);
+                    if (farmer == null || farmer.toolBeingUpgraded.Value == null)
+                    {
+                        context.WorldState.PendingToolUpgradeClears.Remove(pending.PlayerId);
+                    }
                 }
+            }
 
-                Tool upgradedTool = (Tool)farmer.toolBeingUpgraded.Value.getOne();
-                Point mb = farm.GetMainMailboxPosition();
-                Point door = farm.GetMainFarmHouseEntry();
-                (int X, int Y)? spot = MailPackagePlacementLogic.FindFreePackageTile(
-                    mb.X, mb.Y, door.X, door.Y,
-                    (x, y) => IsTileFreeForPackage(farm, x, y),
-                    maxRadius: 5);
+            if (delivered > 0)
+                PersistMailOrderState();
 
-                if (spot == null)
-                    spot = (mb.X + 1, mb.Y);
+            return delivered;
+        }
 
-                var tile = new Vector2(spot.Value.X, spot.Value.Y);
-                var chest = new Chest(playerChest: false, tile) { TileLocation = tile };
-                chest.giftbox.Value = true;
-                chest.giftboxIndex.Value = MailOrderCatalogLogic.GetGiftboxIndex("Blacksmith");
-                chest.giftboxIsStarterGift.Value = false;
-                chest.Items.Add(upgradedTool);
+        private static bool DeliverCompletedToolUpgradeForFarmerOnHost(Farmer farmer)
+        {
+            if (context == null || farmer.toolBeingUpgraded.Value == null)
+                return false;
 
-                chest.modData[MailPackageKeys.IsMailPackage] = "1";
-                chest.modData[MailPackageKeys.OwnerId] = farmerId.ToString();
-                chest.modData[MailPackageKeys.OrderId] = Guid.NewGuid().ToString("N");
-                chest.modData[MailPackageKeys.ShopId] = "ClintUpgrade";
+            long farmerId = farmer.UniqueMultiplayerID;
+            string qualifiedToolId = farmer.toolBeingUpgraded.Value.QualifiedItemId;
 
-                farm.objects[tile] = chest;
+            if (!ToolUpgradeDeliveryLogic.ShouldDeliverToolUpgrade(
+                    farmerId,
+                    qualifiedToolId,
+                    farmer.daysLeftForToolUpgrade.Value,
+                    context.WorldState.PendingToolUpgradeClears))
+            {
+                ClearHostFarmerToolUpgrade(farmer, qualifiedToolId);
+                SendToolUpgradeDeliveredToClient(farmerId, qualifiedToolId);
+                return false;
+            }
+
+            Farm? farm = ResolvePlayerResidenceFarm(farmerId);
+            if (farm == null)
+                return false;
+
+            if (HasUnclaimedToolUpgradePackage(farm, farmerId, qualifiedToolId))
+            {
                 ClearHostFarmerToolUpgrade(farmer, qualifiedToolId);
                 RecordPendingClientClearAndNotify(farmerId, qualifiedToolId);
-
-                context.Monitor.Log($"[MailOrder] Herramienta mejorada '{upgradedTool.DisplayName}' entregada en paquete en {farm.NameOrUniqueName} ({spot.Value.X}, {spot.Value.Y}) para {farmer.Name}.", LogLevel.Info);
-                NotifyPlayerIfOnline(farmerId, I18n.Get("mailbox.orders.clint.tool_arrived", new { tool = upgradedTool.DisplayName }));
+                return false;
             }
+
+            Tool upgradedTool = (Tool)farmer.toolBeingUpgraded.Value.getOne();
+            Point mb = farm.GetMainMailboxPosition();
+            Point door = farm.GetMainFarmHouseEntry();
+            (int X, int Y)? spot = MailPackagePlacementLogic.FindFreePackageTile(
+                mb.X, mb.Y, door.X, door.Y,
+                (x, y) => IsTileFreeForPackage(farm, x, y),
+                maxRadius: 5);
+
+            if (spot == null)
+                spot = (mb.X + 1, mb.Y);
+
+            var tile = new Vector2(spot.Value.X, spot.Value.Y);
+            var chest = new Chest(playerChest: false, tile) { TileLocation = tile };
+            chest.giftbox.Value = true;
+            chest.giftboxIndex.Value = MailOrderCatalogLogic.GetGiftboxIndex("Blacksmith");
+            chest.giftboxIsStarterGift.Value = false;
+            chest.Items.Add(upgradedTool);
+
+            chest.modData[MailPackageKeys.IsMailPackage] = "1";
+            chest.modData[MailPackageKeys.OwnerId] = farmerId.ToString();
+            chest.modData[MailPackageKeys.OrderId] = Guid.NewGuid().ToString("N");
+            chest.modData[MailPackageKeys.ShopId] = "ClintUpgrade";
+
+            farm.objects[tile] = chest;
+            ClearHostFarmerToolUpgrade(farmer, qualifiedToolId);
+            RecordPendingClientClearAndNotify(farmerId, qualifiedToolId);
+
+            context.Monitor.Log($"[MailOrder] Herramienta mejorada '{upgradedTool.DisplayName}' entregada en paquete en {farm.NameOrUniqueName} ({spot.Value.X}, {spot.Value.Y}) para {farmer.Name}.", LogLevel.Info);
+            NotifyPlayerIfOnline(farmerId, I18n.Get("mailbox.orders.clint.tool_arrived", new { tool = upgradedTool.DisplayName }));
+            return true;
         }
 
         private static bool HasUnclaimedToolUpgradePackage(Farm farm, long ownerId, string qualifiedToolId)

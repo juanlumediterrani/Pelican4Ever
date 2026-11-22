@@ -238,6 +238,7 @@ namespace Pelican4Ever.Modules
             order.PlayerId = playerId;
             context.WorldState.PendingAnimalOrders.Add(order);
             context.Monitor.Log($"[MailOrder] Animal '{order.AnimalType}' ({order.AnimalName}) programado para {playerId} en '{order.TargetLocationName}' (día {order.DeliveryGameDay} a las 12:00).", LogLevel.Info);
+            PersistMailOrderState();
             BroadcastOrdersSync();
         }
 
@@ -252,11 +253,7 @@ namespace Pelican4Ever.Modules
             if (building?.GetIndoors() is not AnimalHouse animalHouse || animalHouse.isFull())
             {
                 // Si el corral fue demolido o llenado, reembolsar el importe al jugador
-                Farmer? buyer = Game1.GetPlayer(order.PlayerId);
-                if (buyer != null && buyer.isActive())
-                    DailyRolloverModule.SetFarmerMoney(buyer, buyer.Money + order.PricePaid);
-                else
-                    context.WorldState.GetOrCreatePlayer(order.PlayerId, string.Empty).PendingMarketGold += order.PricePaid;
+                RefundOrderPaymentOnHost(order.PlayerId, order.PricePaid);
 
                 NotifyPlayerIfOnline(order.PlayerId, I18n.Get("mailbox.orders.animal_refunded", new { name = order.AnimalName }));
                 return true;

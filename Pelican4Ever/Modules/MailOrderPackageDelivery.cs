@@ -334,7 +334,48 @@ namespace Pelican4Ever.Modules
 
             if (changed)
             {
+                PersistMailOrderState();
                 BroadcastOrdersSync();
+            }
+        }
+
+        private static void RefundOrderPaymentOnHost(long playerId, int goldAmount, IEnumerable<MailOrderItemLine>? materials = null)
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return;
+
+            if (goldAmount > 0)
+            {
+                Farmer? buyer = Game1.GetPlayer(playerId);
+                if (buyer != null && buyer.isActive())
+                    DailyRolloverModule.SetFarmerMoney(buyer, buyer.Money + goldAmount);
+                else
+                    context.WorldState.GetOrCreatePlayer(playerId, buyer?.Name ?? string.Empty).PendingMarketGold += goldAmount;
+            }
+
+            List<MailOrderItemLine>? validMats = materials?
+                .Where(m => m != null && !string.IsNullOrWhiteSpace(m.QualifiedItemId) && m.Stack > 0)
+                .Select(m => new MailOrderItemLine
+                {
+                    QualifiedItemId = m.QualifiedItemId,
+                    DisplayName = m.DisplayName,
+                    Stack = m.Stack,
+                    Quality = m.Quality,
+                    PricePaid = 0
+                })
+                .ToList();
+
+            if (validMats != null && validMats.Count > 0 && ResolvePlayerResidenceFarm(playerId) != null)
+            {
+                DeliverItemOrderOnHost(new PendingMailItemOrder
+                {
+                    PlayerId = playerId,
+                    ShopId = "Carpenter",
+                    GiftboxIndex = MailOrderCatalogLogic.GetGiftboxIndex("Carpenter"),
+                    CreatedAtGameDay = Game1.Date?.TotalDays ?? 0,
+                    DeliveryGameDay = Game1.Date?.TotalDays ?? 0,
+                    Items = validMats
+                });
             }
         }
 
@@ -373,7 +414,10 @@ namespace Pelican4Ever.Modules
             }
 
             if (count > 0)
+            {
+                PersistMailOrderState();
                 BroadcastOrdersSync();
+            }
 
             return count;
         }

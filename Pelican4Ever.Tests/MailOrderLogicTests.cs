@@ -172,5 +172,146 @@ namespace Pelican4Ever.Tests
             Assert.False(ToolUpgradeDeliveryLogic.ShouldClearClientLocalTool("(T)IronAxe", localDaysLeft: 0, "(T)CopperAxe"));
             Assert.False(ToolUpgradeDeliveryLogic.ShouldClearClientLocalTool(null, localDaysLeft: 0, "(T)CopperAxe"));
         }
+
+        [Theory]
+        [InlineData("Maps\\FarmHouse", 0)]
+        [InlineData("Maps\\FarmHouse_marriage", 0)]
+        [InlineData("Maps/FarmHouse1", 1)]
+        [InlineData("Maps\\FarmHouse1_marriage", 1)]
+        [InlineData("Maps\\FarmHouse2", 2)]
+        [InlineData("Maps\\FarmHouse2_marriage", 2)]
+        [InlineData("Maps\\Cellar", null)]
+        [InlineData(null, null)]
+        public void ParseFarmHouseMapUpgradeLevel_ParsesTiersAndMarriageMaps(string? mapPath, int? expected)
+        {
+            Assert.Equal(expected, ResidenceUpgradeLogic.ParseFarmHouseMapUpgradeLevel(mapPath));
+        }
+
+        [Fact]
+        public void ShouldAllowCarpenterMenuDuringHouseUpgrade_KeepsConstructAvailableWhenRobinStaysInShop()
+        {
+            Assert.True(ResidenceUpgradeLogic.ShouldAllowCarpenterMenuDuringHouseUpgrade(
+                keepRobinInCarpentryShop: true,
+                daysUntilHouseUpgrade: 2,
+                hasPendingMailHouseUpgrade: false,
+                isBuildingUnderConstruction: false));
+
+            Assert.True(ResidenceUpgradeLogic.ShouldAllowCarpenterMenuDuringHouseUpgrade(
+                keepRobinInCarpentryShop: true,
+                daysUntilHouseUpgrade: 0,
+                hasPendingMailHouseUpgrade: false,
+                isBuildingUnderConstruction: false));
+
+            Assert.True(ResidenceUpgradeLogic.ShouldAllowCarpenterMenuDuringHouseUpgrade(
+                keepRobinInCarpentryShop: true,
+                daysUntilHouseUpgrade: -1,
+                hasPendingMailHouseUpgrade: true,
+                isBuildingUnderConstruction: false));
+
+            Assert.False(ResidenceUpgradeLogic.ShouldAllowCarpenterMenuDuringHouseUpgrade(
+                keepRobinInCarpentryShop: false,
+                daysUntilHouseUpgrade: 2,
+                hasPendingMailHouseUpgrade: false,
+                isBuildingUnderConstruction: false));
+
+            Assert.False(ResidenceUpgradeLogic.ShouldAllowCarpenterMenuDuringHouseUpgrade(
+                keepRobinInCarpentryShop: true,
+                daysUntilHouseUpgrade: 2,
+                hasPendingMailHouseUpgrade: false,
+                isBuildingUnderConstruction: true));
+        }
+
+        [Fact]
+        public void EvaluateHouseUpgradeReconciliation_HandlesCountdownStuckZeroAndCabinDesync()
+        {
+            // 1. Cuenta atrás normal (2 -> 1), sin completar aún
+            var countdown = ResidenceUpgradeLogic.EvaluateHouseUpgradeReconciliation(
+                farmerHouseUpgradeLevel: 0,
+                daysUntilHouseUpgrade: 2,
+                hasCabin: true,
+                cabinUpgradeLevel: 0,
+                cabinDisplayedLevel: 0,
+                cabinMapLevel: 0,
+                cabinHasOwner: true,
+                cabinOwnerMatchesFarmer: true);
+            Assert.Equal(1, countdown.NextDaysUntilHouseUpgrade);
+            Assert.Equal(0, countdown.TargetFarmerUpgradeLevel);
+            Assert.False(countdown.ShouldCompleteUpgrade);
+            Assert.False(countdown.NeedsCabinUpgradeSync);
+
+            // 2. Ampliación atascada en 0 días pendientes -> se completa a nivel 1 y desbloquea (-1)
+            var stuckZero = ResidenceUpgradeLogic.EvaluateHouseUpgradeReconciliation(
+                farmerHouseUpgradeLevel: 0,
+                daysUntilHouseUpgrade: 0,
+                hasCabin: true,
+                cabinUpgradeLevel: 0,
+                cabinDisplayedLevel: 0,
+                cabinMapLevel: 0,
+                cabinHasOwner: true,
+                cabinOwnerMatchesFarmer: true);
+            Assert.Equal(-1, stuckZero.NextDaysUntilHouseUpgrade);
+            Assert.Equal(1, stuckZero.TargetFarmerUpgradeLevel);
+            Assert.True(stuckZero.ShouldCompleteUpgrade);
+            Assert.True(stuckZero.NeedsCabinUpgradeSync);
+            Assert.True(stuckZero.NeedsObjectShift);
+            Assert.Equal(0, stuckZero.ShiftFromLevel);
+
+            // 3. Nivel acreditado en el granjero pero la Cabin perdió al propietario o conservó el mapa base
+            var desyncedCabin = ResidenceUpgradeLogic.EvaluateHouseUpgradeReconciliation(
+                farmerHouseUpgradeLevel: 1,
+                daysUntilHouseUpgrade: -1,
+                hasCabin: true,
+                cabinUpgradeLevel: 0,
+                cabinDisplayedLevel: 0,
+                cabinMapLevel: 0,
+                cabinHasOwner: false,
+                cabinOwnerMatchesFarmer: false);
+            Assert.True(desyncedCabin.NeedsOwnerRebind);
+            Assert.True(desyncedCabin.NeedsCabinUpgradeSync);
+            Assert.True(desyncedCabin.NeedsObjectShift);
+            Assert.Equal(1, desyncedCabin.TargetFarmerUpgradeLevel);
+            Assert.False(desyncedCabin.ShouldCompleteUpgrade);
+
+            // 4. Ya sincronizado -> idempotente, sin re-desplazar muebles
+            var synced = ResidenceUpgradeLogic.EvaluateHouseUpgradeReconciliation(
+                farmerHouseUpgradeLevel: 1,
+                daysUntilHouseUpgrade: -1,
+                hasCabin: true,
+                cabinUpgradeLevel: 1,
+                cabinDisplayedLevel: 1,
+                cabinMapLevel: 1,
+                cabinHasOwner: true,
+                cabinOwnerMatchesFarmer: true);
+            Assert.False(synced.NeedsOwnerRebind);
+            Assert.False(synced.NeedsCabinUpgradeSync);
+            Assert.False(synced.NeedsObjectShift);
+
+            // 5. Atascado en 0 ya en nivel 3 -> solo desbloquea daysUntilHouseUpgrade = -1
+            var stuckAtMax = ResidenceUpgradeLogic.EvaluateHouseUpgradeReconciliation(
+                farmerHouseUpgradeLevel: 3,
+                daysUntilHouseUpgrade: 0,
+                hasCabin: true,
+                cabinUpgradeLevel: 3,
+                cabinDisplayedLevel: 3,
+                cabinMapLevel: 2,
+                cabinHasOwner: true,
+                cabinOwnerMatchesFarmer: true);
+            Assert.Equal(-1, stuckAtMax.NextDaysUntilHouseUpgrade);
+            Assert.Equal(3, stuckAtMax.TargetFarmerUpgradeLevel);
+            Assert.False(stuckAtMax.ShouldCompleteUpgrade);
+            Assert.False(stuckAtMax.NeedsCabinUpgradeSync);
+        }
+
+        [Fact]
+        public void RolloverOrderReconciliationLogic_DetectsOverdueAndCreditsElapsedNights()
+        {
+            Assert.False(RolloverOrderReconciliationLogic.IsOverdueForRollover(deliveryGameDay: 11, newGameDay: 11));
+            Assert.True(RolloverOrderReconciliationLogic.IsOverdueForRollover(deliveryGameDay: 11, newGameDay: 12));
+
+            Assert.Equal(2, RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(buildDays: 3, deliveryGameDay: 11, newGameDay: 12));
+            Assert.Equal(1, RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(buildDays: 3, deliveryGameDay: 11, newGameDay: 13));
+            Assert.Equal(0, RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(buildDays: 3, deliveryGameDay: 11, newGameDay: 14));
+            Assert.Equal(0, RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(buildDays: 3, deliveryGameDay: 11, newGameDay: 20));
+        }
     }
 }

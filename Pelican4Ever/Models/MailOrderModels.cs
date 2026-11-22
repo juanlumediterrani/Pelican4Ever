@@ -15,6 +15,7 @@ namespace Pelican4Ever.Models
         public const string ToolUpgradeStarted = "MailOrder.ToolUpgradeStarted";
         public const string ToolUpgradeDelivered = "MailOrder.ToolUpgradeDelivered";
         public const string ToolUpgradeClearAck = "MailOrder.ToolUpgradeClearAck";
+        public const string HouseUpgradeStarted = "MailOrder.HouseUpgradeStarted";
     }
 
     public static class MailPackageKeys
@@ -88,5 +89,11 @@ namespace Pelican4Ever.Models
     {
         public string QualifiedToolId { get; set; } = string.Empty;
         public bool Cleared { get; set; }
+    }
+
+    public sealed class HouseUpgradeStartedPayload
+    {
+        public int DaysUntilHouseUpgrade { get; set; }
+        public int TargetHouseUpgradeLevel { get; set; }
     }
 }

@@ -192,6 +192,16 @@ namespace Pelican4Ever.Modules
             if (Context.IsMainPlayer && Context.IsWorldReady)
             {
                 SendOrdersSyncTo(e.Peer.PlayerID);
+                Farmer? connectedFarmer = Game1.GetPlayer(e.Peer.PlayerID);
+                if (connectedFarmer != null && connectedFarmer.daysUntilHouseUpgrade.Value >= 0)
+                {
+                    SendHouseUpgradeStartedToClient(
+                        e.Peer.PlayerID,
+                        connectedFarmer.daysUntilHouseUpgrade.Value,
+                        Math.Min(3, connectedFarmer.HouseUpgradeLevel + 1)
+                    );
+                }
+
                 if (context != null && context.WorldState.PendingToolUpgradeClears.TryGetValue(e.Peer.PlayerID, out PendingToolUpgradeClear? pending))
                 {
                     ReconcilePendingToolUpgradeClearsOnHost();
@@ -265,7 +275,12 @@ namespace Pelican4Ever.Modules
             int items = GetItemOrdersSnapshot().Count(o => o.PlayerId == playerId);
             int buildings = GetBuildingOrdersSnapshot().Count(o => o.PlayerId == playerId || IsSharedOrderTarget(o.TargetLocationName, playerId));
             int animals = GetAnimalOrdersSnapshot().Count(o => o.PlayerId == playerId || IsSharedOrderTarget(o.TargetLocationName, playerId));
-            return items + buildings + animals;
+            int activeHouseUpgrade = Game1.player != null
+                && playerId == Game1.player.UniqueMultiplayerID
+                && Game1.player.daysUntilHouseUpgrade.Value >= 0
+                ? 1
+                : 0;
+            return items + buildings + animals + activeHouseUpgrade;
         }
 
         private static MailOrderPlayerProgress BuildLocalPlayerProgress()
@@ -480,6 +495,15 @@ namespace Pelican4Ever.Modules
             {
                 string dateText = FormatGameDay(aOrder.DeliveryGameDay);
                 lines.Add(I18n.Get("mailbox.orders.pending_animal_line", new { name = aOrder.AnimalName, type = aOrder.AnimalType, date = dateText }));
+            }
+
+            if (Game1.player != null && Game1.player.daysUntilHouseUpgrade.Value >= 0)
+            {
+                lines.Add(I18n.Get("mailbox.orders.active_house_upgrade", new
+                {
+                    level = Math.Min(3, Game1.player.HouseUpgradeLevel + 1),
+                    days = Game1.player.daysUntilHouseUpgrade.Value
+                }));
             }
 
             if (lines.Count == 0)
@@ -702,6 +726,7 @@ namespace Pelican4Ever.Modules
             }
 
             context.Monitor.Log($"[MailOrder] Pedido de {lines.Count} línea(s) en '{shopId}' registrado para jugador {playerId} (entrega día {deliveryDay} a las 12:00).", LogLevel.Info);
+            PersistMailOrderState();
             BroadcastOrdersSync();
         }
 
@@ -796,7 +821,22 @@ namespace Pelican4Ever.Modules
                         HandleToolUpgradeClearAckOnHost(e.FromPlayerID, e.ReadAs<ToolUpgradeClearAckPayload>());
                     }
                     break;
+
+                case MailOrderMessages.HouseUpgradeStarted:
+                    if (!Context.IsMainPlayer && e.FromPlayerID == Game1.MasterPlayer.UniqueMultiplayerID)
+                    {
+                        HandleHouseUpgradeStartedOnClient(e.ReadAs<HouseUpgradeStartedPayload>());
+                    }
+                    break;
             }
+        }
+
+        private static void PersistMailOrderState()
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return;
+
+            context.Helper.Data.WriteSaveData(ServerWorldState.SaveDataKey, context.WorldState);
         }
 
         private static void BroadcastOrdersSync()

@@ -3,13 +3,17 @@ using System.Collections.Generic;
 using System.Linq;
 using HarmonyLib;
 using Microsoft.Xna.Framework;
+using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Economy;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using Pelican4Ever.Models;
 using StardewModdingAPI;
 using StardewValley;
 using StardewValley.Buildings;
+using StardewValley.Locations;
 using StardewValley.Menus;
+using xTile.Dimensions;
 
 namespace Pelican4Ever.Modules
 {
@@ -43,6 +47,89 @@ namespace Pelican4Ever.Modules
                 AccessTools.Method(typeof(Building), nameof(Building.isThereAnythingtoPreventConstruction)),
                 postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_Building_PreventConstruction)),
                 criticality: Pelican4Ever.Core.Admin.PatchCriticality.Integrity);
+
+            PatchSafe(harmony, "GameLocation.carpenters",
+                AccessTools.Method(typeof(GameLocation), nameof(GameLocation.carpenters), new[] { typeof(Location) }),
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_GameLocation_Carpenters)),
+                criticality: PatchCriticality.Experience);
+        }
+
+        public static bool HasPendingHouseUpgradeFor(long playerId)
+        {
+            return GetBuildingOrdersSnapshot().Any(o => o.PlayerId == playerId && o.IsHouseUpgrade);
+        }
+
+        public static bool Prefix_GameLocation_Carpenters(GameLocation __instance, Location tileLocation, ref bool __result)
+        {
+            if (context == null || Game1.player == null || __instance == null)
+                return true;
+
+            NPC? robin = null;
+            foreach (NPC character in __instance.characters)
+            {
+                if (character != null && string.Equals(character.Name, "Robin", StringComparison.Ordinal))
+                {
+                    robin = character;
+                    break;
+                }
+            }
+
+            if (robin == null || Vector2.Distance(robin.Tile, new Vector2(tileLocation.X, tileLocation.Y)) > 3f)
+                return true;
+
+            bool hasPendingMailUpgrade = HasPendingHouseUpgradeFor(Game1.player.UniqueMultiplayerID);
+            bool isOtherConstruction = Game1.IsThereABuildingUnderConstruction();
+            bool allowDuringUpgrade = ResidenceUpgradeLogic.ShouldAllowCarpenterMenuDuringHouseUpgrade(
+                context.Config.KeepRobinInCarpentryShop,
+                Game1.player.daysUntilHouseUpgrade.Value,
+                hasPendingMailUpgrade,
+                isOtherConstruction);
+
+            bool blockDoubleMailUpgrade = !context.Config.KeepRobinInCarpentryShop
+                && Game1.player.daysUntilHouseUpgrade.Value < 0
+                && hasPendingMailUpgrade
+                && !isOtherConstruction;
+
+            if (!allowDuringUpgrade && !blockDoubleMailUpgrade)
+                return true;
+
+            robin.faceDirection(2);
+            var choices = new List<Response>
+            {
+                new("Shop", Game1.content.LoadString("Strings\\Locations:ScienceHouse_CarpenterMenu_Shop"))
+            };
+
+            if (Game1.IsMasterGame && Game1.player.HouseUpgradeLevel >= 3)
+            {
+                Farmer master = Game1.MasterPlayer;
+                if ((master.mailReceived.Contains("ccIsComplete")
+                        || master.mailReceived.Contains("JojaMember")
+                        || master.hasCompletedCommunityCenter())
+                    && Game1.RequireLocation<Town>("Town").daysUntilCommunityUpgrade.Value <= 0
+                    && (!master.mailReceived.Contains("pamHouseUpgrade")
+                        || !master.mailReceived.Contains("communityUpgradeShortcuts")))
+                {
+                    choices.Add(new Response("CommunityUpgrade", Game1.content.LoadString("Strings\\Locations:ScienceHouse_CarpenterMenu_CommunityUpgrade")));
+                }
+            }
+
+            if (Game1.player.HouseUpgradeLevel >= 2)
+            {
+                string renovateKey = Game1.IsMasterGame
+                    ? "Strings\\Locations:ScienceHouse_CarpenterMenu_RenovateHouse"
+                    : "Strings\\Locations:ScienceHouse_CarpenterMenu_RenovateCabin";
+                choices.Add(new Response("Renovate", Game1.content.LoadString(renovateKey)));
+            }
+
+            choices.Add(new Response("Construct", Game1.content.LoadString("Strings\\Locations:ScienceHouse_CarpenterMenu_Construct")));
+            choices.Add(new Response("Leave", Game1.content.LoadString("Strings\\Locations:ScienceHouse_CarpenterMenu_Leave")));
+
+            __instance.createQuestionDialogue(
+                Game1.content.LoadString("Strings\\Locations:ScienceHouse_CarpenterMenu"),
+                choices.ToArray(),
+                "carpenter");
+            __result = true;
+            return false;
         }
 
         private static void ShowRobinMailMenu()
@@ -156,6 +243,17 @@ namespace Pelican4Ever.Modules
             if (matId != null)
                 Game1.player.Items.ReduceId(matId, matCount);
 
+            var materials = new List<MailOrderItemLine>();
+            if (matId != null && matCount > 0)
+            {
+                materials.Add(new MailOrderItemLine
+                {
+                    QualifiedItemId = matId,
+                    DisplayName = matId,
+                    Stack = matCount
+                });
+            }
+
             var order = new PendingBuildingOrder
             {
                 PlayerId = Game1.player.UniqueMultiplayerID,
@@ -164,6 +262,8 @@ namespace Pelican4Ever.Modules
                 HouseUpgradeLevel = level + 1,
                 BuildingDisplayName = $"House Upgrade {level + 1}",
                 BuildDays = 3,
+                GoldPaid = goldCost,
+                MaterialsPaid = materials,
                 CreatedAtGameDay = Game1.Date?.TotalDays ?? 0,
                 DeliveryGameDay = ComputeDeliveryGameDay(),
                 DeliveryTimeOfDay = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay
@@ -220,6 +320,8 @@ namespace Pelican4Ever.Modules
                 TilesHigh = built.tilesHigh.Value,
                 SkinId = built.skinId.Value,
                 BuildDays = Math.Max(__instance.Blueprint?.BuildDays ?? 2, 1),
+                GoldPaid = Math.Max(0, __instance.Blueprint?.BuildCost ?? 0),
+                MaterialsPaid = CaptureBlueprintMaterials(__instance.Blueprint),
                 CreatedAtGameDay = Game1.Date?.TotalDays ?? 0,
                 DeliveryGameDay = ComputeDeliveryGameDay(),
                 DeliveryTimeOfDay = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay
@@ -294,6 +396,8 @@ namespace Pelican4Ever.Modules
                     TargetBuildingTileX = b.tileX.Value,
                     TargetBuildingTileY = b.tileY.Value,
                     BuildDays = days,
+                    GoldPaid = Math.Max(0, __instance.Blueprint?.BuildCost ?? 0),
+                    MaterialsPaid = CaptureBlueprintMaterials(__instance.Blueprint),
                     CreatedAtGameDay = Game1.Date?.TotalDays ?? 0,
                     DeliveryGameDay = ComputeDeliveryGameDay(),
                     DeliveryTimeOfDay = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay
@@ -301,6 +405,27 @@ namespace Pelican4Ever.Modules
 
                 SubmitBuildingOrder(order);
             }
+        }
+
+        private static List<MailOrderItemLine> CaptureBlueprintMaterials(CarpenterMenu.BlueprintEntry? blueprint)
+        {
+            var list = new List<MailOrderItemLine>();
+            if (blueprint?.BuildMaterials == null)
+                return list;
+
+            foreach (var mat in blueprint.BuildMaterials)
+            {
+                if (mat == null || string.IsNullOrWhiteSpace(mat.ItemId) || mat.Amount <= 0)
+                    continue;
+                list.Add(new MailOrderItemLine
+                {
+                    QualifiedItemId = mat.ItemId,
+                    DisplayName = mat.ItemId,
+                    Stack = mat.Amount
+                });
+            }
+
+            return list;
         }
 
         public static bool Prefix_CarpenterMenu_RobinConstructionMessage(CarpenterMenu __instance)
@@ -341,13 +466,70 @@ namespace Pelican4Ever.Modules
                 return;
 
             order.PlayerId = playerId;
+
+            if (order.IsHouseUpgrade)
+            {
+                Farmer? buyer = Game1.GetPlayer(playerId);
+                bool alreadyQueued = context.WorldState.PendingBuildingOrders.Any(o => o.PlayerId == playerId && o.IsHouseUpgrade);
+                bool alreadyActive = buyer != null && (buyer.daysUntilHouseUpgrade.Value >= 0 || buyer.HouseUpgradeLevel >= order.HouseUpgradeLevel);
+                if (alreadyQueued || alreadyActive)
+                {
+                    RefundOrderPaymentOnHost(playerId, order.GoldPaid, order.MaterialsPaid);
+                    NotifyPlayerIfOnline(playerId, I18n.Get("mailbox.orders.house_upgrade_already_pending"));
+                    context.Monitor.Log($"[MailOrder] Ampliación de casa duplicada rechazada y reembolsada para {playerId}.", LogLevel.Warn);
+                    return;
+                }
+            }
+
             context.WorldState.PendingBuildingOrders.Add(order);
             context.Monitor.Log($"[MailOrder] Obra diferida '{order.BuildingType}' registrada para {playerId} en '{order.TargetLocationName}' (entrega día {order.DeliveryGameDay} a las 12:00).", LogLevel.Info);
+            PersistMailOrderState();
             BroadcastOrdersSync();
+        }
+
+        private static void SendHouseUpgradeStartedToClient(long playerId, int daysUntilUpgrade, int targetLevel)
+        {
+            if (context == null || !Context.IsMainPlayer || playerId == Game1.player.UniqueMultiplayerID)
+                return;
+
+            Farmer? target = Game1.GetPlayer(playerId, onlyOnline: true);
+            if (target == null || !target.isActive())
+                return;
+
+            context.Helper.Multiplayer.SendMessage(
+                new HouseUpgradeStartedPayload
+                {
+                    DaysUntilHouseUpgrade = daysUntilUpgrade,
+                    TargetHouseUpgradeLevel = targetLevel
+                },
+                MailOrderMessages.HouseUpgradeStarted,
+                new[] { context.Manifest.UniqueID },
+                new[] { playerId }
+            );
+        }
+
+        private static void HandleHouseUpgradeStartedOnClient(HouseUpgradeStartedPayload payload)
+        {
+            if (Context.IsMainPlayer || Game1.player == null)
+                return;
+
+            if (payload.DaysUntilHouseUpgrade >= 0
+                && Game1.player.HouseUpgradeLevel < payload.TargetHouseUpgradeLevel)
+            {
+                Game1.player.daysUntilHouseUpgrade.Value = payload.DaysUntilHouseUpgrade;
+            }
         }
 
         private static bool DeliverBuildingOrderOnHost(PendingBuildingOrder order)
         {
+            return TryDeliverBuildingOrderInternal(order, out _, out _);
+        }
+
+        private static bool TryDeliverBuildingOrderInternal(PendingBuildingOrder order, out bool refunded, out Building? affectedBuilding)
+        {
+            refunded = false;
+            affectedBuilding = null;
+
             if (context == null)
                 return true;
 
@@ -357,9 +539,14 @@ namespace Pelican4Ever.Modules
                 if (farmer == null)
                     return false;
 
-                if (farmer.daysUntilHouseUpgrade.Value < 0)
+                if (farmer.HouseUpgradeLevel < order.HouseUpgradeLevel && farmer.daysUntilHouseUpgrade.Value < 0)
                 {
                     farmer.daysUntilHouseUpgrade.Value = Math.Max(order.BuildDays, 1);
+                }
+
+                if (order.PlayerId != Game1.player.UniqueMultiplayerID)
+                {
+                    SendHouseUpgradeStartedToClient(order.PlayerId, farmer.daysUntilHouseUpgrade.Value, order.HouseUpgradeLevel);
                 }
 
                 NotifyPlayerIfOnline(order.PlayerId, I18n.Get("mailbox.orders.house_upgrade_started"));
@@ -374,11 +561,20 @@ namespace Pelican4Ever.Modules
             {
                 Building? target = location.getBuildingAt(new Vector2(order.TargetBuildingTileX, order.TargetBuildingTileY));
                 if (target == null)
+                {
+                    if (order.GoldPaid > 0 || (order.MaterialsPaid != null && order.MaterialsPaid.Count > 0))
+                    {
+                        RefundOrderPaymentOnHost(order.PlayerId, order.GoldPaid, order.MaterialsPaid);
+                        NotifyPlayerIfOnline(order.PlayerId, I18n.Get("mailbox.orders.building_refunded", new { building = order.BuildingDisplayName }));
+                    }
+                    refunded = true;
                     return true;
+                }
 
                 target.upgradeName.Value = order.BuildingType;
                 target.daysUntilUpgrade.Value = Math.Max(order.BuildDays, 1);
                 Game1.netWorldState.Value.MarkUnderConstruction(order.Builder, target);
+                affectedBuilding = target;
                 NotifyPlayerIfOnline(order.PlayerId, I18n.Get("mailbox.orders.building_started", new { building = order.BuildingDisplayName }));
                 return true;
             }
@@ -408,6 +604,7 @@ namespace Pelican4Ever.Modules
 
                 constructed.daysOfConstructionLeft.Value = Math.Max(order.BuildDays, 1);
                 Game1.netWorldState.Value.MarkUnderConstruction(order.Builder, constructed);
+                affectedBuilding = constructed;
 
                 if (string.Equals(order.BuildingType, "Pet Bowl", StringComparison.OrdinalIgnoreCase))
                 {
@@ -427,6 +624,171 @@ namespace Pelican4Ever.Modules
 
             NotifyPlayerIfOnline(order.PlayerId, I18n.Get("mailbox.orders.building_started", new { building = order.BuildingDisplayName }));
             return true;
+        }
+
+        /// <summary>
+        /// Reconcilia durante el rollover los pedidos de correo cuyo día de entrega (<c>DeliveryGameDay &lt; newGameDay</c>)
+        /// quedó atrás sin materializarse, acreditando construcciones, mejoras de vivienda, paquetes o reembolsos huérfanos.
+        /// </summary>
+        internal static (int BuildingsCredited, int ItemsCredited, int AnimalsCredited, int OrphanRefunds) ReconcileOverdueOrdersForRolloverOnHost(int newGameDay)
+        {
+            if (context == null || !Context.IsMainPlayer)
+                return (0, 0, 0, 0);
+
+            int buildingsCredited = 0;
+            int itemsCredited = 0;
+            int animalsCredited = 0;
+            int orphanRefunds = 0;
+            bool changed = false;
+
+            foreach (PendingBuildingOrder order in context.WorldState.PendingBuildingOrders.ToList())
+            {
+                if (!RolloverOrderReconciliationLogic.IsOverdueForRollover(order.DeliveryGameDay, newGameDay))
+                    continue;
+
+                if (order.IsHouseUpgrade)
+                {
+                    Farmer? farmer = Game1.GetPlayer(order.PlayerId);
+                    if (farmer == null)
+                    {
+                        context.WorldState.PendingBuildingOrders.Remove(order);
+                        changed = true;
+                        context.Monitor.Log($"[MailOrder] Pedido huérfano de ampliación de casa {order.OrderId} retirado: jugador {order.PlayerId} inexistente.", LogLevel.Warn);
+                        continue;
+                    }
+
+                    DoorAssignment? door = context.WorldState.FindResidenceOf(order.PlayerId);
+                    if (!farmer.IsMainPlayer && (door == null || door.OwnerId != order.PlayerId))
+                    {
+                        RefundOrderPaymentOnHost(order.PlayerId, order.GoldPaid, order.MaterialsPaid);
+                        context.WorldState.PendingBuildingOrders.Remove(order);
+                        orphanRefunds++;
+                        changed = true;
+                        context.Monitor.Log($"[MailOrder] Ampliación de casa huérfana {order.OrderId} para {farmer.Name} sin residencia propia: reembolso acreditado.", LogLevel.Warn);
+                        continue;
+                    }
+
+                    int targetLevel = Math.Clamp(order.HouseUpgradeLevel, 1, 3);
+                    if (farmer.HouseUpgradeLevel < targetLevel)
+                    {
+                        int remaining = RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(
+                            order.BuildDays,
+                            order.DeliveryGameDay,
+                            newGameDay);
+
+                        if (remaining > 0)
+                        {
+                            if (farmer.daysUntilHouseUpgrade.Value < 0 || farmer.daysUntilHouseUpgrade.Value > remaining)
+                                farmer.daysUntilHouseUpgrade.Value = remaining;
+                            context.Monitor.Log($"[MailOrder] Rollover acreditó ampliación pendiente de {farmer.Name} (nivel {targetLevel}, faltan {remaining} día(s)).", LogLevel.Info);
+                        }
+                        else
+                        {
+                            DailyRolloverModule.ApplyFarmerHouseUpgradeDirectOnHost(farmer, targetLevel);
+                            context.Monitor.Log($"[MailOrder] Rollover completó ampliación de casa vencida para {farmer.Name} hasta nivel {targetLevel}.", LogLevel.Info);
+                        }
+                    }
+
+                    context.WorldState.PendingBuildingOrders.Remove(order);
+                    buildingsCredited++;
+                    changed = true;
+                    continue;
+                }
+
+                if (TryDeliverBuildingOrderInternal(order, out bool refunded, out Building? building))
+                {
+                    context.WorldState.PendingBuildingOrders.Remove(order);
+                    changed = true;
+
+                    if (refunded)
+                    {
+                        orphanRefunds++;
+                        context.Monitor.Log($"[MailOrder] Mejora huérfana '{order.BuildingType}' ({order.OrderId}) reembolsada en rollover por desaparición del edificio destino.", LogLevel.Warn);
+                    }
+                    else
+                    {
+                        if (building != null)
+                        {
+                            int elapsedNights = Math.Max(0, newGameDay - order.DeliveryGameDay);
+                            if (elapsedNights > 0)
+                            {
+                                if (order.IsUpgrade && building.daysUntilUpgrade.Value > 0)
+                                {
+                                    int rem = building.daysUntilUpgrade.Value - elapsedNights;
+                                    if (rem <= 0)
+                                        building.FinishConstruction();
+                                    else
+                                        building.daysUntilUpgrade.Value = rem;
+                                }
+                                else if (!order.IsUpgrade && building.daysOfConstructionLeft.Value > 0)
+                                {
+                                    int rem = building.daysOfConstructionLeft.Value - elapsedNights;
+                                    if (rem <= 0)
+                                        building.FinishConstruction();
+                                    else
+                                        building.daysOfConstructionLeft.Value = rem;
+                                }
+
+                                Game1.netWorldState.Value.UpdateUnderConstruction();
+                            }
+                        }
+
+                        buildingsCredited++;
+                        context.Monitor.Log($"[MailOrder] Rollover materializó obra vencida '{order.BuildingType}' para {order.PlayerId} en '{order.TargetLocationName}'.", LogLevel.Info);
+                    }
+                }
+                else
+                {
+                    RefundOrderPaymentOnHost(order.PlayerId, order.GoldPaid, order.MaterialsPaid);
+                    context.WorldState.PendingBuildingOrders.Remove(order);
+                    orphanRefunds++;
+                    changed = true;
+                    context.Monitor.Log($"[MailOrder] Obra huérfana '{order.BuildingType}' ({order.OrderId}) imposible de materializar en '{order.TargetLocationName}': reembolso acreditado.", LogLevel.Warn);
+                }
+            }
+
+            foreach (PendingMailItemOrder itemOrder in context.WorldState.PendingMailItemOrders.ToList())
+            {
+                if (!RolloverOrderReconciliationLogic.IsOverdueForRollover(itemOrder.DeliveryGameDay, newGameDay))
+                    continue;
+
+                if (DeliverItemOrderOnHost(itemOrder))
+                {
+                    context.WorldState.PendingMailItemOrders.Remove(itemOrder);
+                    itemsCredited++;
+                    changed = true;
+                }
+                else
+                {
+                    int refundGold = itemOrder.Items.Sum(i => Math.Max(0, i.PricePaid));
+                    RefundOrderPaymentOnHost(itemOrder.PlayerId, refundGold);
+                    context.WorldState.PendingMailItemOrders.Remove(itemOrder);
+                    orphanRefunds++;
+                    changed = true;
+                    context.Monitor.Log($"[MailOrder] Paquete huérfano {itemOrder.OrderId} ({itemOrder.ShopId}) reembolsado en rollover ({refundGold}g) por falta de residencia.", LogLevel.Warn);
+                }
+            }
+
+            foreach (PendingAnimalOrder animalOrder in context.WorldState.PendingAnimalOrders.ToList())
+            {
+                if (!RolloverOrderReconciliationLogic.IsOverdueForRollover(animalOrder.DeliveryGameDay, newGameDay))
+                    continue;
+
+                if (DeliverAnimalOrderOnHost(animalOrder))
+                {
+                    context.WorldState.PendingAnimalOrders.Remove(animalOrder);
+                    animalsCredited++;
+                    changed = true;
+                }
+            }
+
+            if (changed)
+            {
+                PersistMailOrderState();
+                BroadcastOrdersSync();
+            }
+
+            return (buildingsCredited, itemsCredited, animalsCredited, orphanRefunds);
         }
     }
 }
