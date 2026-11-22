@@ -2635,3 +2635,36 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Test `NpcShopkeeperLogicTests.CanMicroWander_BlocksExternallyControlledNpc_CorazonPelican` en verde (`"Forest"`, `"Town"`, `"Saloon"`, `"Club"`).
     2. Contrato `modData["CorazonPelican.Control"]` documentado sin dependencias directas hacia Corazón Pelican.
   * **Resolución:** Implementado en `cp-601-micro-wandering` (`fe76df7`, `4766210`) e integrado en `main` (`be875dc`) sin advertencias ni errores (`dotnet test` en verde).
+
+- [ ] **TASK-2601 (`CP-604`): Hook previo a `SaveGame.Save()` en `CheckpointModule` y `DailyRolloverModule` (`PelicanApi`)**
+  * **Prioridad:** Alta (P1)
+  * **Dependencias:** `CP-601` (espejo de `Corazón Pelican` · `CP-604`).
+  * **Descripción:**
+    - Exponer en `PelicanApi` (`Pelican4Ever.SVRTMP`) un callback/evento síncrono invocado antes de `PersistenceModule.FlushToSaveData` + `SaveGame.Save()` en `CheckpointModule` (`374-377`) y `DailyRolloverModule` (`preCloseSave`/`postCloseSave`), donde SMAPI no dispara `GameLoop.Saving` (`gap G1`).
+    - Permitir que mods consumidores (como Corazón Pelican) vuelquen su `SaveData` sin acoplar Pelican 4Ever a ningún mod concreto.
+  * **Criterios de aceptación:**
+    1. Test en `Pelican4Ever.Tests` que verifica que el hook se invoca antes de guardar en checkpoint/rollover.
+
+- [ ] **TASK-2602 (`CP-605`): `HeadlessEventGuardModule` respeta diálogos y cartas activos de mods externos (`CorazonPelican.Prorroga.*`)**
+  * **Prioridad:** Alta (P1)
+  * **Dependencias:** `CP-601` (espejo de `Corazón Pelican` · `CP-605`).
+  * **Descripción:**
+    - Extender `HostEventGuardLogic.Decide` y `HeadlessEventGuardModule` para no avanzar ni cerrar automáticamente `DialogueBox` o `LetterViewerMenu` pertenecientes a un turno o carta de prórroga activa de Corazón Pelican (`CorazonPelican.Prorroga.*` / indicador de diálogo activo) en hosts con `AutoHostSaveName`.
+  * **Criterios de aceptación:**
+    1. Test en `HostEventGuardLogicTests` verificando que esos diálogos/cartas devuelven `HostEventGuardActionKind.None` mientras los eventos vanilla desatendidos siguen desbloqueándose.
+
+- [ ] **TASK-2603 (`CP-608`): Exponer `IsNightHold()` en `IPelicanApi` (`PelicanApi.cs`)**
+  * **Prioridad:** Media (P2)
+  * **Dependencias:** Ninguna (apoyo a `Corazón Pelican` · `CP-608`).
+  * **Descripción:**
+    - Añadir en `PelicanApi` (`Pelican4Ever.SVRTMP`) consultas de solo lectura `IsNightHold()` y estado de rollover en curso (`DailyRolloverModule.IsBusy`) para que mods consumidores adapten su reloj interno entre `01:50` y `06:00` reales sin leer configuración privada de Pelican.
+  * **Criterios de aceptación:**
+    1. `PelicanApi` expone `IsNightHold()` coherente con `RealTimeClockModule.IsNightHold` y compila sin advertencias.
+
+- [ ] **TASK-2604 (`CP-610`): Visibilidad de NPCs omitidos por `CorazonPelican.Control` en `CatchUpVillagerSchedules` / `p4e_time`**
+  * **Prioridad:** Baja (P3)
+  * **Dependencias:** `CP-601` (espejo de `Corazón Pelican` · `CP-610`).
+  * **Descripción:**
+    - Cuando `RealTimeClockModule.CatchUpVillagerSchedules` (arranque desfasado o comando `p4e_time` / `time`) omita aldeanos con `CorazonPelican.Control`, informar explícitamente en el log cuántos y cuáles se omitieron por control externo (p. ej. `27 aldeanos recolocados, 1 omitido por control externo: Leah`).
+  * **Criterios de aceptación:**
+    1. El conteo y aviso quedan reflejados en `RealTimeClockModule` sin alterar la omisión protectora de `CP-601`.
