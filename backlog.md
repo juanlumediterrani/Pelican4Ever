@@ -2664,10 +2664,11 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. `PelicanApi` expone `IsNightHold()` coherente con `RealTimeClockModule.IsNightHold` y compila sin advertencias.
   * **Resolución:** Añadidos `IsNightHold()` y `IsRolloverBusy()` en `Pelican4Ever/PelicanApi.cs` (`0` advertencias, `1828/1828` superados).
 
-- [ ] **TASK-2604 (`CP-610`): Visibilidad de NPCs omitidos por `CorazonPelican.Control` en `CatchUpVillagerSchedules` / `p4e_time`**
+- [x] **TASK-2604 (`CP-610`): Visibilidad de NPCs omitidos por `CorazonPelican.Control` en `CatchUpVillagerSchedules` / `p4e_time`**
   * **Prioridad:** Baja (P3)
   * **Dependencias:** `CP-601` (espejo de `Corazón Pelican` · `CP-610`).
   * **Descripción:**
     - Cuando `RealTimeClockModule.CatchUpVillagerSchedules` (arranque desfasado o comando `p4e_time` / `time`) omita aldeanos con `CorazonPelican.Control`, informar explícitamente en el log cuántos y cuáles se omitieron por control externo (p. ej. `27 aldeanos recolocados, 1 omitido por control externo: Leah`).
   * **Criterios de aceptación:**
     1. El conteo y aviso quedan reflejados en `RealTimeClockModule` sin alterar la omisión protectora de `CP-601`.
+  * **Resolución:** `RealTimeClockModule.CatchUpVillagerSchedules` registra explícitamente los NPCs omitidos por `CorazonPelicanControlKey` (`0` advertencias, `1828/1828` superados).

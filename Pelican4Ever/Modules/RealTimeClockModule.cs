@@ -257,10 +257,17 @@ namespace Pelican4Ever.Modules
             });
 
             int moved = 0;
+            var skippedExternal = new List<string>();
             foreach (NPC npc in villagers)
             {
                 try
                 {
+                    if (npc.modData.ContainsKey(Core.World.NpcShopkeeperLogic.CorazonPelicanControlKey))
+                    {
+                        skippedExternal.Add(npc.Name);
+                        continue;
+                    }
+
                     if (CatchUpSchedule(npc, timeOfDay))
                         moved++;
                 }
@@ -270,8 +277,13 @@ namespace Pelican4Ever.Modules
                 }
             }
 
-            if (moved > 0)
-                context?.Monitor.Log($"[RealTimeClockModule] {moved} aldeanos recolocados según su horario de las {Game1.getTimeOfDayString(timeOfDay)}.", LogLevel.Info);
+            if (moved > 0 || skippedExternal.Count > 0)
+            {
+                string externalNote = skippedExternal.Count > 0
+                    ? $" (omitidos por control externo: {string.Join(", ", skippedExternal)})"
+                    : string.Empty;
+                context?.Monitor.Log($"[RealTimeClockModule] {moved} aldeanos recolocados según su horario de las {Game1.getTimeOfDayString(timeOfDay)}{externalNote}.", LogLevel.Info);
+            }
         }
 
         private static bool CatchUpSchedule(NPC npc, int timeOfDay)
