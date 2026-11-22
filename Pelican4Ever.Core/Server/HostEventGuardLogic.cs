@@ -49,6 +49,7 @@ namespace Pelican4Ever.Core.Server
         public int DialogueSafetyTimer { get; init; }
         public IReadOnlyList<string> ResponseKeys { get; init; } = Array.Empty<string>();
         public string? LastQuestionKey { get; init; }
+        public bool IsExternalModDialogueOrLetter { get; init; }
         public int StuckTicks { get; init; }
         public int DelayTicks { get; init; }
         public int HardEventTimeoutTicks { get; init; }
@@ -60,6 +61,9 @@ namespace Pelican4Ever.Core.Server
     /// </summary>
     public static class HostEventGuardLogic
     {
+        public const string CorazonPelicanDialogueKey = "CorazonPelican.DialogoActivo";
+        public const string CorazonPelicanProrrogaMailPrefix = "CorazonPelican.Prorroga.";
+
         private static readonly string[] PreferredDeclineKeys =
         {
             "no",
@@ -111,6 +115,15 @@ namespace Pelican4Ever.Core.Server
             return responseKeys.Count - 1;
         }
 
+        public static bool IsExternalControlledMenu(bool hasExternalSpeakerControl, string? mailTitle)
+        {
+            if (hasExternalSpeakerControl)
+                return true;
+
+            return !string.IsNullOrEmpty(mailTitle)
+                && mailTitle.StartsWith(CorazonPelicanProrrogaMailPrefix, StringComparison.Ordinal);
+        }
+
         public static HostEventGuardDecision Decide(HostEventGuardInput input)
         {
             if (input == null
@@ -122,6 +135,7 @@ namespace Pelican4Ever.Core.Server
                 || input.IsFestival
                 || input.IsRelayActive
                 || input.HasActiveRenderLease
+                || (input.IsExternalModDialogueOrLetter && !input.HasCurrentEvent && !input.IsEventUp)
                 || input.ActiveMenuKind == HostBlockingMenuKind.SaveGameMenu)
             {
                 return HostEventGuardDecision.DoNothing;

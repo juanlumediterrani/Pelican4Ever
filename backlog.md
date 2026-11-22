@@ -2646,13 +2646,14 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. Test en `Pelican4Ever.Tests` que verifica que el hook se invoca antes de guardar en checkpoint/rollover.
   * **Resolución:** `PreSaveHookRegistry` en `Pelican4Ever.Core/Admin/PreSaveHookRegistry.cs`, invocado desde `PersistenceModule.FlushToSaveData` cuando `reason != "Saving"`, y expuesto vía `PelicanApi.RegisterPreSaveHook`/`UnregisterPreSaveHook`; cubierto por `PreSaveHookRegistryTests` (`1827/1827` superados).
 
-- [ ] **TASK-2602 (`CP-605`): `HeadlessEventGuardModule` respeta diálogos y cartas activos de mods externos (`CorazonPelican.Prorroga.*`)**
+- [x] **TASK-2602 (`CP-605`): `HeadlessEventGuardModule` respeta diálogos y cartas activos de mods externos (`CorazonPelican.Prorroga.*`)**
   * **Prioridad:** Alta (P1)
   * **Dependencias:** `CP-601` (espejo de `Corazón Pelican` · `CP-605`).
   * **Descripción:**
     - Extender `HostEventGuardLogic.Decide` y `HeadlessEventGuardModule` para no avanzar ni cerrar automáticamente `DialogueBox` o `LetterViewerMenu` pertenecientes a un turno o carta de prórroga activa de Corazón Pelican (`CorazonPelican.Prorroga.*` / indicador de diálogo activo) en hosts con `AutoHostSaveName`.
   * **Criterios de aceptación:**
     1. Test en `HostEventGuardLogicTests` verificando que esos diálogos/cartas devuelven `HostEventGuardActionKind.None` mientras los eventos vanilla desatendidos siguen desbloqueándose.
+  * **Resolución:** `HostEventGuardLogic.IsExternalControlledMenu` y `IsExternalModDialogueOrLetter` en `Pelican4Ever.Core/Server/HostEventGuardLogic.cs` + `HeadlessEventGuardModule.cs` (`CorazonPelican.DialogoActivo`, `CorazonPelican.Control`, `CorazonPelican.Prorroga.`); cubierto por `HostEventGuardLogicTests.ExternalModDialogueAndProrrogaLetter_AreNeverDismissed_CP605` (`1828/1828` superados).
 
 - [ ] **TASK-2603 (`CP-608`): Exponer `IsNightHold()` en `IPelicanApi` (`PelicanApi.cs`)**
   * **Prioridad:** Media (P2)

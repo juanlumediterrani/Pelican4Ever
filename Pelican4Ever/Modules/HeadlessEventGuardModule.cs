@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Pelican4Ever.Core.Admin;
 using Pelican4Ever.Core.Server;
+using Pelican4Ever.Core.World;
 using Pelican4Ever.Framework;
 using StardewModdingAPI;
 using StardewModdingAPI.Events;
@@ -84,6 +85,12 @@ namespace Pelican4Ever.Modules
 
             DialogueBox? dialogueBox = Game1.activeClickableMenu as DialogueBox;
             string[] responseKeys = ExtractResponseKeys(dialogueBox);
+            NPC? speaker = dialogueBox?.characterDialogue?.speaker;
+            bool hasExternalSpeakerControl = speaker != null
+                && (speaker.modData.ContainsKey(NpcShopkeeperLogic.CorazonPelicanControlKey)
+                    || speaker.modData.ContainsKey(HostEventGuardLogic.CorazonPelicanDialogueKey));
+            string? mailTitle = (Game1.activeClickableMenu as LetterViewerMenu)?.mailTitle;
+            bool isExternalModDialogueOrLetter = HostEventGuardLogic.IsExternalControlledMenu(hasExternalSpeakerControl, mailTitle);
 
             int delayTicks = Math.Max(1, context.Config.HostEventAutoResolveDelaySeconds) * 60;
             int hardTimeoutTicks = Math.Max(delayTicks, HardEventTimeoutSeconds * 60);
@@ -107,6 +114,7 @@ namespace Pelican4Ever.Modules
                 DialogueSafetyTimer = dialogueBox?.safetyTimer ?? 0,
                 ResponseKeys = responseKeys,
                 LastQuestionKey = Game1.currentLocation?.lastQuestionKey,
+                IsExternalModDialogueOrLetter = isExternalModDialogueOrLetter,
                 StuckTicks = stuckTicks,
                 DelayTicks = delayTicks,
                 HardEventTimeoutTicks = hardTimeoutTicks

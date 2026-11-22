@@ -222,4 +222,28 @@ public class HostEventGuardLogicTests
             StuckTicks = 300, DelayTicks = 300, HardEventTimeoutTicks = 900
         }).Action);
     }
+
+    [Fact]
+    public void ExternalModDialogueAndProrrogaLetter_AreNeverDismissed_CP605()
+    {
+        Assert.True(HostEventGuardLogic.IsExternalControlledMenu(true, null));
+        Assert.True(HostEventGuardLogic.IsExternalControlledMenu(false, "CorazonPelican.Prorroga.comp-1"));
+        Assert.False(HostEventGuardLogic.IsExternalControlledMenu(false, "Robin_Mail"));
+
+        Assert.Equal(HostEventGuardActionKind.None, HostEventGuardLogic.Decide(new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            ActiveMenuKind = HostBlockingMenuKind.DialogueBox,
+            IsExternalModDialogueOrLetter = true,
+            StuckTicks = 2000, DelayTicks = 300, HardEventTimeoutTicks = 900
+        }).Action);
+
+        Assert.Equal(HostEventGuardActionKind.None, HostEventGuardLogic.Decide(new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            ActiveMenuKind = HostBlockingMenuKind.LetterViewerMenu,
+            IsExternalModDialogueOrLetter = true,
+            StuckTicks = 2000, DelayTicks = 300, HardEventTimeoutTicks = 900
+        }).Action);
+    }
 }
