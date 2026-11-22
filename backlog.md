@@ -2672,3 +2672,13 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. El conteo y aviso quedan reflejados en `RealTimeClockModule` sin alterar la omisión protectora de `CP-601`.
   * **Resolución:** `RealTimeClockModule.CatchUpVillagerSchedules` registra explícitamente los NPCs omitidos por `CorazonPelicanControlKey` (`0` advertencias, `1828/1828` superados).
+
+- [x] **TASK-2605 (`CP-611`): Advertencia off-role en `/time` / `p4e_time` y hook de reinicio técnico antes de `CatchUpVillagerSchedules`**
+  * **Prioridad:** Alta (P1)
+  * **Dependencias:** `TASK-2604` (espejo de `Corazón Pelican` · `CP-611`).
+  * **Descripción:**
+    - Tratar `/time` y `p4e_time` como acción técnica «off-role»: advertir antes de ejecutar (con confirmación explícita `confirmar`/`confirm` o repetición en 45 s) cuando el ajuste reinicia estado activo de NPCs externos o puede perder/mezclar progreso con jugadores conectados, y disparar `PelicanApi.RegisterTimeJumpHook` (`(horaAnterior, horaNueva)`) justo antes de `CatchUpVillagerSchedules` para que Corazón Pelican corte cualquier intención y libere el NPC antes de la recolocación canónica.
+  * **Criterios de aceptación:**
+    1. `TimeCommandConfirmationGate` bloquea la primera invocación sin confirmación emitiendo advertencia explícita de progreso/jugadores/NPCs externos y aprueba repetición en ventana de 45 s o sufijo `confirmar` (incluido catálogo remoto `p4e_time`).
+    2. `PelicanApi.RegisterTimeJumpHook` invoca a sus suscriptores en `ApplyCurrentClock()` antes de `CatchUpVillagerSchedules`.
+  * **Resolución:** `TimeJumpHookRegistry`, `TimeCommandParser.ParseWithConfirmation`, `TimeCommandConfirmationGate`, `RemoteCommandCatalog`, `PelicanApi.RegisterTimeJumpHook`, `RealTimeClockModule` + i18n (`default`/`es`/`zh-CN`); cubierto por `TimeCommandConfirmationTests` (`0` advertencias, `1840/1840` superados).

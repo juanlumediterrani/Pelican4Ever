@@ -86,5 +86,16 @@ namespace Pelican4Ever
 
         /// <summary>Retira un callback previamente registrado con <see cref="RegisterPreSaveHook"/>.</summary>
         public void UnregisterPreSaveHook(Action callback) => PersistenceModule.PreSaveHooks.Unregister(callback);
+
+        /// <summary>
+        /// Registra un callback síncrono invocado tras un salto manual de hora (<c>/time</c> / <c>p4e_time</c>)
+        /// y antes de recolocar los horarios de aldeanos (<c>CatchUpVillagerSchedules</c>), para que mods externos
+        /// apliquen un reinicio técnico off-role y liberen el control del NPC (TASK-2605 / CP-611).
+        /// Recibe <c>(horaAnterior, horaNueva)</c> en formato HHmm de Stardew.
+        /// </summary>
+        public void RegisterTimeJumpHook(Action<int, int> callback) => RealTimeClockModule.TimeJumpHooks.Register(callback);
+
+        /// <summary>Retira un callback previamente registrado con <see cref="RegisterTimeJumpHook"/>.</summary>
+        public void UnregisterTimeJumpHook(Action<int, int> callback) => RealTimeClockModule.TimeJumpHooks.Unregister(callback);
     }
 }

@@ -26,11 +26,27 @@ namespace Pelican4Ever.Core.Time
         public readonly record struct Parsed(Kind Kind, TimeSpan Value, double Amount, bool IsMinus);
 
         public static Parsed Parse(string input)
+            => ParseWithConfirmation(input, out _);
+
+        /// <summary>
+        /// Parsea argumentos de <c>p4e_time</c> / <c>/time</c> aceptando un sufijo final explícito de
+        /// confirmación (<c>confirm</c>, <c>confirmar</c>, <c>--confirm</c>, <c>--confirmar</c>).
+        /// </summary>
+        public static Parsed ParseWithConfirmation(string input, out bool isExplicitlyConfirmed)
         {
+            isExplicitlyConfirmed = false;
             if (string.IsNullOrWhiteSpace(input))
                 return new Parsed(Kind.Invalid, TimeSpan.Zero, 0, false);
 
-            input = input.Trim().ToLowerInvariant();
+            string trimmed = input.Trim();
+            string[] tokens = trimmed.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length >= 2 && IsConfirmToken(tokens[^1]))
+            {
+                isExplicitlyConfirmed = true;
+                trimmed = string.Join(" ", tokens, 0, tokens.Length - 1);
+            }
+
+            input = trimmed.ToLowerInvariant();
 
             if (input == "reset")
                 return new Parsed(Kind.Reset, TimeSpan.Zero, 0, false);
@@ -72,5 +88,11 @@ namespace Pelican4Ever.Core.Time
             span = TimeSpan.Zero;
             return false;
         }
+
+        private static bool IsConfirmToken(string token)
+            => token.Equals("confirm", StringComparison.OrdinalIgnoreCase)
+               || token.Equals("confirmar", StringComparison.OrdinalIgnoreCase)
+               || token.Equals("--confirm", StringComparison.OrdinalIgnoreCase)
+               || token.Equals("--confirmar", StringComparison.OrdinalIgnoreCase);
     }
 }

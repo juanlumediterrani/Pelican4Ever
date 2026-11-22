@@ -66,7 +66,7 @@ namespace Pelican4Ever.Core.Admin
             new("p4e_pair_revoke", RemoteCommandRisk.Sensitive, 1, 1, "p4e_pair_revoke <usuario_o_ip_o_id>"),
             new("p4e_forage_wave", RemoteCommandRisk.Sensitive, 0, 0, "p4e_forage_wave"),
             new("p4e_festival_move", RemoteCommandRisk.Sensitive, 3, 3, "p4e_festival_move <spring|summer|fall|winter> <díaActual> <díaNuevo>", CheckFestivalMove),
-            new("p4e_time", RemoteCommandRisk.Sensitive, 1, 2, "p4e_time <+X|-X|reset|set HH:mm>", CheckTime),
+            new("p4e_time", RemoteCommandRisk.Sensitive, 1, 3, "p4e_time <+X|-X|reset|set HH:mm> [confirmar]", CheckTime),
             new("p4e_probation_status", RemoteCommandRisk.Read, 0, 0, "p4e_probation_status"),
             new("p4e_probation_ticket", RemoteCommandRisk.Safe, 2, 2, "p4e_probation_ticket <discord_id> <alias>"),
             new("p4e_probation_approve", RemoteCommandRisk.Safe, 2, 2, "p4e_probation_approve <discord_id> <huella>"),
@@ -101,13 +101,13 @@ namespace Pelican4Ever.Core.Admin
 
         private static string? CheckTime(IReadOnlyList<string> args)
         {
-            // Misma gramática que RealTimeClockModule.AdjustTime; no se añade ninguna otra.
-            TimeCommandParser.Parsed parsed = TimeCommandParser.Parse(string.Join(" ", args));
+            // Misma gramática que RealTimeClockModule.AdjustTime (con sufijo opcional confirmar/confirm).
+            TimeCommandParser.Parsed parsed = TimeCommandParser.ParseWithConfirmation(string.Join(" ", args), out _);
             return parsed.Kind switch
             {
                 TimeCommandParser.Kind.Reset or TimeCommandParser.Kind.Set
                     or TimeCommandParser.Kind.Hours or TimeCommandParser.Kind.Minutes => null,
-                _ => "Uso: p4e_time <+X|-X|reset|set HH:mm> (ej: p4e_time +2, p4e_time -1, p4e_time reset)"
+                _ => "Uso: p4e_time <+X|-X|reset|set HH:mm> [confirmar] (ej: p4e_time +2 confirmar, p4e_time reset)"
             };
         }
 

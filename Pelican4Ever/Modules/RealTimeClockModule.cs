@@ -27,6 +27,8 @@ namespace Pelican4Ever.Modules
         private static ModContext? context;
         public static bool IsNightHold { get; private set; }
         public static TimeSpan ManualTimeOffset { get; set; } = TimeSpan.Zero;
+        public static TimeJumpHookRegistry TimeJumpHooks { get; } = new();
+        private static readonly TimeCommandConfirmationGate TimeConfirmationGate = new();
         private static bool timeChatCommandsRegistered;
 
         /// <summary>Ticks de 10 min procesados sobre máquinas durante la Madrugada en curso (GAP-17).</summary>
@@ -68,6 +70,7 @@ namespace Pelican4Ever.Modules
                 startupSyncPending = villagerCatchUpPending = false;
                 ManualTimeOffset = TimeSpan.Zero;
                 clientNightHoldTick = -1;
+                TimeConfirmationGate.Clear();
             };
             ctx.Helper.Events.Multiplayer.ModMessageReceived += OnModMessageReceived;
             ctx.Helper.Events.Multiplayer.PeerContextReceived += OnPeerContextReceived;
@@ -75,7 +78,7 @@ namespace Pelican4Ever.Modules
             // Comandos para host para forzar o adelantar/retrasar horas (+X, -X, reset)
             ctx.AddCommand(
                 "p4e_time",
-                "Ajusta o fuerza la hora del juego en el servidor. Uso: p4e_time <+X|-X|reset|set HH:mm> (ej: p4e_time +2, p4e_time -1, p4e_time reset)",
+                "Ajusta o fuerza la hora del juego en el servidor (acción off-role). Uso: p4e_time <+X|-X|reset|set HH:mm> [confirmar]",
                 OnConsoleTime
             );
             ctx.Helper.Events.GameLoop.GameLaunched += (s, e) => RegisterTimeChatCommands();
@@ -119,8 +122,8 @@ namespace Pelican4Ever.Modules
         private void OnConsoleTime(string command, string[] args)
         {
             string arg = string.Join(" ", args);
-            AdjustTime(arg, out string message);
-            context?.Monitor.Log(message, LogLevel.Info);
+            bool applied = AdjustTime(arg, out string message);
+            context?.Monitor.Log(message, applied || string.IsNullOrWhiteSpace(arg) ? LogLevel.Info : LogLevel.Warn);
         }
 
         public static bool AdjustTime(string input, out string message)
@@ -131,7 +134,27 @@ namespace Pelican4Ever.Modules
                 return false;
             }
 
-            TimeCommandParser.Parsed parsed = TimeCommandParser.Parse(input);
+            TimeCommandParser.Parsed parsed = TimeCommandParser.ParseWithConfirmation(input, out bool explicitConfirm);
+            switch (parsed.Kind)
+            {
+                case TimeCommandParser.Kind.SetInvalid:
+                    message = I18n.Get("clock.invalid_time_format");
+                    return false;
+
+                case TimeCommandParser.Kind.Invalid:
+                    message = I18n.Get("clock.invalid_format");
+                    return false;
+            }
+
+            TimeCommandSafetyContext safetyContext = CaptureSafetyContext();
+            TimeCommandConfirmationDecision decision = TimeConfirmationGate.Evaluate(parsed, explicitConfirm, safetyContext);
+            if (!decision.Allowed)
+            {
+                message = BuildTimeWarningMessage(safetyContext);
+                context?.Monitor.Log(message, LogLevel.Warn);
+                return false;
+            }
+
             switch (parsed.Kind)
             {
                 case TimeCommandParser.Kind.Reset:
@@ -163,14 +186,42 @@ namespace Pelican4Ever.Modules
                     message = I18n.Get("clock.adjusted_minutes", new { sign = parsed.IsMinus ? "-" : "+", minutes = parsed.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture), time = Game1.getTimeOfDayString(Game1.timeOfDay), offset = ManualTimeOffset.TotalHours.ToString("+0.##;-0.##;0", System.Globalization.CultureInfo.InvariantCulture) });
                     return true;
 
-                case TimeCommandParser.Kind.SetInvalid:
-                    message = I18n.Get("clock.invalid_time_format");
-                    return false;
-
                 default:
                     message = I18n.Get("clock.invalid_format");
                     return false;
             }
+        }
+
+        private static TimeCommandSafetyContext CaptureSafetyContext()
+        {
+            if (!Context.IsWorldReady)
+                return TimeCommandSafetyContext.Empty;
+
+            long hostId = Game1.player?.UniqueMultiplayerID ?? 0;
+            int remotePlayers = Game1.otherFarmers.Values.Count(f => f != null && f.UniqueMultiplayerID != hostId);
+            var externalNpcs = new List<string>();
+            Utility.ForEachVillager(npc =>
+            {
+                if (npc.modData.ContainsKey(Core.World.NpcShopkeeperLogic.CorazonPelicanControlKey))
+                    externalNpcs.Add(npc.Name);
+                return true;
+            });
+            return new TimeCommandSafetyContext(remotePlayers, externalNpcs);
+        }
+
+        private static string BuildTimeWarningMessage(TimeCommandSafetyContext safetyContext)
+        {
+            var parts = new List<string> { I18n.Get("clock.offrole_warning_header") };
+            if (safetyContext.HasMixedPlayers)
+            {
+                parts.Add(I18n.Get("clock.offrole_warning_players", new { count = safetyContext.OnlineRemotePlayersCount }));
+            }
+            if (safetyContext.HasExternalNpcs)
+            {
+                parts.Add(I18n.Get("clock.offrole_warning_npcs", new { npcs = string.Join(", ", safetyContext.ExternalControlledNpcs) }));
+            }
+            parts.Add(I18n.Get("clock.offrole_warning_confirm"));
+            return string.Join(" ", parts);
         }
 
         private static void BroadcastTimeOffset()
@@ -210,6 +261,7 @@ namespace Pelican4Ever.Modules
         {
             if (context == null || !Context.IsMainPlayer) return;
 
+            int previousTimeOfDay = Game1.timeOfDay;
             var cfg = context.Config;
             DateTime now = ServerTime.LocalNow(cfg.TimeZoneId).Add(ManualTimeOffset);
             ClockReading reading = GameClock.Read(now.TimeOfDay, cfg.ParsedDayStart, cfg.ParsedNightHoldStart);
@@ -221,6 +273,9 @@ namespace Pelican4Ever.Modules
             {
                 Game1.netWorldState.Value.UpdateFromGame1();
             }
+
+            TimeJumpHooks.InvokeAll(previousTimeOfDay, Game1.timeOfDay, ex =>
+                context.Monitor.Log($"[RealTimeClockModule] Error en hook off-role de salto horario ({previousTimeOfDay:D4}->{Game1.timeOfDay:D4}): {ex.Message}", LogLevel.Warn));
 
             CatchUpVillagerSchedules(Game1.timeOfDay);
         }
