@@ -140,12 +140,7 @@ namespace Pelican4Ever.Modules
                 return true;
 
             __instance.freeze = false;
-            if (__instance.upArrow != null && __instance.downArrow != null)
-            {
-                bool showScroll = PurchaseAnimalsMenu.GetOffScreenRows(__instance.animalsToPurchase.Count) > 0;
-                __instance.upArrow.visible = showScroll;
-                __instance.downArrow.visible = showScroll;
-            }
+            AndroidMenuCompat.UpdatePurchaseAnimalsScrollArrows(__instance, __instance.animalsToPurchase.Count);
             if (__instance.doneNamingButton != null)
                 __instance.doneNamingButton.visible = false;
             if (__instance.randomButton != null)

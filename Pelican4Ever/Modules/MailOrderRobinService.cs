@@ -307,21 +307,28 @@ namespace Pelican4Ever.Modules
                 return;
 
             Building built = ___TargetLocation.buildings[___TargetLocation.buildings.Count - 1];
+            AndroidMenuCompat.ReadCarpenterBlueprintInfo(
+                __instance,
+                out string? bpDisplayName,
+                out int? bpBuildDays,
+                out int? bpBuildCost,
+                out List<MailOrderItemLine> bpMaterials);
+
             var order = new PendingBuildingOrder
             {
                 PlayerId = Game1.player.UniqueMultiplayerID,
                 Builder = __instance.Builder ?? "Robin",
                 TargetLocationName = ___TargetLocation.NameOrUniqueName,
                 BuildingType = built.buildingType.Value,
-                BuildingDisplayName = __instance.Blueprint?.DisplayName ?? built.buildingType.Value,
+                BuildingDisplayName = bpDisplayName ?? built.buildingType.Value,
                 TileX = built.tileX.Value,
                 TileY = built.tileY.Value,
                 TilesWide = built.tilesWide.Value,
                 TilesHigh = built.tilesHigh.Value,
                 SkinId = built.skinId.Value,
-                BuildDays = Math.Max(__instance.Blueprint?.BuildDays ?? 2, 1),
-                GoldPaid = Math.Max(0, __instance.Blueprint?.BuildCost ?? 0),
-                MaterialsPaid = CaptureBlueprintMaterials(__instance.Blueprint),
+                BuildDays = Math.Max(bpBuildDays ?? 2, 1),
+                GoldPaid = Math.Max(0, bpBuildCost ?? 0),
+                MaterialsPaid = bpMaterials,
                 CreatedAtGameDay = Game1.Date?.TotalDays ?? 0,
                 DeliveryGameDay = ComputeDeliveryGameDay(),
                 DeliveryTimeOfDay = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay
@@ -342,7 +349,7 @@ namespace Pelican4Ever.Modules
             if (!robinMailSessionActive || !__instance.onFarm || __instance.freeze)
                 return true;
 
-            if (__instance.Action == CarpenterMenu.CarpentryAction.Upgrade && ___TargetLocation != null)
+            if (AndroidMenuCompat.IsCarpenterUpgradeAction(__instance) && ___TargetLocation != null)
             {
                 Vector2 tile = new((Game1.viewport.X + Game1.getOldMouseX(ui_scale: false)) / 64, (Game1.viewport.Y + Game1.getOldMouseY(ui_scale: false)) / 64);
                 Building? b = ___TargetLocation.getBuildingAt(tile);
@@ -385,19 +392,26 @@ namespace Pelican4Ever.Modules
                 b.upgradeName.Value = prevUpgradeName;
                 b.daysUntilUpgrade.Value = prevDaysUntilUpgrade;
 
+                AndroidMenuCompat.ReadCarpenterBlueprintInfo(
+                    __instance,
+                    out string? bpDisplayName,
+                    out _,
+                    out int? bpBuildCost,
+                    out List<MailOrderItemLine> bpMaterials);
+
                 var order = new PendingBuildingOrder
                 {
                     PlayerId = Game1.player.UniqueMultiplayerID,
                     Builder = __instance.Builder ?? "Robin",
                     TargetLocationName = ___TargetLocation.NameOrUniqueName,
                     BuildingType = upgradeType,
-                    BuildingDisplayName = __instance.Blueprint?.DisplayName ?? upgradeType,
+                    BuildingDisplayName = bpDisplayName ?? upgradeType,
                     IsUpgrade = true,
                     TargetBuildingTileX = b.tileX.Value,
                     TargetBuildingTileY = b.tileY.Value,
                     BuildDays = days,
-                    GoldPaid = Math.Max(0, __instance.Blueprint?.BuildCost ?? 0),
-                    MaterialsPaid = CaptureBlueprintMaterials(__instance.Blueprint),
+                    GoldPaid = Math.Max(0, bpBuildCost ?? 0),
+                    MaterialsPaid = bpMaterials,
                     CreatedAtGameDay = Game1.Date?.TotalDays ?? 0,
                     DeliveryGameDay = ComputeDeliveryGameDay(),
                     DeliveryTimeOfDay = MailOrderScheduleLogic.DefaultDeliveryTimeOfDay
@@ -405,27 +419,6 @@ namespace Pelican4Ever.Modules
 
                 SubmitBuildingOrder(order);
             }
-        }
-
-        private static List<MailOrderItemLine> CaptureBlueprintMaterials(CarpenterMenu.BlueprintEntry? blueprint)
-        {
-            var list = new List<MailOrderItemLine>();
-            if (blueprint?.BuildMaterials == null)
-                return list;
-
-            foreach (var mat in blueprint.BuildMaterials)
-            {
-                if (mat == null || string.IsNullOrWhiteSpace(mat.ItemId) || mat.Amount <= 0)
-                    continue;
-                list.Add(new MailOrderItemLine
-                {
-                    QualifiedItemId = mat.ItemId,
-                    DisplayName = mat.ItemId,
-                    Stack = mat.Amount
-                });
-            }
-
-            return list;
         }
 
         public static bool Prefix_CarpenterMenu_RobinConstructionMessage(CarpenterMenu __instance)

@@ -21,9 +21,13 @@ namespace Pelican4Ever
         private SystemdWatchdogService? watchdog;
         private bool lockdownKickLogged;
         private bool initialHealthEventsEmitted;
+        private bool androidTitleSkipped;
 
         public override void Entry(IModHelper helper)
         {
+            if (Constants.TargetPlatform == GamePlatform.Android)
+                AccessTools.Property(typeof(Game1), "UnlockedMultiplayer")?.SetValue(null, true);
+
             I18n.Init(helper.Translation);
 
             ServerConfig config = helper.ReadConfig<ServerConfig>();
@@ -122,6 +126,14 @@ namespace Pelican4Ever
         {
             bool worldReady = Context.IsWorldReady;
             context.HealthTracker.RecordTick(worldReady);
+
+            if (Constants.TargetPlatform == GamePlatform.Android && !worldReady && !androidTitleSkipped && e.Ticks >= 60
+                && Game1.activeClickableMenu is StardewValley.Menus.TitleMenu tm
+                && StardewValley.Menus.TitleMenu.subMenu == null)
+            {
+                androidTitleSkipped = true;
+                tm.skipToTitleButtons();
+            }
 
             if (context.IsLockdown && worldReady && Context.IsMainPlayer)
             {

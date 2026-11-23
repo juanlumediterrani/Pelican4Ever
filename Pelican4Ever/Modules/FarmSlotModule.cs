@@ -5492,7 +5492,7 @@ namespace Pelican4Ever.Modules
                 Game1.activeClickableMenu = menu;
 
                 context?.Monitor.Log(
-                    $"[FarmSlotModule] CarpenterMenu asignado para '{locationName}' con {menu.Blueprints.Count} planos disponibles.",
+                    $"[FarmSlotModule] CarpenterMenu asignado para '{locationName}' con {AndroidMenuCompat.GetCarpenterBlueprintCount(menu)} planos disponibles.",
                     LogLevel.Trace);
 
                 DelayedAction.functionAfterDelay(() =>
@@ -6929,7 +6929,7 @@ namespace Pelican4Ever.Modules
 
             Diagnostics.Write(
                 $"CarpenterMenu ctor: destino='{__instance.TargetLocation?.NameOrUniqueName ?? "?"}', " +
-                $"propio={owned}, martilloVisible={__instance.demolishButton?.visible}, host={Context.IsMainPlayer}");
+                $"propio={owned}, martilloVisible={AndroidMenuCompat.GetCarpenterDemolishButton(__instance)?.visible}, host={Context.IsMainPlayer}");
         }
 
         /// <summary>
@@ -6947,13 +6947,14 @@ namespace Pelican4Ever.Modules
         private static bool ApplyDemolishVisibility(CarpenterMenu menu)
         {
             bool owned = CanClientManageLocation(menu.TargetLocation);
+            ClickableComponent? demolishButton = AndroidMenuCompat.GetCarpenterDemolishButton(menu);
 
-            if (Context.IsMainPlayer || menu.readOnly || menu.demolishButton == null || !owned)
+            if (Context.IsMainPlayer || AndroidMenuCompat.IsCarpenterReadOnly(menu) || demolishButton == null || !owned)
                 return owned;
 
-            if (!menu.demolishButton.visible)
+            if (!demolishButton.visible)
             {
-                menu.demolishButton.visible = true;
+                demolishButton.visible = true;
 
                 // resetBounds recablea los vecinos de navegación cuando el martillo estaba oculto;
                 // sin restaurarlos el botón solo se alcanza con el ratón, no con el mando.
