@@ -7,7 +7,7 @@
   * Stardew Valley 1.6.15 incorpora soporte nativo de host automatizado (`Game1.HasDedicatedHost`, `Game1.IsDedicatedHost`, `Farmer.IsDedicatedPlayer` y la clase `StardewValley.Network.Dedicated.DedicatedServer` activada mediante `player.team.hasDedicatedHost.Value = true`).
   * El despliegue se apoya en **JunimoServer** (o contenedor Docker Linux con `xvfb` + `noVNC`) combinando el bot nativo `DedicatedServer` con las reglas de reloj continuo de `Pelican 4Ever` (impidiendo que `DedicatedServer.Tick()` pause el mundo cuando `onlineIds.Count == 0`).
 * **Topología Cliente-Servidor y Confianza:**
-  * El **mismo paquete del mod (`Pelican4Ever.dll` + `Pelican4Ever.Core.dll`) es obligatorio en Host y Clientes** (`ClientVersionGuardModule` expulsa en `PeerContextReceived` a cualquier cliente sin SMAPI o con distinta versión `Major.Minor`).
+  * El **mismo paquete del mod (`Pelican4Ever.dll` + `Pelican4Ever.Core.dll`) es obligatorio en Host y Clientes** (`ClientVersionGuardModule` delega en `ClientVersionPolicy` para exigir la misma serie `Major.Minor` y versión `>= MinCompatibleClientVersion`, desacoplando parches solo-host y hotfixes de UI cliente según ADR-0012).
   * **Host (`Context.IsMainPlayer`) = Fuente Única de la Verdad** para el reloj, el calendario, la asignación de portales/residencias y el registro de jugadores (`ServerWorldState`).
   * **Cliente (`Context.IsLocalPlayer`) = Ejecutor de Interfaz y Jugador Local** para el recorte de energía al comer (`Farmer.doneEating`), bloqueo local de herramientas en granjas ajenas, diálogos de portal y cama. Todas las mutaciones de estado compartido se solicitan al Host vía `Helper.Multiplayer.SendMessage`.
 
@@ -202,3 +202,4 @@ Las decisiones arquitectónicas clave y sus alternativas descartadas están docu
 * **ADR-0009:** Generación de anexos con el flujo «Mapas Puente» (`MapStudio`, recorte canónico y clasificadores verificados).
 * **ADR-0010 (propuesto):** Arranque *fail-closed*, salud del host fuera del hilo del juego (`/api/v1/host/health` + watchdog systemd) y contrato de copias (`p4e-backup.json`, retención y `saves.restore`) con Putre.
 * **ADR-0010 (v0.5, aceptado; `64` experimental):** Residencias escalables (16/32/64) con 16 simultáneos, cola de admisión, reservas tras caída de red, expulsión por inactividad y gates al este de `Town`. Verificado en vivo en [`docs/v0.5-residence-scaling-verification-2026-11-17.md`](docs/v0.5-residence-scaling-verification-2026-11-17.md).
+* **ADR-0012:** Mod único con compatibilidad desacoplada (`ClientVersionPolicy.MinCompatibleClientVersion`), regla determinista de subida (`scripts/calc_min_client_version.py`) y flujo de ramas cortas sobre `main`.

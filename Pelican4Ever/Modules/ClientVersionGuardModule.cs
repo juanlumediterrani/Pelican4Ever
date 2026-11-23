@@ -14,15 +14,15 @@ using StardewValley.Network;
 namespace Pelican4Ever.Modules
 {
     /// <summary>
-    /// Exige que cada cliente tenga Pelican 4Ever con la misma versión mayor.menor que el host (solo host).
-    /// La lógica de energía, comida, puertas y cama se ejecuta en el cliente, así que un cliente sin el mod
-    /// rompería las reglas del servidor (ver ADR-0004). Con <c>RequiredClientMods</c> exige además el resto del
-    /// modpack en la versión exacta que tiene el host: un cliente sin NITV, Fashion Sense, etc. vería objetos rotos.
+    /// Exige que cada cliente tenga Pelican 4Ever en la misma serie <c>Major.Minor</c> que el host y con versión
+    /// igual o superior a <see cref="ClientVersionPolicy.MinCompatibleClientVersion"/> (solo host; ver ADR-0004 y ADR-0012).
+    /// Así los parches solo de host no obligan a actualizar clientes mientras el protocolo y las reglas no cambien.
+    /// Con <c>RequiredClientMods</c> exige además el resto del modpack en la versión exacta que tiene el host.
     /// </summary>
     public sealed class ClientVersionGuardModule : Framework.IModule
     {
         internal const string ProtocolKey = "Pelican4Ever/ClientProtocol";
-        internal const string ProtocolRevision = "1";
+        internal const string ProtocolRevision = ClientVersionPolicy.ProtocolRevision;
         private Framework.ModContext context = null!;
         private static byte modContextMessageType;
 
@@ -70,6 +70,21 @@ namespace Pelican4Ever.Modules
 
             if (requiredMods.Count > 0)
                 context.Monitor.Log($"[ClientVersionGuard] Modpack exigido a los clientes: {string.Join(", ", requiredMods.Select(m => $"{m.Key} {m.Value}"))}.", LogLevel.Info);
+
+            SemVer hostVer = ToSemVer(context.Manifest.Version);
+            SemVer effectiveMin = ClientVersionPolicy.NormalizeFloor(hostVer, ClientVersionPolicy.MinCompatibleClientVersion);
+            if (!ClientVersionPolicy.IsValidFloor(hostVer, ClientVersionPolicy.MinCompatibleClientVersion))
+            {
+                context.Monitor.Log(
+                    $"[ClientVersionGuard] MinCompatibleClientVersion ({ClientVersionPolicy.MinCompatibleClientVersion}) fuera de invariante para host {hostVer}; se aplica fail-closed >= {effectiveMin}.",
+                    LogLevel.Warn);
+            }
+            else
+            {
+                context.Monitor.Log(
+                    $"[ClientVersionGuard] Compatibilidad Pelican 4Ever: host {hostVer}, cliente mínimo exigido >= {effectiveMin} (protocolo {ProtocolRevision}).",
+                    LogLevel.Info);
+            }
         }
 
         private static void BeforeServerMessage(object __instance, IncomingMessage message)
@@ -163,10 +178,14 @@ namespace Pelican4Ever.Modules
             if (mod is null)
                 return $"no tiene instalado {context.Manifest.Name}.";
 
-            ISemanticVersion hostVersion = context.Manifest.Version;
-            if (mod.Version.MajorVersion != hostVersion.MajorVersion || mod.Version.MinorVersion != hostVersion.MinorVersion
-                || mod.Version.PatchVersion < hostVersion.PatchVersion)
-                return $"versión incompatible ({mod.Version}; el servidor usa {hostVersion}).";
+            SemVer hostVersion = ToSemVer(context.Manifest.Version);
+            SemVer clientVersion = ToSemVer(mod.Version);
+            ClientVersionDecision versionDecision = ClientVersionPolicy.Evaluate(
+                hostVersion,
+                ClientVersionPolicy.MinCompatibleClientVersion,
+                clientVersion);
+            if (!versionDecision.IsCompatible)
+                return versionDecision.RejectionReason;
 
             if (requiredMods.Count > 0)
             {
@@ -180,5 +199,8 @@ namespace Pelican4Ever.Modules
 
             return null;
         }
+
+        private static SemVer ToSemVer(ISemanticVersion version) =>
+            new(version.MajorVersion, version.MinorVersion, version.PatchVersion);
     }
 }
