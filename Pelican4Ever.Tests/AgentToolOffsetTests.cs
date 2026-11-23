@@ -36,35 +36,12 @@ namespace Pelican4Ever.Tests
         }
 
         [Fact]
-        public void Dr4coBodyId_MatchesTheFashionSensePack()
-        {
-            string root = FindRepoRoot();
-            string pack = Path.Combine(root, "agents", "Dr4co.FashionSense");
-            using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(pack, "manifest.json")));
-            using JsonDocument body = JsonDocument.Parse(File.ReadAllText(Path.Combine(pack, "Bodies", "Dr4co", "body.json")));
-
-            string expected = $"{manifest.RootElement.GetProperty("UniqueID").GetString()}/Player/{body.RootElement.GetProperty("Name").GetString()}";
-            Assert.Equal(AgentToolOffset.Dr4coBodyId, expected);
-        }
-
-        [Fact]
         public void GetForPlayer_HandlesNativeSkinsAndLegacyFashionSense()
         {
             Assert.Equal((0, 0), AgentToolOffset.GetForPlayer("putre", null, 2));
             Assert.Equal((-4, 12), AgentToolOffset.GetForPlayer("dr4co", null, 1));
             Assert.Equal((4, 12), AgentToolOffset.GetForPlayer("dr4co", null, 3));
             Assert.Equal((-8, 16), AgentToolOffset.GetForPlayer(null, AgentToolOffset.Dr4coBodyId, 1));
-        }
-
-        private static string FindRepoRoot()
-        {
-            for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
-            {
-                if (Directory.Exists(Path.Combine(dir.FullName, "agents", "Dr4co.FashionSense")))
-                    return dir.FullName;
-            }
-
-            throw new DirectoryNotFoundException("Could not locate the Dr4co Fashion Sense pack.");
         }
     }
 }

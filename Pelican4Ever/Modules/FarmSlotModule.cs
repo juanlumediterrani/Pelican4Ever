@@ -214,6 +214,19 @@ namespace Pelican4Ever.Modules
                         };
                     }
 
+                    // Adaptación interna a Nature In The Valley (absorbe Pelican4Ever.NITVCompat sin pack hermano).
+                    if (context?.Helper.ModRegistry.IsLoaded("Nature.NatureInTheValley") == true)
+                    {
+                        foreach (var locEntry in FarmTemplateCatalog.VanillaNitvLocationCustomFields)
+                        {
+                            if (!data.TryGetValue(locEntry.Key, out LocationData? baseLoc) || baseLoc == null)
+                                continue;
+                            baseLoc.CustomFields ??= new Dictionary<string, string>();
+                            foreach (var field in locEntry.Value)
+                                baseLoc.CustomFields[field.Key] = field.Value;
+                        }
+                    }
+
                     int slotCount = context?.Config.FarmSlotCount ?? HostPlazaLayout.BaseFarmSlotCount;
 
                     // TASK-ArtifactLoot: Excluir las residencias y anexos de la tirada global de libros perdidos (LOST_BOOK_OR_ITEM)

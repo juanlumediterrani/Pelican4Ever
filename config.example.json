@@ -59,12 +59,9 @@
   "RequiredClientMods": [
     "Pathoschild.ContentPatcher",
     "spacechase0.SpaceCore",
-    "PeacefulEnd.FashionSense",
-    "Dr4co.Stardew.FashionSenseBody",
     "Nature.NatureInTheValley",
     "Nature.NatureInValleyContent",
-    "SmolHooman.WildAnimalsInTheValley",
-    "Pelican4Ever.NITVCompat"
+    "SmolHooman.WildAnimalsInTheValley"
   ],
   "FarmSlotCount": 16,
   "MaxConcurrentPlayers": 16,

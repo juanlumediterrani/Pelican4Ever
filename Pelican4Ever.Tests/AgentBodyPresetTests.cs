@@ -103,35 +103,6 @@ namespace Pelican4Ever.Tests
             Assert.False(p.CatPerson);
         }
 
-        [Fact]
-        public void EveryReferencedAppearanceExistsInThePack()
-        {
-            string pack = Path.Combine(FindRepoRoot(), "agents", "Dr4co.FashionSense");
-            using JsonDocument manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(pack, "manifest.json")));
-            Assert.Equal(AgentBodyPreset.Dr4coPackId, manifest.RootElement.GetProperty("UniqueID").GetString());
-
-            // Fashion Sense type -> pack folder / json file
-            var folders = new Dictionary<string, (string Folder, string Json)>
-            {
-                ["Player"] = ("Bodies", "body.json"),
-                ["Hair"] = ("Hairs", "hair.json"),
-                ["Shirt"] = ("Shirts", "shirt.json"),
-                ["Pants"] = ("Pants", "pants.json"),
-                ["Shoes"] = ("Shoes", "shoes.json"),
-            };
-
-            foreach (string id in AgentBodyPreset.Dr4co(enable: true).Values)
-            {
-                string[] parts = id.Split('/');
-                Assert.Equal(3, parts.Length);
-                (string folder, string json) = folders[parts[1]];
-                string path = Path.Combine(pack, folder, parts[2], json);
-                Assert.True(File.Exists(path), $"Falta {path} para {id}");
-                using JsonDocument doc = JsonDocument.Parse(File.ReadAllText(path));
-                Assert.Equal(parts[2], doc.RootElement.GetProperty("Name").GetString());
-            }
-        }
-
         [Theory]
         [InlineData("putre", "putre")]
         [InlineData("  Putre ", "putre")]
@@ -185,11 +156,11 @@ namespace Pelican4Ever.Tests
         {
             for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
             {
-                if (Directory.Exists(Path.Combine(dir.FullName, "agents", "Dr4co.FashionSense")))
+                if (Directory.Exists(Path.Combine(dir.FullName, "Pelican4Ever", "assets", "skins")))
                     return dir.FullName;
             }
 
-            throw new DirectoryNotFoundException("Could not locate the Dr4co Fashion Sense pack.");
+            throw new DirectoryNotFoundException("Could not locate Pelican4Ever/assets/skins.");
         }
     }
 }

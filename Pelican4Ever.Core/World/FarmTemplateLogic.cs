@@ -93,6 +93,24 @@ namespace Pelican4Ever.Core.World
         }
 
         /// <summary>
+        /// CustomFields oficiales de Nature In The Valley para las ubicaciones base (plantillas de granja y cueva),
+        /// absorbidos directamente en Pelican 4Ever sin requerir un content pack hermano.
+        /// </summary>
+        public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> VanillaNitvLocationCustomFields { get; } =
+            new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
+            {
+                ["Farm_Standard"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Outside"] = "true" },
+                ["Farm_Forest"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Forest"] = "true", ["Nature.NIV.Outside"] = "true" },
+                ["Farm_Riverland"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Beach"] = "true", ["Nature.NIV.Outside"] = "true" },
+                ["Farm_Beach"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Beach"] = "true", ["Nature.NIV.Outside"] = "true" },
+                ["Farm_FourCorners"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Forest"] = "true", ["Nature.NIV.Outside"] = "true" },
+                ["Farm_Hilltop"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Outside"] = "true" },
+                ["Farm_Wilderness"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Outside"] = "true" },
+                ["Farm_MeadowlandsFarm"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Outside"] = "true" },
+                ["FarmCave"] = new Dictionary<string, string>(StringComparer.Ordinal) { ["Nature.NIV.Underground"] = "true" },
+            };
+
+        /// <summary>
         /// Aplica los CustomFields oficiales requeridos por Nature In The Valley (NiTV)
         /// según la plantilla temática de granja o anexo.
         /// </summary>
