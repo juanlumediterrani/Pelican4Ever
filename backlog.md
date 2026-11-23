@@ -2682,3 +2682,19 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
     1. `TimeCommandConfirmationGate` bloquea la primera invocación sin confirmación emitiendo advertencia explícita de progreso/jugadores/NPCs externos y aprueba repetición en ventana de 45 s o sufijo `confirmar` (incluido catálogo remoto `p4e_time`).
     2. `PelicanApi.RegisterTimeJumpHook` invoca a sus suscriptores en `ApplyCurrentClock()` antes de `CatchUpVillagerSchedules`.
   * **Resolución:** `TimeJumpHookRegistry`, `TimeCommandParser.ParseWithConfirmation`, `TimeCommandConfirmationGate`, `RemoteCommandCatalog`, `PelicanApi.RegisterTimeJumpHook`, `RealTimeClockModule` + i18n (`default`/`es`/`zh-CN`); cubierto por `TimeCommandConfirmationTests` (`0` advertencias, `1840/1840` superados).
+
+---
+
+### Épica 27: Endurecimiento del Anfitrión Agente (`AgentHost` / `Putre Valley`)
+
+- [ ] **TASK-2701: Política ante eventos y *cutscenes* vanilla bloqueantes durante `render_lease` activo del `AgentHost`**
+  * **Prioridad:** Alta (P1)
+  * **Dependencias:** `TASK-2602` (`HeadlessEventGuardModule`), `HeadlessRenderModule`, `CheckpointModule`.
+  * **Contexto (incidencia viva `2026-11-23 06:31 CET`):**
+    - Al salir Putre por primera vez a `Farm (64,15)` en día 15 de primavera con `render_lease` activo, el juego disparó una *cutscene* matinal vanilla (`Game1.CurrentEvent` / `DialogueBox`). Como `HeadlessEventGuardModule` omite auto-resolver eventos cuando `HeadlessRenderModule.Leases.HasActive(...)` es `true`, el evento bloqueó el agente y suprimió el checkpoint programado (`06:35 CET`: «hay un festival, un evento o un jugador en una ubicación temporal») hasta la expiración del lease (`06:51`).
+  * **Descripción:**
+    - Distinguir en `HeadlessEventGuardModule` entre menús/tiendas interactivas o diálogos protegidos de mods externos (`CorazonPelican.*`) y *cutscenes* vanilla no solicitadas que paralizan el avance del anfitrión durante un `render_lease` (permitiendo p. ej. resolución opt-in o avance tras inactividad corta y exponiendo en `GET /api/v1/host/health` o `/render` si hay evento activo bloqueante).
+    - Sincronizar la mejora con `PUTRE-502` en `../Putre/backlog.md`.
+  * **Criterios de aceptación:**
+    1. Una *cutscene* vanilla disparada al cambiar de mapa con `render_lease` activo no deja el bucle de eventos bloqueando checkpoints ni al `AgentHost`.
+    2. Cobertura en `Pelican4Ever.Tests` (`HostEventGuardLogicTests`) preservando la protección explícita de tienda, cofre y `CorazonPelican.Prorroga.*` (`TASK-2602`).
