@@ -395,6 +395,8 @@ namespace Pelican4Ever.Core.Admin
         public string SmapiVersion { get; set; } = string.Empty;
         public string ModVersion { get; set; } = string.Empty;
         public double UptimeSeconds { get; set; }
+        public bool BlockingEventActive { get; set; }
+        public string? ActiveMenuName { get; set; }
     }
 
     /// <summary>

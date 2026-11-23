@@ -50,6 +50,8 @@ namespace Pelican4Ever.Core.Server
         public IReadOnlyList<string> ResponseKeys { get; init; } = Array.Empty<string>();
         public string? LastQuestionKey { get; init; }
         public bool IsExternalModDialogueOrLetter { get; init; }
+        public bool AgentHostEnabled { get; init; }
+        public int RenderLeaseVanillaEventTimeoutTicks { get; init; }
         public int StuckTicks { get; init; }
         public int DelayTicks { get; init; }
         public int HardEventTimeoutTicks { get; init; }
@@ -61,6 +63,7 @@ namespace Pelican4Ever.Core.Server
     /// </summary>
     public static class HostEventGuardLogic
     {
+        public const int DefaultRenderLeaseVanillaEventTimeoutTicks = 20 * 60;
         public const string CorazonPelicanDialogueKey = "CorazonPelican.DialogoActivo";
         public const string CorazonPelicanProrrogaMailPrefix = "CorazonPelican.Prorroga.";
 
@@ -134,17 +137,32 @@ namespace Pelican4Ever.Core.Server
                 || input.IsRolloverBusy
                 || input.IsFestival
                 || input.IsRelayActive
-                || input.HasActiveRenderLease
-                || (input.IsExternalModDialogueOrLetter && !input.HasCurrentEvent && !input.IsEventUp)
+                || (input.IsExternalModDialogueOrLetter && (input.HasActiveRenderLease || (!input.HasCurrentEvent && !input.IsEventUp)))
                 || input.ActiveMenuKind == HostBlockingMenuKind.SaveGameMenu)
             {
                 return HostEventGuardDecision.DoNothing;
             }
 
+            bool isVanillaEvent = input.HasCurrentEvent || input.IsEventUp;
+            if (input.HasActiveRenderLease)
+            {
+                if (!input.AgentHostEnabled || !isVanillaEvent)
+                    return HostEventGuardDecision.DoNothing;
+            }
+
             if (!IsBlockingState(input.HasCurrentEvent, input.IsEventUp, input.ActiveMenuKind))
                 return HostEventGuardDecision.DoNothing;
 
-            if (input.StuckTicks < Math.Max(0, input.DelayTicks))
+            int minDelayTicks = Math.Max(0, input.DelayTicks);
+            if (input.HasActiveRenderLease && input.AgentHostEnabled && isVanillaEvent)
+            {
+                int leaseTimeout = input.RenderLeaseVanillaEventTimeoutTicks > 0
+                    ? input.RenderLeaseVanillaEventTimeoutTicks
+                    : DefaultRenderLeaseVanillaEventTimeoutTicks;
+                minDelayTicks = Math.Max(minDelayTicks, leaseTimeout);
+            }
+
+            if (input.StuckTicks < minDelayTicks)
                 return HostEventGuardDecision.DoNothing;
 
             if (input.ActiveMenuKind == HostBlockingMenuKind.DialogueBox)
@@ -179,7 +197,7 @@ namespace Pelican4Ever.Core.Server
                 if (input.IsEventSkippable)
                     return new HostEventGuardDecision(HostEventGuardActionKind.SkipCurrentEvent);
 
-                if (input.StuckTicks >= Math.Max(input.DelayTicks, input.HardEventTimeoutTicks))
+                if (input.StuckTicks >= Math.Max(minDelayTicks, input.HardEventTimeoutTicks))
                     return new HostEventGuardDecision(HostEventGuardActionKind.ForceExitCurrentEvent);
             }
 

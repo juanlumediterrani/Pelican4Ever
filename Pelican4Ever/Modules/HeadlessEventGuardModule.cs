@@ -21,6 +21,9 @@ namespace Pelican4Ever.Modules
         private const int ActionCooldownTicks = 30;
         private const int HardEventTimeoutSeconds = 20;
 
+        private static volatile bool blockingEventSnapshot;
+        private static volatile string? activeMenuNameSnapshot;
+
         private ModContext? context;
         private int stuckTicks;
         private int cooldownTicks;
@@ -29,6 +32,10 @@ namespace Pelican4Ever.Modules
         public string Name => "HeadlessEventGuard";
 
         public ModuleSide Side => ModuleSide.Host;
+
+        /// <summary>Instantánea sin bloqueo de hilo de evento/menú activo para <c>GET /api/v1/host/health</c> (TASK-2701).</summary>
+        public static (bool BlockingEventActive, string? ActiveMenuName) GetBlockingStateSnapshot()
+            => (blockingEventSnapshot, activeMenuNameSnapshot);
 
         public void Register(ModContext ctx)
         {
@@ -43,33 +50,46 @@ namespace Pelican4Ever.Modules
             stuckTicks = 0;
             cooldownTicks = 0;
             episodeLogged = false;
+            blockingEventSnapshot = false;
+            activeMenuNameSnapshot = null;
         }
 
         private void OnUpdateTicked(object? sender, UpdateTickedEventArgs e)
         {
             if (context == null || !Context.IsMainPlayer || !Context.IsWorldReady)
-                return;
-
-            if (string.IsNullOrEmpty(context.Config.AutoHostSaveName) || !context.Config.AutoResolveHostEvents)
             {
-                ResetState();
+                blockingEventSnapshot = false;
+                activeMenuNameSnapshot = null;
                 return;
             }
 
             HostBlockingMenuKind menuKind = ClassifyMenu(Game1.activeClickableMenu);
             bool hasCurrentEvent = Game1.CurrentEvent != null;
             bool isEventUp = Game1.eventUp;
+            blockingEventSnapshot = hasCurrentEvent || isEventUp;
+            activeMenuNameSnapshot = Game1.activeClickableMenu?.GetType().Name;
 
-            if (!HostEventGuardLogic.IsBlockingState(hasCurrentEvent, isEventUp, menuKind))
+            if (string.IsNullOrEmpty(context.Config.AutoHostSaveName) || !context.Config.AutoResolveHostEvents)
             {
-                ResetState();
+                stuckTicks = 0;
+                cooldownTicks = 0;
+                episodeLogged = false;
                 return;
             }
 
+            if (!HostEventGuardLogic.IsBlockingState(hasCurrentEvent, isEventUp, menuKind))
+            {
+                stuckTicks = 0;
+                cooldownTicks = 0;
+                episodeLogged = false;
+                return;
+            }
+
+            bool hasActiveLease = HeadlessRenderModule.Leases.HasActive(DateTime.UtcNow);
             if (DailyRolloverModule.IsBusy
                 || Game1.isFestival()
                 || HostEventRelayModule.IsRelayActive
-                || HeadlessRenderModule.Leases.HasActive(DateTime.UtcNow))
+                || (hasActiveLease && (!context.Config.AgentHost || !(hasCurrentEvent || isEventUp))))
             {
                 stuckTicks = 0;
                 cooldownTicks = 0;
@@ -115,6 +135,8 @@ namespace Pelican4Ever.Modules
                 ResponseKeys = responseKeys,
                 LastQuestionKey = Game1.currentLocation?.lastQuestionKey,
                 IsExternalModDialogueOrLetter = isExternalModDialogueOrLetter,
+                AgentHostEnabled = context.Config.AgentHost,
+                RenderLeaseVanillaEventTimeoutTicks = HardEventTimeoutSeconds * 60,
                 StuckTicks = stuckTicks,
                 DelayTicks = delayTicks,
                 HardEventTimeoutTicks = hardTimeoutTicks

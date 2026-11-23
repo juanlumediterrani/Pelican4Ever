@@ -246,4 +246,63 @@ public class HostEventGuardLogicTests
             StuckTicks = 2000, DelayTicks = 300, HardEventTimeoutTicks = 900
         }).Action);
     }
+
+    [Fact]
+    public void AgentHostRenderLease_ResolvesVanillaCutscenesAfterTimeout_WhilePreservingMenusAndExternalDialogues_TASK2701()
+    {
+        // Menú normal (tienda/cofre) con render_lease activo en AgentHost sigue respetado siempre.
+        Assert.Equal(HostEventGuardActionKind.None, HostEventGuardLogic.Decide(new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            AgentHostEnabled = true, HasActiveRenderLease = true,
+            ActiveMenuKind = HostBlockingMenuKind.LetterViewerMenu,
+            StuckTicks = 5000, DelayTicks = 300, HardEventTimeoutTicks = 900,
+            RenderLeaseVanillaEventTimeoutTicks = 1200
+        }).Action);
+
+        // Diálogo protegido de Corazón Pelican tampoco se cierra aunque haya evento o lease.
+        Assert.Equal(HostEventGuardActionKind.None, HostEventGuardLogic.Decide(new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            AgentHostEnabled = true, HasActiveRenderLease = true,
+            HasCurrentEvent = true, IsEventUp = true, IsEventSkippable = true,
+            ActiveMenuKind = HostBlockingMenuKind.DialogueBox,
+            IsExternalModDialogueOrLetter = true,
+            StuckTicks = 5000, DelayTicks = 300, HardEventTimeoutTicks = 900,
+            RenderLeaseVanillaEventTimeoutTicks = 1200
+        }).Action);
+
+        // Cutscene vanilla matinal bloqueando AgentHost con render_lease: respeta antes de 1200 ticks y resuelve tras el umbral.
+        var vanillaCutsceneBeforeTimeout = new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            AgentHostEnabled = true, HasActiveRenderLease = true,
+            HasCurrentEvent = true, IsEventUp = true, IsEventSkippable = true,
+            ActiveMenuKind = HostBlockingMenuKind.DialogueBox,
+            StuckTicks = 1199, DelayTicks = 300, HardEventTimeoutTicks = 900,
+            RenderLeaseVanillaEventTimeoutTicks = 1200
+        };
+        Assert.Equal(HostEventGuardActionKind.None, HostEventGuardLogic.Decide(vanillaCutsceneBeforeTimeout).Action);
+
+        var vanillaCutsceneAfterTimeout = new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            AgentHostEnabled = true, HasActiveRenderLease = true,
+            HasCurrentEvent = true, IsEventUp = true, IsEventSkippable = true,
+            ActiveMenuKind = HostBlockingMenuKind.DialogueBox,
+            StuckTicks = 1200, DelayTicks = 300, HardEventTimeoutTicks = 900,
+            RenderLeaseVanillaEventTimeoutTicks = 1200
+        };
+        Assert.Equal(HostEventGuardActionKind.SkipCurrentEvent, HostEventGuardLogic.Decide(vanillaCutsceneAfterTimeout).Action);
+
+        var unskippableEventAfterTimeout = new HostEventGuardInput
+        {
+            IsMainPlayer = true, IsWorldReady = true, IsUnattendedHost = true, AutoResolveEnabled = true,
+            AgentHostEnabled = true, HasActiveRenderLease = true,
+            HasCurrentEvent = true, IsEventUp = true, IsEventSkippable = false,
+            StuckTicks = 1200, DelayTicks = 300, HardEventTimeoutTicks = 900,
+            RenderLeaseVanillaEventTimeoutTicks = 1200
+        };
+        Assert.Equal(HostEventGuardActionKind.ForceExitCurrentEvent, HostEventGuardLogic.Decide(unskippableEventAfterTimeout).Action);
+    }
 }

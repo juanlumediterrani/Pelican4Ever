@@ -457,8 +457,11 @@ namespace Pelican4Ever.Modules
 
                 case "GET /api/v1/host/health":
                 {
-                    // Lectura directa de instantánea atómica fuera de MainThreadActionQueue (ADR-0010, TASK-2503).
+                    // Lectura directa de instantánea atómica fuera de MainThreadActionQueue (ADR-0010, TASK-2503, TASK-2701).
                     HostHealthDto dto = context!.HealthTracker.BuildDto();
+                    (bool blockingEvent, string? activeMenu) = HeadlessEventGuardModule.GetBlockingStateSnapshot();
+                    dto.BlockingEventActive = blockingEvent;
+                    dto.ActiveMenuName = activeMenu;
                     WriteJson(res, dto);
                     break;
                 }

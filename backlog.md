@@ -2687,7 +2687,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 
 ### Épica 27: Endurecimiento del Anfitrión Agente (`AgentHost` / `Putre Valley`)
 
-- [ ] **TASK-2701: Política ante eventos y *cutscenes* vanilla bloqueantes durante `render_lease` activo del `AgentHost`**
+- [x] **TASK-2701: Política ante eventos y *cutscenes* vanilla bloqueantes durante `render_lease` activo del `AgentHost`**
   * **Prioridad:** Alta (P1)
   * **Dependencias:** `TASK-2602` (`HeadlessEventGuardModule`), `HeadlessRenderModule`, `CheckpointModule`.
   * **Contexto (incidencia viva `2026-11-23 06:31 CET`):**
@@ -2698,3 +2698,4 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. Una *cutscene* vanilla disparada al cambiar de mapa con `render_lease` activo no deja el bucle de eventos bloqueando checkpoints ni al `AgentHost`.
     2. Cobertura en `Pelican4Ever.Tests` (`HostEventGuardLogicTests`) preservando la protección explícita de tienda, cofre y `CorazonPelican.Prorroga.*` (`TASK-2602`).
+  * **Resolución:** `HostEventGuardInput.AgentHostEnabled` y `RenderLeaseVanillaEventTimeoutTicks` en `HostEventGuardLogic.cs`, seguimiento de ticks bloqueados durante lease solo para eventos vanilla de `AgentHost` + snapshot thread-safe `GetBlockingStateSnapshot()` en `HeadlessEventGuardModule.cs`, exposición de `BlockingEventActive` / `ActiveMenuName` en `HostHealthDto` (`AdminApiModule.cs` `GET /api/v1/host/health`), y cobertura en `HostEventGuardLogicTests.AgentHostRenderLease_ResolvesVanillaCutscenesAfterTimeout_WhilePreservingMenusAndExternalDialogues_TASK2701` (`1848/1848` superados, `0` advertencias).
