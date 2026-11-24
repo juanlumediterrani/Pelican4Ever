@@ -48,8 +48,13 @@ scripts/rd_styles_catalog.json
 scripts/test_walking_animation.py
 scripts/build_putre_*.py
 
-# Agent tooling & local metadata
-.agents/
+# Agent tooling & local metadata (keep project skills & declarative configs)
+.agents/*
+!.agents/skills/
+!.agents/skills/**
+!.agents/skills.json
+!.agents/plugins.json
+!.agents/hooks.json
 
 # Operating system artifacts
 .DS_Store

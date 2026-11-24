@@ -1,6 +1,6 @@
 # `AGENTS.md` — Índice Operativo del Brain (*Pelican 4Ever*)
 
-> **Punto de entrada obligatorio para cualquier agente de IA.**
+> **Punto de entrada obligatorio para cualquier agente de IA** (conforme a `EST-001` v1.2 de Niu D'Ocells).
 > No explores ni cargues `docs/` a ciegas. Lee primero estas reglas de contexto, localiza los archivos obligatorios en la tabla de enrutamiento condicional según la carpeta que vayas a tocar y aplica el protocolo de *write-back* antes de cerrar la tarea.
 
 ---
@@ -21,8 +21,9 @@
    - [`ADR-0008`](docs/adr/0008-skill-economy-rebalance.md) está implementado y verificado técnicamente en vivo, pero sigue `Propuesto` a la espera de calibración humana ([`TASK-2107`](test-users-tasks.md)).
    - [`ADR-0013`](docs/adr/0013-fail-closed-health-and-backup-contract.md) *(renumerado desde `ADR-0010`; código `TASK-2501..2505` aún cita `ADR-0010`)* está parcialmente implementado y pendiente de pruebas vivas (`LIVE-2501..2503`).
    - **`ADR-0011` está reservado** en la rama `feat/v0.6-extended-concurrency` (`0011-extended-concurrency-interest-management.md`); cualquier ADR nuevo en `main`/`dev` debe tomar **`0014+`**.
-5. **Contratos entre repositorios (Nivel 2 · `MCP Pelican`):**
-   - Para consultar contratos o ADRs de los repositorios hermanos acoplados (`Corazón Pelican`, `Stardew Voyager`; `Putre` es legacy y el agente runtime de AWS es `Yuki`), usa el servidor `MCP Pelican` (`/home/mtx/Escritorio/WIP Proyectos/Ecosistema Pelican/MCP Pelican`) en lugar de duplicar copias estáticas entre proyectos.
+5. **Contratos y skills del ecosistema (Nivel 2 · `MCP Pelican`):**
+   - Para consultar contratos o ADRs de los repositorios hermanos acoplados (`Corazón Pelican`, `PelicanChat`, `stardew-voyager`, `Yuki`, `NatureInTheValley`), usa el servidor `MCP Pelican` (`/home/mtx/Escritorio/WIP Proyectos/Ecosistema Pelican/MCP Pelican`) en lugar de duplicar copias estáticas entre proyectos.
+   - Gobernanza corporativa (`DEC-0001` / `DEC-0002`): **ERPNext** (`PROJ-0005`) lleva el seguimiento empresarial y todo paquete de release oficial va a `~/Documentos/Niu D'Ocells/produccio/externa/Pelican4Ever Servidor/mods/` con `SHA256SUMS` (nunca `~/Documentos/Producción/`). Los detalles privados de operación AWS/`Yuki` residen en la skill `pelican-aws-ops` de `MCP Pelican`.
 
 ---
 
@@ -64,7 +65,7 @@ Antes de diseñar o editar archivos en una zona del repositorio, carga **únicam
 | `Pelican4Ever.Core/Admin/*`, `Pelican4Ever.Core/Server/*`, `Pelican4Ever.Core/Config/*`, `Framework/{PatchRegistry,HostHealthTracker,SaveBackupService,SystemdWatchdogService}.cs`, `Modules/{AdminApiModule,AutoHostModule,CheckpointModule,CheckpointSpikeModule,HeadlessRenderModule,HeadlessEventGuardModule,PersistenceModule,StatusCommandModule,HostEventRelayModule}.cs`, `Pelican4Ever/PelicanApi.cs` | [`host-api.md`](docs/host-api.md), [`ADR-0013`](docs/adr/0013-fail-closed-health-and-backup-contract.md) | Rutas REST v1 (`/api/v1/host/*`), arranque *fail-closed* `Lockdown`, `/health` fuera del hilo principal, `sd_notify` y `p4e-backup.json` |
 | `Core/World/{RecipeFallbackLogic,FurnaceUnlockLogic}.cs`, `Modules/{FurnaceUnlockModule,RecipeFallbackModule}.cs` | [`recipe-unlock-parity.md`](docs/backlog/recipe-unlock-parity.md) | Entrega de `mailForTomorrow` en rollover y redes de seguridad de recetas de evento |
 | `Pelican4Ever.Core/{Chat,Festivals,Pets,Localization}/*`, `Pelican4Ever/i18n/*`, `Modules/{ChatChannelModule,Festival*,ClientPetAdoptionModule,NitvProgression}.cs` | [`design.md`](design.md) (§4.3–4.5, `RNF-04`), [`architecture.md`](architecture.md) (§4.4–4.5) | Chat espacial/global, festivales desacoplados, mascotas de cliente, colección individual NITV e `i18n` |
-| `Pelican4Ever/Modules/AgentCosmeticsModule.cs`, `Core/Players/{AgentBodyPreset,AgentToolOffset,FarmerAppearancePreset}.cs`, `Pelican4Ever/assets/skins/*`, `agents/*`, `scripts/dr4co_*` | [`agents/README.md`](agents/README.md), `.agents/skills/pixel-art/SKILL.md` | Hojas 126 cuadros de `Dr4co`/`Putre`, offsets de herramientas y auditoría de pixel art |
+| `Pelican4Ever/Modules/AgentCosmeticsModule.cs`, `Core/Players/{AgentBodyPreset,AgentToolOffset,FarmerAppearancePreset}.cs`, `Pelican4Ever/assets/skins/*`, `agents/*`, `scripts/dr4co_*` | [`agents/README.md`](agents/README.md), `.agents/skills/pixel-art/SKILL.md`, `.agents/skills/pelican4ever-dev/SKILL.md` | Hojas 126 cuadros de `Dr4co`/`Putre`, offsets de herramientas, sprites y laboratorio |
 | `deploy/*`, `docker-compose.yml`, `config.example.json`, `.github/*` | [`host-vps.md`](docs/despliegue/host-vps.md), [`host-local.md`](docs/despliegue/host-local.md), [`cliente.md`](docs/despliegue/cliente.md), [`servidor-preview.md`](docs/servidor-preview.md), [`ADR-0012`](docs/adr/0012-client-version-compatibility-and-branching.md) | Despliegue 24/7 en Linux/VPS, firewall `24642/udp`, CI, cascada `main -> dev` y ramas cortas |
 
 ---
