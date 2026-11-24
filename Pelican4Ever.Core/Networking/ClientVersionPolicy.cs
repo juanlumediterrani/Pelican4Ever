@@ -99,13 +99,12 @@ namespace Pelican4Ever.Core.Networking
         /// <summary>
         /// Versión mínima de <c>Pelican 4Ever</c> exigida al cliente para entrar a este servidor.
         /// <para>
-        /// <b>Cálculo v0.5.4 (base 0.5.3):</b> elevada a <c>0.5.4</c> por el commit <c>c444aa6</c>, que absorbió
-        /// <c>Pelican4Ever.NITVCompat</c> en <c>Data/Locations</c> (<c>FarmTemplateLogic.cs</c> + <c>FarmSlotModule.cs</c>)
-        /// y retiró el content pack hermano de <c>deploy/modpack/</c>. Los commits de <c>dev</c> (<c>fix(android)</c> y
-        /// <c>TASK-2701</c>) eran por sí solos retrocompatibles.
+        /// <b>Cálculo v0.5.5 (base 0.5.4):</b> elevada a <c>0.5.5</c> por los cambios en
+        /// <c>ClientSecurityModule.cs</c> / <c>DeviceEnrollmentLogic.cs</c> (<c>7344f01</c>) y en
+        /// <c>MailOrderLogic.cs</c> / <c>MailOrderModule.cs</c> / <c>MailOrderClintService.cs</c>.
         /// </para>
         /// </summary>
-        public static readonly SemVer MinCompatibleClientVersion = new(0, 5, 4);
+        public static readonly SemVer MinCompatibleClientVersion = new(0, 5, 5);
 
         private static readonly HashSet<string> HostOnlyFiles = new(StringComparer.OrdinalIgnoreCase)
         {
