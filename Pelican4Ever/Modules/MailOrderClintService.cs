@@ -18,6 +18,7 @@ namespace Pelican4Ever.Modules
     {
         private static bool clintUpgradeMailSessionActive;
         private static bool clintGeodeMailSessionActive;
+        private static GeodeMenu? activeGeodeMailMenu;
         private static readonly List<MailOrderItemLine> activeGeodeBuffer = new();
         private static readonly Dictionary<long, DateTimeOffset> lastToolUpgradeClearNoticeUtc = new();
         private static readonly TimeSpan ToolUpgradeClearNoticeCooldown = TimeSpan.FromSeconds(5);
@@ -26,8 +27,16 @@ namespace Pelican4Ever.Modules
         {
             clintUpgradeMailSessionActive = false;
             clintGeodeMailSessionActive = false;
+            activeGeodeMailMenu = null;
             activeGeodeBuffer.Clear();
             lastToolUpgradeClearNoticeUtc.Clear();
+        }
+
+        private static bool IsActiveMailGeodeMenu(GeodeMenu? menu)
+        {
+            return clintGeodeMailSessionActive
+                && menu != null
+                && ReferenceEquals(menu, activeGeodeMailMenu);
         }
 
         private static void ApplyClintPatches(Harmony harmony)
@@ -37,9 +46,17 @@ namespace Pelican4Ever.Modules
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_Tool_ActionWhenPurchased)),
                 postfix: new HarmonyMethod(typeof(MailOrderModule), nameof(Postfix_Tool_ActionWhenPurchased)));
 
+            PatchSafe(harmony, "GeodeMenu.receiveLeftClick",
+                AccessTools.Method(typeof(GeodeMenu), nameof(GeodeMenu.receiveLeftClick), new[] { typeof(int), typeof(int), typeof(bool) }),
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_GeodeMenu_ReceiveLeftClick)));
+
             PatchSafe(harmony, "GeodeMenu.update",
                 AccessTools.Method(typeof(GeodeMenu), nameof(GeodeMenu.update), new[] { typeof(GameTime) }),
                 prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_GeodeMenu_Update)));
+
+            PatchSafe(harmony, "GeodeMenu.emergencyShutDown",
+                AccessTools.Method(typeof(GeodeMenu), nameof(GeodeMenu.emergencyShutDown), Type.EmptyTypes),
+                prefix: new HarmonyMethod(typeof(MailOrderModule), nameof(Prefix_GeodeMenu_EmergencyShutDown)));
         }
 
         private static void ShowClintMailMenu()
@@ -70,9 +87,11 @@ namespace Pelican4Ever.Modules
                     }
                     else if (answer == "Geodes")
                     {
-                        activeGeodeBuffer.Clear();
+                        FlushGeodeBuffer();
+                        var geodeMenu = new GeodeMenu();
+                        activeGeodeMailMenu = geodeMenu;
                         clintGeodeMailSessionActive = true;
-                        Game1.activeClickableMenu = new GeodeMenu();
+                        Game1.activeClickableMenu = geodeMenu;
                     }
                 }
             );
@@ -199,43 +218,130 @@ namespace Pelican4Ever.Modules
             );
         }
 
+        public static bool Prefix_GeodeMenu_ReceiveLeftClick(GeodeMenu __instance, int x, int y)
+        {
+            if (!IsActiveMailGeodeMenu(__instance) || __instance.waitingForServerResponse)
+                return true;
+
+            if (!__instance.geodeSpot.containsPoint(x, y))
+                return true;
+
+            Item? held = __instance.heldItem;
+            if (held == null || !Utility.IsGeode(held) || Game1.player.Money < 25 || __instance.geodeAnimationTimer > 0)
+                return true;
+
+            int freeSpots = Game1.player.freeSpotsInInventory();
+            if (!GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: true, freeSpots, held.Stack))
+                return true;
+
+            // El tesoro va al paquete del día siguiente, así que omitimos la guarda vanilla de inventario lleno.
+            if (held.QualifiedItemId == "(O)791" && !Game1.netWorldState.Value.GoldenCoconutCracked)
+            {
+                __instance.waitingForServerResponse = true;
+                Game1.player.team.goldenCoconutMutex.RequestLock(
+                    () =>
+                    {
+                        __instance.waitingForServerResponse = false;
+                        __instance.geodeTreasureOverride = ItemRegistry.Create("(O)73");
+                        __instance.startGeodeCrack();
+                    },
+                    () =>
+                    {
+                        __instance.waitingForServerResponse = false;
+                        __instance.startGeodeCrack();
+                    });
+            }
+            else
+            {
+                __instance.startGeodeCrack();
+            }
+
+            return false;
+        }
+
         public static void Prefix_GeodeMenu_Update(GeodeMenu __instance, GameTime time)
         {
-            if (clintGeodeMailSessionActive && Game1.activeClickableMenu is not GeodeMenu)
+            if (!IsActiveMailGeodeMenu(__instance))
             {
-                FlushGeodeBuffer();
+                if (GeodeMailSessionLogic.ShouldEndGeodeMailSession(
+                        clintGeodeMailSessionActive,
+                        IsActiveMailGeodeMenu(Game1.activeClickableMenu as GeodeMenu)))
+                {
+                    FlushGeodeBuffer();
+                }
                 return;
             }
 
-            if (!clintGeodeMailSessionActive || __instance.geodeAnimationTimer <= 0)
+            if (__instance.geodeAnimationTimer <= 0)
                 return;
 
             if (__instance.geodeAnimationTimer - time.ElapsedGameTime.Milliseconds <= 0 && __instance.geodeTreasure != null)
             {
-                Item treasure = __instance.geodeTreasure;
-                if (treasure.QualifiedItemId == "(O)73")
-                    Game1.netWorldState.Value.GoldenCoconutCracked = true;
-
-                activeGeodeBuffer.Add(new MailOrderItemLine
-                {
-                    QualifiedItemId = treasure.QualifiedItemId,
-                    DisplayName = treasure.DisplayName,
-                    Stack = treasure.Stack,
-                    Quality = treasure.Quality,
-                    PricePaid = 25
-                });
-
-                Game1.addHUDMessage(new HUDMessage(
-                    I18n.Get("mailbox.orders.item_queued", new { item = treasure.DisplayName, count = treasure.Stack }),
-                    HUDMessage.newQuest_type));
-
-                __instance.geodeTreasure = null;
+                CaptureAndEnqueueGeodeTreasure(__instance);
             }
+        }
+
+        public static void Prefix_GeodeMenu_EmergencyShutDown(GeodeMenu __instance)
+        {
+            if (!IsActiveMailGeodeMenu(__instance))
+                return;
+
+            if (__instance.geodeTreasure != null)
+            {
+                CaptureAndEnqueueGeodeTreasure(__instance);
+            }
+            else if (__instance.geodeSpot?.item != null)
+            {
+                // Si el menú se cierra a la fuerza antes de generar el tesoro (p. ej. rollover de las 02:00), devolver la geoda en curso.
+                Item inFlight = __instance.geodeSpot.item;
+                __instance.geodeSpot.item = null;
+                __instance.geodeAnimationTimer = 0;
+                if (!Game1.player.addItemToInventoryBool(inFlight))
+                    Game1.createItemDebris(inFlight, Game1.player.getStandingPosition(), Game1.player.FacingDirection, Game1.currentLocation);
+            }
+
+            FlushGeodeBuffer();
+        }
+
+        private static void CaptureAndEnqueueGeodeTreasure(GeodeMenu menu)
+        {
+            Item? treasure = menu.geodeTreasure;
+            if (treasure == null)
+                return;
+
+            if (treasure.QualifiedItemId == "(O)73")
+                Game1.netWorldState.Value.GoldenCoconutCracked = true;
+
+            var line = new MailOrderItemLine
+            {
+                QualifiedItemId = treasure.QualifiedItemId,
+                DisplayName = treasure.DisplayName,
+                Stack = treasure.Stack,
+                Quality = treasure.Quality,
+                PricePaid = 25
+            };
+
+            // Enviar de inmediato al Host para que no se pierda ninguna geoda procesada si hay desconexión o rollover.
+            if (context != null)
+            {
+                SubmitGeodeOrderLines(new List<MailOrderItemLine> { line });
+            }
+            else
+            {
+                activeGeodeBuffer.Add(line);
+            }
+
+            Game1.addHUDMessage(new HUDMessage(
+                I18n.Get("mailbox.orders.item_queued", new { item = treasure.DisplayName, count = treasure.Stack }),
+                HUDMessage.newQuest_type));
+
+            menu.geodeTreasure = null;
         }
 
         private static void FlushGeodeBuffer()
         {
             clintGeodeMailSessionActive = false;
+            activeGeodeMailMenu = null;
             if (activeGeodeBuffer.Count == 0 || context == null)
             {
                 activeGeodeBuffer.Clear();
@@ -244,6 +350,13 @@ namespace Pelican4Ever.Modules
 
             List<MailOrderItemLine> lines = activeGeodeBuffer.ToList();
             activeGeodeBuffer.Clear();
+            SubmitGeodeOrderLines(lines);
+        }
+
+        private static void SubmitGeodeOrderLines(List<MailOrderItemLine> lines)
+        {
+            if (context == null || lines.Count == 0)
+                return;
 
             if (Context.IsMainPlayer)
             {

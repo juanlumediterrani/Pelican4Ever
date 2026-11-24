@@ -159,6 +159,13 @@ namespace Pelican4Ever.Modules
                 FlushActiveShopBuffer();
             }
 
+            if (GeodeMailSessionLogic.ShouldEndGeodeMailSession(
+                    clintGeodeMailSessionActive,
+                    IsActiveMailGeodeMenu(Game1.activeClickableMenu as GeodeMenu)))
+            {
+                FlushGeodeBuffer();
+            }
+
             if (Context.IsMainPlayer)
             {
                 TryDeliverDueOrders();
@@ -176,6 +183,13 @@ namespace Pelican4Ever.Modules
             if (activeShopOrderId != null && e.NewMenu is not ShopMenu)
             {
                 FlushActiveShopBuffer();
+            }
+
+            if (GeodeMailSessionLogic.ShouldEndGeodeMailSession(
+                    clintGeodeMailSessionActive,
+                    IsActiveMailGeodeMenu(e.NewMenu as GeodeMenu)))
+            {
+                FlushGeodeBuffer();
             }
 
             if (clintUpgradeMailSessionActive

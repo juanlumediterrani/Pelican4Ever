@@ -313,5 +313,26 @@ namespace Pelican4Ever.Tests
             Assert.Equal(0, RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(buildDays: 3, deliveryGameDay: 11, newGameDay: 14));
             Assert.Equal(0, RolloverOrderReconciliationLogic.ComputeRemainingBuildDaysAfterMissedDelivery(buildDays: 3, deliveryGameDay: 11, newGameDay: 20));
         }
+
+        [Fact]
+        public void GeodeMailSessionLogic_BypassesFullInventoryAndEndsSessionWhenMenuChanges()
+        {
+            // Sesión de correo: inventario lleno (0 huecos, o 1 hueco con stack > 1) debe saltarse la guarda vanilla
+            Assert.True(GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: true, freeInventorySpots: 0, heldStack: 1));
+            Assert.True(GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: true, freeInventorySpots: 1, heldStack: 5));
+
+            // Si vanilla ya lo permite (1 hueco con stack 1, o >= 2 huecos), no hace falta bypass
+            Assert.False(GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: true, freeInventorySpots: 1, heldStack: 1));
+            Assert.False(GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: true, freeInventorySpots: 2, heldStack: 10));
+
+            // Fuera de sesión de correo nunca se salta la guarda vanilla
+            Assert.False(GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: false, freeInventorySpots: 0, heldStack: 1));
+            Assert.False(GeodeMailSessionLogic.ShouldBypassVanillaInventorySpaceCheck(isMailGeodeSession: false, freeInventorySpots: 1, heldStack: 5));
+
+            // Cierre de sesión: termina cuando la instancia activa deja de coincidir
+            Assert.False(GeodeMailSessionLogic.ShouldEndGeodeMailSession(sessionActive: false, isSameActiveMenuInstance: false));
+            Assert.False(GeodeMailSessionLogic.ShouldEndGeodeMailSession(sessionActive: true, isSameActiveMenuInstance: true));
+            Assert.True(GeodeMailSessionLogic.ShouldEndGeodeMailSession(sessionActive: true, isSameActiveMenuInstance: false));
+        }
     }
 }

@@ -126,6 +126,34 @@ namespace Pelican4Ever.Core.Economy
         }
     }
 
+    public static class GeodeMailSessionLogic
+    {
+        /// <summary>
+        /// En el procesador de geodas por correo los objetos no entran al inventario local sino al paquete del día siguiente;
+        /// por ello, si la mochila no cumple la guarda vanilla de espacio libre, la sesión de correo debe saltarla.
+        /// </summary>
+        public static bool ShouldBypassVanillaInventorySpaceCheck(
+            bool isMailGeodeSession,
+            int freeInventorySpots,
+            int heldStack)
+        {
+            if (!isMailGeodeSession)
+                return false;
+
+            bool vanillaAllows = freeInventorySpots > 1 || (freeInventorySpots == 1 && heldStack == 1);
+            return !vanillaAllows;
+        }
+
+        /// <summary>
+        /// Determina si la sesión de procesado de geodas por correo ha terminado porque el menú activo ya no es
+        /// la instancia abierta desde el buzón.
+        /// </summary>
+        public static bool ShouldEndGeodeMailSession(bool sessionActive, bool isSameActiveMenuInstance)
+        {
+            return sessionActive && !isSameActiveMenuInstance;
+        }
+    }
+
     public static class MailOrderScheduleLogic
     {
         public const int DefaultDeliveryTimeOfDay = 1200;
