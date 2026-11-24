@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado (sustituye el punto 3 de [ADR-0004](0004-host-authority-client-mod-and-satiety.md))
 * **Fecha:** 2026-11-06
+* **Ámbito:** `Pelican4Ever.Core/Economy/{SatietyBudget,SittingRegenLogic,PassiveRegenLogic}.cs`, `Core/Players/{OfflineStaminaRegenLogic,GroundSitLogic,PersistedFoodBuff}.cs`, `Modules/{EconomyModule,GroundSitModule}.cs`
 
 ## Contexto
 

@@ -22,7 +22,6 @@ guías vivas.
 | `arquitectura-produccion-hermes.md` | Propuesta **no implementada** (contenedores) | [host-vps.md](../despliegue/host-vps.md) |
 | `deployment-lines.md` / `development-line.md` | Rutas y ramas de una máquina concreta | [host-vps.md](../despliegue/host-vps.md) |
 | `checkpoint-validation-2026-11-06.md` / `market-validation-2026-11-06.md` / `spike-checkpoints.md` | Informes con SHAs y resultados fechados | [host-vps.md](../despliegue/host-vps.md) § Copias de seguridad |
-| `pruebas-residencias.md` | Comandos de prueba de una fase concreta | [host-api.md](../host-api.md), backlog |
 | `save-migration-guide.md` | Migración de partidas de un solo uso | `scripts/migrate_save_to_plaza.py` |
 | `reconnection-smapi-4.5.2.md` | Post-mortem de un fallo puntual de SMAPI | `ClientVersionGuardModule` |
 | `pixel_art_pipeline.md` | Duplicaba la habilidad de pixel art | `.agents/skills/pixel-art/`, [agents/README.md](../../agents/README.md) |

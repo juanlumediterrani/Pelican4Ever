@@ -8,14 +8,16 @@ ADR 是一项**决策**及其理由：当背景变化时不会重写，而是由
 | [0001](0001-native-daily-rollover.md) · [EN](0001-native-daily-rollover.en.md) · [中文](0001-native-daily-rollover.zh-CN.md) | 原生换日，时间为 **02:00**，黎明为 **06:00** | 已接受 | 2026-11-02 |
 | [0002](0002-realtime-clock-and-epoch-calendar.md) · [EN](0002-realtime-clock-and-epoch-calendar.en.md) · [中文](0002-realtime-clock-and-epoch-calendar.zh-CN.md) | 1:1 时钟（`0600–2550`），带 `NightHold` 与由 `CalendarEpoch` 推导的日历 | 已接受 | 2026-10-29 |
 | [0003](0003-declarative-farm-slots.md) · [EN](0003-declarative-farm-slots.en.md) · [中文](0003-declarative-farm-slots.zh-CN.md) | `Data/Locations` 中声明式的农场槽位（标准模板） | 已接受（由 0005 扩展） | 2026-10-29 |
-| [0004](0004-host-authority-client-mod-and-satiety.md) · [EN](0004-host-authority-client-mod-and-satiety.en.md) · [中文](0004-host-authority-client-mod-and-satiety.zh-CN.md) | 权限归于主机，客户端强制安装模组，模块为 `IModule` | 已接受；第 3 点（每日饱腹值预算）由 0006 取代 | 2026-10-29 |
+| [0004](0004-host-authority-client-mod-and-satiety.md) · [EN](0004-host-authority-client-mod-and-satiety.en.md) · [中文](0004-host-authority-client-mod-and-satiety.zh-CN.md) | 权限归于主机，客户端强制安装模组，模块为 `IModule` | 已接受；第 1 点由 0012 扩展，第 3 点由 0006 取代 | 2026-10-29 |
 | [0005](0005-host-plaza-and-bridge-maps.md) · [EN](0005-host-plaza-and-bridge-maps.en.md) · [中文](0005-host-plaza-and-bridge-maps.zh-CN.md) | 主机农场上的中央广场与声明式的桥接地图 | 已接受 | 2026-11-03 |
 | [0006](0006-session-energy-satiety-wellfed-spa.md) · [EN](0006-session-energy-satiety-wellfed-spa.en.md) · [中文](0006-session-energy-satiety-wellfed-spa.zh-CN.md) | 按会话计算精力：持续消耗的饱腹值、坐着时的「吃饱」和温泉增益 | 已接受（取代 0004 的第 3 点） | 2026-11-06 |
 | [0007](0007-dispositivo-identidad-y-acceso-seguro.md) · [EN](0007-dispositivo-identidad-y-acceso-seguro.en.md) · [中文](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md) | 按设备的非对称身份（ECDSA P-256）与 Lidgren 上的 `P4E\x02` 质询 | 已接受 | 2026-11-11 |
 | [0008](0008-skill-economy-rebalance.md) · [EN](0008-skill-economy-rebalance.en.md) · [中文](0008-skill-economy-rebalance.zh-CN.md) | 面向 1:1 的再平衡：每日经验曲线、更慢的钓鱼、更少的梯子以及骷髅洞穴的能量消耗 | 提议中 | 2026-11-14 |
 | [0009](0009-annex-vanilla-composition.md) | 使用「桥接地图」流程生成附属区域（`MapStudio` + 规范裁剪 + 已验证分类器） | 已接受 | 2026-11-08 |
-| [0010](0010-fail-closed-health-and-backup-contract.md) · [EN](0010-fail-closed-health-and-backup-contract.en.md) · [中文](0010-fail-closed-health-and-backup-contract.zh-CN.md) | 快速失败启动、主机健康检查（`/health` + 看门狗）与 Putre 备份契约 | 提议中 | 2026-11-16 |
-| [0010 (v0.5)](0010-scalable-residences-admission-queue.md) | 可扩展住宅（16/32/64），16 人同时在线，准入队列、挂机踢出以及 `Town` 东侧入口 | 提议中 | 2026-11-15 |
+| [0010](0010-scalable-residences-admission-queue.md) | 可扩展住宅（16/32/64），16 人同时在线，准入队列、挂机踢出以及 `Town` 东侧入口 | 已接受（`64` 实验性） | 2026-11-15 |
+| `0011` *（已预留）* | 扩展并发 v0.6（位于 `feat/v0.6-extended-concurrency` 分支的 `0011-extended-concurrency-interest-management.md`） | 提议中（另一分支） | 2026-11-15 |
+| [0012](0012-client-version-compatibility-and-branching.md) | 单一模组配合解耦的 `MinCompatibleClientVersion` 下限、确定性升级规则与基于 `main` 的短分支流程 | 已接受（扩展 0004 第 1 点） | 2026-11-23 |
+| [0013](0013-fail-closed-health-and-backup-contract.md) · [EN](0013-fail-closed-health-and-backup-contract.en.md) · [中文](0013-fail-closed-health-and-backup-contract.zh-CN.md) | 快速失败启动、主机健康检查（`/health` + 看门狗）与 Putre 备份契约*（原 ADR-0010）* | 提议中 | 2026-11-16 |
 
 ## 如何阅读
 

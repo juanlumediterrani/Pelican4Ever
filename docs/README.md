@@ -1,8 +1,9 @@
 # Documentación de Pelican 4Ever
 
+> **Para agentes de IA:** NO cargues `docs/` a ciegas. Entra siempre por [`AGENTS.md`](../AGENTS.md) en la raíz: define el enrutamiento condicional código → ADR, prohíbe leer `docs/archive/`, `docs/verifications/` y traducciones `*.en.md` / `*.zh-CN.md`, y fija el protocolo de *write-back*.
+
 Índice de la documentación viva del proyecto. Lo que no aparece aquí (o está en
-[`archive/`](archive/)) es histórico: informes de una fecha concreta, planes de una épica cerrada
-o procedimientos que ya han sido sustituidos por estas guías.
+[`archive/`](archive/) / [`verifications/`](verifications/)) es histórico o evidencia fechada: informes de una fecha concreta, planes de una épica cerrada o procedimientos que ya han sido sustituidos por estas guías.
 
 ## Guías de despliegue
 
@@ -24,10 +25,15 @@ simplificado** (`*.zh-CN.md`).
 
 | Documento | Idiomas | Contenido |
 | --- | --- | --- |
+| Índice operativo del Brain | [ES](../AGENTS.md) | Punto de entrada para agentes de IA: enrutamiento condicional, rutas prohibidas y *write-back* |
 | API de anfitrión | [ES](host-api.md) · [EN](host-api.en.md) · [中文](host-api.zh-CN.md) | API REST de anfitrión v1: rutas, autenticación, comandos remotos permitidos y sucesos |
-| ADR | [índice](adr/) · [EN](adr/README.en.md) · [中文](adr/README.zh-CN.md) | Registros de decisiones de arquitectura, cada uno en los tres idiomas |
+| ADR | [índice](adr/) · [EN](adr/README.en.md) · [中文](adr/README.zh-CN.md) | Registros de decisiones de arquitectura (fuente única en español) |
 | Arquitectura | [ES](../architecture.md) · [EN](../architecture.en.md) · [中文](../architecture.zh-CN.md) | Arquitectura técnica del sistema |
 | Especificación del sistema (GSS) / Diseño | [ES](../design.md) · [EN](../design.en.md) · [中文](../design.zh-CN.md) | Especificación general del sistema (`RF`/`RNF`), subsistemas y reglas del mundo |
+| Recortes canónicos de anexos | [ES](anexos-ventanas-recorte.md) | Tabla oficial 40×32 de los 8 tipos × 3 orientaciones (`North`/`East`/`South`) (**solo en español**) |
+| Minas, Caverna y Volcán | [ES](minas-progreso-y-validacion.md) | Reglas multijugador del ascensor, cofres personales y reinicio cada 12 h (**solo en español**) |
+| Pruebas de residencias y anexos | [ES](pruebas-residencias.md) | Comandos `p4e_farm_*` y guía de validación en vivo (**solo en español**) |
+| Paridad de desbloqueo de recetas | [ES](backlog/recipe-unlock-parity.md) | Matriz de eventos, correo y fallbacks de recetas en multijugador (**solo en español**) |
 | Backlog técnico | [ES](../backlog.md) | Hoja de ruta de desarrollo: épicas, tareas y su resolución (**solo en español**) |
 | Pruebas vivas (agentes) | [ES](../live-agent-tests-backlog.md) | Batería de pruebas vivas y carga reproducibles por agentes autónomos (**solo en español**) |
 | Pruebas con jugadores | [ES](../test-users-tasks.md) | Calibración y verificaciones visuales o interactivas con jugadores humanos (**solo en español**) |
@@ -50,20 +56,22 @@ git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
 ## Reglas de la casa
 
 - El juego es **Stardew Valley 1.6.15** con **SMAPI 4.1+**.
-- El mod se llama **Pelican 4Ever** (`Pelican4Ever.SVRTMP`), versión actual **0.4.9**.
+- El mod se llama **Pelican 4Ever** (`Pelican4Ever.SVRTMP`); la versión vigente se declara en [`Pelican4Ever/manifest.json`](../Pelican4Ever/manifest.json) y la compatibilidad mínima de cliente en [ADR-0012](adr/0012-client-version-compatibility-and-branching.md).
 - El servidor expone **un solo puerto público**: UDP `24642`. La API de anfitrión (`8085`) se
   queda en loopback.
 - `config.json` se **valida al arrancar**: si algo no cuadra, el mod no se registra (sin modo
-  degradado para configuración; para parches Harmony de `Experience`, ver [ADR-0010](adr/0010-fail-closed-health-and-backup-contract.md) propuesto).
+  degradado para configuración; para parches Harmony de `Experience`, ver [ADR-0013](adr/0013-fail-closed-health-and-backup-contract.md) propuesto).
 - El anfitrión es siempre un jugador local: **no existe modo servidor dedicado nativo**. La
   opción `DedicatedServerMode` no se usa en el código actual.
 - Las versiones del modpack que exige el servidor son **exactas** (no *major.minor*). La del
-  propio mod se compara por *major.minor*.
+  propio mod se compara por *major.minor* junto con `MinCompatibleClientVersion` ([ADR-0012](adr/0012-client-version-compatibility-and-branching.md)).
 - La identidad de cada jugador es su **clave de dispositivo** (ECDSA P-256), no su IP: cambiar de
   IP no obliga a volver a emparejarse.
 
-## Historial
+## Historial y verificaciones
 
 Los documentos archivados están en [`archive/`](archive/) con una nota al principio de cada uno
 explicando su estado. No los borres sin revisar: algunos contienen el detalle técnico (formatos de
 datos, inventarios de bugs) que todavía no se ha trasplantado a las guías vivas.
+
+Los protocolos e informes puntuales de verificación en vivo se guardan en [`verifications/`](verifications/). Ni `archive/` ni `verifications/` deben cargarse como verdad normativa por agentes (ver [`AGENTS.md`](../AGENTS.md)).

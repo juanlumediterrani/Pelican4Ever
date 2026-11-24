@@ -24,7 +24,7 @@
 * 未安装 SMAPI 或未匹配所需模组包（`RequiredClientMods`）的原版客户端。
 * 超出模组包校验、设备签名与主机权威不变量之外的、针对篡改本地 DLL 客户端的密码学反作弊。
 * 在客户端配置文件中保存服务器密钥、Discord 令牌或主机 API 令牌。
-* 不停止游戏进程的热恢复存档（恢复操作始终在停机状态下由 `Putre` / `saves.restore` 执行，见 [ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.zh-CN.md)）。
+* 不停止游戏进程的热恢复存档（恢复操作始终在停机状态下由 `Putre` / `saves.restore` 执行，见 [ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.zh-CN.md)）。
 * 在完成并接纳智能体压测（`LIVE-2503` / `PUTRE-401`）之前，在生产环境正式承诺支持 `FarmSlotCount > 8`。
 
 ### 1.3 定义与术语表
@@ -40,7 +40,7 @@
 | **居所附属区（Annex）** | 可购买的 `40×32` 格单入口主题扩展地图，采用原版图块拼装（[ADR-0009](docs/adr/0009-annex-vanilla-composition.md)），每块地块上限为 `MaxAnnexesPerResidence = 2`。 |
 | **同居机制（`Owner` / `Tenant`）** | 1 名房主（`OwnerId`）与最多 1 名租客（`TenantId`）在同一居所共享建筑与动物管理，同时钱包、邮件、包裹、经验与矿井进度保持各自独立。 |
 | **信箱延期订单** | 通过门外或室内信箱全天候向城镇商店下单、即时扣款，并在目标日真实时间 `12:00` 以购买者专属包裹、脚手架或动物形式交付。 |
-| **`Lockdown` 模式（Fail-Closed）** | 提议中的保护状态（[ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.zh-CN.md)）：若任一 `Security`/`Integrity` 补丁失败或游戏版本未经验证，`ModEntry` 直接阻止加载存档并拒绝联机。 |
+| **`Lockdown` 模式（Fail-Closed）** | 提议中的保护状态（[ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.zh-CN.md)）：若任一 `Security`/`Integrity` 补丁失败或游戏版本未经验证，`ModEntry` 直接阻止加载存档并拒绝联机。 |
 
 ---
 
@@ -122,7 +122,7 @@
 
 * **ECDSA P-256 身份（[ADR-0007](docs/adr/0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md)）：** 脱离 IP 绑定的 Lidgren `P4E\x02` 握手、限时配对邀请（`PairingInviteTtlHours = 72`）及 `RequiredClientMods` 强校验。
 * **2 名额试用准入协议（`ProbationTelemetryModule`）：** **Putre** 在 `#pelican-gate` 发放临时工单（`MaxConcurrentPutreSlots = 2`），追踪分阶段行为遥测并可拉入 Putre 不可撤回的黑名单（仅服主可解除）。
-* **主机 API 与韧性契约（[ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.zh-CN.md)）：** 运行于回环地址的 REST API（`/api/v1/host/*`）在主线程执行，并在史诗 25 中扩展脱离主线程的 `/api/v1/host/health`、*fail-closed* 启动阻断、`sd_notify` 看门狗，以及供 Putre 同步 S3 和执行 `saves.restore` 的 `p4e-backup.json` 清单。
+* **主机 API 与韧性契约（[ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.zh-CN.md)）：** 运行于回环地址的 REST API（`/api/v1/host/*`）在主线程执行，并在史诗 25 中扩展脱离主线程的 `/api/v1/host/health`、*fail-closed* 启动阻断、`sd_notify` 看门狗，以及供 Putre 同步 S3 和执行 `saves.restore` 的 `p4e-backup.json` 清单。
 
 ---
 
@@ -197,8 +197,8 @@
 | `RF-38` | 在初始握手阶段校验模组版本与精确的 `RequiredClientMods` 列表（`ClientVersionGuardModule`）。 | 高 |
 | `RF-39` | 运行 Putre 的 2 名额试用准入协议（`MaxConcurrentPutreSlots = 2`）、行为遥测（`ProbationTelemetryModule`）与 Putre 不可撤回黑名单。 | 高 |
 | `RF-40` | 暴露主机 REST API（`/api/v1/host/*` 与 `HostEventLog`），包含白名单远程命令与安全重启（`p4e_safe_restart`）。 | 高 |
-| `RF-41` | （*提议 ADR-0010 / 史诗 25*）在 `PatchRegistry` 中按 `Security`、`Integrity`、`Experience` 注册全部 Harmony 补丁，并在关键补丁失败或版本不在 `VerifiedGameVersions` 时进入 *fail-closed* `Lockdown`。 | 高 |
-| `RF-42` | （*提议 ADR-0010 / 史诗 25*）提供脱离游戏主线程的 `GET /api/v1/host/health`，通过 `sd_notify` 发送 `WATCHDOG=1` 心跳，并在每次备份生成 `p4e-backup.json` 清单。 | 高 |
+| `RF-41` | （*提议 ADR-0013 / 史诗 25*）在 `PatchRegistry` 中按 `Security`、`Integrity`、`Experience` 注册全部 Harmony 补丁，并在关键补丁失败或版本不在 `VerifiedGameVersions` 时进入 *fail-closed* `Lockdown`。 | 高 |
+| `RF-42` | （*提议 ADR-0013 / 史诗 25*）提供脱离游戏主线程的 `GET /api/v1/host/health`，通过 `sd_notify` 发送 `WATCHDOG=1` 心跳，并在每次备份生成 `p4e-backup.json` 清单。 | 高 |
 
 ---
 
@@ -214,10 +214,10 @@
 | `RNF-06` | **最小网络暴露面与客户端零密钥** | 仅公开 `24642/udp`；REST API（默认 `AdminApiPort = 8085`，回环绑定）默认不对外暴露，且客户端不保存任何服务器或 Discord 令牌。 |
 | `RNF-07` | **日切与检查点完整性** | 每次每日备份与检查点均对文件逐个校验 SHA-256；`RolloverDayGuard` 防止重复处罚，且若备份或有序断连失败则绝不推进日期。 |
 | `RNF-08` | **无头运行与算力预算** | 专用主机支持抑制绘制的 headless 运行（`HeadlessRenderModule` + `Xvfb`），目标虚拟机规格为 `2 vCPU`、`LP_NUM_THREADS=1`、`Nice=5`、`MemoryMax=4G`。 |
-| `RNF-09` | **Fail-Closed 启动（提议 ADR-0010）** | 任一 `Security`/`Integrity` 补丁失败，或版本不在 `VerifiedGameVersions`（`["1.6.15"]`）与 `MinimumSmapiVersion`（`4.1.0`）内，均在无需依赖 Harmony 补丁的情况下阻止加载 `AutoHostSaveName` 与联机接入，仅允许 `LockdownOverride` 按补丁名显式豁免。 |
-| `RNF-10` | **无锁可观测健康接口（提议 ADR-0010）** | `GET /api/v1/host/health` 直接从 HTTP 线程响应（`< 50 ms`）且绕过 `MainThreadActionQueue`，输出 `Status`、`SecondsSinceLastTick`、`SaveLoaded`、`Lockdown.Reasons[]` 与 `Patches.Failed[]`。 |
-| `RNF-11` | **看门狗卡死检测（提议 ADR-0010）** | 存在 `NOTIFY_SOCKET` 时每 `15 s` 发送 `WATCHDOG=1`，仅当 `SecondsSinceLastTick <= HangThresholdSeconds`（`120 s`）；`systemd` 声明 `WatchdogSec=180` 与 `NotifyAccess=all`。 |
-| `RNF-12` | **Putre 负向监控告警（提议 ADR-0010）** | `Putre` 每 `60 s` 轮询 `/api/v1/host/health`，在 `Ok` 状态下保持静默，仅在转入 `Lockdown`、`Degraded`、卡死、崩溃或备份失败及恢复时触发 `owner.alert`。 |
-| `RNF-13` | **备份清单与 S3 保留契约（提议 ADR-0010）** | 每份备份均包含 `p4e-backup.json`（`FormatVersion = 1`），默认本地保留 `BackupRetentionDays = 14` 与 `CheckpointRetention = 12`；Putre 在每次 `backup.created` 后执行无 `--delete` 的 `aws s3 sync`，过期策略交由 IaC 管理。 |
-| `RNF-14` | **停机校验恢复（提议 ADR-0010）** | `saves.restore`（Putre 2 级）先停服，校验 `p4e-backup.json` 与 SHA-256，将原存档移至 `Pelican4Ever_Backups/pre-restore/<UTC>/`（永不删除），复制目标备份，启动后要求 `health.Status == "Ok"`、`SaveLoaded == true` 且 `TotalGameDays` 一致。 |
-| `RNF-15` | **规模实测验证门禁（提议 ADR-0010）** | 在基于 8、12、16 个模拟客户端测得存档体积、`SaveGame.Save()` 耗时、`LastCheckpointLongestTickMs`、带宽及 NITV 生物密度（`LIVE-2503` / `PUTRE-401`）之前，不在生产环境宣称支持 `FarmSlotCount > 8`。 |
+| `RNF-09` | **Fail-Closed 启动（提议 ADR-0013）** | 任一 `Security`/`Integrity` 补丁失败，或版本不在 `VerifiedGameVersions`（`["1.6.15"]`）与 `MinimumSmapiVersion`（`4.1.0`）内，均在无需依赖 Harmony 补丁的情况下阻止加载 `AutoHostSaveName` 与联机接入，仅允许 `LockdownOverride` 按补丁名显式豁免。 |
+| `RNF-10` | **无锁可观测健康接口（提议 ADR-0013）** | `GET /api/v1/host/health` 直接从 HTTP 线程响应（`< 50 ms`）且绕过 `MainThreadActionQueue`，输出 `Status`、`SecondsSinceLastTick`、`SaveLoaded`、`Lockdown.Reasons[]` 与 `Patches.Failed[]`。 |
+| `RNF-11` | **看门狗卡死检测（提议 ADR-0013）** | 存在 `NOTIFY_SOCKET` 时每 `15 s` 发送 `WATCHDOG=1`，仅当 `SecondsSinceLastTick <= HangThresholdSeconds`（`120 s`）；`systemd` 声明 `WatchdogSec=180` 与 `NotifyAccess=all`。 |
+| `RNF-12` | **Putre 负向监控告警（提议 ADR-0013）** | `Putre` 每 `60 s` 轮询 `/api/v1/host/health`，在 `Ok` 状态下保持静默，仅在转入 `Lockdown`、`Degraded`、卡死、崩溃或备份失败及恢复时触发 `owner.alert`。 |
+| `RNF-13` | **备份清单与 S3 保留契约（提议 ADR-0013）** | 每份备份均包含 `p4e-backup.json`（`FormatVersion = 1`），默认本地保留 `BackupRetentionDays = 14` 与 `CheckpointRetention = 12`；Putre 在每次 `backup.created` 后执行无 `--delete` 的 `aws s3 sync`，过期策略交由 IaC 管理。 |
+| `RNF-14` | **停机校验恢复（提议 ADR-0013）** | `saves.restore`（Putre 2 级）先停服，校验 `p4e-backup.json` 与 SHA-256，将原存档移至 `Pelican4Ever_Backups/pre-restore/<UTC>/`（永不删除），复制目标备份，启动后要求 `health.Status == "Ok"`、`SaveLoaded == true` 且 `TotalGameDays` 一致。 |
+| `RNF-15` | **规模实测验证门禁（提议 ADR-0013）** | 在基于 8、12、16 个模拟客户端测得存档体积、`SaveGame.Save()` 耗时、`LastCheckpointLongestTickMs`、带宽及 NITV 生物密度（`LIVE-2503` / `PUTRE-401`）之前，不在生产环境宣称支持 `FarmSlotCount > 8`。 |

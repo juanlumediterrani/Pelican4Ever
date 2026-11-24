@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado. El punto 1 (compatibilidad de versión cliente/host) está ampliado por [ADR-0012](0012-client-version-compatibility-and-branching.md); el punto 3 (presupuesto diario de Saciedad) está sustituido por [ADR-0006](0006-session-energy-satiety-wellfed-spa.md).
 * **Fecha:** 2026-10-29
+* **Ámbito:** `Pelican4Ever/ModEntry.cs`, `Framework/{IModule,ModContext}.cs`, `Core/World/ServerWorldState.cs`, `Modules/ClientVersionGuardModule.cs`
 
 ## Contexto
 

@@ -55,7 +55,7 @@ git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
 - The server exposes **a single public port**: UDP `24642`. The host API (`8085`) stays on
   loopback.
 - `config.json` is **validated at startup**: if anything does not add up, the mod does not
-  register (no degraded mode for config; for `Experience` Harmony patches, see proposed [ADR-0010](adr/0010-fail-closed-health-and-backup-contract.en.md)).
+  register (no degraded mode for config; for `Experience` Harmony patches, see proposed [ADR-0013](adr/0013-fail-closed-health-and-backup-contract.en.md)).
 - The host is always a local player: **there is no native dedicated server mode**. The
   `DedicatedServerMode` option is not used in the current code.
 - The modpack versions the server requires are **exact** (not *major.minor*). The mod's own version

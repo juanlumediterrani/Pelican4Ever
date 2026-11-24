@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-11-03
+* **Ámbito:** `Pelican4Ever.Core/World/{HostPlazaLayout,DoorCatalogValidator,SpatialWarpRouter,PlazaTopologyVerifier}.cs`, `Framework/MapCloneHelper.cs`, `Modules/FarmSlotModule.cs`, `Pelican4Ever/assets/doors.json`
 
 ## Contexto
 

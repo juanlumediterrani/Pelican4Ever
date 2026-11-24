@@ -2,6 +2,7 @@
 
 * **Estado:** Propuesto (los valores son puntos de partida sin calibrar en partida; pasa a *Aceptado* al cerrar TASK-2107)
 * **Fecha:** 2026-11-14
+* **Ámbito:** `Pelican4Ever.Core/Economy/{DailySkillExperience,SkillExperienceCurve,SkillCheckpointBarrier,SkullCavernDescent,CategoryPriceMultiplier,DailyGoldLedger}.cs`, `Modules/{SkillExperienceModule,FishingRebalanceModule,MineLadderModule,SkullCavernDescentModule,DailyGoldTelemetryModule,EconomyModule}.cs`
 * **Contexto:** Épica 21. Complementa a [ADR-0002](0002-realtime-clock-and-epoch-calendar.md) (reloj 1:1) y a [ADR-0006](0006-session-energy-satiety-wellfed-spa.md) (energía por sesiones).
 
 ## Contexto

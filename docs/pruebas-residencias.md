@@ -99,32 +99,9 @@ Cada caso debe revisarse verificando:
 4. **Bonificaciones:** Superficie transitable y área de bonificación accesible y funcional.
 5. **Estaciones:** Aspecto correcto en las 4 estaciones (`spring`, `summer`, `fall`, `winter`).
 
-| ID | Tipo de Anexo | Lado Entrada | Ventana (X,Y) | Entrada Anexo | Letrero Residencia | Letrero Anexo | Host | Cliente | Estado |
-|---|---|---|---|---|---|---|---|---|---|
-| **01** | Standard | North (sale al sur) | (20, 33) | (20, 30) | Flanco sur (39/42, 63) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **02** | Standard | East (sale al oeste) | (40, 16) | (1, 16) | Flanco este (78, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **03** | Standard | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **04** | Fishing | North (sale al sur) | (20, 33) | (20, 30) | Puente sur (39/42, 63) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **05** | Fishing | East (sale al oeste) | (40, 0) | (1, 16) | Flanco este (78, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **06** | Fishing | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **07** | Foraging | North (sale al sur) | (20, 33) | (20, 30) | Flanco sur (39/42, 63) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **08** | Foraging | East (sale al oeste) | (0, 16) | (1, 16) | Flanco este (78, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **09** | Foraging | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **10** | Mining | North (sale al sur) | (20, 33) | (20, 30) | Flanco sur (39/42, 63) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **11** | Mining | East (sale al oeste) | (0, 10) | (1, 16) | Flanco este (78, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **12** | Mining | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **13** | Combat | North (sale al sur) | (20, 33) | (20, 30) | Flanco sur (39/42, 63) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **14** | Combat | East (sale al oeste) | (40, 16) | (1, 16) | Flanco este (78, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **15** | Combat | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **16** | FourCorners | North (sale al sur) | (20, 48) | (20, 30) | Flanco sur (39/42, 63) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **17** | FourCorners | East (sale al oeste) | (4, 0) | (1, 16) | Flanco este (78, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **18** | FourCorners | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **19** | Ranching | North (sale al sur) | (32, 43) | (20, 30) | Flanco sur (51/54, 73) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **20** | Ranching | East (sale al oeste) | (60, 0) | (1, 16) | Flanco este (98, 20/24) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **21** | Ranching | South (sale al norte) | (43, 0) | (20, 1) | Flanco norte (62/65, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
-| **22** | Beach | North (sale al sur) | (61, 78) | (20, 30) | Flanco sur (80/83, 108) | Flanco interior (18/22, 30) | [x] | [x] | Verificado |
-| **23** | Beach | East (sale al oeste) | (70, 0) | (1, 16) | Flanco este (108, 15/19) | Flanco interior (1, 14/18) | [x] | [x] | Verificado |
-| **24** | Beach | South (sale al norte) | (20, 0) | (20, 1) | Flanco norte (39/42, 1) | Flanco interior (18/22, 1) | [x] | [x] | Verificado |
+### Coordenadas canónicas y tabla de los 24 casos (ADR-0009)
+
+> La tabla de coordenadas pre-ADR-0009 se retiró para evitar contradicciones: las coordenadas oficiales de recorte base, entradas (`North`, `East`, `South`), llegadas y conteos BFS de los 24 casos viven exclusivamente en [`anexos-ventanas-recorte.md`](anexos-ventanas-recorte.md) (verificado mediante `p4e_annex_validate all` y `audit/render/*_map.png`).
 
 ### Prueba de Migración de Anexos Previos (TASK-912)
 

@@ -69,6 +69,7 @@ Para ver las instrucciones detalladas paso a paso, consulta la [Guía del servid
 
 ## 📚 Documentación Técnica
 
+* [Índice Operativo del Brain (`AGENTS.md`)](AGENTS.md) — Enrutamiento para agentes de IA, rutas prohibidas y regla de *write-back*
 * [Guía del servidor preview](docs/servidor-preview.md) — [EN](docs/servidor-preview.en.md) · [中文](docs/servidor-preview.zh-CN.md)
 * [Guía de modo cliente](docs/despliegue/cliente.md) — [EN](docs/despliegue/cliente.en.md) · [中文](docs/despliegue/cliente.zh-CN.md)
 * [Anfitrión en un VPS](docs/despliegue/host-vps.md) — [EN](docs/despliegue/host-vps.en.md) · [中文](docs/despliegue/host-vps.zh-CN.md)

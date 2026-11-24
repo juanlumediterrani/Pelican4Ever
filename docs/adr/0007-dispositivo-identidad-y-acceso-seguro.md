@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-11-11
+* **Ámbito:** `Pelican4Ever.Core/Security/*`, `Core/Players/{ClientPairingLogic,PlayerAuthLogic}.cs`, `Modules/{ClientSecurityModule,ProbationTelemetryModule}.cs`
 * **Contexto:** Épica 18 (TASK-1801), reemplaza el esquema de token compartido y lista blanca fija por IP de [ADR-0004](0004-host-authority-client-mod-and-satiety.md).
 
 ## Contexto

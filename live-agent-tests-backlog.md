@@ -13,7 +13,7 @@ Este documento agrupa las **pruebas de integración y carga en vivo sobre el jue
    - Combinar la API REST local del Host (`AdminApiPort`, p. ej. `127.0.0.1:8085`), comandos de consola SMAPI (`p4e_*`, activando `EnableTestCommands: true` y `AllowUnverifiedGameVersion: true` únicamente en el `config.json` del laboratorio cuando sea necesario) y/o el puente HTTP de *Stardew Voyager* (asignando puertos distintos si corren varias instancias simultáneas).
 3. **Cierre limpio y evidencias:**
    - Verificar que no quedan excepciones en los logs de SMAPI de Host ni clientes.
-   - Guardar el informe de evidencias en `docs/` (tablas de resultados, JSON de telemetría o extractos de `HostEventLog`) cuando la prueba cierre una épica o ADR.
+   - Guardar el informe de evidencias en `docs/verifications/` (tablas de resultados, JSON de telemetría o extractos de `HostEventLog`) cuando la prueba cierre una épica o ADR.
    - Finalizar todos los procesos del laboratorio al concluir.
 
 ---
@@ -69,7 +69,7 @@ Este documento agrupa las **pruebas de integración y carga en vivo sobre el jue
     2. `"NatCSpeedN"` no queda pegado ~28,5 min, las redes funcionan en visitas sin permiso de edición (manteniendo terrarios bloqueados), y queda documentada la medición real de `locationCap`.
 
 - [ ] **LIVE-2501: Prueba viva de arranque fail-closed (`Lockdown`), respuesta de `GET /api/v1/host/health` con hilo principal bloqueado y disparo de watchdog**
-  * **Origen:** Épica 25 ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md))
+  * **Origen:** Épica 25 ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md))
   * **Dependencias:** `TASK-2501`, `TASK-2502`, `TASK-2503`, `TASK-2504`.
   * **Procedimiento ejecutable por agente:**
     1. Arrancar Host de laboratorio con una versión de juego simulada fuera de `VerifiedGameVersions` (con `AllowUnverifiedGameVersion = false`) y en una segunda ejecución provocar un fallo simulado de parche `Security` (`checkFarmhandRequest`): comprobar que `AutoHostSaveName` **no** se carga, que un *farmhand* no puede unirse y que `GET /api/v1/host/health` devuelve `Status = "Lockdown"` con `Lockdown.Reasons` y `Patches.Failed`.
@@ -80,7 +80,7 @@ Este documento agrupa las **pruebas de integración y carga en vivo sobre el jue
     2. `/api/v1/host/health` responde sin timeouts aunque el hilo del juego esté congelado, y el emisor de watchdog se detiene al superar `HangThresholdSeconds`.
 
 - [ ] **LIVE-2502: Ensayo vivo de respaldo con `p4e-backup.json` y restauración mediante `saves.restore` de `putre-ops`**
-  * **Origen:** Épica 25 ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)) · **Coordina con:** `PUTRE-302`, `PUTRE-303` (`../Putre/backlog.md`)
+  * **Origen:** Épica 25 ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md)) · **Coordina con:** `PUTRE-302`, `PUTRE-303` (`../Putre/backlog.md`)
   * **Dependencias:** `TASK-2505`, `PUTRE-302`.
   * **Procedimiento ejecutable por agente:**
     1. Ejecutar rollover y checkpoint en Host de laboratorio, verificando la generación atómica de `p4e-backup.json` (esquema v1, hashes SHA-256 sin comprimir, `ServerWorldState` incluido) y la rotación según `BackupRetentionDays` / `CheckpointRetention`.
@@ -91,12 +91,12 @@ Este documento agrupa las **pruebas de integración y carga en vivo sobre el jue
     2. La partida anterior queda preservada en `pre-restore/` sin eliminarse ningún fichero.
 
 - [ ] **LIVE-2503: Banco de carga escalonado con 4, 8, 12 y 16 farmhands sintéticos**
-  * **Origen:** Épica 25 ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)) · **Coordina con:** `PUTRE-401` (`../Putre/backlog.md`)
+  * **Origen:** Épica 25 ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md)) · **Coordina con:** `PUTRE-401` (`../Putre/backlog.md`)
   * **Dependencias:** `TASK-2506`, `PUTRE-401`.
   * **Procedimiento ejecutable por agente:**
     1. Levantar Host en entorno equivalente a la VM objetivo (`Nice=5`, `LP_NUM_THREADS=1`, render headless) con `FarmSlotCount = 16`, las 16 residencias reclamadas (con edificios, cultivos, máquinas y anexos poblados) y NITV activo.
     2. Conectar secuencialmente **4, 8, 12 y 16 *farmhands* sintéticos** ejecutando actividad concurrente (movimiento entre Plaza/Puentes/Anexos, capturas, checkpoints intradía y un rollover completo).
-    3. Registrar en `docs/`: tamaño del XML de partida, duración total de `SaveGame.Save()`, `LastCheckpointLongestTickMs`, bytes/s de red en clonación de *farmhands*, uso de RAM frente a `MemoryMax=4G`, FPS/tick del servidor y densidad real de `NatCreature` por mapa.
+    3. Registrar en `docs/verifications/`: tamaño del XML de partida, duración total de `SaveGame.Save()`, `LastCheckpointLongestTickMs`, bytes/s de red en clonación de *farmhands*, uso de RAM frente a `MemoryMax=4G`, FPS/tick del servidor y densidad real de `NatCreature` por mapa.
   * **Criterios de aceptación:**
-    1. Informe de métricas guardado en `docs/` para 4, 8, 12 y 16 clientes concurrentes.
-    2. Calibración validada de `HangThresholdSeconds` / `WatchdogSec` y decisión explícita sobre el tope soportado de `FarmSlotCount` y mitigación de `locationCap` de NITV para actualizar [ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md).
+    1. Informe de métricas guardado en `docs/verifications/` para 4, 8, 12 y 16 clientes concurrentes.
+    2. Calibración validada de `HangThresholdSeconds` / `WatchdogSec` y decisión explícita sobre el tope soportado de `FarmSlotCount` y mitigación de `locationCap` de NITV para actualizar [ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md).

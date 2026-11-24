@@ -24,7 +24,7 @@
 * Clientes vanilla sin SMAPI ni modpack requerido (`RequiredClientMods`).
 * Anti-cheat criptográfico contra modificación arbitraria de la DLL local del cliente más allá de la validación de modpack, firma de dispositivo e invariantes autoritativos en el Host.
 * Almacenamiento de secretos del servidor o tokens de Discord/API en la configuración de los clientes.
-* Restauración en caliente de partidas sin detener el proceso del juego (siempre se ejecuta fuera de línea vía `Putre` / `saves.restore`, [ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)).
+* Restauración en caliente de partidas sin detener el proceso del juego (siempre se ejecuta fuera de línea vía `Putre` / `saves.restore`, [ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md)).
 * Soporte oficial en producción para `FarmSlotCount > 8` hasta completar y validar el banco de carga (`LIVE-2503` / `PUTRE-401`).
 
 ### 1.3 Definiciones y Glosario
@@ -40,7 +40,7 @@
 | **Anexo de Residencia** | Expansión privada adquirible de `40×32` casillas y entrada única generada con tilesets vanilla ([ADR-0009](docs/adr/0009-annex-vanilla-composition.md)), hasta `MaxAnnexesPerResidence = 2` por parcela. |
 | **Co-Residencia (`Owner` / `Tenant`)** | Convivencia de un Propietario (`OwnerId`) y hasta 1 Inquilino (`TenantId`) en la misma residencia compartiendo edificios y animales mientras mantienen cartera, correo, paquetes, XP y minas individuales. |
 | **Pedido Diferido por Buzón** | Encargo 24/7 a tiendas del valle desde cualquier buzón de residencia/portal con cobro inmediato y materialización física (paquete exclusivo del comprador, andamio o animal) a las `12:00` reales del día objetivo. |
-| **Modo `Lockdown` (*Fail-Closed*)** | Estado propuesto ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)) en el que `ModEntry` bloquea la carga de la partida y las conexiones entrantes si falla algún parche `Security`/`Integrity` o si la versión del juego no está verificada. |
+| **Modo `Lockdown` (*Fail-Closed*)** | Estado propuesto ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md)) en el que `ModEntry` bloquea la carga de la partida y las conexiones entrantes si falla algún parche `Security`/`Integrity` o si la versión del juego no está verificada. |
 
 ---
 
@@ -122,7 +122,7 @@ El anfitrión y cada cliente deben ejecutar la versión de Pelican 4Ever que inc
 
 * **Identidad ECDSA P-256 ([ADR-0007](docs/adr/0007-dispositivo-identidad-y-acceso-seguro.md)):** Saludo `P4E\x02` en Lidgren independiente de la IP, emparejamiento por código temporal (`PairingInviteTtlHours = 72`) y comprobación de `RequiredClientMods`.
 * **Protocolo de admisión de 2 cupos (`ProbationTelemetryModule`):** **Putre** abre tickets temporales en `#pelican-gate` (`MaxConcurrentPutreSlots = 2`), evalúa telemetría conductual escalonada y puede aplicar lista negra irrevocable por Putre (solo revocable por el dueño).
-* **API de Anfitrión y Contrato de Resiliencia ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)):** Endpoints loopback (`/api/v1/host/*`) despachados en el hilo principal, complementados en Épica 25 con `/api/v1/host/health` sin bloqueo de hilo, arranque *fail-closed*, watchdog `sd_notify` y manifiesto `p4e-backup.json` para sincronización S3 y `saves.restore` por Putre.
+* **API de Anfitrión y Contrato de Resiliencia ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md)):** Endpoints loopback (`/api/v1/host/*`) despachados en el hilo principal, complementados en Épica 25 con `/api/v1/host/health` sin bloqueo de hilo, arranque *fail-closed*, watchdog `sd_notify` y manifiesto `p4e-backup.json` para sincronización S3 y `saves.restore` por Putre.
 
 ---
 
@@ -197,8 +197,8 @@ El anfitrión y cada cliente deben ejecutar la versión de Pelican 4Ever que inc
 | `RF-38` | Validar en handshake la versión del mod y la lista exacta de mods requeridos (`RequiredClientMods` en `ClientVersionGuardModule`). | Alta |
 | `RF-39` | Operar el protocolo de admisión de 2 cupos (`MaxConcurrentPutreSlots = 2`), telemetría conductual (`ProbationTelemetryModule`) y lista negra irrevocable por Putre. | Alta |
 | `RF-40` | Exponer la API REST de anfitrión (`/api/v1/host/*` y `HostEventLog`), incluyendo comandos whitelisted y reinicio controlado (`p4e_safe_restart`). | Alta |
-| `RF-41` | (*Propuesto ADR-0010 / Épica 25*) Declarar cada parche Harmony en `PatchRegistry` (`Security`, `Integrity`, `Experience`) y entrar en `Lockdown` *fail-closed* si falla alguno crítico o si la versión del juego no está en `VerifiedGameVersions`. | Alta |
-| `RF-42` | (*Propuesto ADR-0010 / Épica 25*) Exponer `GET /api/v1/host/health` fuera del hilo del juego, emitir pulsos `WATCHDOG=1` vía `sd_notify` y generar manifiestos `p4e-backup.json` en cada copia. | Alta |
+| `RF-41` | (*Propuesto ADR-0013 / Épica 25*) Declarar cada parche Harmony en `PatchRegistry` (`Security`, `Integrity`, `Experience`) y entrar en `Lockdown` *fail-closed* si falla alguno crítico o si la versión del juego no está en `VerifiedGameVersions`. | Alta |
+| `RF-42` | (*Propuesto ADR-0013 / Épica 25*) Exponer `GET /api/v1/host/health` fuera del hilo del juego, emitir pulsos `WATCHDOG=1` vía `sd_notify` y generar manifiestos `p4e-backup.json` en cada copia. | Alta |
 
 ---
 
@@ -214,10 +214,10 @@ El anfitrión y cada cliente deben ejecutar la versión de Pelican 4Ever que inc
 | `RNF-06` | **Superficie de Red y Cero Secretos en Clientes** | El único puerto público es `24642/udp`; la API REST (`AdminApiPort = 8085` por defecto, loopback) no se expone al exterior salvo configuración explícita, y los clientes nunca almacenan tokens de API ni de Discord. |
 | `RNF-07` | **Integridad de Rollover y Checkpoints** | Toda copia diaria y checkpoint verifica SHA-256 por fichero; `RolloverDayGuard` previene doble ejecución de penalizaciones y ningún día avanza si falla la copia o el cierre ordenado. |
 | `RNF-08` | **Operación Headless y Presupuesto de Cómputo** | El host dedicado soporta render suprimido (`HeadlessRenderModule` sobre `Xvfb`), operando en la VM de producción objetivo de `2 vCPU`, `LP_NUM_THREADS=1`, `Nice=5` y `MemoryMax=4G`. |
-| `RNF-09` | **Arranque *Fail-Closed* (Propuesto ADR-0010)** | Cualquier fallo en parches `Security`/`Integrity` o versión fuera de `VerifiedGameVersions` (`["1.6.15"]`) y `MinimumSmapiVersion` (`4.1.0`) impide cargar `AutoHostSaveName` y bloquea conexiones sin depender de parches Harmony, salvo excepción nominal en `LockdownOverride`. |
-| `RNF-10` | **Salud Observable Sin Bloqueo de Hilo (Propuesto ADR-0010)** | `GET /api/v1/host/health` responde desde el hilo HTTP en `< 50 ms` sin pasar por `MainThreadActionQueue`, exponiendo `Status`, `SecondsSinceLastTick`, `SaveLoaded`, `Lockdown.Reasons[]` y `Patches.Failed[]`. |
-| `RNF-11` | **Detección de Cuelgues por Watchdog (Propuesto ADR-0010)** | Si `NOTIFY_SOCKET` existe, envía `WATCHDOG=1` cada `15 s` solo mientras `SecondsSinceLastTick <= HangThresholdSeconds` (`120 s`); `systemd` configura `WatchdogSec=180` y `NotifyAccess=all`. |
-| `RNF-12` | **Vigilancia por Monitor Negativo en Putre (Propuesto ADR-0010)** | `Putre` sondea `/api/v1/host/health` cada `60 s`, silencia estados nominales `Ok` y emite `owner.alert` únicamente en transiciones a `Lockdown`, `Degraded`, cuelgue, caída o fallo de backup y su recuperación. |
-| `RNF-13` | **Contrato de Copias y Retención S3 (Propuesto ADR-0010)** | Cada copia incluye `p4e-backup.json` (`FormatVersion = 1`) con rotación local por defecto `BackupRetentionDays = 14` y `CheckpointRetention = 12`; Putre ejecuta `aws s3 sync` sin `--delete` tras cada `backup.created` y la caducidad se gestiona en IaC. |
-| `RNF-14` | **Restauración Verificada Offline (Propuesto ADR-0010)** | `saves.restore` (nivel 2 en Putre) detiene el juego, valida `p4e-backup.json` y SHA-256, mueve la partida previa a `Pelican4Ever_Backups/pre-restore/<UTC>/` sin borrar datos, copia la elegida y exige `health.Status == "Ok"`, `SaveLoaded == true` y `TotalGameDays` coherente. |
-| `RNF-15` | **Validación Empírica de Escala (Propuesto ADR-0010)** | `FarmSlotCount > 8` no se declara soportado en producción hasta medir tamaño de guardado, duración de `SaveGame.Save()`, `LastCheckpointLongestTickMs`, ancho de banda y densidad NITV con 8, 12 y 16 *farmhands* sintéticos (`LIVE-2503` / `PUTRE-401`). |
+| `RNF-09` | **Arranque *Fail-Closed* (Propuesto ADR-0013)** | Cualquier fallo en parches `Security`/`Integrity` o versión fuera de `VerifiedGameVersions` (`["1.6.15"]`) y `MinimumSmapiVersion` (`4.1.0`) impide cargar `AutoHostSaveName` y bloquea conexiones sin depender de parches Harmony, salvo excepción nominal en `LockdownOverride`. |
+| `RNF-10` | **Salud Observable Sin Bloqueo de Hilo (Propuesto ADR-0013)** | `GET /api/v1/host/health` responde desde el hilo HTTP en `< 50 ms` sin pasar por `MainThreadActionQueue`, exponiendo `Status`, `SecondsSinceLastTick`, `SaveLoaded`, `Lockdown.Reasons[]` y `Patches.Failed[]`. |
+| `RNF-11` | **Detección de Cuelgues por Watchdog (Propuesto ADR-0013)** | Si `NOTIFY_SOCKET` existe, envía `WATCHDOG=1` cada `15 s` solo mientras `SecondsSinceLastTick <= HangThresholdSeconds` (`120 s`); `systemd` configura `WatchdogSec=180` y `NotifyAccess=all`. |
+| `RNF-12` | **Vigilancia por Monitor Negativo en Putre (Propuesto ADR-0013)** | `Putre` sondea `/api/v1/host/health` cada `60 s`, silencia estados nominales `Ok` y emite `owner.alert` únicamente en transiciones a `Lockdown`, `Degraded`, cuelgue, caída o fallo de backup y su recuperación. |
+| `RNF-13` | **Contrato de Copias y Retención S3 (Propuesto ADR-0013)** | Cada copia incluye `p4e-backup.json` (`FormatVersion = 1`) con rotación local por defecto `BackupRetentionDays = 14` y `CheckpointRetention = 12`; Putre ejecuta `aws s3 sync` sin `--delete` tras cada `backup.created` y la caducidad se gestiona en IaC. |
+| `RNF-14` | **Restauración Verificada Offline (Propuesto ADR-0013)** | `saves.restore` (nivel 2 en Putre) detiene el juego, valida `p4e-backup.json` y SHA-256, mueve la partida previa a `Pelican4Ever_Backups/pre-restore/<UTC>/` sin borrar datos, copia la elegida y exige `health.Status == "Ok"`, `SaveLoaded == true` y `TotalGameDays` coherente. |
+| `RNF-15` | **Validación Empírica de Escala (Propuesto ADR-0013)** | `FarmSlotCount > 8` no se declara soportado en producción hasta medir tamaño de guardado, duración de `SaveGame.Save()`, `LastCheckpointLongestTickMs`, ancho de banda y densidad NITV con 8, 12 y 16 *farmhands* sintéticos (`LIVE-2503` / `PUTRE-401`). |

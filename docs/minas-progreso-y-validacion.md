@@ -1,6 +1,6 @@
-# Minas: comportamiento y validación pendiente
+# Minas, Caverna Calavera y Volcán: comportamiento multijugador y validación
 
-Rama de trabajo: `codex/minas-progreso-individual`.
+Estado: Integrado en `dev`/`main` (referencia normativa del subsistema de minas).
 
 ## Comportamiento acordado
 

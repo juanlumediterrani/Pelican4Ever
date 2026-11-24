@@ -24,7 +24,7 @@
 * Vanilla clients without SMAPI or the required modpack (`RequiredClientMods`).
 * Cryptographic anti-cheat against arbitrary modification of a client's local DLL beyond modpack checks, device signatures, and Host authoritative invariants.
 * Storing server secrets or Discord/API tokens inside client configuration files.
-* Hot in-place save restores without stopping the game process (restores always run offline via `Putre` / `saves.restore`, [ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.en.md)).
+* Hot in-place save restores without stopping the game process (restores always run offline via `Putre` / `saves.restore`, [ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.en.md)).
 * Official production support for `FarmSlotCount > 8` until the agent load test benchmark (`LIVE-2503` / `PUTRE-401`) is completed and accepted.
 
 ### 1.3 Definitions and Glossary
@@ -40,7 +40,7 @@
 | **Residence Annex** | Purchasable `40×32` private single-entrance expansion composed from vanilla tilesets ([ADR-0009](docs/adr/0009-annex-vanilla-composition.md)), up to `MaxAnnexesPerResidence = 2` per plot. |
 | **Co-Residency (`Owner` / `Tenant`)** | Shared residence of one Owner (`OwnerId`) and up to 1 Tenant (`TenantId`) sharing buildings and animals while keeping wallets, mail, packages, XP, and mine progression individual. |
 | **Deferred Mailbox Order** | 24/7 shop order placed from any residence/portal mailbox with immediate payment and physical delivery (owner-locked package, scaffolding, or animal) at `12:00` real time on the target day. |
-| **`Lockdown` Mode (*Fail-Closed*)** | Proposed state ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.en.md)) where `ModEntry` blocks loading the save and refuses incoming connections if a `Security`/`Integrity` patch fails or the game version is unverified. |
+| **`Lockdown` Mode (*Fail-Closed*)** | Proposed state ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.en.md)) where `ModEntry` blocks loading the save and refuses incoming connections if a `Security`/`Integrity` patch fails or the game version is unverified. |
 
 ---
 
@@ -122,7 +122,7 @@ The host and every client need the Pelican 4Ever build that includes this change
 
 * **ECDSA P-256 identity ([ADR-0007](docs/adr/0007-dispositivo-identidad-y-acceso-seguro.en.md)):** IP-independent Lidgren `P4E\x02` handshake, timed invite pairing (`PairingInviteTtlHours = 72`), and `RequiredClientMods` validation.
 * **2-slot probation protocol (`ProbationTelemetryModule`):** **Putre** issues temporary tickets in `#pelican-gate` (`MaxConcurrentPutreSlots = 2`), tracks staged behavioral telemetry, and can apply an irrevocable blacklist (only removable by the owner).
-* **Host API & Resilience Contract ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.en.md)):** Loopback REST API (`/api/v1/host/*`) dispatched on the main thread, extended in Epic 25 with off-thread `/api/v1/host/health`, fail-closed startup, `sd_notify` watchdog, and `p4e-backup.json` manifest for S3 sync and Putre `saves.restore`.
+* **Host API & Resilience Contract ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.en.md)):** Loopback REST API (`/api/v1/host/*`) dispatched on the main thread, extended in Epic 25 with off-thread `/api/v1/host/health`, fail-closed startup, `sd_notify` watchdog, and `p4e-backup.json` manifest for S3 sync and Putre `saves.restore`.
 
 ---
 
@@ -197,8 +197,8 @@ The host and every client need the Pelican 4Ever build that includes this change
 | `RF-38` | Enforce mod version and exact `RequiredClientMods` checks during initial handshake (`ClientVersionGuardModule`). | High |
 | `RF-39` | Run Putre's 2-slot probation protocol (`MaxConcurrentPutreSlots = 2`), behavioral telemetry (`ProbationTelemetryModule`), and Putre-irrevocable blacklist. | High |
 | `RF-40` | Expose the Host REST API (`/api/v1/host/*` and `HostEventLog`), including whitelisted remote commands and safe restart (`p4e_safe_restart`). | High |
-| `RF-41` | (*Proposed ADR-0010 / Epic 25*) Register all Harmony patches in `PatchRegistry` (`Security`, `Integrity`, `Experience`) and fail closed into `Lockdown` on critical failures or unverified `VerifiedGameVersions`. | High |
-| `RF-42` | (*Proposed ADR-0010 / Epic 25*) Expose `GET /api/v1/host/health` off the game thread, emit `WATCHDOG=1` pulses via `sd_notify`, and generate `p4e-backup.json` manifests per backup. | High |
+| `RF-41` | (*Proposed ADR-0013 / Epic 25*) Register all Harmony patches in `PatchRegistry` (`Security`, `Integrity`, `Experience`) and fail closed into `Lockdown` on critical failures or unverified `VerifiedGameVersions`. | High |
+| `RF-42` | (*Proposed ADR-0013 / Epic 25*) Expose `GET /api/v1/host/health` off the game thread, emit `WATCHDOG=1` pulses via `sd_notify`, and generate `p4e-backup.json` manifests per backup. | High |
 
 ---
 
@@ -214,10 +214,10 @@ The host and every client need the Pelican 4Ever build that includes this change
 | `RNF-06` | **Minimal Network Surface & Zero Client Secrets** | Only `24642/udp` is exposed publicly; the REST API (`AdminApiPort = 8085` default, loopback) is never externally bound unless explicitly configured, and clients store zero server/Discord tokens. |
 | `RNF-07` | **Rollover & Checkpoint Integrity** | Every daily backup and checkpoint verifies SHA-256 per file; `RolloverDayGuard` prevents double penalty application and no day advances if backup or orderly disconnect fails. |
 | `RNF-08` | **Headless Operation & Compute Budget** | Dedicated host supports suppressed rendering (`HeadlessRenderModule` on `Xvfb`), targeting a production VM of `2 vCPU`, `LP_NUM_THREADS=1`, `Nice=5`, and `MemoryMax=4G`. |
-| `RNF-09` | **Fail-Closed Startup (Proposed ADR-0010)** | Any `Security`/`Integrity` patch failure or version outside `VerifiedGameVersions` (`["1.6.15"]`) and `MinimumSmapiVersion` (`4.1.0`) blocks loading `AutoHostSaveName` and connections without relying on Harmony patches, unless listed in `LockdownOverride`. |
-| `RNF-10` | **Lock-Free Observable Health (Proposed ADR-0010)** | `GET /api/v1/host/health` responds directly from the HTTP thread in `< 50 ms` bypassing `MainThreadActionQueue`, exposing `Status`, `SecondsSinceLastTick`, `SaveLoaded`, `Lockdown.Reasons[]`, and `Patches.Failed[]`. |
-| `RNF-11` | **Hang Detection via Watchdog (Proposed ADR-0010)** | If `NOTIFY_SOCKET` is set, sends `WATCHDOG=1` every `15 s` only while `SecondsSinceLastTick <= HangThresholdSeconds` (`120 s`); `systemd` sets `WatchdogSec=180` and `NotifyAccess=all`. |
-| `RNF-12` | **Negative Monitor Vigilance in Putre (Proposed ADR-0010)** | `Putre` polls `/api/v1/host/health` every `60 s`, stays silent during nominal `Ok` states, and sends `owner.alert` only on transitions to `Lockdown`, `Degraded`, hang, crash, or backup failure and recovery. |
-| `RNF-13` | **Backup Contract & S3 Retention (Proposed ADR-0010)** | Every backup writes `p4e-backup.json` (`FormatVersion = 1`) with default local retention `BackupRetentionDays = 14` and `CheckpointRetention = 12`; Putre runs `aws s3 sync` without `--delete` after `backup.created` and IaC manages S3 expiration. |
-| `RNF-14` | **Verified Offline Restore (Proposed ADR-0010)** | `saves.restore` (Level 2 in Putre) stops the game, verifies `p4e-backup.json` and SHA-256 checksums, moves prior save data to `Pelican4Ever_Backups/pre-restore/<UTC>/` without deleting, copies target data, and requires `health.Status == "Ok"`, `SaveLoaded == true`, and matching `TotalGameDays`. |
-| `RNF-15` | **Empirical Scale Validation (Proposed ADR-0010)** | `FarmSlotCount > 8` is not declared production-supported until measuring save size, `SaveGame.Save()` duration, `LastCheckpointLongestTickMs`, bandwidth, and NITV density across 8, 12, and 16 synthetic farmhands (`LIVE-2503` / `PUTRE-401`). |
+| `RNF-09` | **Fail-Closed Startup (Proposed ADR-0013)** | Any `Security`/`Integrity` patch failure or version outside `VerifiedGameVersions` (`["1.6.15"]`) and `MinimumSmapiVersion` (`4.1.0`) blocks loading `AutoHostSaveName` and connections without relying on Harmony patches, unless listed in `LockdownOverride`. |
+| `RNF-10` | **Lock-Free Observable Health (Proposed ADR-0013)** | `GET /api/v1/host/health` responds directly from the HTTP thread in `< 50 ms` bypassing `MainThreadActionQueue`, exposing `Status`, `SecondsSinceLastTick`, `SaveLoaded`, `Lockdown.Reasons[]`, and `Patches.Failed[]`. |
+| `RNF-11` | **Hang Detection via Watchdog (Proposed ADR-0013)** | If `NOTIFY_SOCKET` is set, sends `WATCHDOG=1` every `15 s` only while `SecondsSinceLastTick <= HangThresholdSeconds` (`120 s`); `systemd` sets `WatchdogSec=180` and `NotifyAccess=all`. |
+| `RNF-12` | **Negative Monitor Vigilance in Putre (Proposed ADR-0013)** | `Putre` polls `/api/v1/host/health` every `60 s`, stays silent during nominal `Ok` states, and sends `owner.alert` only on transitions to `Lockdown`, `Degraded`, hang, crash, or backup failure and recovery. |
+| `RNF-13` | **Backup Contract & S3 Retention (Proposed ADR-0013)** | Every backup writes `p4e-backup.json` (`FormatVersion = 1`) with default local retention `BackupRetentionDays = 14` and `CheckpointRetention = 12`; Putre runs `aws s3 sync` without `--delete` after `backup.created` and IaC manages S3 expiration. |
+| `RNF-14` | **Verified Offline Restore (Proposed ADR-0013)** | `saves.restore` (Level 2 in Putre) stops the game, verifies `p4e-backup.json` and SHA-256 checksums, moves prior save data to `Pelican4Ever_Backups/pre-restore/<UTC>/` without deleting, copies target data, and requires `health.Status == "Ok"`, `SaveLoaded == true`, and matching `TotalGameDays`. |
+| `RNF-15` | **Empirical Scale Validation (Proposed ADR-0013)** | `FarmSlotCount > 8` is not declared production-supported until measuring save size, `SaveGame.Save()` duration, `LastCheckpointLongestTickMs`, bandwidth, and NITV density across 8, 12, and 16 synthetic farmhands (`LIVE-2503` / `PUTRE-401`). |

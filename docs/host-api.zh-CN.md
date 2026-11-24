@@ -448,7 +448,7 @@ Voyager、Putre 或某个诊断流程）。每位申请者最多持有一个：�
 
 ### `GET /api/v1/host/health`
 
-直接从 HTTP 线程读取原子健康快照（`HostHealthDto`），**不经过 `MainThreadActionQueue`**，即使游戏主线程卡死或服务器处于未加载存档的 `Lockdown` 状态也能立即响应（ADR-0010）。
+直接从 HTTP 线程读取原子健康快照（`HostHealthDto`），**不经过 `MainThreadActionQueue`**，即使游戏主线程卡死或服务器处于未加载存档的 `Lockdown` 状态也能立即响应（ADR-0013）。
 
 **响应 `200 OK`（`HostHealthDto`）：**
 ```json

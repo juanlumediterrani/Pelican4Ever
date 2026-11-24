@@ -433,7 +433,7 @@ Devuelve el estado del protocolo de admisión de Putre (`MaxSlots` = 2, `UsedSlo
 
 ### `GET /api/v1/host/health`
 
-Devuelve la instantánea atómica de salud del host (`HostHealthDto`), leída **directamente desde el hilo HTTP sin pasar por `MainThreadActionQueue`**, por lo que responde incluso si el hilo principal del juego está colgado o el servidor permanece en `Lockdown` sin partida cargada (ADR-0010).
+Devuelve la instantánea atómica de salud del host (`HostHealthDto`), leída **directamente desde el hilo HTTP sin pasar por `MainThreadActionQueue`**, por lo que responde incluso si el hilo principal del juego está colgado o el servidor permanece en `Lockdown` sin partida cargada (ADR-0013).
 
 **Respuesta `200 OK` (`HostHealthDto`):**
 ```json

@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-11-02 (revisión)
+* **Ámbito:** `Pelican4Ever.Core/Time/*`, `Core/Admin/{SafeRolloverWorkflow,RolloverDayGuard}.cs`, `Modules/{DailyRolloverModule,RolloverLockModule}.cs`
 
 ## Contexto
 

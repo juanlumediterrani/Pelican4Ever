@@ -30,3 +30,6 @@ jobs:
 
       - name: Compilar y pasar los tests
         run: dotnet test Pelican4Ever.Tests -c Release
+
+      - name: Verificar integridad del Brain
+        run: python3 scripts/verify_brain.py --check

@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-11-23
+* **Ámbito:** `Pelican4Ever.Core/Networking/ClientVersionPolicy.cs`, `Modules/ClientVersionGuardModule.cs`, `Pelican4Ever/manifest.json`, `scripts/calc_min_client_version.py`, `.github/workflows/*`
 * **Versión objetivo:** 0.5.4+
 * **Amplía:** [ADR-0004](0004-host-authority-client-mod-and-satiety.md) (punto 1: política de versión entre cliente y host)
 

@@ -314,7 +314,7 @@ Tareas analizadas técnicamente contra el motor decompilado de **Stardew Valley 
     3. En una residencia salvaje los monstruos escalan con el nivel del dueño.
     4. Los pararrayos de las residencias producen pilas en días de tormenta.
     5. Cada punto pendiente queda implementado o descartado explícitamente en esta tarea.
-  * **Pruebas en vivo:** comandos de host `p4e_farm_found`, `p4e_farm_tp`, `p4e_farm_inspect`, `p4e_farm_spawn`, `p4e_lightning`, `p4e_weather` y `p4e_skill` (`FarmTestCommandsModule`, con `EnableTestCommands`). Guía y casos en `docs/archive/pruebas-residencias.md`.
+  * **Pruebas en vivo:** comandos de host `p4e_farm_found`, `p4e_farm_tp`, `p4e_farm_inspect`, `p4e_farm_spawn`, `p4e_lightning`, `p4e_weather` y `p4e_skill` (`FarmTestCommandsModule`, con `EnableTestCommands`). Guía y casos en `docs/pruebas-residencias.md`.
 
 ---
 
@@ -1991,7 +1991,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - [x] **TASK-2102: Curva diaria de experiencia — parche y contador autoritativo**
   * **Prioridad:** Alta
   * **Dependencias:** TASK-2101, TASK-301.
-  * **Resolución:** Verificados el parche autoritativo de `gainExperience`, la barrera de checkpoints con 50 XP de Pesca retenida y liberada al concluir (`pending=0->1->0`), la restauración del respaldo del checkpoint (`Foraging=285`, `Mining=150`, sin la XP posterior en tránsito), la captura real de criaturas de *Nature in the Valley* (`0→15` y cruce del tope `295→301` con `Remainder=0.75`), la supervivencia exacta tras desconexión/reconexión y el reinicio al cambiar de día en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Resolución:** Verificados el parche autoritativo de `gainExperience`, la barrera de checkpoints con 50 XP de Pesca retenida y liberada al concluir (`pending=0->1->0`), la restauración del respaldo del checkpoint (`Foraging=285`, `Mining=150`, sin la XP posterior en tránsito), la captura real de criaturas de *Nature in the Valley* (`0→15` y cruce del tope `295→301` con `Remainder=0.75`), la supervivencia exacta tras desconexión/reconexión y el reinicio al cambiar de día en [el informe de prueba](docs/verifications/adr-0008-live-verification-2026-11-14.md).
   * **Descripción:** Parchear `Farmer.gainExperience(int which, int howMuch)` con un prefijo que solo actúe sobre el jugador local y sustituya `howMuch` por el resultado de TASK-2101. Guardar en `PlayerRecord` el XP ganado hoy por habilidad, el resto fraccionario y el día de juego al que pertenecen, con el mismo patrón que la Saciedad: el cliente informa al host, el host lo acota y lo persiste en `ServerWorldState`, y el cliente lo recupera al reconectar. El contador se reinicia al cambiar el día de juego.
   * **Criterios de aceptación:**
     1. Un *farmhand* que supera el cupo de Pesca, se desconecta y vuelve el mismo día sigue en la parte reducida de la curva.
@@ -2004,7 +2004,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - [x] **TASK-2103: Pesca — tiempo hasta la picada y duración del minijuego**
   * **Prioridad:** Media
   * **Dependencias:** Ninguna.
-  * **Resolución:** Verificados en vivo con host y *farmhand* (`2.5` y `1.5`): picada `2,50×` sin cebo (`21.656→54.141 ms`) y con cebo (`14.438→36.094 ms`); exención de estanques poblados (`1.000 ms` frente a `36.094 ms` en vacío) y concursos/minijuegos de festival; captura (`501→750` ticks, `1,497×`), escape (`330→496` ticks, `1,503×`) y concurso de festival (`501` ticks) en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Resolución:** Verificados en vivo con host y *farmhand* (`2.5` y `1.5`): picada `2,50×` sin cebo (`21.656→54.141 ms`) y con cebo (`14.438→36.094 ms`); exención de estanques poblados (`1.000 ms` frente a `36.094 ms` en vacío) y concursos/minijuegos de festival; captura (`501→750` ticks, `1,497×`), escape (`330→496` ticks, `1,503×`) y concurso de festival (`501` ticks) en [el informe de prueba](docs/verifications/adr-0008-live-verification-2026-11-14.md).
   * **Descripción:** Añadir `FishingBiteTimeMultiplier` (`2.5`) y `FishingMinigameDurationMultiplier` (`1.5`). El primero se aplica como postfix al resultado de `FishingRod.calculateTimeUntilFishingBite`, salvo cuando el anzuelo cae en un estanque de peces con ocupantes. El segundo escala, en `BobberBar.update`, la variación por tick de `distanceFromCatching` dividiéndola entre el multiplicador, tanto al subir como al bajar.
   * **Criterios de aceptación:**
     1. Con cebo y sin cebo, el tiempo medio hasta la picada medido en partida es unas 2,5 veces el de vanilla.
@@ -2016,7 +2016,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - [x] **TASK-2104: Minas — probabilidad de escalera por piedra y por monstruo**
   * **Prioridad:** Media
   * **Dependencias:** Ninguna.
-  * **Resolución:** Verificados en piso 3 (piedras: `35→13` y última piedra garantizada) y en piso 6 en serie limpia de 200 ensayos (`monsterDrop`: `22` en vanilla `0,15`, `13` con `0,08` y `38` con `+0,07` de la estatua del enano), así como la sincronización cliente→host de una escalera generada por el *farmhand* (`UndergroundMine6`, `x=3, y=18, idx=173`), en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md). Transpilers documentados que conservan ramas garantizadas y revierten a vanilla con log ante cambios de IL.
+  * **Resolución:** Verificados en piso 3 (piedras: `35→13` y última piedra garantizada) y en piso 6 en serie limpia de 200 ensayos (`monsterDrop`: `22` en vanilla `0,15`, `13` con `0,08` y `38` con `+0,07` de la estatua del enano), así como la sincronización cliente→host de una escalera generada por el *farmhand* (`UndergroundMine6`, `x=3, y=18, idx=173`), en [el informe de prueba](docs/verifications/adr-0008-live-verification-2026-11-14.md). Transpilers documentados que conservan ramas garantizadas y revierten a vanilla con log ante cambios de IL.
   * **Descripción:** Añadir `MineStoneLadderChanceMultiplier` (`0.5`) y `MineMonsterLadderChance` (`0.08`). Aplicarlos a la tirada de escalera de `MineShaft.checkStoneForItems` y a la de `MineShaft.monsterDrop`, conservando la escalera garantizada al romper la última piedra, el `+0.07` de la estatua del enano y los pisos que exigen matar a todos los monstruos. Las probabilidades son literales dentro de ambos métodos: decidir en la tarea entre transpiler y veto probabilístico sobre `createLadderDown` / `createLadderAt`, y dejarlo anotado.
   * **Criterios de aceptación:**
     1. Ningún piso queda sin salida: romper la última piedra crea siempre la escalera.
@@ -2028,7 +2028,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - [x] **TASK-2105: Caverna Calavera — coste de energía por piso descendido**
   * **Prioridad:** Alta
   * **Dependencias:** Ninguna.
-  * **Resolución:** Verificados en vivo el pozo (`enterMineShaft`, pisos `121→126`, coste `−5,80`), la escalera fabricada `(BC)71` (`CheckForActionOnStaircase`, `126→127`, coste `−1,28`), el modo difícil (`SkullCavesDifficulty=1`, coste `−4,56`), el Festival del Desierto (activo, coste `−3,84`), el agotamiento sin bloqueo ni energía negativa, y las exenciones de Minas normales (`5→8`) y Volcán (`1→2`) en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Resolución:** Verificados en vivo el pozo (`enterMineShaft`, pisos `121→126`, coste `−5,80`), la escalera fabricada `(BC)71` (`CheckForActionOnStaircase`, `126→127`, coste `−1,28`), el modo difícil (`SkullCavesDifficulty=1`, coste `−4,56`), el Festival del Desierto (activo, coste `−3,84`), el agotamiento sin bloqueo ni energía negativa, y las exenciones de Minas normales (`5→8`) y Volcán (`1→2`) en [el informe de prueba](docs/verifications/adr-0008-live-verification-2026-11-14.md).
   * **Descripción:** Añadir `SkullCavernDescentBaseCost` (`1`) y `SkullCavernDescentDepthDivisor` (`25`). Cuando el jugador local llega a un piso de la Caverna más profundo que el anterior, restar de su energía la suma de `base + piso / divisor` de cada piso recorrido, con `piso = mineLevel − 120`. Cubre escaleras, pozos (`enterMineShaft` salta varios pisos) y escaleras fabricadas. La fórmula y la suma van en Core con pruebas. Si la energía no alcanza, queda en `0` y el jugador pasa a agotado; el descenso no se bloquea.
   * **Criterios de aceptación:**
     1. Bajar del piso 1 al 100 de uno en uno cuesta unos 300 puntos; una caída de 8 pisos cuesta lo mismo que bajar esos 8 pisos por escalera.
@@ -2041,7 +2041,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 - [x] **TASK-2106: Multiplicadores de precio de pescado y minerales, y telemetría diaria**
   * **Prioridad:** Media
   * **Dependencias:** TASK-2102.
-  * **Resolución:** Corregida la sincronización de `PriceRules` de host a clientes en `EconomyModule` y la atribución de día durante los menús de mañana en `DailyGoldTelemetryModule` (`closingGameDay` entre `DayEnding` y `DayStarted`). Verificados en vivo ventas en `FishShop` y `Blacksmith`, envíos de caja, cartera individual con *farmhand* desconectado (`800g` y `750g`), cartera compartida con ambos conectados (`400g` y `1.150g` sin duplicaciones), idempotencia de reintentos (`files=2->2` y `files=4->4`) y 1.379 pruebas unitarias en verde en [el informe de prueba](docs/adr-0008-live-verification-2026-11-14.md).
+  * **Resolución:** Corregida la sincronización de `PriceRules` de host a clientes en `EconomyModule` y la atribución de día durante los menús de mañana en `DailyGoldTelemetryModule` (`closingGameDay` entre `DayEnding` y `DayStarted`). Verificados en vivo ventas en `FishShop` y `Blacksmith`, envíos de caja, cartera individual con *farmhand* desconectado (`800g` y `750g`), cartera compartida con ambos conectados (`400g` y `1.150g` sin duplicaciones), idempotencia de reintentos (`files=2->2` y `files=4->4`) y 1.379 pruebas unitarias en verde en [el informe de prueba](docs/verifications/adr-0008-live-verification-2026-11-14.md).
   * **Descripción:** Ampliar `Postfix_SellToStorePrice` con `FishPriceMultiplier` (categoría `-4`) y `MineralPriceMultiplier` (categorías `-2`, `-12` y `-15`), ambos `1.0`. Registrar en el log de eventos del host, una vez por rollover y jugador, el oro ganado en el día y el XP obtenido por habilidad (antes y después de la curva), para calibrar con datos reales.
   * **Criterios de aceptación:**
     1. Con los multiplicadores en `1.0` ningún precio cambia.
@@ -2417,14 +2417,14 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
 
 ---
 
-### Épica 25: Resiliencia Operativa, Arranque Fail-Closed, Salud del Host y Contrato de Copias ([ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md))
+### Épica 25: Resiliencia Operativa, Arranque Fail-Closed, Salud del Host y Contrato de Copias ([ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md))
 > **Objetivo:** Eliminar los fallos silenciosos en operación 24/7 cerrando la brecha entre la lógica del mod y la operación de la VM: arranque *fail-closed* si falla algún parche Harmony crítico o si cambia la versión del juego/SMAPI, endpoint de salud observable aunque el hilo del juego se cuelgue, watchdog systemd, contrato explícito de manifiesto y retención de copias, e instrumentación para medir el escalado real a 8–16 jugadores.
 >
 > **Frontera entre repositorios:** En este backlog viven las tareas del mod y del runtime en **Pelican 4Ever** (`TASK-2501`..`TASK-2506`). El sondeo negativo en la VM, el `WatchdogSec` de las unidades de producción, la fijación de `steamcmd`, la subida automática a S3 y `saves.restore` viven en el repositorio hermano **`Putre`** (`PUTRE-101`..`PUTRE-401` en `../Putre/backlog.md`). Las pruebas vivas ejecutables por agentes viven en [live-agent-tests-backlog.md](live-agent-tests-backlog.md) (`LIVE-2501`..`LIVE-2503`).
 
 - [x] **TASK-2501: Registro centralizado de parches Harmony (`PatchRegistry`) y política pura de criticidad (`PatchHealthPolicy`) en `Pelican4Ever.Core`**
   * **Prioridad:** Crítica
-  * **Dependencias:** Ninguna (base: [ADR-0010](docs/adr/0010-fail-closed-health-and-backup-contract.md)).
+  * **Dependencias:** Ninguna (base: [ADR-0013](docs/adr/0013-fail-closed-health-and-backup-contract.md)).
   * **Resolución:** Implementado en `Pelican4Ever.Core/Admin/PatchHealthPolicy.cs` y `Pelican4Ever/Framework/PatchRegistry.cs` (`ModContext.Patch` + `ModContext.EvaluateHealth`); todos los parches Harmony de `Pelican4Ever/Modules/*.cs` migrados con criticidad explícita y cubiertos en `Pelican4Ever.Tests/PatchHealthPolicyTests.cs`.
 
 - [x] **TASK-2502: Arranque fail-closed (`Lockdown`), lista de versiones verificadas (`VerifiedGameVersions`) y excepción auditable (`LockdownOverride`)**
@@ -2595,7 +2595,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. Tabla de medidas para 16, 32 y 64 residencias publicada en `docs/`.
     2. `FarmSlotCount = 64` queda documentado como soportado o experimental según los umbrales.
-  * **Resolución:** Medición ejecutada sobre la VM AWS de referencia (`i-053e53c1536f541fd`, `Pelican4Ever_999999999`) con `scripts/measure_v05_residences.py` y `p4e_farm_populate` para 16, 32 y 64 residencias pobladas y hasta 16 clientes remotos simultáneos (`17` conectados); resultados y veredicto (`32` máximo operativo bajo `MemoryMax=4G`, `64` experimental al alcanzar `VmHWM = 4.937.216 kB` y `8.916 ms` de checkpoint) publicados en `docs/v0.5-residence-scaling-verification-2026-11-17.md` y `docs/adr/0010-scalable-residences-admission-queue.md`.
+  * **Resolución:** Medición ejecutada sobre la VM AWS de referencia (`i-053e53c1536f541fd`, `Pelican4Ever_999999999`) con `scripts/measure_v05_residences.py` y `p4e_farm_populate` para 16, 32 y 64 residencias pobladas y hasta 16 clientes remotos simultáneos (`17` conectados); resultados y veredicto (`32` máximo operativo bajo `MemoryMax=4G`, `64` experimental al alcanzar `VmHWM = 4.937.216 kB` y `8.916 ms` de checkpoint) publicados en `docs/verifications/v0.5-residence-scaling-verification-2026-11-17.md` y `docs/adr/0010-scalable-residences-admission-queue.md`.
 
 - [x] **TASK-2410: Administración, i18n y documentación (`AdminApiModule.cs`, `StatusCommandModule.cs`, `i18n/*.json`, `docs/host-api.md`, `docs/despliegue/host-vps.md`)**
   * **Prioridad:** Media
@@ -2618,7 +2618,7 @@ Cada gap indica de dónde sale, qué rompe y cómo se acota. Las tareas de abajo
   * **Criterios de aceptación:**
     1. `dotnet test` en verde.
     2. Verificación en vivo documentada de cola, reserva de plaza, expulsión por inactividad, gates y residencias `17..64`.
-  * **Resolución:** Verificación completa en vivo (`4A.1..4A.7` y `4B` con 4/8/12/16 clientes remotos concurrentes sobre 64 residencias pobladas) documentada en `docs/v0.5-residence-scaling-verification-2026-11-17.md`; corregidos el tope de puertas de `FarmSlotModule.LoadDoors`, timeouts de `AdminApiModule`, filtrado de saludo en modo abierto/loopback (`FarmhandAuthLogic` / `ClientSecurityModule`), codificación y timeout de mensajes de cola y bombeo de `FarmhandMenu` sin foco (`Specialized.UnvalidatedUpdateTicked`); `manifest.json` en `0.5.0`, `architecture.md` actualizado y `dotnet test` (`1753/1753`) en verde.
+  * **Resolución:** Verificación completa en vivo (`4A.1..4A.7` y `4B` con 4/8/12/16 clientes remotos concurrentes sobre 64 residencias pobladas) documentada en `docs/verifications/v0.5-residence-scaling-verification-2026-11-17.md`; corregidos el tope de puertas de `FarmSlotModule.LoadDoors`, timeouts de `AdminApiModule`, filtrado de saludo en modo abierto/loopback (`FarmhandAuthLogic` / `ClientSecurityModule`), codificación y timeout de mensajes de cola y bombeo de `FarmhandMenu` sin foco (`Specialized.UnvalidatedUpdateTicked`); `manifest.json` en `0.5.0`, `architecture.md` actualizado y `dotnet test` (`1753/1753`) en verde.
 
 ---
 

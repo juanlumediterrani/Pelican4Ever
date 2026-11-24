@@ -180,9 +180,9 @@ Pelican4Ever.sln
 3. **24/7 信箱商店订购与同居机制（`MailOrderModule`，史诗 22 与 23）：**
    * **延期交付订单（`MailOrderLogic`、`MailOrderRobinService`、`MailOrderMarnieService`、`MailOrderClintService`、`MailOrderPackageDelivery`）：** 通过传送门/居所信箱全天候下单、即时扣款，并在目标日真实时间 `12:00` 交付（在 `NightHold` 期间阻塞），生成的实体包裹仅允许购买者本人（`OwnerId`）开启。
    * **房主 + 租客同居（`ServerWorldState` v8、`ModDataKeys.TenantId`、`TownMailboxModule`、`LocationCullingLogic`）：** 房主（`OwnerId`）可通过门外信箱接纳最多 1 名租客（`TenantId`）；将用于网络认证的技术小屋与共享室内居所（`Pelican4Ever_Farm_XX_Home`）解耦，共享建筑与动物管理（`AnimalPage`、`PendingBuildingOrder`、`PendingAnimalOrder`），同时保持个人进度严格隔离（钱包、`Shipping Bin`、邮件、包裹、经验与矿井），并提供安全驱逐与自动过户协议。
-4. **设备身份、Putre 观察期与运维韧性（史诗 18 与史诗 25 / ADR-0010）：**
+4. **设备身份、Putre 观察期与运维韧性（史诗 18 与史诗 25 / ADR-0013）：**
    * **`ClientSecurityModule` 与 `ProbationTelemetryModule`（`ProbationAndBlacklistLogic`）：** 基于 ECDSA P-256 的非对称设备身份认证（Lidgren 中的 `P4E\x02`）、白名单配对以及由 Putre 管理的 2 名额试用观察与永久黑名单协议。
-   * **提议中的韧性架构（ADR-0010 / 史诗 25，开发中）：** 统一的 Harmony 补丁关键等级注册表（`PatchRegistry` + `PatchHealthPolicy`：`Security` 与 `Integrity` 失败即进入 *fail-closed* `Lockdown`，`Experience` 进入 `Degraded`）、`VerifiedGameVersions` 白名单、脱离 `MainThreadActionQueue` 直接读取原子快照的 `GET /api/v1/host/health`、systemd `WATCHDOG=1` 心跳线程，以及与 `Putre` 协同的可校验 `p4e-backup.json` 清单和默认本地保留策略（`BackupRetentionDays = 14`、`CheckpointRetention = 12`）。
+   * **提议中的韧性架构（ADR-0013 / 史诗 25，开发中）：** 统一的 Harmony 补丁关键等级注册表（`PatchRegistry` + `PatchHealthPolicy`：`Security` 与 `Integrity` 失败即进入 *fail-closed* `Lockdown`，`Experience` 进入 `Degraded`）、`VerifiedGameVersions` 白名单、脱离 `MainThreadActionQueue` 直接读取原子快照的 `GET /api/v1/host/health`、systemd `WATCHDOG=1` 心跳线程，以及与 `Putre` 协同的可校验 `p4e-backup.json` 清单和默认本地保留策略（`BackupRetentionDays = 14`、`CheckpointRetention = 12`）。
 
 ---
 
@@ -199,4 +199,4 @@ Pelican4Ever.sln
 * **ADR-0007：** 基于设备的不对称身份（ECDSA P-256）以及 Lidgren 握手中的 `P4E\x02` 挑战。
 * **ADR-0008（提议中）：** 面向 1:1 的再平衡：每日经验曲线、更慢的钓鱼、更少的矿井梯子以及骷髅洞穴每层的能量消耗。
 * **ADR-0009：** 使用「桥接地图」流程生成附属区域（`MapStudio`、规范裁剪与已验证分类器）。
-* **ADR-0010（提议中）：** 快速失败启动、脱离游戏主线程的主机健康接口（`/api/v1/host/health` + systemd 看门狗）以及与 Putre 约定的备份契约（`p4e-backup.json`、轮转保留与 `saves.restore`）。
+* **ADR-0013（提议中，原 ADR-0010）：** 快速失败启动、脱离游戏主线程的主机健康接口（`/api/v1/host/health` + systemd 看门狗）以及与 Putre 约定的备份契约（`p4e-backup.json`、轮转保留与 `saves.restore`）。

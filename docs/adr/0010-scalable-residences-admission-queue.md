@@ -1,7 +1,8 @@
 # ADR-0010: Residencias Escalables (16/32/64), Cola de Admisión y Gates al Este de Pelican Town
 
-* **Estado:** Aceptado (`FarmSlotCount = 32` máximo operativo bajo `MemoryMax=4G`; `FarmSlotCount = 64` experimental — ver [informe de verificación 2026-11-17](../v0.5-residence-scaling-verification-2026-11-17.md))
+* **Estado:** Aceptado (`FarmSlotCount = 32` máximo operativo bajo `MemoryMax=4G`; `FarmSlotCount = 64` experimental — ver [informe de verificación 2026-11-17](../verifications/v0.5-residence-scaling-verification-2026-11-17.md))
 * **Fecha:** 2026-11-15
+* **Ámbito:** `Pelican4Ever.Core/Networking/AdmissionLogic.cs`, `Core/Players/IdleKickLogic.cs`, `Core/World/{HostPlazaLayout,MinecartPlazaLogic,LocationCullingLogic}.cs`, `Modules/{ClientSecurityModule,IdleKickModule,FarmSlotModule}.cs`, `Pelican4Ever/assets/doors.json`
 * **Versión objetivo:** 0.5 (rama `feat/v0.5-residence-scaling`)
 * **Amplía:** [ADR-0003](0003-declarative-farm-slots.md) y [ADR-0005](0005-host-plaza-and-bridge-maps.md). **Prepara:** ADR-0011 (concurrencia ampliada, versión 0.6).
 

@@ -69,6 +69,7 @@ For complete step-by-step instructions, see the [Preview Server Guide](docs/serv
 
 ## 📚 Technical Documentation
 
+* [Agent Brain Entrypoint (`AGENTS.md`)](AGENTS.md) — Routing index, forbidden legacy paths, and write-back rules (Spanish canonical source)
 * [Preview Server Guide](docs/servidor-preview.en.md) — [中文](docs/servidor-preview.zh-CN.md) · [ES](docs/servidor-preview.md)
 * [Client Guide](docs/despliegue/cliente.en.md) — [中文](docs/despliegue/cliente.zh-CN.md) · [ES](docs/despliegue/cliente.md)
 * [Host on a VPS](docs/despliegue/host-vps.en.md) — [中文](docs/despliegue/host-vps.zh-CN.md) · [ES](docs/despliegue/host-vps.md)

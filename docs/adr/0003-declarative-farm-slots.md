@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-10-29
+* **Ámbito:** `Pelican4Ever.Core/World/{FarmTemplateLogic,ServerWorldState}.cs`, `Modules/FarmSlotModule.cs`
 
 ## Contexto
 

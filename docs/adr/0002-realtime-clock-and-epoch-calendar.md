@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado
 * **Fecha:** 2026-10-29
+* **Ámbito:** `Pelican4Ever.Core/Time/{GameClock,ServerCalendar,ServerTime}.cs`, `Modules/RealTimeClockModule.cs`, `Framework/NightHoldWorldSimulator.cs`
 
 ## Contexto
 

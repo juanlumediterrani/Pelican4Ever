@@ -2,6 +2,7 @@
 
 * **Estado:** Aceptado (Revisado tras post-mortem en vivo del 2026-11-08)
 * **Fecha:** 2026-11-08
+* **Ámbito:** `Pelican4Ever/Framework/{MapCloneHelper,AnnexBorderArtist,ForagingAnnexLayout}.cs`, `Core/World/{TerrainTileClassifier,VerticalMultiTileClassifier,Annex*,ResidenceAnnex*}.cs`, `Modules/{FarmSlotModule,AnnexReviewModule}.cs`, `tools/MapRenderer/*`
 
 ## Contexto y Post-Mortem de Intentos Previos
 

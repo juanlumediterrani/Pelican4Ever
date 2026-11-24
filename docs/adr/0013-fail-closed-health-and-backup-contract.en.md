@@ -1,9 +1,10 @@
-# ADR-0010 · Fail-Closed Startup, Host Health, and Backup Contract with Putre
+# ADR-0013 · Fail-Closed Startup, Host Health, and Backup Contract with Putre
 
-🌐 **Languages:** [Español](0010-fail-closed-health-and-backup-contract.md) | English | [中文](0010-fail-closed-health-and-backup-contract.zh-CN.md)
+🌐 **Languages:** [Español](0013-fail-closed-health-and-backup-contract.md) | English | [中文](0013-fail-closed-health-and-backup-contract.zh-CN.md)
 
 - **Status:** Proposed
 - **Date:** 2026-11-16
+- **Traceability note:** Originally drafted as ADR-0010 (2026-11-16) and renumbered to ADR-0013 to avoid colliding with [ADR-0010](0010-scalable-residences-admission-queue.md) and preserve the ADR-0011 slot on `feat/v0.6-extended-concurrency`.
 - **Scope:** `Pelican 4Ever` (host mod) and its sibling repository `Putre` (`putre-ops` / Hermes), which operates the production VM.
 - **Related:** [ADR-0001](0001-native-daily-rollover.en.md) (rollover and SHA-256 backup), [ADR-0004](0004-host-authority-client-mod-and-satiety.en.md) (host authority), [ADR-0007](0007-dispositivo-identidad-y-acceso-seguro.en.md) (per-device identity). Backlog: Epic 25 in [backlog.md](../../backlog.md) and Putre backlog (`Putre/backlog.md`).
 

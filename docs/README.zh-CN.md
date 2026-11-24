@@ -49,7 +49,7 @@ git checkout feat/web-panel -- Pelican4Ever/assets/dashboard.html \
 - 游戏是 **Stardew Valley 1.6.15**，搭配 **SMAPI 4.1+** 使用。
 - 模组名为 **Pelican 4Ever**（`Pelican4Ever.SVRTMP`），当前版本 **0.4.9**。
 - 服务器只公开**一个公共端口**：UDP `24642`。主机 API（`8085`）保留在回环地址上。
-- `config.json` 在**启动时校验**：如果有任何不一致，模组不会注册（配置本身无降级模式；针对 `Experience` 类 Harmony 补丁，见提议中的 [ADR-0010](adr/0010-fail-closed-health-and-backup-contract.zh-CN.md)）。
+- `config.json` 在**启动时校验**：如果有任何不一致，模组不会注册（配置本身无降级模式；针对 `Experience` 类 Harmony 补丁，见提议中的 [ADR-0013](adr/0013-fail-closed-health-and-backup-contract.zh-CN.md)）。
 - 主机始终是一个本地玩家：**不存在原生的专用服务器模式**。选项 `DedicatedServerMode` 在
   当前代码中并未使用。
 - 服务器要求的模组包版本是**精确版本**（而不是 *major.minor*）。模组自身的版本则按

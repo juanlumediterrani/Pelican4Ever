@@ -12,7 +12,7 @@ Tareas de verificación y calibración que requieren partidas reales con **vario
 
 - [ ] **TASK-2107: Calibración en partida y aceptación de ADR-0008**
   * **Prioridad:** Media
-  * **Dependencias:** `TASK-2102..TASK-2106` (verificación técnica en servidor/laboratorio cerrada; ver [adr-0008-live-verification-2026-11-14.md](docs/adr-0008-live-verification-2026-11-14.md)).
+  * **Dependencias:** `TASK-2102..TASK-2106` (verificación técnica en servidor/laboratorio cerrada; ver [adr-0008-live-verification-2026-11-14.md](docs/verifications/adr-0008-live-verification-2026-11-14.md)).
   * **Descripción:** Jugar al menos una semana real con el grupo con los valores iniciales y revisar la telemetría diaria (`data/economy-telemetry/<saveId>/*.json` y eventos `DailyEconomy`) generada por `TASK-2106`. Ajustar los valores, anotar en [ADR-0008](docs/adr/0008-skill-economy-rebalance.md) las cifras finales y pasarlo a *Aceptado* en los tres idiomas (`es`, `en`, `zh-CN`). Actualizar `design.md` (§4), `architecture.md`, `config.example.json` y los índices de ADR en los tres idiomas.
   * **Criterios de aceptación:**
     1. Queda escrito cuántos días tarda un jugador de una sesión diaria en llegar a nivel 5 y a nivel 10 de Pesca, Minería y Combate.

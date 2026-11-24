@@ -1,9 +1,10 @@
-# ADR-0010 · 快速失败（Fail-Closed）启动、主机健康检查与 Putre 备份契约
+# ADR-0013 · 快速失败（Fail-Closed）启动、主机健康检查与 Putre 备份契约
 
-🌐 **语言：** [Español](0010-fail-closed-health-and-backup-contract.md) | [English](0010-fail-closed-health-and-backup-contract.en.md) | 中文
+🌐 **语言：** [Español](0013-fail-closed-health-and-backup-contract.md) | [English](0013-fail-closed-health-and-backup-contract.en.md) | 中文
 
 - **状态：** 提议中
 - **日期：** 2026-11-16
+- **编号说明：** 原草案编号为 ADR-0010（2026-11-16），现重编号为 ADR-0013，以消除与 [ADR-0010](0010-scalable-residences-admission-queue.md) 的冲突并保留 `feat/v0.6-extended-concurrency` 分支中的 ADR-0011 编号。
 - **范围：** `Pelican 4Ever`（主机 mod）及其运营生产虚拟机的兄弟仓库 `Putre`（`putre-ops` / Hermes）。
 - **关联文档：** [ADR-0001](0001-native-daily-rollover.zh-CN.md)（日切与 SHA-256 备份）、[ADR-0004](0004-host-authority-client-mod-and-satiety.zh-CN.md)（主机权威）、[ADR-0007](0007-dispositivo-identidad-y-acceso-seguro.zh-CN.md)（按设备身份验证）。待办列表：[backlog.md](../../backlog.md) 史诗 25 与 Putre 待办列表（`Putre/backlog.md`）。
 

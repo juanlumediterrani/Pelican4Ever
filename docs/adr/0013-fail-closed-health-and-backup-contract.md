@@ -1,9 +1,10 @@
-# ADR-0010 · Arranque *fail-closed*, salud del host y contrato de copias con Putre
+# ADR-0013 · Arranque *fail-closed*, salud del host y contrato de copias con Putre
 
-🌐 **Idiomas:** Español | [English](0010-fail-closed-health-and-backup-contract.en.md) | [中文](0010-fail-closed-health-and-backup-contract.zh-CN.md)
+🌐 **Idiomas:** Español | [English](0013-fail-closed-health-and-backup-contract.en.md) | [中文](0013-fail-closed-health-and-backup-contract.zh-CN.md)
 
 - **Estado:** Propuesto
 - **Fecha:** 2026-11-16
+- **Nota de trazabilidad:** Publicado inicialmente como ADR-0010 (2026-11-16) y renumerado a ADR-0013 para eliminar la colisión con [ADR-0010](0010-scalable-residences-admission-queue.md) y respetar la reserva de ADR-0011 en `feat/v0.6-extended-concurrency`. Los comentarios en código de `TASK-2501..2505` que citan `ADR-0010` remiten a este ADR.
 - **Ámbito:** `Pelican 4Ever` (mod del host) y su repositorio hermano `Putre` (`putre-ops` / Hermes), que opera la VM de producción.
 - **Relacionados:** [ADR-0001](0001-native-daily-rollover.md) (rollover y copia SHA-256), [ADR-0004](0004-host-authority-client-mod-and-satiety.md) (autoridad en el host), [ADR-0007](0007-dispositivo-identidad-y-acceso-seguro.md) (identidad por dispositivo). Backlog: Épica 25 en [backlog.md](../../backlog.md) y backlog de Putre (`Putre/backlog.md`).
 

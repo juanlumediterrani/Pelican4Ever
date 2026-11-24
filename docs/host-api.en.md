@@ -466,7 +466,7 @@ Returns the status of Putre's admission protocol (`MaxSlots` = 2, `UsedSlots`, `
 
 ### `GET /api/v1/host/health`
 
-Returns the atomic host health snapshot (`HostHealthDto`), read **directly from the HTTP thread without going through `MainThreadActionQueue`**, so it responds even when the main game thread is hung or the host is in `Lockdown` with no save loaded (ADR-0010).
+Returns the atomic host health snapshot (`HostHealthDto`), read **directly from the HTTP thread without going through `MainThreadActionQueue`**, so it responds even when the main game thread is hung or the host is in `Lockdown` with no save loaded (ADR-0013).
 
 **`200 OK` response (`HostHealthDto`):**
 ```json
