@@ -22,7 +22,7 @@
    - [`ADR-0013`](docs/adr/0013-fail-closed-health-and-backup-contract.md) *(renumerado desde `ADR-0010`; código `TASK-2501..2505` aún cita `ADR-0010`)* está parcialmente implementado y pendiente de pruebas vivas (`LIVE-2501..2503`).
    - **`ADR-0011` está reservado** en la rama `feat/v0.6-extended-concurrency` (`0011-extended-concurrency-interest-management.md`); cualquier ADR nuevo en `main`/`dev` debe tomar **`0014+`**.
 5. **Contratos entre repositorios (Nivel 2 · `MCP Pelican`):**
-   - Para consultar contratos o ADRs de los repositorios hermanos acoplados (`Putre`, `Corazón Pelican`, `Stardew Voyager`), usa el servidor `MCP Pelican` (`/home/mtx/Documentos/Projects/MCP Pelican`) en lugar de duplicar copias estáticas entre proyectos.
+   - Para consultar contratos o ADRs de los repositorios hermanos acoplados (`Corazón Pelican`, `Stardew Voyager`; `Putre` es legacy y el agente runtime de AWS es `Yuki`), usa el servidor `MCP Pelican` (`/home/mtx/Escritorio/WIP Proyectos/Ecosistema Pelican/MCP Pelican`) en lugar de duplicar copias estáticas entre proyectos.
 
 ---
 
