@@ -8,6 +8,12 @@ Incluye residencias privadas personalizables accesibles desde la Plaza Central y
 
 ---
 
+## Ubicación de los checkouts
+
+Pelican-4Ever (el mod) y Stardew Voyager (el arnés) son repositorios independientes. Si se usan desde un workspace compartido, pueden exponerse como checkouts o enlaces en `projects/Pelican-4Ever` y `projects/stardew-voyager`. No hace falta mover partidas ni cambiar de rama para crear esos accesos.
+
+El checkout de Pelican contiene el código del mod; no es el directorio de instalación de SMAPI ni el de las partidas.
+
 ## 🚀 Servidor Preview y Acceso para Testers
 
 ¡El **Servidor Preview de Pelican 4Ever** ya está disponible para testers y colaboradores!
