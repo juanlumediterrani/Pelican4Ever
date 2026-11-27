@@ -59,7 +59,7 @@ Devuelve la hora del juego y real, si el servidor está en tramo de madrugada (`
 
 ### `GET /api/v1/host/players`
 
-Devuelve los jugadores conectados y registrados, su ubicación y coordenadas actuales, su residencia asignada, si están dentro del festival de hoy y su `PlayerRecord` completo (estado de descanso y saciedad).
+Devuelve los jugadores conectados y registrados, su ubicación y coordenadas actuales, su residencia asignada, si están dentro del festival de hoy, su `PlayerRecord` completo (estado de descanso y saciedad) y la instantánea nativa del anfitrión (`NativeHost`, o `null` si aún no hay partida cargada) para vincular el `UniqueMultiplayerID` del host con su registro persistido incluso antes del primer descanso.
 
 **Respuesta `200 OK` (`HostPlayersResponseDto`):**
 ```json
@@ -93,7 +93,18 @@ Devuelve los jugadores conectados y registrados, su ubicación y coordenadas act
       "IsClaimed": true,
       "OwnerTokenMasked": "a1b2...c5d6"
     }
-  ]
+  ],
+  "NativeHost": {
+    "PlayerId": 1234567890,
+    "Name": "VoyagerHost",
+    "IsOnline": true,
+    "LocationName": "Town",
+    "TileX": 28,
+    "TileY": 67,
+    "IsRegistered": true,
+    "SleepState": "Rested",
+    "RestedOnGameDay": 12
+  }
 }
 ```
 

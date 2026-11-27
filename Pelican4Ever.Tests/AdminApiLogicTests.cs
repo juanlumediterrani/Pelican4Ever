@@ -406,5 +406,103 @@ namespace Pelican4Ever.Tests
             Assert.True(validToken.Allowed);
             Assert.Equal(200, validToken.StatusCode);
         }
+
+        [Fact]
+        public void BuildNativeHost_WhenHostIsRegistered_MirrorsPlayerRecordExactly()
+        {
+            var players = new[]
+            {
+                new HostPlayerDetailDto
+                {
+                    PlayerId = -1375562964767351794,
+                    Name = "Vecino",
+                    IsOnline = false,
+                    IsHost = false,
+                    SleepState = "Rested",
+                    RestedOnGameDay = 18
+                },
+                new HostPlayerDetailDto
+                {
+                    PlayerId = 8280143954403412195,
+                    Name = "Yuki",
+                    IsOnline = true,
+                    IsHost = true,
+                    LocationName = "FarmHouse",
+                    TileX = 5,
+                    TileY = 9,
+                    SleepState = "Rested",
+                    RestedOnGameDay = 17
+                }
+            };
+
+            HostNativePlayerDto? native = HostPlayersResponseDto.BuildNativeHost(
+                worldReady: true,
+                masterPlayerId: 8280143954403412195,
+                masterName: "Yuki",
+                masterOnline: true,
+                masterLocationName: "FarmHouse",
+                masterTileX: 5,
+                masterTileY: 9,
+                players: players);
+
+            Assert.NotNull(native);
+            Assert.Equal(8280143954403412195, native!.PlayerId);
+            Assert.Equal("Yuki", native.Name);
+            Assert.True(native.IsOnline);
+            Assert.Equal("FarmHouse", native.LocationName);
+            Assert.Equal(5, native.TileX);
+            Assert.Equal(9, native.TileY);
+            Assert.True(native.IsRegistered);
+            Assert.Equal("Rested", native.SleepState);
+            Assert.Equal(17, native.RestedOnGameDay);
+        }
+
+        [Fact]
+        public void BuildNativeHost_WhenHostIsUnregisteredOrWorldNotReady_PreservesInvariants()
+        {
+            var players = new[]
+            {
+                new HostPlayerDetailDto
+                {
+                    PlayerId = 3323519649329417322,
+                    Name = "Dr4co",
+                    IsOnline = false,
+                    IsHost = false,
+                    SleepState = "OfflineSafe",
+                    RestedOnGameDay = 16
+                }
+            };
+
+            HostNativePlayerDto? unregistered = HostPlayersResponseDto.BuildNativeHost(
+                worldReady: true,
+                masterPlayerId: 8280143954403412195,
+                masterName: "Yuki",
+                masterOnline: true,
+                masterLocationName: "Farm",
+                masterTileX: 64,
+                masterTileY: 15,
+                players: players);
+
+            Assert.NotNull(unregistered);
+            Assert.Equal(8280143954403412195, unregistered!.PlayerId);
+            Assert.Equal("Yuki", unregistered.Name);
+            Assert.True(unregistered.IsOnline);
+            Assert.Equal("Farm", unregistered.LocationName);
+            Assert.Equal(64, unregistered.TileX);
+            Assert.Equal(15, unregistered.TileY);
+            Assert.False(unregistered.IsRegistered);
+            Assert.Null(unregistered.SleepState);
+            Assert.Null(unregistered.RestedOnGameDay);
+
+            Assert.Null(HostPlayersResponseDto.BuildNativeHost(
+                worldReady: false,
+                masterPlayerId: 8280143954403412195,
+                masterName: "Yuki",
+                masterOnline: false,
+                masterLocationName: null,
+                masterTileX: 0,
+                masterTileY: 0,
+                players: players));
+        }
     }
 }

@@ -942,6 +942,20 @@ namespace Pelican4Ever.Modules
                 });
             }
 
+            Farmer? master = Context.IsWorldReady ? Game1.MasterPlayer : null;
+            Farmer? onlineHost = null;
+            bool masterOnline = hostId != 0 && onlineFarmers.TryGetValue(hostId, out onlineHost);
+            Farmer? hostSnapshot = onlineHost ?? master;
+            response.NativeHost = HostPlayersResponseDto.BuildNativeHost(
+                worldReady: Context.IsWorldReady && master != null,
+                masterPlayerId: hostId,
+                masterName: hostSnapshot?.Name,
+                masterOnline: masterOnline,
+                masterLocationName: hostSnapshot?.currentLocation?.NameOrUniqueName,
+                masterTileX: hostSnapshot?.TilePoint.X ?? 0,
+                masterTileY: hostSnapshot?.TilePoint.Y ?? 0,
+                players: response.Players);
+
             return response;
         }
 

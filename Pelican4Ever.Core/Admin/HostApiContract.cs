@@ -89,6 +89,24 @@ namespace Pelican4Ever.Core.Admin
     }
 
     /// <summary>
+    /// Instantánea nativa del granjero anfitrión (<c>Game1.MasterPlayer</c>) para <c>GET /api/v1/host/players</c>.
+    /// Permite vincular la identidad observada en el puente local con el <c>PlayerRecord</c> persistido en Pelican,
+    /// incluso antes de que exista registro previo de descanso.
+    /// </summary>
+    public sealed class HostNativePlayerDto
+    {
+        public long PlayerId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public bool IsOnline { get; set; }
+        public string LocationName { get; set; } = string.Empty;
+        public int TileX { get; set; }
+        public int TileY { get; set; }
+        public bool IsRegistered { get; set; }
+        public string? SleepState { get; set; }
+        public int? RestedOnGameDay { get; set; }
+    }
+
+    /// <summary>
     /// Respuesta de <c>GET /api/v1/host/players</c>.
     /// </summary>
     public sealed class HostPlayersResponseDto
@@ -96,6 +114,69 @@ namespace Pelican4Ever.Core.Admin
         public int TotalOnline { get; set; }
         public int TotalRegistered { get; set; }
         public List<HostPlayerDetailDto> Players { get; set; } = new();
+        public HostNativePlayerDto? NativeHost { get; set; }
+
+        /// <summary>
+        /// Construye la instantánea <see cref="NativeHost"/> coherente con <see cref="Players"/> cuando el mundo
+        /// está cargado y existe <c>Game1.MasterPlayer</c>. Si el anfitrión ya figura en <see cref="Players"/>,
+        /// reutiliza exactamente su registro; si aún no tiene <c>PlayerRecord</c>, publica sus datos nativos con
+        /// <c>IsRegistered = false</c> y descanso nulo.
+        /// </summary>
+        public static HostNativePlayerDto? BuildNativeHost(
+            bool worldReady,
+            long masterPlayerId,
+            string? masterName,
+            bool masterOnline,
+            string? masterLocationName,
+            int masterTileX,
+            int masterTileY,
+            IReadOnlyList<HostPlayerDetailDto> players)
+        {
+            if (!worldReady || masterPlayerId == 0)
+                return null;
+
+            HostPlayerDetailDto? registered = null;
+            if (players != null)
+            {
+                for (int i = 0; i < players.Count; i++)
+                {
+                    if (players[i].PlayerId == masterPlayerId)
+                    {
+                        registered = players[i];
+                        break;
+                    }
+                }
+            }
+
+            if (registered != null)
+            {
+                return new HostNativePlayerDto
+                {
+                    PlayerId = registered.PlayerId,
+                    Name = registered.Name,
+                    IsOnline = registered.IsOnline,
+                    LocationName = registered.LocationName,
+                    TileX = registered.TileX,
+                    TileY = registered.TileY,
+                    IsRegistered = true,
+                    SleepState = registered.SleepState,
+                    RestedOnGameDay = registered.RestedOnGameDay
+                };
+            }
+
+            return new HostNativePlayerDto
+            {
+                PlayerId = masterPlayerId,
+                Name = masterName ?? string.Empty,
+                IsOnline = masterOnline,
+                LocationName = masterOnline ? (masterLocationName ?? string.Empty) : string.Empty,
+                TileX = masterOnline ? masterTileX : 0,
+                TileY = masterOnline ? masterTileY : 0,
+                IsRegistered = false,
+                SleepState = null,
+                RestedOnGameDay = null
+            };
+        }
     }
 
     /// <summary>
